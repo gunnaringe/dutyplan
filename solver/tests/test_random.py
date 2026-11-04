@@ -29,6 +29,8 @@ def random_instance(seed: int):
         "history": {p: {t: rng.randint(0, 3) for t in tasks} for p in people},
         "params": {"time_limit": 3, "workers": 2, "seed": seed},
     }
+    for person in inst["people"]:
+        person["proposable"] = rng.random() > 0.15
     for p in people:
         inst["person_tasks"][p] = {t: rng.choice(LEVELS) for t in tasks if rng.random() < 0.7}
         inst["person_dates"][p] = {d: rng.choice(LEVELS) for d in ds if rng.random() < 0.4}
@@ -48,6 +50,7 @@ def random_instance(seed: int):
         inst["groups"].append({"id": "g1", "members": rng.sample(people, rng.randint(1, max(1, len(people) // 2)))})
     inst["group_tasks"] = []
     if inst["groups"]:
+        inst["groups"][0]["proposable"] = rng.random() > 0.2
         for t in rng.sample(tl, rng.randint(0, len(tl))):
             inst["group_tasks"].append({"group": "g1", "task": t, "fills": rng.randint(1, 2), "level": rng.choice(LEVELS)})
         for pl in inst["pools"]:

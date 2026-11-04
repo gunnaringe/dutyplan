@@ -1,0 +1,94 @@
+# Alle verktøy og kommandoer går gjennom mise. Ikke kjør python/uv/pytest direkte.
+#   mise install      verktøyene (python, uv) i eksakte versjoner (under)
+#   mise run setup    Python-pakkene (ortools, pytest) fra solver/uv.lock
+#   mise tasks        alle oppgaver
+min_version = "2026.10.0"
+
+[tools]
+python = "3.12.15"
+uv = "0.13.5"
+
+[env]
+# uv skal bruke mises Python og lockfila, aldri laste ned sin egen Python eller endre låsen på egen hånd.
+UV_PYTHON_DOWNLOADS = "never"
+UV_PYTHON_PREFERENCE = "only-system"
+UV_LOCKED = "1"
+UV_PROJECT_ENVIRONMENT = "{{config_root}}/solver/.venv"
+
+[tasks.setup]
+description = "Python-pakkene fra uv.lock (kjør etter mise install)"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv sync"
+
+[tasks.test]
+description = "Alle tester, stille: ett linje ved suksess, én linje per feil ellers (ca. 10 s). Ekstra args: -- -k navn"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run pytest"
+
+[tasks."test:fast"]
+description = "Bare regeltestene (ca. 2 s)"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run pytest tests/test_rules.py"
+
+[tasks.mutations]
+description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 30 s). Stille ved suksess. Args: --only tekst, --list"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run python scripts/mutations.py"
+
+[tasks.verify]
+description = "Tester + mutasjoner: alt som må være grønt etter en regelendring"
+depends = ["test", "mutations"]
+quiet = true
+run = "echo 'verify: ok'"
+
+[tasks.plan]
+description = "Kjør planleggeren på testdataene og skriv en kort oppsummering (ca. 6 linjer). Args: --full, --info, --time N, --seed N, --input fil (sti fra repoets rot)"
+quiet = true
+run = "uv run --project solver python solver/scripts/plan.py"
+
+[tasks.check]
+description = "Uavhengig sjekk av en ferdig plan: mise run check -- inndata.json utdata.json (stier fra repoets rot)"
+quiet = true
+run = "uv run --project solver python -m tjenesteplan_solver check"
+
+[tasks.solve]
+description = "Planleggeren som filter: mise run solve < inndata.json > utdata.json"
+quiet = true
+run = "uv run --project solver python -m tjenesteplan_solver"
+
+[tasks.fixture]
+description = "Lag testdataene på nytt (solver/fixtures/host2026.json) fra make_host2026.py"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run python fixtures/make_host2026.py > fixtures/host2026.json"
+
+[tasks."measure:time"]
+description = "Kvalitet mot tidsgrense på testdataene (ca. 80 s)"
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run python scripts/timing.py"
+
+[tasks."measure:fair"]
+description = "Sammenlign vektsett for jevn fordeling (ca. 100 s). Args: tidsgrense frø..."
+quiet = true
+dir = "{{config_root}}/solver"
+run = "uv run python scripts/fairness_experiment.py"
+
+# Avhengigheter endres også via mise. UV_LOCKED=1 (over) forbyr det på vanlig kjøring, så disse slår det av.
+[tasks.lock]
+description = "Oppdater solver/uv.lock etter endring i pyproject.toml. Args: --upgrade for nyere versjoner"
+quiet = true
+dir = "{{config_root}}/solver"
+env = { UV_LOCKED = "0" }
+run = "uv lock"
+
+[tasks.add]
+description = "Legg til en Python-pakke: mise run add -- pakke  (eller -- --dev pakke). Oppdaterer pyproject.toml og uv.lock"
+quiet = true
+dir = "{{config_root}}/solver"
+env = { UV_LOCKED = "0" }
+run = "uv add"

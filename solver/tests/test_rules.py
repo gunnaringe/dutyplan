@@ -476,3 +476,67 @@ def test_stabilitet_gjelder_ogsa_foreslatte_grupper():
     inst["person_tasks"] = {}
     res = run(inst)
     assert [g["group"] for g in res["group_assignments"]] == ["g1", "g2", "g1", "g2"]
+
+
+# --- «kan foreslås»: innstilling per person og per gruppe --------------------------------------------
+
+
+def test_person_som_ikke_kan_foreslaas_velges_aldri_men_kan_lases():
+    d = dates(4)
+    inst = base(n_dates=4, locked=[{"date": d[0], "task": "t", "person": "a"}])
+    inst["people"][0]["proposable"] = False
+    inst["person_tasks"]["a"]["t"] = "godt"  # alle andre ville vært bedre uten innstillingen
+    res = run(inst)
+    assert who(res, "t", d[0]) == ["a"] and count(res, "a") == 1  # bare det manuelle valget
+
+
+def test_gruppe_som_ikke_kan_foreslaas_velges_aldri_men_kan_stå_i_en_manuell_rute():
+    d = dates(4)
+    inst = lag_inst(locked=[{"date": d[0], "task": "t", "group": "lag"}])
+    inst["groups"][0]["proposable"] = False
+    inst["group_tasks"][0]["level"] = "godt"
+    res = run(inst)
+    assert not res["group_assignments"]
+    assert res["manual"] == [{"date": d[0], "task": "t", "group": "lag", "fills": 1}]
+    assert res["unfilled"][0]["why"]["grupper"] == {"lag": "ikke_foreslaas"}
+
+
+def test_gruppe_med_medlem_som_ikke_kan_foreslaas_utelukkes():
+    inst = lag_inst()
+    inst["people"][0]["proposable"] = False  # a er medlem av «lag»
+    res = run(inst)
+    assert not res["group_assignments"]
+    assert res["unfilled"][0]["why"]["grupper"] == {"lag": "ikke_foreslaas:a"}
+
+
+def test_forklaringen_nevner_dem_som_ikke_kan_foreslaas():
+    inst = base(people=("a",), n_dates=1)
+    inst["people"][0]["proposable"] = False
+    res = run(inst)
+    assert res["unfilled"][0]["why"]["ikke_foreslaas"] == ["a"] and res["unfilled"][0]["why"]["kandidater"] == 0
+
+
+def test_foreslatt_gruppe_velges_etter_medlemmenes_datoonsker():
+    d = dates(4)
+    for good, bad in (("a", "b"), ("b", "a")):  # begge retninger, så en tilfeldig uavgjort ikke gir riktig svar
+        inst = base(
+            people=("a", "b"),
+            n_dates=4,
+            groups=[{"id": "g1", "members": ["a"]}, {"id": "g2", "members": ["b"]}],
+            group_tasks=[{"group": "g1", "task": "t"}, {"group": "g2", "task": "t"}],
+            person_dates={bad: {x: "darlig" for x in d}, good: {x: "godt" for x in d}},
+            params=NO_FAIR,
+        )
+        inst["person_tasks"] = {}
+        res = run(inst)
+        assert {g["group"] for g in res["group_assignments"]} == {"g1" if good == "a" else "g2"}
+
+
+def test_historikk_virker_ogsa_i_det_samlede_leddet():
+    """Skru av oppgaveleddet, så er det bare det samlede leddet som kan ta hensyn til historikken."""
+    inst = base(
+        n_dates=6,
+        history={"a": {"t": 6}},
+        params={"history_weight": 0.5, "w_task_fair": 0, "w_task_range": 0},
+    )
+    assert count(run(inst), "a") == 0  # a har allerede 3 (halvt av 6) og får sin andel dekket

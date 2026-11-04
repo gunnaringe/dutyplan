@@ -69,6 +69,10 @@ bokmål først, men tekstene skal kunne byttes ut.
 - **Foreslåtte grupper, det admin må sette opp:** for hver gruppe hvilke oppgaver den kan foreslås til, hvor mange plasser den
   fyller og et nivå. Én som har «passer ikke» en dato, utelukker hele gruppen den datoen; et par er altså ikke brukbart en dato
   noen av dem er borte.
+- **Kan foreslås, per person og per gruppe** (standard ja). Står den på nei, velger planleggeren aldri personen eller gruppen selv
+  (heller ikke gjennom et utvalg), men admin kan fortsatt legge dem inn for hånd. En gruppe foreslås heller ikke hvis et medlem
+  ikke kan foreslås. Gruppen foreslås til de oppgavene admin har satt opp for den, uavhengig av om medlemmene selv har krysset av
+  for oppgaven; det er denne innstillingen som styrer det.
 - **Foreslåtte grupper:** admin setter opp hvilke oppgaver en gruppe kan foreslås til (`group_task`). Gruppen er en kandidat
   på lik linje med en person og fyller `fills` plasser. Den er utelukket en dato hvis ett medlem har «passer ikke» (eller har
   sagt «ikke» til oppgaven), hvis gruppen står utenfor et utvalg, eller hvis medlemmene er opptatt via en annen gruppe.
@@ -80,8 +84,8 @@ bokmål først, men tekstene skal kunne byttes ut.
 
 | Tabell | Innhold |
 |---|---|
-| `person` | navn, aktiv |
-| `group`, `group_member` | navngitt sett personer (team, kor, par). Ingen egne regler |
+| `person` | navn, aktiv, **kan foreslås** (standard ja) |
+| `group`, `group_member` | navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
 | `group_task` | oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
 | `task` | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner). F.eks. én oppgave per aldersgruppe |
 | `period` | f.eks. et semester |
@@ -171,7 +175,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 
 ## Resultater fra spiken (fase 0)
 
-Solveren alene, `solver/`: 72 tester (41 regeltester, testdataene fra høsten 2026, 30 tilfeldige instanser), alle grønne.
+Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 2026, 30 tilfeldige instanser), alle grønne.
 
 - **Reglene holder.** Hver regel har en test som feiler hvis regelen fjernes (prøvd ved å bryte modellen én regel av
   gangen). En uavhengig sjekker kontrollerer harde krav på alle planer. Utvalg, grupper i manuelle ruter (med kombinasjonsinnstillingen), foreslåtte team og par, den låste
@@ -179,11 +183,11 @@ Solveren alene, `solver/`: 72 tester (41 regeltester, testdataene fra høsten 20
 - **Størrelse og tid.** Etter at hvile og dagstak ble tatt ut, kommer en gyldig og brukbar plan etter ca. 2 sekunder, og
   kvaliteten bedres til ca. 20 s. Solveren **beviser ikke** at planen er best mulig (øvre grense tettner ikke), så resultatet
   er et *forslag* innenfor tidsgrensen. Ulike frø gir litt ulike planer; «prøv en gang til» er derfor en nyttig knapp.
-  Anbefalt tidsgrense i appen: 30 s. Gjentas med `solver/scripts/timing.py`.
+  Anbefalt tidsgrense i appen: 30 s. Gjentas med `mise run measure:time`.
 - **Fordelingen måtte rettes to ganger.**
   1. Heltall skalert med total kapasitet og `abs` ga svak relaksasjon og dårlig konvergens. Byttet til bånd.
   2. Med samlet antall som hovedledd ble fordelingen *per oppgave* skjev: i en kjøring tok én person 7 forbønner mens en
-     annen fikk 0. Nå er oppgaveleddet hovedleddet. Målt med `solver/scripts/fairness_experiment.py` (8 s, fire frø):
+     annen fikk 0. Nå er oppgaveleddet hovedleddet. Målt med `mise run measure:fair` (8 s, fire frø):
 
      | | verste avvik fra egen andel per oppgave | største spredning per oppgave | verste samlet avvik |
      |---|---|---|---|
@@ -200,7 +204,9 @@ Solveren alene, `solver/`: 72 tester (41 regeltester, testdataene fra høsten 20
 
 ## Testing
 
-- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes).
+- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 32 regler i
+  modellen én om gangen og krever at en test feiler; stille når alt er fanget.
+- Alt kjøres via mise (`mise.toml`: python og uv i eksakte versjoner, stille oppgaver); se `CLAUDE.md`.
 - **Uavhengig sjekker** som kontrollerer at en ferdig plan ikke bryter noe hardt krav. Tilfeldige instanser
   kjøres gjennom solver + sjekker.
 - Fast testplan basert på en kirkes høst 2026 med oppdiktede navn. Ekte navn og telefon- og e-postlister hører ikke inn i repoet.

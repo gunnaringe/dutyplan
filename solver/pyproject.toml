@@ -17,3 +17,5 @@ packages = ["tjenesteplan_solver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Stille som standard (billig for AI): én linje ved suksess, én linje per feil, ingen tredjeparts-advarsler.
+addopts = "-q --tb=line -p no:cacheprovider --no-header -W ignore::DeprecationWarning"

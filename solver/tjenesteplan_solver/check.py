@@ -19,6 +19,8 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
         return [f"ingen plan å sjekke (status {result.get('status')})"]
 
     people = {p["id"] for p in data["people"]}
+    proposable_p = {p["id"]: bool(p.get("proposable", True)) for p in data["people"]}
+    proposable_g = {g["id"]: bool(g.get("proposable", True)) for g in data.get("groups", [])}
     planned = {t["id"] for t in data["tasks"] if t.get("planned", True)}
     dtype = {d["id"]: d["type"] for d in data["dates"]}
     default_combo = (data.get("params") or {}).get("default_combination", DEFAULT_PARAMS["default_combination"])
@@ -76,6 +78,8 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
             continue  # manuelt valg vinner over filtrene
         if a.get("locked"):
             bad.append(f"{p} {t} {d} er merket låst, men finnes ikke i inndata")
+        if not proposable_p[p]:
+            bad.append(f"{p} kan ikke foreslås, men er satt opp på {t} {d}")
         if t not in data.get("person_tasks", {}).get(p, {}):
             bad.append(f"{p} er ikke med på {t} ({d})")
         elif data["person_tasks"][p][t] == "ikke":
@@ -111,7 +115,11 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
         per_cell[key] += int(cfg.get("fills", 1))
         if key in pools and g not in pool_groups[key]:
             bad.append(f"gruppe {g} står ikke i utvalget for {t} {d}")
+        if not proposable_g[g]:
+            bad.append(f"gruppe {g} kan ikke foreslås, men er satt opp på {t} {d}")
         for mem in members[g]:
+            if not proposable_p[mem]:
+                bad.append(f"{mem} (i gruppe {g}) kan ikke foreslås, men gruppen er satt opp på {t} {d}")
             if data.get("person_tasks", {}).get(mem, {}).get(t) == "ikke":
                 bad.append(f"{mem} (i gruppe {g}) har sagt «ikke» til {t} ({d})")
             if date_lvl(mem, t, d) == "ikke":

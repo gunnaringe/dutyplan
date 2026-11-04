@@ -10,12 +10,14 @@ Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
   tasks:               [{"id", "planned": true}]
   dates:               [{"id": "2026-09-20", "type": "helg"}]
   day_type_tasks:      {"helg": {"vakt": 1, "kafe": 3}}
-  people:              [{"id"}]
+  people:              [{"id", "proposable": true}]   proposable=false: planleggeren velger aldri personen (manuelle ruter går an)
   person_tasks:        {person: {task: nivå}}          person er med på oppgaven hvis nøkkelen finnes
   person_dates:        {person: {dato: nivå}}          felles kalender for personens oppgaver
   person_task_calendars: {person: {task: {dato: nivå}}}  "egen kalender", erstatter den felles for oppgaven
   combinations:        [{"a", "b", "level"}]
-  groups:              [{"id", "members": [person...]}]   navngitt sett personer; ingen egne regler
+  groups:              [{"id", "members": [person...], "proposable": true}]   navngitt sett personer; ingen egne regler.
+                       proposable=false: planleggeren foreslår aldri gruppen. Den foreslås heller ikke hvis et medlem
+                       har proposable=false. Manuelle ruter går an.
   group_tasks:         [{"group", "task", "fills": 1, "level": "noytral"}]
                        oppgaver planleggeren kan foreslå gruppen til; gruppen fyller "fills" plasser.
                        Dato-ønsker kommer fra medlemmene (snitt); "ikke" hos ett medlem utelukker gruppen.
@@ -86,6 +88,7 @@ class Problem:
         self.params = _merge_params(data.get("params"))
         self.data = data
         self.people = [p["id"] for p in data["people"]]
+        self.person_proposable = {p["id"]: bool(p.get("proposable", True)) for p in data["people"]}
         self.planned = {t["id"] for t in data["tasks"] if t.get("planned", True)}
         self.dates = sorted(d["id"] for d in data["dates"])
         self.date_type = {d["id"]: d["type"] for d in data["dates"]}
@@ -120,6 +123,7 @@ class Problem:
             if unknown:
                 raise ValueError(f"gruppe {g['id']} har ukjente medlemmer: {unknown}")
             self.group_members[g["id"]] = list(g["members"])
+        self.group_proposable = {g["id"]: bool(g.get("proposable", True)) for g in data.get("groups", [])}
         self.group_tasks: dict[tuple[str, str], dict[str, Any]] = {}
         for gt in data.get("group_tasks", []):
             if gt["group"] not in self.group_members:
@@ -221,6 +225,8 @@ class Problem:
 
     def reason(self, p: str, t: str, d: str) -> str | None:
         """Hvorfor p ikke kan ta t på d, eller None hvis det går."""
+        if not self.person_proposable[p]:
+            return "ikke_foreslaas"
         if t not in self.task_level.get(p, {}):
             return "ikke_med"
         if self.task_level[p][t] == "ikke":
@@ -238,12 +244,16 @@ class Problem:
     def group_reason(self, g: str, t: str, d: str) -> str | None:
         """Hvorfor gruppen g ikke kan foreslås for t på d, eller None. Medlemmenes egne «ikke» utelukker gruppen."""
         cfg = self.group_tasks[g, t]
+        if not self.group_proposable[g]:
+            return "ikke_foreslaas"
         free = self.slots.get((d, t), 0) - self.fixed_fill.get((d, t), 0) - len(self.locked_person.get((d, t), ()))
         if cfg["fills"] > free:
             return "for_mange_plasser"
         if (d, t) in self.pool and g not in self.pool_groups[d, t]:
             return "utenfor_utvalg"
         for mem in self.group_members[g]:
+            if not self.person_proposable[mem]:
+                return f"ikke_foreslaas:{mem}"
             if self.task_level.get(mem, {}).get(t) == "ikke":
                 return f"oppgave_ikke:{mem}"
             if self.date_level(mem, t, d) == "ikke":
@@ -548,12 +558,14 @@ def _explain(
     pb: Problem, assigned: dict[tuple[str, str], list[str]], d: str, t: str
 ) -> dict[str, Any]:
     """Hvorfor en plass ble stående tom: hvem som er ute og av hvilken grunn."""
-    why: dict[str, Any] = {"ikke_med": 0, "oppgave_ikke": [], "dato_ikke": [], "opptatt": {}}
+    why: dict[str, Any] = {"ikke_foreslaas": [], "ikke_med": 0, "oppgave_ikke": [], "dato_ikke": [], "opptatt": {}}
     outside_pool: list[str] = []
     candidates = 0
     for p in pb.people:
         r = pb.reason(p, t, d)
-        if r == "ikke_med":
+        if r == "ikke_foreslaas":
+            why["ikke_foreslaas"].append(p)
+        elif r == "ikke_med":
             why["ikke_med"] += 1
         elif r == "oppgave_ikke":
             why["oppgave_ikke"].append(p)
