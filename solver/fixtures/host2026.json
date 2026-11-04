@@ -284,7 +284,6 @@
   "Dagfinn": {
    "2026-08-23": "darlig",
    "2026-09-06": "darlig",
-   "2026-09-20": "godt",
    "2026-10-04": "darlig",
    "2026-10-18": "godt",
    "2026-11-08": "darlig",
@@ -319,10 +318,8 @@
    "2026-11-08": "darlig"
   },
   "Ingrid": {
-   "2026-09-20": "godt",
    "2026-10-18": "darlig",
    "2026-11-01": "ikke",
-   "2026-11-15": "ikke",
    "2026-11-22": "darlig",
    "2026-12-24": "darlig"
   },
@@ -334,11 +331,9 @@
   "Kjersti": {
    "2026-09-06": "darlig",
    "2026-09-13": "darlig",
-   "2026-09-20": "darlig",
    "2026-10-04": "darlig",
    "2026-10-18": "godt",
    "2026-10-25": "darlig",
-   "2026-11-15": "darlig",
    "2026-11-22": "darlig",
    "2026-12-13": "godt"
   },
@@ -460,6 +455,29 @@
    "a": "motevert",
    "b": "forbonn",
    "level": "praktisk"
+  },
+  {
+   "a": "lovsang",
+   "b": "lyd",
+   "level": "kan_ikke"
+  },
+  {
+   "a": "lovsang",
+   "b": "bilde",
+   "level": "kan_ikke"
+  }
+ ],
+ "groups": [
+  {
+   "id": "kirkekoret",
+   "members": [
+    "Alma",
+    "Dagfinn",
+    "Ingrid",
+    "Kjersti",
+    "Lasse",
+    "Mona"
+   ]
   }
  ],
  "pools": [
@@ -478,36 +496,18 @@
     "Bjarne",
     "Elin"
    ]
-  },
-  {
-   "date": "2026-09-20",
-   "task": "bilde",
-   "people": [
-    "Gro",
-    "Henrik",
-    "Joakim"
-   ]
-  },
-  {
-   "date": "2026-11-15",
-   "task": "bilde",
-   "people": [
-    "Gro",
-    "Henrik",
-    "Joakim"
-   ]
   }
  ],
  "locked": [
   {
    "date": "2026-09-20",
    "task": "lovsang",
-   "label": "Kirkekoret"
+   "group": "kirkekoret"
   },
   {
    "date": "2026-11-15",
    "task": "lovsang",
-   "label": "Kirkekoret"
+   "group": "kirkekoret"
   },
   {
    "date": "2026-09-13",

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from tjenesteplan_solver import check, solve
 
-NO_FAIR = {"w_fair": 0, "w_fair_range": 0, "w_task_fair": 0, "w_rest_task": 0, "w_rest_any": 0}
+NO_FAIR = {"w_fair": 0, "w_fair_range": 0, "w_task_fair": 0, "w_task_range": 0}
 
 
 def dates(n: int) -> list[str]:

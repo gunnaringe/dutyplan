@@ -8,15 +8,19 @@ Inndata og utdata er vanlige dict-er (JSON). Nivåer er ASCII i ledningsformatet
 Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
 
   tasks:               [{"id", "planned": true}]
-  dates:               [{"id": "2026-09-20", "type": "gudstjeneste"}]
-  day_type_tasks:      {"gudstjeneste": {"lyd": 1, "kafe": 3}}
+  dates:               [{"id": "2026-09-20", "type": "helg"}]
+  day_type_tasks:      {"helg": {"vakt": 1, "kafe": 3}}
   people:              [{"id"}]
   person_tasks:        {person: {task: nivå}}          person er med på oppgaven hvis nøkkelen finnes
   person_dates:        {person: {dato: nivå}}          felles kalender for personens oppgaver
   person_task_calendars: {person: {task: {dato: nivå}}}  "egen kalender", erstatter den felles for oppgaven
   combinations:        [{"a", "b", "level"}]
   pools:               [{"date", "task", "people": [...]}]   «utvalg»: bare disse kan velges den dagen
-  locked:              [{"date", "task", "person"} | {"date", "task", "label"}]
+  groups:              [{"id", "members": [person...]}]   navngitt sett personer; ingen egne regler
+  locked:              manuelle ruter: {"date", "task", "person"} | {"date", "task", "label"}
+                       | {"date", "task", "group"}; label og group kan ha "fills" (plasser, standard 1).
+                       En gruppe i en rute gjør medlemmene opptatt med oppgaven: den felles
+                       kombinasjonsinnstillingen avgjør hva de kan ha samme dag (ingen særregel).
   history:             {person: {task: antall oppdrag i tidligere semestre}}   teller halvt som standard
   previous_plan:       [{"date", "task", "person"}]
   params:              se DEFAULT_PARAMS
@@ -40,7 +44,6 @@ DEFAULT_PARAMS: dict[str, Any] = {
     "time_limit": 20.0,
     "workers": 8,
     "seed": 1,
-    "max_tasks_per_day": 2,
     "default_combination": "upraktisk",  # for oppgavepar som ikke er satt
     "w_task": {"darlig": -4, "noytral": 0, "godt": 2},
     "w_date": {"darlig": -6, "noytral": 0, "godt": 3},
@@ -50,8 +53,6 @@ DEFAULT_PARAMS: dict[str, Any] = {
     "w_task_fair": 10,  # som w_fair, men per oppgave: hovedleddet for «lik fordeling»
     "w_task_range": 10,  # det verste avviket per oppgave
     "history_weight": 0.5,  # hvor mye tidligere semestre teller («litt mindre til den som har gjort mest»)
-    "w_rest_task": 6,  # samme oppgave to datoer på rad
-    "w_rest_any": 3,  # noen oppgave to datoer på rad
     "w_stability": 2,  # behold forrige plans tildeling
     "w_unfilled": 1000,  # tom plass; skal komme etter alt annet
     "solver": {},  # rå CP-SAT-parametre, f.eks. {"linearization_level": 2}
@@ -108,16 +109,34 @@ class Problem:
 
         # låste ruter
         self.locked_person: dict[tuple[str, str], list[str]] = defaultdict(list)
-        self.locked_label: dict[tuple[str, str], list[str]] = defaultdict(list)
+        self.locked_other: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)  # tekst/gruppe
+        self.fixed_fill: dict[tuple[str, str], int] = defaultdict(int)  # plasser fylt uten en person
+        self.group_members: dict[str, list[str]] = {}
+        for g in data.get("groups", []):
+            unknown = [mem for mem in g["members"] if mem not in self.people]
+            if unknown:
+                raise ValueError(f"gruppe {g['id']} har ukjente medlemmer: {unknown}")
+            self.group_members[g["id"]] = list(g["members"])
+        # (person, dato) -> [(oppgave, gruppe)]: medlemmer som er opptatt via en gruppe i en manuell rute
+        self.occupied: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
         for lk in data.get("locked", []):
             key = (lk["date"], lk["task"])
             if "person" in lk:
                 if lk["person"] not in self.locked_person[key]:
                     self.locked_person[key].append(lk["person"])
-            else:
-                self.locked_label[key].append(lk["label"])
-        for key in set(self.locked_person) | set(self.locked_label):
-            have = len(self.locked_person.get(key, [])) + len(self.locked_label.get(key, []))
+                continue
+            fills = int(lk.get("fills", 1))
+            if fills < 1:
+                raise ValueError("fills må være minst 1")
+            if "group" in lk:
+                if lk["group"] not in self.group_members:
+                    raise ValueError(f"ukjent gruppe: {lk['group']}")
+                for mem in self.group_members[lk["group"]]:
+                    self.occupied[mem, lk["date"]].append((lk["task"], lk["group"]))
+            self.locked_other[key].append({**{k: lk[k] for k in ("label", "group") if k in lk}, "fills": fills})
+            self.fixed_fill[key] += fills
+        for key in set(self.locked_person) | set(self.locked_other):
+            have = len(self.locked_person.get(key, [])) + self.fixed_fill.get(key, 0)
             self.slots[key] = max(self.slots.get(key, 0), have)
 
         # utvalg: manuell begrensning av hvem som kan velges for én oppgave på én dato
@@ -191,7 +210,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
 
     unfilled: dict[tuple[str, str], cp_model.IntVar] = {}
     for (d, t), n in pb.slots.items():
-        labels = len(pb.locked_label.get((d, t), ()))
+        labels = pb.fixed_fill.get((d, t), 0)
         fills = [x[p, t, d] for p in pb.people if (p, t, d) in x]
         u = m.new_int_var(0, n, f"u_{t}_{d}")
         unfilled[d, t] = u
@@ -210,9 +229,6 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
 
     # --- harde og myke krav per person og dag ------------------------------
     for (p, d), ts in by_pd.items():
-        cap = max(prm["max_tasks_per_day"], len(locked_pd[p, d]))
-        if len(ts) > cap:
-            m.add(sum(x[p, t, d] for t in ts) <= cap)
         for t1, t2 in _pairs(sorted(ts), 2):
             if t1 in locked_pd[p, d] and t2 in locked_pd[p, d]:
                 continue  # begge låst for hånd: ikke vårt valg
@@ -226,6 +242,24 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
                 m.add(both <= b)
                 m.add(both >= a + b - 1)
                 obj.append((SCALE * prm["w_combo"][lvl], both))
+
+    # --- gruppe i en manuell rute: medlemmene er opptatt med oppgaven -------------
+    pre_warnings: list[str] = []
+    for (mem, d), occ in pb.occupied.items():
+        for t, g in occ:
+            if pb.date_level(mem, t, d) == "ikke":
+                pre_warnings.append(
+                    f"gruppe {g} står på {t} {d}, men {mem} har «ikke» den dagen (manuelt valg beholdt)"
+                )
+            for t2 in by_pd.get((mem, d), []):
+                v = x[mem, t2, d]
+                lvl = "kan_ikke" if t2 == t else pb.combo_level(t, t2)  # samme oppgave to ganger gir ingen mening
+                if mem in pb.locked_person.get((d, t2), ()):
+                    pre_warnings.append(f"{mem} er låst på {t2} {d} samtidig som gruppe {g} står på {t}")
+                elif lvl == "kan_ikke":
+                    m.add(v == 0)
+                else:
+                    obj.append((SCALE * prm["w_combo"][lvl], v))
 
     # --- preferanser og stabilitet -----------------------------------------
     for (p, t, d), v in x.items():
@@ -247,7 +281,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
     capacity = {p: len(ds) for p, ds in dates_of.items()}
     persons = [p for p in pb.people if capacity.get(p)]
     total_slots = sum(
-        n - len(pb.locked_label.get(key, ())) for key, n in pb.slots.items()
+        n - pb.fixed_fill.get(key, 0) for key, n in pb.slots.items()
     )  # plasser som skal fylles av personer
     hist = {p: pb.history_total.get(p, 0) for p in persons}
     A = sum(capacity[p] for p in persons)
@@ -288,7 +322,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
         cap_t = {p: len({d for (q, tt, d) in x if q == p and tt == t}) for p in cand}
         A_t = sum(cap_t.values())
         T_t = sum(
-            n - len(pb.locked_label.get((d, tt), ()))
+            n - pb.fixed_fill.get((d, tt), 0)
             for (d, tt), n in pb.slots.items()
             if tt == t
         )
@@ -301,26 +335,6 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
             band(f"{p}_{t}", sum(task_terms[p, t]) + h_t[p], (T_t + H_t) * cap_t[p], A_t, prm["w_task_fair"], worst_t)
         obj.append((-round(SCALE * prm["w_task_range"]), worst_t))
         task_info[t] = (cap_t, A_t, T_t, h_t)
-
-    # --- hvile: samme person to datoer på rad ------------------------------
-    active_dates = [d for d in pb.dates if any(k[0] == d for k in pb.slots)]
-    busy: dict[tuple[str, str], cp_model.IntVar] = {}
-    for p in persons:
-        for d in dates_of[p]:
-            b = m.new_bool_var(f"busy_{p}_{d}")
-            busy[p, d] = b
-            for t in by_pd[p, d]:
-                m.add_implication(x[p, t, d], b)
-    for da, db in zip(active_dates, active_dates[1:]):
-        for p in persons:
-            if (p, da) in busy and (p, db) in busy:
-                z = m.new_bool_var(f"rest_{p}_{da}")
-                m.add(busy[p, da] + busy[p, db] - 1 <= z)
-                obj.append((-SCALE * prm["w_rest_any"], z))
-            for t in {t for t in by_pd.get((p, da), [])} & set(by_pd.get((p, db), [])):
-                z = m.new_bool_var(f"restt_{p}_{t}_{da}")
-                m.add(x[p, t, da] + x[p, t, db] - 1 <= z)
-                obj.append((-SCALE * prm["w_rest_task"], z))
 
     # --- tom plass ---------------------------------------------------------
     for u in unfilled.values():
@@ -341,10 +355,10 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
         "status": status_name,
         "wall_time": round(solver.wall_time, 3),
         "assignments": [],
-        "labels": [],
+        "manual": [],
         "unfilled": [],
         "concessions": [],
-        "warnings": [],
+        "warnings": list(pre_warnings),
         "load": {},
         "task_load": {},
     }
@@ -372,9 +386,9 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
                 result["concessions"].append(
                     {"date": d, "task": t, "person": p, "task_level": tl, "date_level": dl}
                 )
-    for (d, t), ls in sorted(pb.locked_label.items()):
-        for label in ls:
-            result["labels"].append({"date": d, "task": t, "label": label})
+    for (d, t), cells in sorted(pb.locked_other.items()):
+        for cell in cells:
+            result["manual"].append({"date": d, "task": t, **cell})
 
     for (d, t), u in sorted(unfilled.items()):
         missing = solver.value(u)
@@ -423,6 +437,10 @@ def _explain(
             why["dato_ikke"].append(p)
         elif r == "utenfor_utvalg":
             outside_pool.append(p)
+        elif blocked_by := [
+            f"{gt} ({g})" for gt, g in pb.occupied.get((p, d), []) if gt == t or pb.combo_level(gt, t) == "kan_ikke"
+        ]:
+            why["opptatt"][p] = blocked_by
         else:
             candidates += 1
             others = [o for o in assigned.get((p, d), []) if o != t]

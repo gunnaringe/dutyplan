@@ -6,9 +6,13 @@ finnes. Appen (Go + SQLite) er ikke startet. Lokalt repo, ikke på GitHub ennå.
 
 ## Designregler fra brukeren (ikke bryt uten å spørre)
 
-- **Ingen særregler for enkeltting.** Kirkekoret er ikke et begrep i planleggeren. Admin legger koret inn som en
-  manuell rute og setter et **utvalg** (bare disse kan velges) for Lyd/Bilde den dagen. Samme mekanisme gjelder alt.
-  Ingen grupper, team, kompetanser eller betingede krav.
+- **Generelt verktøy, ikke kirke.** Oppgaver, personer, grupper, datoer og dagtyper er data admin lager selv. Ingen
+  navn eller begreper fra kirken i kode, datamodell eller regler; de finnes bare i testdataene og som eksempler.
+- **Ingen særregler for enkeltting.** Kirkekoret er ikke et begrep i planleggeren. En **gruppe** er bare et navngitt sett
+  personer; i en manuell rute gjør den medlemmene opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave)
+  avgjør hva de kan ha samme dag. Et **utvalg** (bare disse kan velges) dekker «egen lydtekniker» og liknende.
+  Planleggeren velger ikke grupper selv ennå. Ingen kompetanser eller betingede krav.
+- **Tatt ut etter ønske:** maks antall oppgaver per person per dag, og hvile mellom datoer. Ikke legg dem tilbake uten å spørre.
 - **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
 - Hver person velger selv hvilke oppgaver hen er med på; resten skjules. Én dato-kalender per person (*passer ikke /
   dårlig / godt*), valgfri egen kalender per oppgave. Kombinasjoner av oppgaver er én felles innstilling.
@@ -20,7 +24,7 @@ finnes. Appen (Go + SQLite) er ikke startet. Lokalt repo, ikke på GitHub ennå.
 
     export UV_PYTHON_PREFERENCE=only-managed
     mise exec uv@0.13.5 -- uv sync --python 3.12
-    mise exec uv@0.13.5 -- uv run pytest -q          # 54 tester, ca. 12 s
+    mise exec uv@0.13.5 -- uv run pytest -q          # 60 tester, ca. 10 s
 
 Ikke gi et skript navn som kolliderer med standardbiblioteket (`inspect.py` ødela numpy-importen).
 

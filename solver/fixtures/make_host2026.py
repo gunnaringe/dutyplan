@@ -13,7 +13,7 @@ rng = random.Random(2026)
 
 PEOPLE = ["Alma", "Bjarne", "Cecilie", "Dagfinn", "Elin", "Frida", "Gro", "Henrik", "Ingrid",
           "Joakim", "Kjersti", "Lasse", "Mona", "Njål", "Oda", "Pål", "Randi", "Sindre"]
-CHOIR = ["Alma", "Dagfinn", "Ingrid", "Kjersti", "Lasse", "Mona"]  # synger i Kirkekoret; brukes bare til å velge utvalg under
+CHOIR = ["Alma", "Dagfinn", "Ingrid", "Kjersti", "Lasse", "Mona"]  # en vanlig gruppe
 
 DATES = [
     ("2026-08-09", "gudstjeneste"), ("2026-08-23", "gudstjeneste"), ("2026-08-25", "medarbeiderkveld"),
@@ -45,6 +45,8 @@ COMBOS = [
     ("moteleder", "bilde", "kan_ikke"), ("taler", "lyd", "kan_ikke"), ("taler", "bilde", "kan_ikke"),
     ("motevert", "kafe", "bor"), ("kafe", "forbonn", "kan_ikke"), ("kafe", "lyd", "kan_ikke"),
     ("kafe", "bilde", "kan_ikke"), ("motevert", "forbonn", "praktisk"),
+    # De som synger kan ikke samtidig ha Lyd eller Bilde. Vanlig kombinasjonsinnstilling, ingen særregel.
+    ("lovsang", "lyd", "kan_ikke"), ("lovsang", "bilde", "kan_ikke"),
 ]
 
 
@@ -57,22 +59,21 @@ for t, ps in INVOLVED.items():
     for p in ps:
         person_tasks[p][t] = pick(["darlig", "noytral", "godt"], [2, 5, 3])
 
+choir_dates = ["2026-09-20", "2026-11-15"]
 person_dates = {}
 dates_with_tasks = [d for d, ty in DATES if DAY_TYPE_TASKS[ty]]
 for p in PEOPLE:
     cal = {}
     for d in dates_with_tasks:
         lvl = pick([None, "ikke", "darlig", "godt"], [70, 8, 10, 12])
-        if lvl:
+        if lvl and not (p in CHOIR and d in choir_dates):  # de som synger, er der
             cal[d] = lvl
     person_dates[p] = cal
 
 # En lydtekniker som er på gudstjenester men helst vil ha en annen rytme på Lyd (egen kalender)
 person_task_calendars = {"Bjarne": {"lyd": {d: pick(["ikke", "darlig", "godt", "noytral"], [10, 10, 30, 50]) for d in dates_with_tasks}}}
 
-choir_dates = ["2026-09-20", "2026-11-15"]
 lyd_non_choir = [p for p in INVOLVED["lyd"] if p not in CHOIR]
-bilde_non_choir = [p for p in INVOLVED["bilde"] if p not in CHOIR]
 
 data = {
     "tasks": [{"id": t} for t in TASKS] + [{"id": "lovsang", "planned": False}],
@@ -83,14 +84,13 @@ data = {
     "person_dates": person_dates,
     "person_task_calendars": person_task_calendars,
     "combinations": [{"a": a, "b": b, "level": lvl} for a, b, lvl in COMBOS],
-    # Ingen egen regel for Kirkekoret: admin legger koret inn for hånd (låst rute på Lovsang)
-    # og setter et utvalg for Lyd og Bilde de dagene, blant dem som ikke synger.
-    "pools": (
-        [{"date": d, "task": "lyd", "people": lyd_non_choir[:2]} for d in choir_dates]
-        + [{"date": d, "task": "bilde", "people": bilde_non_choir} for d in choir_dates]
-    ),
+    # Kirkekoret er en vanlig gruppe. Admin legger den inn for hånd på Lovsang (som ikke fordeles) og setter et
+    # utvalg for Lyd: «egen lydtekniker» blant dem som ikke synger. Medlemmene holdes unna Lyd og Bilde av
+    # kombinasjonsinnstillingen over, ikke av en særregel.
+    "groups": [{"id": "kirkekoret", "members": CHOIR}],
+    "pools": [{"date": d, "task": "lyd", "people": lyd_non_choir[:2]} for d in choir_dates],
     "locked": [
-        *[{"date": d, "task": "lovsang", "label": "Kirkekoret"} for d in choir_dates],
+        *[{"date": d, "task": "lovsang", "group": "kirkekoret"} for d in choir_dates],
         {"date": "2026-09-13", "task": "taler", "label": "Gjest utenfra"},
         {"date": "2026-12-24", "task": "moteleder", "person": "Ingrid"},
     ],

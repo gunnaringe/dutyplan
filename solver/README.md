@@ -5,7 +5,7 @@ og `tjenesteplan_solver/model.py` (toppen) for inndataformatet.
 
     export UV_PYTHON_PREFERENCE=only-managed     # mise-shimmen for python er ødelagt her
     mise exec uv@0.13.5 -- uv sync --python 3.12
-    mise exec uv@0.13.5 -- uv run pytest -q                                  # 54 tester, ca. 11 s
+    mise exec uv@0.13.5 -- uv run pytest -q                                  # 60 tester, ca. 10 s
     mise exec uv@0.13.5 -- uv run python -m tjenesteplan_solver < fixtures/host2026.json > /tmp/ut.json
     mise exec uv@0.13.5 -- uv run python -m tjenesteplan_solver check fixtures/host2026.json /tmp/ut.json
 

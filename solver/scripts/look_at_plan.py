@@ -25,7 +25,7 @@ if __name__ == "__main__":
     for pool in data["pools"]:
         got = [a["person"] for a in A if a["date"] == pool["date"] and a["task"] == pool["task"]]
         print(f"  {pool['date']} {pool['task']:6} utvalg {pool['people']} -> {got}")
-    print("Manuelle ruter:", r["labels"], [a for a in A if a["locked"]])
+    print("Manuelle ruter:", r["manual"], [a for a in A if a["locked"]])
 
     print("\nPer oppgave (antall / mål):")
     for t, per in r["task_load"].items():

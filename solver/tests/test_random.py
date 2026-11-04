@@ -23,10 +23,11 @@ def random_instance(seed: int):
         "person_dates": {},
         "person_task_calendars": {},
         "combinations": [],
+        "groups": [],
         "pools": [],
         "locked": [],
         "history": {p: {t: rng.randint(0, 3) for t in tasks} for p in people},
-        "params": {"time_limit": 3, "workers": 2, "seed": seed, "max_tasks_per_day": rng.randint(1, 3)},
+        "params": {"time_limit": 3, "workers": 2, "seed": seed},
     }
     for p in people:
         inst["person_tasks"][p] = {t: rng.choice(LEVELS) for t in tasks if rng.random() < 0.7}
@@ -43,11 +44,15 @@ def random_instance(seed: int):
         inst["pools"].append(
             {"date": rng.choice(ds), "task": rng.choice(tl), "people": rng.sample(people, rng.randint(1, 3))}
         )
+    if rng.random() < 0.6:
+        inst["groups"].append({"id": "g1", "members": rng.sample(people, rng.randint(1, max(1, len(people) // 2)))})
     seen = set()
     for _ in range(rng.randint(0, 3)):
         key = (rng.choice(ds), rng.choice(tl))
         who = rng.choice(people + [None])
-        if who is None or (key, who) in seen:
+        if who is None and inst["groups"] and rng.random() < 0.6:
+            inst["locked"].append({"date": key[0], "task": key[1], "group": "g1"})
+        elif who is None or (key, who) in seen:
             inst["locked"].append({"date": key[0], "task": key[1], "label": "Gjest"})
         else:
             seen.add((key, who))

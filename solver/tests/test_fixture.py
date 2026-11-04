@@ -15,16 +15,17 @@ def test_host2026_gir_gyldig_plan_uten_tomme_plasser():
     assert res["unfilled"] == []
     assert res["warnings"] == []
 
-    # Kirkekoret er bare manuelle ruter, og utvalgene begrenser Lyd og Bilde de dagene
-    kor = [lk for lk in data["locked"] if lk.get("label") == "Kirkekoret"]
+    # Kirkekoret er en vanlig gruppe i manuelle ruter; kombinasjonsinnstillingen holder medlemmene unna Lyd og Bilde
+    kor = [lk for lk in data["locked"] if lk.get("group") == "kirkekoret"]
+    members = set(data["groups"][0]["members"])
     assert len(kor) == 2 and all(lk["task"] == "lovsang" for lk in kor)
-    assert {"date": kor[0]["date"], "task": "lovsang", "label": "Kirkekoret"} in res["labels"]
-    assert len(data["pools"]) == 4
+    for lk in kor:
+        on_d = [a for a in res["assignments"] if a["date"] == lk["date"] and a["task"] in ("lyd", "bilde")]
+        assert on_d and not {a["person"] for a in on_d} & members
     for pool in data["pools"]:
         got = [a["person"] for a in res["assignments"] if a["date"] == pool["date"] and a["task"] == pool["task"]]
         assert got and set(got) <= set(pool["people"])
-
-    assert {"date": "2026-09-13", "task": "taler", "label": "Gjest utenfra"} in res["labels"]
+    assert {"date": "2026-09-13", "task": "taler", "label": "Gjest utenfra", "fills": 1} in res["manual"]
     assert any(a["person"] == "Ingrid" and a["date"] == "2026-12-24" and a["locked"] for a in res["assignments"])
     # ingen får mange flere «dårlig» enn nødvendig i denne fixturen
     assert len(res["concessions"]) <= 25

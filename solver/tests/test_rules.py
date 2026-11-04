@@ -1,5 +1,6 @@
 """Én liten test per regel."""
 
+import pytest
 from helpers import NO_FAIR, base, count, dates, run, who
 from tjenesteplan_solver import check, solve
 
@@ -77,7 +78,7 @@ def test_kirkekoret_er_bare_en_manuell_rute_pluss_utvalg():
     inst["tasks"].append({"id": "lovsang", "planned": False})  # med i oppsettet, men fordeles ikke
     inst["person_tasks"]["a"]["lyd"] = "godt"
     res = run(inst)
-    assert res["labels"] == [{"date": d[1], "task": "lovsang", "label": "Kirkekoret"}]
+    assert res["manual"] == [{"date": d[1], "task": "lovsang", "label": "Kirkekoret", "fills": 1}]
     assert who(res, "lyd", d[1])[0] in ("b", "c")
     assert not [a for a in res["assignments"] if a["task"] == "lovsang"]
 
@@ -125,7 +126,7 @@ def test_last_person_beholdes_og_ledd_teller_som_plass():
     res = run(inst)
     assert "c" in who(res, "k", d[0]) and len(who(res, "k", d[0])) == 2
     assert len(who(res, "k", d[1])) == 1
-    assert res["labels"] == [{"date": d[1], "task": "k", "label": "Egen komité"}]
+    assert res["manual"] == [{"date": d[1], "task": "k", "label": "Egen komité", "fills": 1}]
 
 
 def test_last_person_vinner_over_ikke_men_gir_advarsel():
@@ -175,12 +176,6 @@ def test_stabilitet_beholder_forrige_plan():
     assert got == {(p["date"], p["person"]) for p in prev}
 
 
-def test_hvile_unngar_samme_person_to_ganger_pa_rad():
-    res = run(base(people=("a", "b"), n_dates=6))
-    seq = [who(res, "t", d)[0] for d in dates(6)]
-    assert all(x != y for x, y in zip(seq, seq[1:])), seq
-
-
 def test_egen_kalender_erstatter_den_felles():
     d = dates(1)[0]
     inst = base(n_dates=1, person_dates={"a": {d: "ikke"}}, person_task_calendars={"a": {"t": {d: "godt"}}})
@@ -198,21 +193,114 @@ def test_darlig_brukes_bare_nar_det_trengs_og_meldes():
     assert res["concessions"] and res["concessions"][0]["person"] == "a"
 
 
-def test_maks_oppgaver_per_dag():
-    inst = base(
-        people=("a",),
-        n_dates=1,
-        tasks={"x": 1, "y": 1, "z": 1},
-        combinations=[{"a": p, "b": q, "level": "bor"} for p, q in [("x", "y"), ("x", "z"), ("y", "z")]],
-        params={**NO_FAIR, "max_tasks_per_day": 2},
-    )
-    res = run(inst)
-    assert len(res["assignments"]) == 2 and sum(u["missing"] for u in res["unfilled"]) == 1
-
-
 def test_sjekkeren_finner_brudd():
     d = dates(1)[0]
     inst = base(n_dates=1, person_dates={"a": {d: "ikke"}})
     res = run(inst)
     res["assignments"][0]["person"] = "a"  # tukle med planen
     assert any("ikke" in p for p in check(inst, res))
+
+
+# --- generell gruppestøtte: ingen særregler, bare grupper + den felles kombinasjonsinnstillingen ----------
+
+
+def group_inst(level=None, **extra):
+    """Gruppe «g» = {a}, satt opp på «sang» første dato (oppgaven fordeles ikke). a vil gjerne ha Lyd."""
+    d = dates(3)
+    inst = base(
+        n_dates=3,
+        tasks={"lyd": 1},
+        groups=[{"id": "g", "members": ["a"]}],
+        locked=[{"date": d[0], "task": "sang", "group": "g"}],
+        combinations=[{"a": "sang", "b": "lyd", "level": level}] if level else [],
+        **extra,
+    )
+    inst["tasks"].append({"id": "sang", "planned": False})
+    inst["person_tasks"]["a"]["lyd"] = "godt"
+    return inst, d
+
+
+def test_gruppe_gjor_medlemmer_opptatt_via_kombinasjonsinnstillingen():
+    inst, d = group_inst("kan_ikke")
+    res = run(inst)  # run() sjekker også gruppekravet i den uavhengige sjekkeren
+    assert "a" not in who(res, date=d[0])
+    assert res["manual"] == [{"date": d[0], "task": "sang", "group": "g", "fills": 1}]
+
+
+def test_gruppe_uten_hardt_krav_er_bare_en_straff_og_kan_bli_valgt_hvis_det_trengs():
+    inst, d = group_inst()  # paret er ikke satt: standard er upraktisk
+    for other in "bc":
+        inst.setdefault("person_dates", {})[other] = {d[0]: "ikke"}
+    assert who(run(inst), "lyd", d[0]) == ["a"]  # ingen andre kan, og upraktisk er ikke forbudt
+
+
+def test_gruppe_med_bor_kombineres_gir_medlemmet_oppgaven():
+    inst, d = group_inst("bor", params=NO_FAIR)
+    inst["person_tasks"]["a"]["lyd"] = "noytral"  # uten belønningen er b og c bedre
+    inst["person_tasks"]["b"]["lyd"] = inst["person_tasks"]["c"]["lyd"] = "godt"
+    assert who(run(inst), "lyd", d[0]) == ["a"]
+    inst["combinations"] = []  # uten innstilling (upraktisk) velges b eller c
+    assert who(run(inst), "lyd", d[0])[0] in ("b", "c")
+
+
+def test_medlem_av_gruppe_kan_ikke_ta_en_ekstra_plass_pa_samme_oppgave():
+    d = dates(1)[0]
+    inst = base(
+        people=("a", "b", "c", "d"),
+        n_dates=1,
+        tasks={"kafe": 3},
+        groups=[{"id": "lag", "members": ["a"]}],
+        locked=[{"date": d, "task": "kafe", "group": "lag"}],  # laget fyller én av tre plasser
+        params={**NO_FAIR, "w_combo": {"upraktisk": 0}},  # så en straff ikke kan skjule forskjellen
+    )
+    inst["person_tasks"]["a"]["kafe"] = "godt"  # a vil gjerne, men er allerede med via laget
+    res = run(inst)
+    assert "a" not in who(res, "kafe", d) and len(who(res, "kafe", d)) == 2
+
+
+def test_gruppe_kan_fylle_flere_plasser():
+    d = dates(2)
+    inst = base(
+        people=("a", "b", "c", "d", "e"),
+        n_dates=2,
+        tasks={"kafe": 3},
+        groups=[{"id": "lag", "members": ["a", "b", "c"]}],
+        locked=[{"date": d[0], "task": "kafe", "group": "lag", "fills": 3}],
+    )
+    res = run(inst)
+    assert who(res, "kafe", d[0]) == [] and not res["unfilled"]  # gruppen fyller alle tre
+    assert len(who(res, "kafe", d[1])) == 3
+
+
+def test_gruppe_medlem_med_ikke_gir_advarsel_og_manuelt_valg_beholdes():
+    inst, d = group_inst("kan_ikke")
+    inst.setdefault("person_dates", {})["a"] = {d[0]: "ikke"}
+    res = solve(inst)
+    assert any("«ikke»" in w for w in res["warnings"])
+    assert res["manual"]
+
+
+def test_ukjent_gruppe_eller_medlem_gir_feil():
+    inst, d = group_inst()
+    inst["locked"][0]["group"] = "finnes_ikke"
+    with pytest.raises(ValueError):
+        solve(inst)
+    inst, d = group_inst()
+    inst["groups"][0]["members"] = ["ukjent"]
+    with pytest.raises(ValueError):
+        solve(inst)
+
+
+def test_forklaring_nevner_gruppen_nar_medlemmer_er_opptatt():
+    d = dates(1)[0]
+    inst = base(
+        people=("a",),
+        n_dates=1,
+        groups=[{"id": "g", "members": ["a"]}],
+        locked=[{"date": d, "task": "sang", "group": "g"}],
+        combinations=[{"a": "sang", "b": "t", "level": "kan_ikke"}],
+    )
+    inst["tasks"].append({"id": "sang", "planned": False})
+    res = run(inst)
+    assert res["unfilled"][0]["why"]["opptatt"] == {"a": ["sang (g)"]}
+    assert res["unfilled"][0]["why"]["kandidater"] == 0

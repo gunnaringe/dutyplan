@@ -21,7 +21,6 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
     people = {p["id"] for p in data["people"]}
     planned = {t["id"] for t in data["tasks"] if t.get("planned", True)}
     dtype = {d["id"]: d["type"] for d in data["dates"]}
-    max_per_day = (data.get("params") or {}).get("max_tasks_per_day", DEFAULT_PARAMS["max_tasks_per_day"])
     default_combo = (data.get("params") or {}).get("default_combination", DEFAULT_PARAMS["default_combination"])
 
     slots: dict[tuple[str, str], int] = {}
@@ -32,11 +31,15 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
 
     locked_p: dict[tuple[str, str], list[str]] = defaultdict(list)
     locked_l: dict[tuple[str, str], int] = defaultdict(int)
+    members = {g["id"]: g["members"] for g in data.get("groups", [])}
+    group_cells: list[tuple[str, str, str]] = []  # (dato, oppgave, gruppe)
     for lk in data.get("locked", []):
         if "person" in lk:
             locked_p[lk["date"], lk["task"]].append(lk["person"])
         else:
-            locked_l[lk["date"], lk["task"]] += 1
+            locked_l[lk["date"], lk["task"]] += int(lk.get("fills", 1))
+            if "group" in lk:
+                group_cells.append((lk["date"], lk["task"], lk["group"]))
     for key in set(locked_p) | set(locked_l):
         slots[key] = max(slots.get(key, 0), len(locked_p.get(key, [])) + locked_l.get(key, 0))
 
@@ -96,11 +99,16 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
         by_pd[a["person"], a["date"]].add(a["task"])
     for (p, d), ts in by_pd.items():
         lk = {t for t in ts if p in locked_p.get((d, t), [])}
-        if len(ts) > max(max_per_day, len(lk)):
-            bad.append(f"{p} har {len(ts)} oppgaver {d} (maks {max_per_day})")
         for t1, t2 in combinations(sorted(ts), 2):
             if t1 in lk and t2 in lk:
                 continue
             if combo.get(frozenset((t1, t2)), default_combo) == "kan_ikke":
                 bad.append(f"{p} har {t1} og {t2} {d}, som ikke kan kombineres")
+    for d, t, g in group_cells:  # medlemmer av en gruppe i en manuell rute er opptatt med den oppgaven
+        for mem in members[g]:
+            for t2 in by_pd.get((mem, d), ()):
+                if mem in locked_p.get((d, t2), []):
+                    continue
+                if t2 == t or combo.get(frozenset((t, t2)), default_combo) == "kan_ikke":
+                    bad.append(f"{mem} står på {t2} {d} samtidig som gruppe {g} står på {t}")
     return bad
