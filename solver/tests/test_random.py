@@ -46,6 +46,13 @@ def random_instance(seed: int):
         )
     if rng.random() < 0.6:
         inst["groups"].append({"id": "g1", "members": rng.sample(people, rng.randint(1, max(1, len(people) // 2)))})
+    inst["group_tasks"] = []
+    if inst["groups"]:
+        for t in rng.sample(tl, rng.randint(0, len(tl))):
+            inst["group_tasks"].append({"group": "g1", "task": t, "fills": rng.randint(1, 2), "level": rng.choice(LEVELS)})
+        for pl in inst["pools"]:
+            if rng.random() < 0.5:
+                pl["groups"] = ["g1"]
     seen = set()
     for _ in range(rng.randint(0, 3)):
         key = (rng.choice(ds), rng.choice(tl))

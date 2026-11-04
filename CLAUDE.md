@@ -9,9 +9,10 @@ finnes. Appen (Go + SQLite) er ikke startet. Lokalt repo, ikke på GitHub ennå.
 - **Generelt verktøy, ikke kirke.** Oppgaver, personer, grupper, datoer og dagtyper er data admin lager selv. Ingen
   navn eller begreper fra kirken i kode, datamodell eller regler; de finnes bare i testdataene og som eksempler.
 - **Ingen særregler for enkeltting.** Kirkekoret er ikke et begrep i planleggeren. En **gruppe** er bare et navngitt sett
-  personer; i en manuell rute gjør den medlemmene opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave)
-  avgjør hva de kan ha samme dag. Et **utvalg** (bare disse kan velges) dekker «egen lydtekniker» og liknende.
-  Planleggeren velger ikke grupper selv ennå. Ingen kompetanser eller betingede krav.
+  personer. Den kan stå i en manuell rute eller foreslås av planleggeren (`group_tasks`); i begge tilfeller er medlemmene
+  opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag. Et **utvalg**
+  (bare disse personene/gruppene kan velges) dekker «egen lydtekniker» og liknende. Ingen kompetanser eller betingede krav.
+- **Gruppearbeid = ett oppdrag per medlem** i fordelingen (samlet, per oppgave, historikk). Brukerens valg 2026-11-04.
 - **Tatt ut etter ønske:** maks antall oppgaver per person per dag, og hvile mellom datoer. Ikke legg dem tilbake uten å spørre.
 - **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
 - Hver person velger selv hvilke oppgaver hen er med på; resten skjules. Én dato-kalender per person (*passer ikke /
@@ -24,7 +25,7 @@ finnes. Appen (Go + SQLite) er ikke startet. Lokalt repo, ikke på GitHub ennå.
 
     export UV_PYTHON_PREFERENCE=only-managed
     mise exec uv@0.13.5 -- uv sync --python 3.12
-    mise exec uv@0.13.5 -- uv run pytest -q          # 60 tester, ca. 10 s
+    mise exec uv@0.13.5 -- uv run pytest -q          # 72 tester, ca. 10 s
 
 Ikke gi et skript navn som kolliderer med standardbiblioteket (`inspect.py` ødela numpy-importen).
 

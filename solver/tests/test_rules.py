@@ -304,3 +304,175 @@ def test_forklaring_nevner_gruppen_nar_medlemmer_er_opptatt():
     res = run(inst)
     assert res["unfilled"][0]["why"]["opptatt"] == {"a": ["sang (g)"]}
     assert res["unfilled"][0]["why"]["kandidater"] == 0
+
+
+# --- planleggeren kan foreslå grupper -----------------------------------------------------------------
+
+
+def lag_inst(**extra):
+    """a og b er bare med via laget «lag»; ingen er med på oppgaven personlig."""
+    inst = base(
+        people=("a", "b", "c"),
+        n_dates=4,
+        groups=[{"id": "lag", "members": ["a", "b"]}],
+        group_tasks=[{"group": "lag", "task": "t"}],
+        **extra,
+    )
+    inst["person_tasks"] = {}
+    return inst
+
+
+def test_planleggeren_kan_foresla_en_gruppe():
+    res = run(lag_inst())
+    assert len(res["group_assignments"]) == 4 and not res["assignments"] and not res["unfilled"]
+    assert all(a["members"] == ["a", "b"] for a in res["group_assignments"])
+
+
+def test_ett_medlems_ikke_utelukker_gruppen_og_forklares():
+    d = dates(4)
+    inst = lag_inst(person_dates={"a": {d[1]: "ikke"}})
+    res = run(inst)
+    assert {a["date"] for a in res["group_assignments"]} == {d[0], d[2], d[3]}
+    (u,) = res["unfilled"]
+    assert u["date"] == d[1] and u["why"]["grupper"] == {"lag": "dato_ikke:a"}
+
+
+def test_gruppe_som_trenger_flere_plasser_enn_det_er_kan_ikke_velges():
+    inst = lag_inst()
+    inst["group_tasks"][0]["fills"] = 2  # oppgaven har bare én plass
+    res = run(inst)
+    assert not res["group_assignments"] and len(res["unfilled"]) == 4
+    assert res["unfilled"][0]["why"]["grupper"] == {"lag": "for_mange_plasser"}
+
+
+def test_foreslatt_gruppe_kan_fylle_alle_plasser_pa_en_dag():
+    d = dates(2)
+    inst = base(
+        people=("a", "b"),
+        n_dates=2,
+        tasks={"forbonn": 2},
+        groups=[{"id": "par", "members": ["a", "b"]}],
+        group_tasks=[{"group": "par", "task": "forbonn", "fills": 2}],
+    )
+    inst["person_tasks"] = {}
+    res = run(inst)
+    assert len(res["group_assignments"]) == 2 and not res["unfilled"]
+
+
+def test_foreslatt_gruppe_gjor_medlemmer_opptatt_via_kombinasjonene():
+    inst = base(
+        people=("a", "b"),
+        n_dates=1,
+        tasks={"t": 1, "u": 1},
+        groups=[{"id": "lag", "members": ["a"]}],
+        group_tasks=[{"group": "lag", "task": "t", "level": "godt"}],
+        combinations=[{"a": "t", "b": "u", "level": "kan_ikke"}],
+    )
+    inst["person_tasks"] = {"a": {"u": "godt"}, "b": {"u": "noytral"}}  # a vil gjerne ha u, men er i laget på t
+    res = run(inst)
+    assert [g["group"] for g in res["group_assignments"]] == ["lag"]
+    assert who(res, "u") == ["b"]
+
+
+def test_to_grupper_med_felles_medlem_kan_ikke_begge_velges_pa_samme_oppgave():
+    inst = base(
+        people=("a", "b", "c"),
+        n_dates=1,
+        tasks={"t": 2},
+        groups=[{"id": "g1", "members": ["a", "b"]}, {"id": "g2", "members": ["b", "c"]}],
+        group_tasks=[{"group": "g1", "task": "t"}, {"group": "g2", "task": "t"}],
+    )
+    inst["person_tasks"] = {}
+    res = run(inst)
+    assert len(res["group_assignments"]) == 1 and sum(u["missing"] for u in res["unfilled"]) == 1
+
+
+def test_utvalg_kan_navngi_grupper_og_et_utvalg_uten_grupper_utelukker_dem():
+    d = dates(2)
+    inst = base(
+        people=("a", "b", "c"),
+        n_dates=2,
+        groups=[{"id": "g1", "members": ["a"]}, {"id": "g2", "members": ["b"]}],
+        group_tasks=[{"group": "g1", "task": "t", "level": "godt"}, {"group": "g2", "task": "t", "level": "godt"}],
+        pools=[{"date": d[0], "task": "t", "groups": ["g2"]}, {"date": d[1], "task": "t", "people": ["c"]}],
+    )
+    inst["person_tasks"] = {"c": {"t": "noytral"}}
+    res = run(inst)
+    assert [g["group"] for g in res["group_assignments"] if g["date"] == d[0]] == ["g2"]
+    assert who(res, "t", d[1]) == ["c"] and not [g for g in res["group_assignments"] if g["date"] == d[1]]
+
+
+def test_gruppearbeid_teller_ett_oppdrag_per_medlem_for_manuelle_ruter():
+    d = dates(6)
+
+    def run_with(manual):
+        inst = base(n_dates=6, groups=[{"id": "lag", "members": ["a"]}],
+                    locked=[{"date": d[i], "task": "t", "group": "lag"} for i in range(manual)])
+        return run(inst)
+
+    uten = run_with(0)
+    assert (count(uten, "a"), uten["load"]["a"]["count"]) == (2, 2)  # uten gruppearbeid deler de likt
+    med = run_with(2)  # laget (kun a) fyller t to ganger for hånd
+    assert count(med, "a") == 0  # de to rutene er a sin andel: ett oppdrag hver
+    assert med["load"]["a"]["count"] == 2 and med["task_load"]["t"]["a"]["count"] == 2
+    assert sorted(count(med, p) for p in "bc") == [2, 2]
+    assert not med["unfilled"]
+
+
+def test_oppdrag_teller_ett_per_medlem_for_foreslatte_grupper():
+    inst = base(
+        people=("a", "b", "c"),
+        n_dates=4,
+        groups=[{"id": "lag", "members": ["a", "b"]}],
+        group_tasks=[{"group": "lag", "task": "t", "level": "godt"}],
+    )
+    res = run(inst)
+    assert res["group_assignments"]
+    for p in "abc":
+        via = sum(1 for g in res["group_assignments"] if p in g["members"])
+        assert res["load"][p]["count"] == count(res, p) + via
+        assert res["task_load"]["t"][p]["count"] == count(res, p, "t") + via
+
+
+def test_foreslatt_gruppe_teller_i_fordelingen_slik_at_den_ikke_tar_alt():
+    """a og b er bare med via laget, som alle vil ha (godt). Teller medlemmene ett oppdrag hver per gang,
+    må laget dele datoene med c; ellers ville laget tatt alle seks."""
+    inst = base(
+        people=("a", "b", "c"),
+        n_dates=6,
+        groups=[{"id": "lag", "members": ["a", "b"]}],
+        group_tasks=[{"group": "lag", "task": "t", "level": "godt"}],
+    )
+    inst["person_tasks"] = {"c": {"t": "noytral"}}
+    res = run(inst)
+    assert 1 <= len(res["group_assignments"]) <= 3
+    assert count(res, "c") >= 3
+
+
+def test_manuelt_gruppearbeid_teller_ogsa_i_det_samlede_leddet():
+    """Gruppearbeid på en annen oppgave (sang) påvirker bare det samlede leddet; skru av oppgaveleddet for å se det."""
+    d = dates(6)
+    params = {"w_combo": {"upraktisk": 0}, "w_task_fair": 0, "w_task_range": 0}
+
+    def planned_for_a(manual):
+        inst = base(n_dates=6, groups=[{"id": "lag", "members": ["a"]}], params=params,
+                    locked=[{"date": d[i], "task": "sang", "group": "lag"} for i in range(manual)])
+        inst["tasks"].append({"id": "sang", "planned": False})
+        return count(run(inst), "a")
+
+    assert planned_for_a(0) == 2
+    assert planned_for_a(2) <= 1
+
+
+def test_stabilitet_gjelder_ogsa_foreslatte_grupper():
+    d = dates(4)
+    inst = base(
+        people=("a", "b"),
+        n_dates=4,
+        groups=[{"id": "g1", "members": ["a"]}, {"id": "g2", "members": ["b"]}],
+        group_tasks=[{"group": "g1", "task": "t"}, {"group": "g2", "task": "t"}],
+        previous_plan=[{"date": d[i], "task": "t", "group": "g1" if i % 2 == 0 else "g2"} for i in range(4)],
+    )
+    inst["person_tasks"] = {}
+    res = run(inst)
+    assert [g["group"] for g in res["group_assignments"]] == ["g1", "g2", "g1", "g2"]

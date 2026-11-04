@@ -478,6 +478,62 @@
     "Lasse",
     "Mona"
    ]
+  },
+  {
+   "id": "kafeteam_a",
+   "members": [
+    "Cecilie",
+    "Elin",
+    "Kjersti"
+   ]
+  },
+  {
+   "id": "kafeteam_b",
+   "members": [
+    "Mona",
+    "Oda",
+    "Randi"
+   ]
+  },
+  {
+   "id": "forbonnspar_1",
+   "members": [
+    "Dagfinn",
+    "Gro"
+   ]
+  },
+  {
+   "id": "forbonnspar_2",
+   "members": [
+    "Njål",
+    "Pål"
+   ]
+  }
+ ],
+ "group_tasks": [
+  {
+   "group": "kafeteam_a",
+   "task": "kafe",
+   "fills": 3,
+   "level": "noytral"
+  },
+  {
+   "group": "kafeteam_b",
+   "task": "kafe",
+   "fills": 3,
+   "level": "noytral"
+  },
+  {
+   "group": "forbonnspar_1",
+   "task": "forbonn",
+   "fills": 2,
+   "level": "godt"
+  },
+  {
+   "group": "forbonnspar_2",
+   "task": "forbonn",
+   "fills": 2,
+   "level": "noytral"
   }
  ],
  "pools": [
@@ -522,84 +578,84 @@
  ],
  "history": {
   "Alma": {
-   "lyd": 3
+   "lyd": 1
   },
   "Bjarne": {
-   "lyd": 2,
-   "motevert": 1
+   "lyd": 1,
+   "motevert": 3
   },
   "Cecilie": {
    "motevert": 1,
    "kafe": 3,
-   "forbonn": 1
+   "forbonn": 0
   },
   "Dagfinn": {
-   "lyd": 3,
-   "bilde": 0,
-   "forbonn": 2
+   "lyd": 2,
+   "bilde": 3,
+   "forbonn": 0
   },
   "Elin": {
-   "lyd": 3,
+   "lyd": 1,
    "motevert": 0,
-   "kafe": 1
+   "kafe": 2
   },
   "Frida": {
-   "lyd": 0,
+   "lyd": 2,
    "motevert": 2
   },
   "Gro": {
-   "bilde": 2,
-   "motevert": 2,
-   "forbonn": 1
+   "bilde": 1,
+   "motevert": 0,
+   "forbonn": 0
   },
   "Henrik": {
-   "bilde": 0,
-   "motevert": 0
+   "bilde": 1,
+   "motevert": 2
   },
   "Ingrid": {
-   "moteleder": 1,
-   "taler": 2
+   "moteleder": 0,
+   "taler": 3
   },
   "Joakim": {
-   "bilde": 0,
-   "motevert": 3
+   "bilde": 3,
+   "motevert": 1
   },
   "Kjersti": {
-   "motevert": 3,
-   "kafe": 1
+   "motevert": 0,
+   "kafe": 0
   },
   "Lasse": {
-   "moteleder": 0,
-   "taler": 0
+   "moteleder": 1,
+   "taler": 3
   },
   "Mona": {
-   "taler": 1,
-   "kafe": 3,
+   "taler": 2,
+   "kafe": 2,
    "forbonn": 2
   },
   "Njål": {
-   "moteleder": 2,
-   "forbonn": 2
+   "moteleder": 0,
+   "forbonn": 1
   },
   "Oda": {
-   "moteleder": 0,
-   "kafe": 1,
-   "forbonn": 1
+   "moteleder": 1,
+   "kafe": 2,
+   "forbonn": 2
   },
   "Pål": {
    "moteleder": 2,
    "taler": 2,
-   "forbonn": 2
+   "forbonn": 1
   },
   "Randi": {
-   "taler": 2,
+   "taler": 3,
    "motevert": 1,
-   "kafe": 3
+   "kafe": 0
   },
   "Sindre": {
-   "taler": 1,
-   "kafe": 0,
-   "forbonn": 3
+   "taler": 3,
+   "kafe": 3,
+   "forbonn": 2
   }
  },
  "params": {

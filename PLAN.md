@@ -25,15 +25,13 @@ bokmål først, men tekstene skal kunne byttes ut.
 
 - **Ingen innlogging, ingen lenker med hemmelighet, ingen roller.** Se *Tilgang uten innlogging*.
 - **Grupper er generelle.** En gruppe er et navngitt sett personer (et team, et kor, et par, et lag). Ingen gruppe har
-  særregler. En gruppe kan stå i en manuell rute og fylle én eller flere plasser. Medlemmene er da opptatt med den
-  oppgaven, og den felles kombinasjonsinnstillingen avgjør hva de kan ha samme dag (se *Manuelle ruter og utvalg*).
-- **Planleggeren velger ikke grupper selv ennå.** Grupper settes inn for hånd. Å la planleggeren velge hele team som
-  kandidater kan komme senere hvis det trengs.
+  særregler. Admin kan sette en gruppe inn i en manuell rute, og **planleggeren kan også foreslå grupper** som kandidater
+  for oppgaver admin har satt opp for gruppen (`group_task`: hvilken oppgave, hvor mange plasser den fyller, og et nivå).
+  I begge tilfeller er medlemmene opptatt med oppgaven, og den felles kombinasjonsinnstillingen avgjør hva de kan ha samme
+  dag (se *Manuelle ruter, grupper og utvalg*).
+- **Gruppearbeid teller som ett oppdrag per medlem** i fordelingen (samlet, per oppgave og i historikken), både for
+  manuelle og foreslåtte grupper. Historikken for neste periode regnes ut slik av backenden.
 - Ingen kompetanser og ingen betingede krav («når X, så Y»). Utvalg dekker det.
-- **Arbeid via en gruppe i en manuell rute teller foreløpig ikke i fordelingen.** Verken medlemmenes totale antall,
-  per-oppgave-målene eller historikken for neste periode regner det med. Et team som fyller en kafédato for hånd, får
-  altså fortsatt full andel av de andre kafédatoene. Regelen for hvordan det skal telle (ett oppdrag per medlem, eller
-  plassene delt på medlemmene) er ikke valgt; det er brukerens avgjørelse.
 - Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom datoer. Det er kombinasjonsinnstillingen
   som styrer hva som kan, bør og ikke bør samme dag. (Begge ble prøvd og tatt ut etter ønske 2026-11-04.)
 
@@ -42,7 +40,8 @@ bokmål først, men tekstene skal kunne byttes ut.
 **Hvem som helst med adressen**
 - Åpner siden og velger navnet sitt.
 - **Velger selv hvilke oppgaver hen er med på.** Alle oppgaver er skjult til å begynne med; «vis alle» lar
-  personen krysse av for flere. Det som ikke er avkrysset, vises ikke og blir aldri tildelt.
+  personen krysse av for flere. Det som ikke er avkrysset, vises ikke og blir aldri tildelt personlig (unntatt via en gruppe admin
+  har satt opp for oppgaven, se *Manuelle ruter, grupper og utvalg*).
 - Velger preferanse per oppgave: *ikke / dårlig / nøytral / godt*. Folk er ulike, og det er opp til dem.
 - Velger for hver dato: *passer ikke / dårlig / godt* (ikke markert = nøytral). **Én kalender gjelder
   alle oppgavene personen er med på.** Lyd og Bilde har samme preferanse, så det er ett valg per dato.
@@ -66,7 +65,16 @@ bokmål først, men tekstene skal kunne byttes ut.
   Er antallet i utvalget like stort som antall plasser, er det i praksis en manuell tildeling.
 - Utvalget er et vanlig hardt krav. Står noen i utvalget som har «passer ikke» den dagen eller ikke er med på
   oppgaven, kommer det som forklaring (og en tom plass hvis ingen i utvalget går).
-- Står et gruppemedlem på «passer ikke» den dagen gruppen er satt opp, beholdes det manuelle valget, med en advarsel.
+- Står et gruppemedlem på «passer ikke» den dagen en manuell gruppe er satt opp, beholdes det manuelle valget, med en advarsel.
+- **Foreslåtte grupper, det admin må sette opp:** for hver gruppe hvilke oppgaver den kan foreslås til, hvor mange plasser den
+  fyller og et nivå. Én som har «passer ikke» en dato, utelukker hele gruppen den datoen; et par er altså ikke brukbart en dato
+  noen av dem er borte.
+- **Foreslåtte grupper:** admin setter opp hvilke oppgaver en gruppe kan foreslås til (`group_task`). Gruppen er en kandidat
+  på lik linje med en person og fyller `fills` plasser. Den er utelukket en dato hvis ett medlem har «passer ikke» (eller har
+  sagt «ikke» til oppgaven), hvis gruppen står utenfor et utvalg, eller hvis medlemmene er opptatt via en annen gruppe.
+  Datopoengene er snittet av medlemmenes ønsker; oppgavenivået settes på gruppen. Medlemmenes egen deltakelse i oppgaven
+  trengs ikke. Et utvalg kan nevne både personer og grupper.
+- To grupper med felles medlem kan ikke begge velges samme dag hvis det er samme oppgave eller «kan ikke kombineres».
 
 ## Datamodell (SQLite)
 
@@ -74,6 +82,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 |---|---|
 | `person` | navn, aktiv |
 | `group`, `group_member` | navngitt sett personer (team, kor, par). Ingen egne regler |
+| `group_task` | oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
 | `task` | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner). F.eks. én oppgave per aldersgruppe |
 | `period` | f.eks. et semester |
 | `slot_date` | dato, dagtype (fritt navn admin lager selv), merknad |
@@ -82,7 +91,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 | `person_date` | nivå per dato, felles for personens oppgaver |
 | `person_task_calendar` | settes på når en oppgave har «egen kalender»; da brukes den i stedet for den felles for den oppgaven |
 | `task_combination` | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
-| `selection` | **utvalg** for én oppgave på én dato: de eneste som kan velges |
+| `selection` | **utvalg** for én oppgave på én dato: de eneste personer og grupper som kan velges |
 | `assignment` | dato, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
 | `plan_run` | parametere, resultat, mål, forklaringer, publisert ja/nei |
 | `change_log` | hvem (oppgitt navn), hva, når. Se *Tilgang uten innlogging* |
@@ -102,8 +111,9 @@ Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjon
 - Utvalg (`selection`): alle utenfor utvalget fjernes for den oppgaven og datoen.
 - Antall plasser per oppgave og dato (låste ruter regnes med).
 - Oppgavepar som *kan ikke kombineres*: høyst én av dem per person per dag.
-- Gruppe i en manuell rute: hvert medlem er opptatt med gruppens oppgave. Paret (gruppens oppgave, medlemmets andre oppgave)
-  følger kombinasjonsinnstillingen (forbud, straff eller bonus), og medlemmet kan ikke ta en ekstra plass på samme oppgave.
+- Gruppe i en manuell rute eller foreslått av planleggeren: hvert medlem er opptatt med gruppens oppgave. Paret (gruppens oppgave,
+  medlemmets andre oppgave) følger kombinasjonsinnstillingen (forbud, straff eller bonus), og medlemmet kan ikke ta en ekstra
+  plass på samme oppgave.
 
 **Mål (poeng, justeres mot testdataene)**
 - Pluss for «godt», minus for «dårlig», på dato og oppgave.
@@ -112,7 +122,9 @@ Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjon
   oppgavens plasser, regnet ut fra hvor mange datoer personen kan stille. Målet er sjelden et helt tall, så det er et
   **bånd** [nedre, øvre hele tall] som er «jevnt nok», og bare det utenfor båndet koster. I tillegg straffes det verste
   avviket per oppgave, så ikke én person tar hele avviket.
-- **Samlet antall oppdrag (vern mot overbelastning)**: samme type bånd over alle oppgaver, med lavere vekt. Oppgavene har
+- **Samlet antall oppdrag (vern mot overbelastning)**: samme type bånd over alle oppgaver, med lavere vekt. Gruppearbeid
+  teller ett oppdrag per medlem. (Måltallet bygger på antall plasser; en foreslått gruppe med flere medlemmer enn plasser gir
+  flere oppdrag enn plasser, og det regnes ikke inn i målet på forhånd.) Oppgavene har
   ulik etterspørsel (f.eks. 33 plasser på 7 personer for én oppgave, 17 på 5 for en annen), så samlet antall kan ikke bli likt uten å gjøre
   fordelingen per oppgave skjev. Vektene bestemmer avveiningen: se *Resultater fra spiken*.
 - **Historikk fra tidligere semestre, per oppgave**: den som har gjort mest av en oppgave, får litt mindre av akkurat
@@ -159,11 +171,11 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 
 ## Resultater fra spiken (fase 0)
 
-Solveren alene, `solver/`: 60 tester (29 regeltester, testdataene fra høsten 2026, 30 tilfeldige instanser), alle grønne.
+Solveren alene, `solver/`: 72 tester (41 regeltester, testdataene fra høsten 2026, 30 tilfeldige instanser), alle grønne.
 
 - **Reglene holder.** Hver regel har en test som feiler hvis regelen fjernes (prøvd ved å bryte modellen én regel av
-  gangen). En uavhengig sjekker kontrollerer harde krav på alle planer. Utvalg, gruppe i manuell rute (med kombinasjonsinnstillingen), den låste
-  personen og tekstrutene virker på testdataene (18 personer, 17 datoer, 7 oppgaver, ca. 120 tildelinger).
+  gangen). En uavhengig sjekker kontrollerer harde krav på alle planer. Utvalg, grupper i manuelle ruter (med kombinasjonsinnstillingen), foreslåtte team og par, den låste
+  personen og tekstrutene virker på testdataene (18 personer, 17 datoer, 7 oppgaver, 4 team/par, ca. 120 tildelinger).
 - **Størrelse og tid.** Etter at hvile og dagstak ble tatt ut, kommer en gyldig og brukbar plan etter ca. 2 sekunder, og
   kvaliteten bedres til ca. 20 s. Solveren **beviser ikke** at planen er best mulig (øvre grense tettner ikke), så resultatet
   er et *forslag* innenfor tidsgrensen. Ulike frø gir litt ulike planer; «prøv en gang til» er derfor en nyttig knapp.
@@ -175,8 +187,8 @@ Solveren alene, `solver/`: 60 tester (29 regeltester, testdataene fra høsten 20
 
      | | verste avvik fra egen andel per oppgave | største spredning per oppgave | verste samlet avvik |
      |---|---|---|---|
-     | gammelt vektsett (samlet først) | 4,1–5,1 oppdrag | 7–8 | 0,9–1,9 |
-     | nåværende (oppgave først) | 1,0 | 4 | 4,4–5,4 |
+     | gammelt vektsett (samlet først) | 4,6–5,6 oppdrag | 8–9 | 0,9 |
+     | nåværende (oppgave først) | 1,0 | 3–4 | 4,5 |
 
      **Prisen er at samlet antall oppdrag per person blir mer ulikt.** Er det feil avveining, endres det med vektene
      `w_fair` og `w_task_fair`. Det er en beslutning for deg, ikke en teknisk detalj.

@@ -73,6 +73,14 @@ for p in PEOPLE:
 # En lydtekniker som er på gudstjenester men helst vil ha en annen rytme på Lyd (egen kalender)
 person_task_calendars = {"Bjarne": {"lyd": {d: pick(["ikke", "darlig", "godt", "noytral"], [10, 10, 30, 50]) for d in dates_with_tasks}}}
 
+# Faste team og par som planleggeren kan foreslå som en enhet: (medlemmer, oppgave, plasser)
+TEAMS = {
+    "kafeteam_a": (["Cecilie", "Elin", "Kjersti"], "kafe", 3),
+    "kafeteam_b": (["Mona", "Oda", "Randi"], "kafe", 3),
+    "forbonnspar_1": (["Dagfinn", "Gro"], "forbonn", 2),
+    "forbonnspar_2": (["Njål", "Pål"], "forbonn", 2),
+}
+
 lyd_non_choir = [p for p in INVOLVED["lyd"] if p not in CHOIR]
 
 data = {
@@ -87,7 +95,12 @@ data = {
     # Kirkekoret er en vanlig gruppe. Admin legger den inn for hånd på Lovsang (som ikke fordeles) og setter et
     # utvalg for Lyd: «egen lydtekniker» blant dem som ikke synger. Medlemmene holdes unna Lyd og Bilde av
     # kombinasjonsinnstillingen over, ikke av en særregel.
-    "groups": [{"id": "kirkekoret", "members": CHOIR}],
+    "groups": [{"id": "kirkekoret", "members": CHOIR}]
+    + [{"id": g, "members": mems} for g, (mems, _t, _n) in TEAMS.items()],
+    "group_tasks": [
+        {"group": g, "task": t, "fills": n, "level": pick(["noytral", "godt"], [2, 1])}
+        for g, (_mems, t, n) in TEAMS.items()
+    ],
     "pools": [{"date": d, "task": "lyd", "people": lyd_non_choir[:2]} for d in choir_dates],
     "locked": [
         *[{"date": d, "task": "lovsang", "group": "kirkekoret"} for d in choir_dates],

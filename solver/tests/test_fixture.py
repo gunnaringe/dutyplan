@@ -30,6 +30,16 @@ def test_host2026_gir_gyldig_plan_uten_tomme_plasser():
     # ingen får mange flere «dårlig» enn nødvendig i denne fixturen
     assert len(res["concessions"]) <= 25
 
+    # Planleggeren foreslår faste team og par som en enhet; hvert medlem teller ett oppdrag per gang
+    assert res["group_assignments"]
+    members = {g["id"]: g["members"] for g in data["groups"]}
+    manual = [lk for lk in data["locked"] if "group" in lk]
+    for p, load in res["load"].items():
+        own = sum(1 for a in res["assignments"] if a["person"] == p)
+        via = sum(1 for g in res["group_assignments"] if p in g["members"])
+        locked_cells = sum(1 for lk in manual if p in members[lk["group"]])
+        assert load["count"] == own + via + locked_cells, p
+
     # Lik fordeling per oppgave: ingen ligger langt fra sin andel, og de som kan like mange datoer
     # får omtrent like mange oppdrag. Uten dette gikk én person på 7 forbønner mens en annen fikk 0.
     for t, per in res["task_load"].items():

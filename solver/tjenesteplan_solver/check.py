@@ -43,7 +43,9 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
     for key in set(locked_p) | set(locked_l):
         slots[key] = max(slots.get(key, 0), len(locked_p.get(key, [])) + locked_l.get(key, 0))
 
-    pools = {(pl["date"], pl["task"]): set(pl["people"]) for pl in data.get("pools", [])}
+    pools = {(pl["date"], pl["task"]): set(pl.get("people", [])) for pl in data.get("pools", [])}
+    pool_groups = {(pl["date"], pl["task"]): set(pl.get("groups", [])) for pl in data.get("pools", [])}
+    group_tasks = {(gt["group"], gt["task"]): gt for gt in data.get("group_tasks", [])}
     combo = {
         frozenset((c["a"], c["b"])): c["level"] for c in data.get("combinations", [])
     }
@@ -88,11 +90,41 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
             if seen[p, key[1], key[0]] == 0:
                 bad.append(f"låst {p} {key[1]} {key[0]} mangler i planen")
 
+    # grupper foreslått av planleggeren
+    gassigns = result.get("group_assignments", [])
+    seen_g = Counter((a["group"], a["task"], a["date"]) for a in gassigns)
+    for k, n in seen_g.items():
+        if n > 1:
+            bad.append(f"dobbelt gruppe: {k}")
+    for a in gassigns:
+        g, t, d = a["group"], a["task"], a["date"]
+        key = (d, t)
+        cfg = group_tasks.get((g, t))
+        if cfg is None:
+            bad.append(f"gruppe {g} er ikke satt opp for {t}")
+            continue
+        if cfg.get("level") == "ikke":
+            bad.append(f"gruppe {g} har sagt «ikke» til {t}")
+        if key not in slots:
+            bad.append(f"gruppe {g} satt opp på {t} {d}, men oppgaven gjelder ikke den dagen")
+            continue
+        per_cell[key] += int(cfg.get("fills", 1))
+        if key in pools and g not in pool_groups[key]:
+            bad.append(f"gruppe {g} står ikke i utvalget for {t} {d}")
+        for mem in members[g]:
+            if data.get("person_tasks", {}).get(mem, {}).get(t) == "ikke":
+                bad.append(f"{mem} (i gruppe {g}) har sagt «ikke» til {t} ({d})")
+            if date_lvl(mem, t, d) == "ikke":
+                bad.append(f"{mem} (i gruppe {g}) har «ikke» på {d} for {t}")
+            for gd, gt, gg in group_cells:
+                if gd == d and mem in members[gg] and (gt == t or combo.get(frozenset((gt, t)), default_combo) == "kan_ikke"):
+                    bad.append(f"{mem} står i gruppe {g} på {t} {d} samtidig som gruppe {gg} står på {gt}")
+
     missing = {(u["date"], u["task"]): u["missing"] for u in result["unfilled"]}
     for key, n in slots.items():
         filled = per_cell[key] + locked_l.get(key, 0) + missing.get(key, 0)
         if filled != n:
-            bad.append(f"{key}: {per_cell[key]} personer + {locked_l.get(key, 0)} ledd + {missing.get(key, 0)} tomme ≠ {n} plasser")
+            bad.append(f"{key}: {per_cell[key]} personer/grupper + {locked_l.get(key, 0)} manuelle + {missing.get(key, 0)} tomme ≠ {n} plasser")
 
     by_pd: dict[tuple[str, str], set[str]] = defaultdict(set)
     for a in assigns:
@@ -104,6 +136,19 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
                 continue
             if combo.get(frozenset((t1, t2)), default_combo) == "kan_ikke":
                 bad.append(f"{p} har {t1} og {t2} {d}, som ikke kan kombineres")
+    for a in gassigns:  # medlemmer av en foreslått gruppe er opptatt med gruppens oppgave
+        g, t, d = a["group"], a["task"], a["date"]
+        for mem in members[g]:
+            for t2 in by_pd.get((mem, d), ()):
+                if t2 == t or combo.get(frozenset((t, t2)), default_combo) == "kan_ikke":
+                    bad.append(f"{mem} står på {t2} {d} samtidig som gruppe {g} står på {t}")
+    for a1, a2 in combinations(gassigns, 2):
+        if a1["date"] != a2["date"]:
+            continue
+        shared = set(members[a1["group"]]) & set(members[a2["group"]])
+        t1, t2 = a1["task"], a2["task"]
+        if shared and (t1 == t2 or combo.get(frozenset((t1, t2)), default_combo) == "kan_ikke"):
+            bad.append(f"gruppe {a1['group']} ({t1}) og {a2['group']} ({t2}) {a1['date']} deler {sorted(shared)}")
     for d, t, g in group_cells:  # medlemmer av en gruppe i en manuell rute er opptatt med den oppgaven
         for mem in members[g]:
             for t2 in by_pd.get((mem, d), ()):

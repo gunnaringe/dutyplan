@@ -21,6 +21,10 @@ if __name__ == "__main__":
     print(r["status"], "mål", r["objective"], "grense", r["bound"], "brudd:", check(data, r) or "ingen")
     print("tomme plasser:", r["unfilled"] or "ingen", "| advarsler:", r["warnings"] or "ingen")
 
+    teams = defaultdict(int)
+    for g in r["group_assignments"]:
+        teams[g["group"]] += 1
+    print("Foreslåtte grupper (antall datoer):", dict(teams) or "ingen")
     print("\nUtvalg:")
     for pool in data["pools"]:
         got = [a["person"] for a in A if a["date"] == pool["date"] and a["task"] == pool["task"]]
