@@ -1,0 +1,30 @@
+:root { color-scheme: light dark; --bg: #fbfbf8; --fg: #1d2420; --muted: #5b655f; --line: #d8ddd6; --accent: #1f6f4a; --err: #a12626; }
+@media (prefers-color-scheme: dark) { :root { --bg: #131715; --fg: #e8ede9; --muted: #9aa59e; --line: #2d3531; --accent: #5fc795; --err: #ff8a8a; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--line); }
+header .brand { font-weight: 700; color: var(--fg); text-decoration: none; }
+header label { color: var(--muted); font-size: .875rem; display: flex; gap: .4rem; align-items: center; }
+header .spacer { flex: 1; }
+main { max-width: 56rem; margin: 0 auto; padding: 1rem; }
+h1 { font-size: 1.5rem; margin: .5rem 0 1rem; }
+h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+a { color: var(--accent); }
+input, select, button { font: inherit; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--bg); color: var(--fg); }
+button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+@media (prefers-color-scheme: dark) { button { color: #0b1a12; } }
+button:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+form.row { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+form.row input[type=text] { flex: 1; min-width: 12rem; }
+ul.plain { list-style: none; padding: 0; margin: 0; }
+ul.plain li { padding: .5rem 0; border-bottom: 1px solid var(--line); }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: .875rem; }
+.muted { color: var(--muted); }
+.small { font-size: .875rem; }
+#msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; min-height: 1.5rem; }
+#msg.err { color: var(--err); }
+#msg.ok { color: var(--accent); }
+.log td:first-child { white-space: nowrap; color: var(--muted); }

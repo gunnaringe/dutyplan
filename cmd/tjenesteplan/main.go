@@ -1,0 +1,62 @@
+// Command tjenesteplan serves the task-planning app: one binary, SQLite, embedded frontend. No login.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gunnaringe/tjenesteplan/internal/api"
+	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/tjenesteplan/web"
+)
+
+func main() {
+	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on (port 0 picks a free one)")
+	dbPath := flag.String("db", "tjenesteplan.db", "SQLite database file (created if missing)")
+	flag.Parse()
+
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	st, err := store.Open(*dbPath)
+	if err != nil {
+		log.Error("open database", "err", err)
+		os.Exit(1)
+	}
+	defer st.Close()
+
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Error("listen", "err", err)
+		os.Exit(1)
+	}
+	srv := &http.Server{
+		Handler:           api.New(st, web.Files, log),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
+	}
+	fmt.Printf("tjenesteplan: http://%s\n", ln.Addr()) // the one line scripts and people look for
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stop
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Error("serve", "err", err)
+		os.Exit(1)
+	}
+}

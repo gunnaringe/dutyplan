@@ -1,12 +1,13 @@
-# Alle verktøy og kommandoer går gjennom mise. Ikke kjør python/uv/pytest direkte.
-#   mise install      verktøyene (python, uv) i eksakte versjoner (under)
-#   mise run setup    Python-pakkene (ortools, pytest) fra solver/uv.lock
+# Alle verktøy og kommandoer går gjennom mise. Ikke kjør python/uv/pytest/go direkte.
+#   mise install      verktøyene (python, uv, go) i eksakte versjoner (under)
+#   mise run setup    Python-pakkene (ortools, pytest) fra solver/uv.lock; Go-pakkene hentes av go selv
 #   mise tasks        alle oppgaver
 min_version = "2026.10.0"
 
 [tools]
 python = "3.12.15"
 uv = "0.13.5"
+go = "1.26.10"
 
 [env]
 # uv skal bruke mises Python og lockfila, aldri laste ned sin egen Python eller endre låsen på egen hånd.
@@ -22,16 +23,55 @@ dir = "{{config_root}}/solver"
 run = "uv sync"
 
 [tasks.test]
-description = "Alle tester, stille: ett linje ved suksess, én linje per feil ellers (ca. 10 s). Ekstra args: -- -k navn"
+description = "Alle tester, Go og Python, stille (ca. 15 s). Ekstra args gjelder ikke; bruk test:app eller test:solver -- -k navn"
+depends = ["test:app", "test:solver"]
 quiet = true
-dir = "{{config_root}}/solver"
-run = "uv run pytest"
+run = "echo 'test: ok'"
 
 [tasks."test:fast"]
-description = "Bare regeltestene (ca. 2 s)"
+description = "Raskeste løkke: Go-testene og Python-regeltestene (ca. 5 s)"
+depends = ["test:app", "test:solver:fast"]
 quiet = true
+run = "echo 'test:fast: ok'"
+
+[tasks."test:app"]
+description = "go vet + go test for appen, stille (ca. 3 s). Args: -- -run Navn"
+quiet = true
+run = "sh scripts/test-app.sh"
+
+[tasks."test:solver"]
+description = "Python-testene for planleggeren, stille (ca. 10 s). Args: -- -k navn"
 dir = "{{config_root}}/solver"
+quiet = true
+run = "uv run pytest"
+
+[tasks."test:solver:fast"]
+description = "Bare regeltestene i planleggeren (ca. 2 s)"
+dir = "{{config_root}}/solver"
+quiet = true
 run = "uv run pytest tests/test_rules.py"
+
+[tasks."app:build"]
+description = "Bygg appen til bin/tjenesteplan (én statisk binær med frontenden innebygd)"
+quiet = true
+run = "go build -o bin/tjenesteplan ./cmd/tjenesteplan"
+
+[tasks."app:run"]
+description = "Kjør appen i forgrunnen. Skriver én linje med adressen. Args: -- --addr 127.0.0.1:8080 --db fil.db"
+quiet = true
+run = "go run ./cmd/tjenesteplan"
+
+[tasks."app:ui"]
+description = "Nettlesersjekk av frontenden (headless Chromium mot en midlertidig server, ca. 10 s). Krever playwright-core fra ../scoreboard"
+depends = ["app:build"]
+quiet = true
+run = "node scripts/ui-check.js"
+
+[tasks."app:smoke"]
+description = "Start appen på en midlertidig database, lag to organisasjoner, sjekk isolasjonen med curl, stopp den igjen (ca. 5 s)"
+depends = ["app:build"]
+quiet = true
+run = "sh scripts/smoke.sh"
 
 [tasks.mutations]
 description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 30 s). Stille ved suksess. Args: --only tekst, --list"
@@ -40,8 +80,8 @@ dir = "{{config_root}}/solver"
 run = "uv run python scripts/mutations.py"
 
 [tasks.verify]
-description = "Tester + mutasjoner: alt som må være grønt etter en regelendring"
-depends = ["test", "mutations"]
+description = "Tester (Go + Python) + mutasjoner + røyktest av appen: alt som må være grønt før commit"
+depends = ["test", "mutations", "app:smoke"]
 quiet = true
 run = "echo 'verify: ok'"
 

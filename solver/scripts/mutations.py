@@ -1,4 +1,4 @@
-"""Mutasjonssjekk: bryt én regel om gangen i model.py og se at minst én test feiler.
+"""Mutasjonssjekk: bryt én regel om gangen (planleggeren i Python og appen i Go) og se at minst én test feiler.
 
     mise run mutations                 alle (ca. 30 s); stille ved suksess
     mise run mutations -- --only gruppe   bare de som har «gruppe» i navnet
@@ -6,7 +6,7 @@
 
 Skriver bare det som krever handling: mutasjoner som overlevde (mangler en test), mønstre som ikke
 finnes lenger (utdatert liste) og mutasjoner som ikke lar seg kjøre. Avsluttes med én oppsummeringslinje.
-model.py gjenopprettes alltid; en sikkerhetskopi ligger i .mutation-backup-model.py mens det pågår.
+Filene gjenopprettes alltid; sikkerhetskopier ligger i solver/.mutation-backup/ mens det pågår.
 """
 
 from __future__ import annotations
@@ -17,13 +17,14 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-MODEL = ROOT / "tjenesteplan_solver" / "model.py"
-BACKUP = ROOT / ".mutation-backup-model.py"
+ROOT = Path(__file__).resolve().parent.parent  # solver/
+REPO = ROOT.parent
+BACKUP = ROOT / ".mutation-backup"
+MODEL = "solver/tjenesteplan_solver/model.py"
 TESTS = ["tests/test_rules.py", "tests/test_random.py", "tests/test_fixture.py"]  # raskeste først, så -x stopper tidlig
 
 # (navn, mønster i model.py, erstatning). Mønsteret erstattes bare første gang det forekommer.
-MUTATIONS: list[tuple[str, str, str]] = [
+PY_MUTATIONS: list[tuple[str, str, str]] = [
     ("kan ikke kombineres ignoreres", "m.add(a + b <= 1)", "pass"),
     ("ikke på dato ignoreres", 'if self.date_level(p, t, d) == "ikke":', "if False:"),
     ("ikke med på oppgaven ignoreres", "if t not in self.task_level.get(p, {}):", "if False:"),
@@ -58,12 +59,45 @@ MUTATIONS: list[tuple[str, str, str]] = [
     ("manuelt valg vinner ikke", "m.add(v == 1)  # manuelt valg vinner over filtrene", "pass"),
 ]
 
+# Go-appen: (navn, fil fra repoets rot, mønster, erstatning). Tenant-vaktene først: det er det viktigste å ikke miste.
+GO_MUTATIONS: list[tuple[str, str, str, str]] = [
+    ("tenant: person oppdateres uten org-vakt", "internal/store/store.go", "FROM person WHERE id = ? AND org_id = ?`, id, oid)", "FROM person WHERE id = ? AND ? > 0`, id, oid)"),
+    ("tenant: plan hentes uten org", "internal/store/store.go", "WHERE o.slug = ? AND p.slug = ?", "WHERE ? != '' AND p.slug = ?"),
+    ("tenant: personer listes uten org", "internal/store/store.go", "FROM person WHERE org_id = ? ORDER BY", "FROM person WHERE ? > 0 ORDER BY"),
+    ("tenant: planer listes uten org", "internal/store/store.go", "FROM plan WHERE org_id = ? ORDER BY id DESC", "FROM plan WHERE ? > 0 ORDER BY id DESC"),
+    ("tenant: logg uten org", "internal/store/store.go", "LEFT JOIN plan p ON p.id = l.plan_id WHERE l.org_id = ?", "LEFT JOIN plan p ON p.id = l.plan_id WHERE ? > 0"),
+    ("fremmednøkler av", "internal/store/store.go", 'q.Add("_pragma", "foreign_keys(1)")', 'q.Add("_pragma", "foreign_keys(0)")'),
+    ("aktør er ikke påkrevd", "internal/store/store.go", 'if dec == "" {', "if false {"),
+    ("aktør lengde og tegn", "internal/store/store.go", "utf8.RuneCountInString(dec) > 80 || !validText(dec)", "false"),
+    ("organisasjon kan dupliseres", "internal/store/migrations/001_init.sql", "slug       TEXT NOT NULL UNIQUE,", "slug       TEXT NOT NULL,"),
+    ("plan kan dupliseres i organisasjonen", "internal/store/migrations/001_init.sql", "UNIQUE (org_id, slug)", "UNIQUE (id)"),
+    ("person kan dupliseres i organisasjonen", "internal/store/migrations/001_init.sql", "UNIQUE (org_id, name)", "UNIQUE (id)"),
+    ("endring uten ny verdi godtas", "internal/store/store.go", "if len(changes) == 0 {", "if false {"),
+    ("API krever ikke JSON", "internal/api/api.go", 'len(ct) < 16 || ct[:16] != "application/json"', "len(ct) < 0"),
+    ("API godtar ukjente felt", "internal/api/api.go", "dec.DisallowUnknownFields()", ""),
+    ("API har ingen størrelsesgrense", "internal/api/api.go", "r.Body = http.MaxBytesReader(w, r.Body, 64<<10)", ""),
+    ("API mangler sikkerhetshoder", "internal/api/api.go", 'h.Set("Content-Security-Policy"', 'h.Set("X-Csp-Av"'),
+]
+
+MUTATIONS: list[tuple[str, str, str, str]] = [(n, MODEL, a, b) for n, a, b in PY_MUTATIONS] + GO_MUTATIONS
+
+
+def run_tests(target: str) -> tuple[int, str]:
+    """(0 = alle bestod; 1 = en test feilet; ellers = kunne ikke kjøres, f.eks. byggfeil)."""
+    if target.endswith(".py"):
+        r = subprocess.run([sys.executable, "-m", "pytest", "-x", *TESTS], cwd=ROOT, capture_output=True, text=True, check=False)
+        return r.returncode, r.stdout
+    r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=REPO, capture_output=True, text=True, check=False)
+    out = r.stdout + r.stderr
+    if r.returncode != 0 and ("build failed" in out or "setup failed" in out):
+        return 99, out
+    return r.returncode, out
+
 
 def tests_pass() -> int:
-    r = subprocess.run(
-        [sys.executable, "-m", "pytest", "-x", *TESTS], cwd=ROOT, capture_output=True, text=True, check=False
-    )
-    return r.returncode
+    py, _ = run_tests(MODEL)
+    go, _ = run_tests("x.go")
+    return py or go
 
 
 def main() -> int:
@@ -74,41 +108,51 @@ def main() -> int:
 
     chosen = [m for m in MUTATIONS if not args.only or args.only.lower() in m[0].lower()]
     if args.list:
-        print("\n".join(name for name, _a, _b in chosen))
+        print("\n".join(name for name, *_ in chosen))
         return 0
     if not chosen:
         print(f"ingen mutasjoner matcher «{args.only}»")
         return 1
 
     if BACKUP.exists():  # forrige kjøring ble avbrutt midt i en mutasjon
-        MODEL.write_text(BACKUP.read_text(encoding="utf-8"), encoding="utf-8")
-        BACKUP.unlink()
-        print("gjenopprettet model.py etter en avbrutt kjøring")
-    original = MODEL.read_text(encoding="utf-8")
+        for saved in BACKUP.iterdir():
+            (REPO / saved.name.replace("__", "/")).write_text(saved.read_text(encoding="utf-8"), encoding="utf-8")
+            saved.unlink()
+        BACKUP.rmdir()
+        print("gjenopprettet filer etter en avbrutt kjøring")
     if tests_pass() != 0:
         print("testene feiler allerede uten mutasjoner; rett det først (mise run test)")
         return 1
 
-    BACKUP.write_text(original, encoding="utf-8")
+    files = sorted({f for _n, f, _a, _b in chosen})
+    originals = {f: (REPO / f).read_text(encoding="utf-8") for f in files}
+    BACKUP.mkdir(exist_ok=True)
+    for f, text in originals.items():
+        (BACKUP / f.replace("/", "__")).write_text(text, encoding="utf-8")
     problems: list[str] = []
     caught = 0
     t0 = time.time()
     try:
-        for name, old, new in chosen:
+        for name, f, old, new in chosen:
+            original = originals[f]
             if old not in original:
-                problems.append(f"UTDATERT  {name}: mønsteret finnes ikke i model.py")
+                problems.append(f"UTDATERT  {name}: mønsteret finnes ikke i {f}")
                 continue
-            MODEL.write_text(original.replace(old, new, 1), encoding="utf-8")
-            rc = tests_pass()
+            (REPO / f).write_text(original.replace(old, new, 1), encoding="utf-8")
+            rc, _out = run_tests(f if f.endswith(".py") else "x.go")
+            (REPO / f).write_text(original, encoding="utf-8")
             if rc == 1:
                 caught += 1
             elif rc == 0:
                 problems.append(f"OVERLEVDE {name}: ingen test feilet")
             else:
-                problems.append(f"UGYLDIG   {name}: pytest ga kode {rc} (syntaksfeil i mutasjonen?)")
+                problems.append(f"UGYLDIG   {name}: testene kunne ikke kjøres (kode {rc}); byggfeil i mutasjonen?")
     finally:
-        MODEL.write_text(original, encoding="utf-8")
-        BACKUP.unlink(missing_ok=True)
+        for f, text in originals.items():
+            (REPO / f).write_text(text, encoding="utf-8")
+        for saved in BACKUP.iterdir():
+            saved.unlink()
+        BACKUP.rmdir()
 
     for line in problems:
         print(line)

@@ -1,6 +1,6 @@
 # Tjenesteplan: plan
 
-Arbeidstittel. Status 2026-11-04: **plan + en fungerende planlegger alene (`solver/`). Ingen app ennå. Lokalt git-repo, ikke på GitHub.**
+Arbeidstittel. Status 2026-11-07: **planleggeren (`solver/`) virker alene; appens første del (organisasjoner, planer, personer, endringslogg) er bygget. Lokalt git-repo, ikke på GitHub.**
 Første bruksområde og testdata: en kirkes tjenesteplan for høsten 2026 (oppdiktede navn i repoet). Verktøyet er generelt; se *Generelt*.
 
 ## Mål
@@ -82,23 +82,33 @@ bokmål først, men tekstene skal kunne byttes ut.
 
 ## Datamodell (SQLite)
 
-| Tabell | Innhold |
-|---|---|
-| `person` | navn, aktiv, **kan foreslås** (standard ja) |
-| `group`, `group_member` | navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
-| `group_task` | oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
-| `task` | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner). F.eks. én oppgave per aldersgruppe |
-| `period` | f.eks. et semester |
-| `slot_date` | dato, dagtype (fritt navn admin lager selv), merknad |
-| `day_type_task` | hvilke oppgaver som gjelder for dagtypen, og antall plasser |
-| `person_task` | om personen er med på oppgaven (eget valg, skjult som standard) og nivå |
-| `person_date` | nivå per dato, felles for personens oppgaver |
-| `person_task_calendar` | settes på når en oppgave har «egen kalender»; da brukes den i stedet for den felles for den oppgaven |
-| `task_combination` | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
-| `selection` | **utvalg** for én oppgave på én dato: de eneste personer og grupper som kan velges |
-| `assignment` | dato, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
-| `plan_run` | parametere, resultat, mål, forklaringer, publisert ja/nei |
-| `change_log` | hvem (oppgitt navn), hva, når. Se *Tilgang uten innlogging* |
+**En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
+organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
+
+*Bygget (migrering 001):* `organization`, `plan`, `person`, `change_log`. Resten er planlagt og kommer med sine faser.
+
+| Tabell | Nivå | Innhold |
+|---|---|---|
+| `organization` | | `slug` (unik, i adressen), navn |
+| `plan` | organisasjon | `slug` (unik i organisasjonen), navn. Erstatter «periode/semester» |
+| `person` | organisasjon | navn (unikt i organisasjonen), aktiv, **kan foreslås** (standard ja). Gjenbrukes i alle planer |
+| `group`, `group_member` | organisasjon | navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
+| `group_task` | organisasjon | oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
+| `task` | organisasjon | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner) |
+| `day_type`, `day_type_task` | organisasjon | dagtyper admin lager, hvilke oppgaver som gjelder for dem, og antall plasser |
+| `task_combination` | organisasjon | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
+| `person_task` | organisasjon | om personen er med på oppgaven (eget valg, skjult som standard) og nivå |
+| `slot_date` | plan | dato, dagtype, merknad |
+| `person_date` | plan | nivå per dato, felles for personens oppgaver |
+| `person_task_calendar` | plan | settes på når en oppgave har «egen kalender»; da brukes den i stedet for den felles |
+| `selection` | plan | **utvalg** for én oppgave på én dato: de eneste personer og grupper som kan velges |
+| `assignment` | plan | dato, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
+| `assignment_member` | plan | **øyeblikksbilde** av medlemmene i en gruppe-tildeling når planen publiseres (ett oppdrag per medlem). Uten den endrer historikken seg når gruppen endres |
+| `plan_run` | plan | parametere, resultat, mål, forklaringer, publisert ja/nei |
+| `change_log` | organisasjon (+ valgfri plan) | hvem (oppgitt navn), hva, når. Skrives i samme transaksjon som endringen |
+
+Historikk til planleggeren er tidligere planers publiserte tildelinger i **samme organisasjon**.
+Alle oppslag er avgrenset av organisasjonen; en plan eller person fra en annen organisasjon gir 404.
 
 Rader i et eksisterende ark som bare er informasjon (tema, kollekt), er ikke oppgaver og hører ikke inn i planleggeren.
 
@@ -141,9 +151,15 @@ Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjon
 
 ## Arkitektur: ordentlig backend
 
-- **Go-binær med innebygd SQLite**, migreringer ved oppstart, Connect-API, vanilla JS-frontend innebygd,
-  samme oppsett som `scoreboard/` og `chores/`. Kjører på kate (Flux, image til GHCR).
+- **Go-binær med innebygd SQLite** (`modernc.org/sqlite`, ren Go uten cgo), nummererte migreringer innebygd og kjørt i en
+  transaksjon ved oppstart, vanilla JS-frontend innebygd. Kjører på kate (Flux, image til GHCR).
   Backend trengs for felles lagring mellom alle brukerne, planleggeren og historikk, selv uten innlogging.
+- **API: vanlig JSON over `net/http`, ikke Connect** (valgt 2026-11-07, avviker fra `scoreboard/`). Det er under ti endepunkter,
+  og Connect ville krevd `buf`, to kodegeneratorer og generert kode. Skiftet senere er lite siden grensesnittet er smalt.
+  Feil er `{"error": kode, "message": tekst}` med riktig statuskode.
+- **Organisasjonen ligger i adressen**, både i siden (`/o/<org>/p/<plan>`) og API-et (`/api/orgs/{org}/...`). Tjeneren har ingen
+  «gjeldende organisasjon», så å bytte er bare å gå til en annen adresse. Organisasjonslisten kan leses av alle som når adressen.
+- **Fremmednøkler** er av som standard i SQLite på hver tilkobling og slås på i DSN-en; en test sjekker at de håndheves.
 - **Solveren er et Python-program med `ortools`** som Go starter som underprosess:
   JSON inn på stdin, JSON ut på stdout, tidsgrense. Samme container-image. Kontrakten er liten og kan testes
   uten resten av appen. Jeg valgte dette fordi OR-Tools ikke har en støttet Go-binding, og fordi Python-eksemplene
@@ -158,13 +174,15 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 - Det som gjør det forsvarlig: appen legges på en adresse som ikke er lenket noe sted og bes holdes utenfor
   søkemotorer (`noindex`), **`change_log`** viser hvem (oppgitt navn) som endret hva og når,
   og SQLite tas sikkerhetskopi av.
-- Alle endringer sendes med hvem som handler. Legger vi til lenker eller innlogging senere, er det
-  et tillegg og krever ingen ny datamodell.
+- Alle endringer sendes med hvem som handler, i `X-Actor` (prosentkodet UTF-8). Skrivinger må være `application/json`, og
+  den egendefinerte headeren gjør at nettlesere nekter skriving fra andre nettsteder (ingen CORS). Mangler navnet, svarer API-et 400.
+  Alle skrivinger går gjennom én hjelper som logger i samme transaksjon.
+- Legger vi til lenker eller innlogging senere, er det et tillegg og krever ingen ny datamodell.
 
 ## Faser
 
 0. **Spike (gjort 2026-11-03, oppdatert 11-04)**: `solver/`, se resultatene under. Ingen app ennå.
-1. **Backend-skjelett**: Go, SQLite, migreringer, navnevelger, endringslogg.
+1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
 2. **Oppsett og import**: oppgaver, dagtyper, datoer. Lim inn/CSV fra arket.
 3. **Personsiden**: oppgavepreferanser og dato-kalender med tegning/trykk (som i `whenever/`).
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser.
