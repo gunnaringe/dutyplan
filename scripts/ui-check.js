@@ -25,6 +25,7 @@ const { spawn } = require('child_process');
     browser = await chromium.launch({ executablePath: process.env.CHROME || chromeDir(), args: ['--no-sandbox'] });
     const page = await browser.newPage();
     page.on('response', (r) => { if (r.status() === 404) notFound.push(new URL(r.url()).pathname); });
+    page.on('dialog', (d) => d.accept());  // bekreftelser (sletting m.m.) godtas
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
     const ok = (cond, what) => { if (!cond) throw new Error('FEIL: ' + what); };
@@ -57,7 +58,7 @@ const { spawn } = require('child_process');
     await page.waitForSelector('td:has-text("Kari Test")');
     await page.uncheck('input[aria-label="Kan foreslås: Kari Test"]');
     await page.waitForFunction(() => document.body.innerText.includes('person.update'));
-    const logText = await page.innerText('table.log');
+    const logText = await page.innerText('ul.log');
     ok(logText.includes('Ola Nordmann') && logText.includes('proposable true -> false'), 'endringsloggen viser hvem og hva: ' + logText);
 
     // bytte organisasjon: ny organisasjon, deretter tilbake via valgfeltet
@@ -112,6 +113,38 @@ const { spawn } = require('child_process');
     await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026-08-09"]').length === 2);
     await page.click('button[aria-label^="Slett hendelsen 2026-08-30"]');
     await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026"]').length === 5);
+
+    // --- fase 3: min side ---
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await h1is('Høst 2026');
+    await page.selectOption('select[aria-label="Velg navnet ditt"]', { label: 'Kari Test' });
+    await page.click('text=Åpne min side');
+    await h1is('Kari Test');
+    await page.click('button[aria-label="Legg til Lyd"]');
+    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"]');
+    await page.click('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"]');
+    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"][aria-pressed="true"]');
+    await page.click('.avail-row:first-child button[data-level="ikke"]');
+    await page.waitForSelector('.avail-row:first-child button[data-level="ikke"][aria-pressed="true"]');
+    ok((await page.innerText('main')).includes('1 passer ikke'), 'oppsummeringen teller svaret');
+    await page.reload();
+    await h1is('Kari Test');
+    await page.waitForSelector('.avail-row:first-child button[data-level="ikke"][aria-pressed="true"]');
+    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"][aria-pressed="true"]');
+    await page.click('.row-inline button:has-text("Godt")');  // alle på godt; ett svar overskrives, bekreftelsen godtas
+    await page.waitForFunction(() => document.querySelectorAll('.avail-row button[data-level="godt"][aria-pressed="true"]').length === document.querySelectorAll('.avail-row').length);
+    await page.click('.avail-row:first-child button[data-level="godt"]');  // trykk på valgt svar igjen fjerner det
+    await page.waitForSelector('.avail-row:first-child button[aria-pressed="true"]', { state: 'detached' });
+
+    // ingen side skal bli bredere enn en mobilskjerm
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const url of ['/o/menigheten', '/o/menigheten/oppsett', '/o/menigheten/p/host-2026', page.url().replace(base, '')]) {
+      await page.goto(base + url);
+      await page.waitForSelector('h1');
+      await page.waitForTimeout(150);
+      const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+      ok(w[0] <= w[1], `siden ${url} er ${w[0]} px bred på en ${w[1]} px skjerm (scroller sideveis)`);
+    }
 
     ok(errors.length === 0, 'konsollfeil: ' + errors.join(' | ') + ' 404 på: ' + notFound.join(', '));
     console.log('ui-check: ok');

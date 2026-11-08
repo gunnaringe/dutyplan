@@ -1,5 +1,5 @@
-:root { color-scheme: light dark; --bg: #fbfbf8; --fg: #1d2420; --muted: #5b655f; --line: #d8ddd6; --accent: #1f6f4a; --err: #a12626; }
-@media (prefers-color-scheme: dark) { :root { --bg: #131715; --fg: #e8ede9; --muted: #9aa59e; --line: #2d3531; --accent: #5fc795; --err: #ff8a8a; } }
+:root { color-scheme: light dark; --bg: #fbfbf8; --fg: #1d2420; --muted: #5b655f; --line: #d8ddd6; --accent: #1f6f4a; --err: #a12626; --warn: #9a5b00; }
+@media (prefers-color-scheme: dark) { :root { --bg: #131715; --fg: #e8ede9; --muted: #9aa59e; --line: #2d3531; --accent: #5fc795; --err: #ff8a8a; --warn: #e0a040; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 header { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--line); }
@@ -37,3 +37,48 @@ textarea { font: inherit; width: 100%; padding: .5rem; border: 1px solid var(--l
 .chip { display: inline-flex; gap: .25rem; align-items: center; border: 1px solid var(--line); border-radius: 1rem; padding: .15rem .6rem; }
 .err { color: var(--err); }
 input[type=number] { width: 5rem; }
+
+/* ---- lister som brytes pent på smale skjermer (mobil først) ---- */
+main { overflow-wrap: break-word; }
+ul.events, ul.log, ul.cards, ul.avail { list-style: none; padding: 0; margin: 0; }
+/* mobil: dato og slett på første linje, så dagtype, så merknad */
+.event-row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.when { white-space: nowrap; }
+.event-row .when { align-self: center; }
+.event-row select, .event-row input { grid-column: 1 / -1; width: 100%; }
+.event-row button { grid-column: 2; grid-row: 1; }
+ul.log li { display: grid; grid-template-columns: auto 1fr; gap: .1rem .75rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+ul.log .when { color: var(--muted); font-size: .875rem; }
+ul.log .who { font-weight: 600; }
+ul.log .what { grid-column: 1 / -1; color: var(--muted); font-size: .875rem; }
+ul.log .detail { grid-column: 1 / -1; overflow-wrap: anywhere; }
+@media (min-width: 40rem) {
+  .event-row { grid-template-columns: 9.5rem 11rem 1fr auto; align-items: center; }
+  .event-row select, .event-row input { grid-column: auto; }
+  .event-row button { grid-column: auto; grid-row: auto; }
+  ul.log li { grid-template-columns: 9rem 6rem 11rem 1fr; }
+  ul.log .what, ul.log .detail { grid-column: auto; }
+}
+
+/* ---- min side ---- */
+.card-row, .avail-row { display: grid; gap: .6rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.row-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.avail-row .what { display: flex; flex-direction: column; }
+.seg { display: flex; gap: .35rem; }
+.seg button { flex: 1; min-height: 2.75rem; background: transparent; color: var(--fg); border: 1px solid var(--line); padding: .4rem .25rem; font-size: .9rem; line-height: 1.15; }
+.seg button[aria-pressed="true"] { color: #fff; border-color: transparent; font-weight: 600; }
+.seg button[aria-pressed="true"][data-level="ikke"] { background: var(--err); }
+.seg button[aria-pressed="true"][data-level="darlig"] { background: var(--warn); }
+.seg button[aria-pressed="true"][data-level="noytral"] { background: var(--muted); }
+.seg button[aria-pressed="true"][data-level="godt"] { background: var(--accent); }
+@media (prefers-color-scheme: dark) { .seg button[aria-pressed="true"] { color: #0b1a12; } }
+button.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+button.link-button { background: none; border: none; color: var(--err); text-decoration: underline; padding: .25rem .5rem; }
+details summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center; font-weight: 600; color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+a.chip { text-decoration: none; color: var(--fg); min-height: 2.5rem; padding: .35rem .8rem; }
+@media (min-width: 40rem) {
+  .avail-row { grid-template-columns: 1fr 22rem; align-items: center; }
+  .card-row:not(.row-head) { grid-template-columns: 1fr 26rem; align-items: center; }
+}
+@media (pointer: coarse) { button, select, input[type=text], input[type=date], input[type=number] { min-height: 2.75rem; } }

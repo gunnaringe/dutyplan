@@ -87,7 +87,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001–003):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`. Resten kommer med sine faser.
+*Bygget (migrering 001–004):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`. Resten kommer med sine faser.
 Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
@@ -100,10 +100,10 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 | `task` | organisasjon | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner) |
 | `day_type`, `day_type_task` | organisasjon | dagtyper admin lager, hvilke oppgaver som gjelder for dem, og antall plasser |
 | `task_combination` | organisasjon | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
-| `person_task` | organisasjon | om personen er med på oppgaven (eget valg, skjult som standard) og nivå |
+| `person_task` | organisasjon | **bygget**: personen er med på oppgaven (eget valg; ingen rad = ikke med) og nivå (ikke / dårlig / nøytral / godt). Bare oppgaver planleggeren fordeler kan velges |
 | `event` | plan | **hendelse**: dato, dagtype, merknad. Selvstendig enhet; flere på samme dag er lov |
-| `person_event` | plan | nivå per hendelse, felles for personens oppgaver |
-| `person_task_event` | plan | settes på når en oppgave har «egen liste»; da brukes den i stedet for den felles |
+| `person_event` | plan | **bygget**: nivå per hendelse (passer ikke / dårlig / godt; ingen rad = nøytral), felles for personens oppgaver. Sammensatt fremmednøkkel (org, plan, hendelse) |
+| `person_task_event` | plan | *ikke bygget ennå*: settes på når en oppgave har «egen liste»; da brukes den i stedet for den felles |
 | `selection` | plan | **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges |
 | `assignment` | plan | hendelse, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
 | `assignment_member` | plan | **øyeblikksbilde** av medlemmene i en gruppe-tildeling når planen publiseres (ett oppdrag per medlem). Uten den endrer historikken seg når gruppen endres |
@@ -192,7 +192,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 0. **Spike (gjort 2026-11-03, oppdatert 11-04)**: `solver/`, se resultatene under. Ingen app ennå.
 1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
 2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
-3. **Personsiden**: oppgavepreferanser og tilgjengelighet per hendelse med trykk/tegning (som i `whenever/`).
+3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser.
 5. **Plan**: rutenett (hendelser bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.

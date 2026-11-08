@@ -10,7 +10,7 @@ Kjør bare via mise (aldri python/uv/pytest direkte). Alle oppgaver er stille: �
 3. Endret eller la du til en **regel**: `mise run mutations -- --only <ord fra navnet>` (sekunder), og til slutt
    `mise run mutations` (ca. 30 s). Stille ved suksess; skriver bare OVERLEVDE / UTDATERT / UGYLDIG.
 4. Før commit: `mise run verify` (tester + alle mutasjoner + røyktest av den bygde appen).
-5. Endret du frontenden (`web/`): `mise run app:ui` (headless nettleser, ca. 10 s). Hopp over den for endringer som ikke er synlige.
+5. Endret du frontenden (`web/`): `mise run app:ui` (headless nettleser, ca. 10 s; feiler også om en side blir bredere enn en mobilskjerm). Hopp over den for endringer som ikke er synlige.
 
 Overlevde en mutasjon, mangler en test som avhenger av regelen. Skriv den slik at uavhengige ledd ikke dekker for den:
 skru av andre ledd med parametre (`NO_FAIR` i tests/helpers.py, `w_combo: {upraktisk: 0}`), og test begge retninger

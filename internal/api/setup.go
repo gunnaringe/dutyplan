@@ -9,6 +9,7 @@ import (
 
 // setupRoutes: tasks, day types and combinations (per organisation), dates (per plan).
 func (s *server) setupRoutes(mux *http.ServeMux) {
+	s.prefsRoutes(mux)
 	mux.HandleFunc("GET /api/orgs/{org}/tasks", s.listTasks)
 	mux.HandleFunc("POST /api/orgs/{org}/tasks", s.createTask)
 	mux.HandleFunc("POST /api/orgs/{org}/tasks/bulk", s.createTasks)

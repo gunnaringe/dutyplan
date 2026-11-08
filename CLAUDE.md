@@ -2,7 +2,7 @@
 
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) virker alene; appens første del (Go + SQLite + vanilla JS)
-har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser). Preferanser (personsiden) og kobling til planleggeren er neste faser.
+har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser). Personsiden («Min side») er bygget. Kobling til planleggeren er neste fase.
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/api` (JSON-API + serverer frontenden),
 `web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).

@@ -1,0 +1,271 @@
+package store
+
+import (
+	"database/sql"
+	"errors"
+	"strings"
+	"testing"
+)
+
+// prefEnv: one organisation with a person, three tasks (one manual-only), a plan with three events.
+type prefEnv struct {
+	s          *Store
+	org        Org
+	person     Person
+	lyd, bilde Task
+	lovsang    Task // not planned
+	plan       Plan
+	ev         []Event
+}
+
+func newPrefEnv(t *testing.T) prefEnv {
+	t.Helper()
+	s := open(t)
+	e := prefEnv{s: s, org: mustOrg(t, s, "Menighet")}
+	e.person, _ = s.CreatePerson(ctx, e.org.Slug, "Ola", "Kari Test")
+	e.lyd, _ = s.CreateTask(ctx, e.org.Slug, "Ola", "Lyd", true)
+	e.bilde, _ = s.CreateTask(ctx, e.org.Slug, "Ola", "Bilde", true)
+	e.lovsang, _ = s.CreateTask(ctx, e.org.Slug, "Ola", "Lovsang", false)
+	e.plan, _ = s.CreatePlan(ctx, e.org.Slug, "Ola", "Høst 2026", "")
+	dt, _ := s.CreateDayType(ctx, e.org.Slug, "Ola", "Gudstjeneste")
+	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23"} {
+		ev, err := s.AddEvent(ctx, e.org.Slug, e.plan.Slug, "Ola", d, dt.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.ev = append(e.ev, ev)
+	}
+	return e
+}
+
+func (e prefEnv) me(t *testing.T) Me {
+	t.Helper()
+	me, err := e.s.GetMe(ctx, e.org.Slug, e.plan.Slug, e.person.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return me
+}
+
+func count(t *testing.T, s *Store, query string, args ...any) int {
+	t.Helper()
+	var n int
+	if err := s.DB().QueryRow(query, args...).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestPersonTasksAreChosenByThePerson(t *testing.T) {
+	e := newPrefEnv(t)
+	me := e.me(t)
+	if len(me.Tasks) != 2 || me.Tasks[0].Name != "Bilde" || me.Tasks[0].Level != "" || me.Tasks[1].Name != "Lyd" {
+		t.Fatalf("only the planner's tasks are offered, none chosen yet: %+v", me.Tasks)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.me(t).Tasks[1]; got.Level != "godt" {
+		t.Errorf("Lyd = %+v", got)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no-op: %v", err)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "darlig"); err != nil { // changes the level
+		t.Fatal(err)
+	}
+	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 1 {
+		t.Errorf("an update must not add a second row: %d", got)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "kanskje"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("bad level: %v", err)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lovsang.ID, "godt"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a manual-only task cannot be chosen: %v", err)
+	}
+	if err := e.s.RemovePersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.RemovePersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("removing what is not chosen: %v", err)
+	}
+	if got := e.me(t).Tasks[1].Level; got != "" {
+		t.Errorf("removed: %q", got)
+	}
+	log := mustLog(t, e.s, e.org.Slug, "")
+	if log[0].Action != "pref.task" || !strings.Contains(log[0].Detail, "Kari Test: Lyd fjernet") || log[0].Actor != "Kari" {
+		t.Errorf("log: %+v", log[0])
+	}
+}
+
+func TestAvailabilityPerEvent(t *testing.T) {
+	e := newPrefEnv(t)
+	set := func(levels map[int64]string) error {
+		return e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, levels)
+	}
+	if err := set(map[int64]string{e.ev[0].ID: "ikke", e.ev[2].ID: "godt"}); err != nil {
+		t.Fatal(err)
+	}
+	me := e.me(t)
+	if me.Events[0].Level != "ikke" || me.Events[1].Level != "" || me.Events[2].Level != "godt" {
+		t.Fatalf("events: %+v", me.Events)
+	}
+	if err := set(map[int64]string{e.ev[0].ID: "ikke"}); !errors.Is(err, ErrInvalid) {
+		t.Errorf("no change: %v", err)
+	}
+	if err := set(map[int64]string{e.ev[0].ID: ""}); err != nil { // neutral removes the answer
+		t.Fatal(err)
+	}
+	if got := count(t, e.s, `SELECT COUNT(*) FROM person_event`); got != 1 {
+		t.Errorf("neutral must remove the row, %d rows left", got)
+	}
+	for name, levels := range map[string]map[int64]string{
+		"bad level": {e.ev[0].ID: "kanskje"}, "empty": {}, "task level on an event": {e.ev[0].ID: "noytral"},
+	} {
+		if err := set(levels); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// all or nothing: one unknown event means none of the others are stored either
+	if err := set(map[int64]string{e.ev[1].ID: "godt", 99999: "ikke"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown event: %v", err)
+	}
+	if got := e.me(t).Events[1].Level; got != "" {
+		t.Errorf("the valid half must not be stored: %q", got)
+	}
+	log := mustLog(t, e.s, e.org.Slug, e.plan.Slug)
+	if log[0].Action != "pref.availability" || !strings.Contains(log[0].Detail, "1 fjernet") {
+		t.Errorf("log: %+v", log[0])
+	}
+	// one log line per call, never one per event
+	before := len(mustLog(t, e.s, e.org.Slug, ""))
+	set(map[int64]string{e.ev[0].ID: "darlig", e.ev[1].ID: "darlig", e.ev[2].ID: "darlig"})
+	if after := len(mustLog(t, e.s, e.org.Slug, "")); after != before+1 {
+		t.Errorf("one call, one log line: %d -> %d", before, after)
+	}
+}
+
+func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
+	a := newPrefEnv(t)
+	b := mustOrg(t, a.s, "Org B")
+	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva", "Eva Test")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Eva", "Lyd B", true)
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	dtB, _ := a.s.CreateDayType(ctx, b.Slug, "Eva", "Type B")
+	evB, _ := a.s.AddEvent(ctx, b.Slug, planB.Slug, "Eva", "2026-08-09", dtB.ID, "")
+
+	// A's person, task and event through B's path, and the other way round
+	if _, err := a.s.GetMe(ctx, b.Slug, planB.Slug, a.person.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's person on B's page: %v", err)
+	}
+	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", a.person.ID, taskB.ID, "godt"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's person via B: %v", err)
+	}
+	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, a.lyd.ID, "godt"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's task for B's person: %v", err)
+	}
+	if err := a.s.SetPersonTask(ctx, a.org.Slug, "Ola", personB.ID, a.lyd.ID, "godt"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("B's person through A: %v", err)
+	}
+	if err := a.s.RemovePersonTask(ctx, b.Slug, "Eva", a.person.ID, a.lyd.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("remove across: %v", err)
+	}
+	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", personB.ID, map[int64]string{a.ev[0].ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's event for B's person: %v", err)
+	}
+	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", a.person.ID, map[int64]string{evB.ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's person via B: %v", err)
+	}
+	// an event of another plan in the same organisation does not count for this plan
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Vår 2027", "")
+	if err := a.s.SetAvailability(ctx, a.org.Slug, other.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("another plan's event: %v", err)
+	}
+	if got := count(t, a.s, `SELECT COUNT(*) FROM person_task`) + count(t, a.s, `SELECT COUNT(*) FROM person_event`); got != 0 {
+		t.Fatalf("every refused write must leave nothing behind, %d rows", got)
+	}
+
+	// B's own page shows only B's things
+	me, err := a.s.GetMe(ctx, b.Slug, planB.Slug, personB.ID)
+	if err != nil || len(me.Tasks) != 1 || me.Tasks[0].TaskID != taskB.ID || len(me.Events) != 1 || me.Events[0].EventID != evB.ID {
+		t.Errorf("B's page: %+v %v", me, err)
+	}
+	// the other plan of A lists none of the first plan's events
+	if me, _ := a.s.GetMe(ctx, a.org.Slug, other.Slug, a.person.ID); len(me.Events) != 0 {
+		t.Errorf("a plan lists only its own events: %+v", me.Events)
+	}
+}
+
+// The database refuses the same references even when the code is bypassed.
+func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
+	a := newPrefEnv(t)
+	b := mustOrg(t, a.s, "Org B")
+	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva", "Eva Test")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Eva", "Lyd B", true)
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Vår 2027", "")
+	var orgA, orgB, planOther int64
+	db := a.s.DB()
+	db.QueryRow(`SELECT id FROM organization WHERE slug = ?`, a.org.Slug).Scan(&orgA)
+	db.QueryRow(`SELECT id FROM organization WHERE slug = ?`, b.Slug).Scan(&orgB)
+	db.QueryRow(`SELECT id FROM plan WHERE org_id = ? AND slug = ?`, orgA, other.Slug).Scan(&planOther)
+	for _, c := range []struct {
+		name, stmt string
+		args       []any
+	}{
+		{"person_task with another organisation's task", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'godt')`, []any{orgA, a.person.ID, taskB.ID}},
+		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'godt')`, []any{orgA, personB.ID, a.lyd.ID}},
+		{"person_event with an event of another plan", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'ikke')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
+		{"person_event for another organisation's person", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'ikke')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
+	} {
+		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
+			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)
+		}
+	}
+	_ = orgB
+}
+
+func TestPreferencesGoWhenTheirTaskOrEventGoes(t *testing.T) {
+	e := newPrefEnv(t)
+	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt")
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "ikke", e.ev[1].ID: "godt"})
+	if err := e.s.DeleteEvent(ctx, e.org.Slug, e.plan.Slug, "Ola", e.ev[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, e.s, `SELECT COUNT(*) FROM person_event`); got != 1 {
+		t.Errorf("an event's answers go with it: %d", got)
+	}
+	if err := e.s.DeleteTask(ctx, e.org.Slug, "Ola", e.lyd.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 0 {
+		t.Errorf("a task's choices go with it: %d", got)
+	}
+}
+
+func planOf(db interface {
+	QueryRow(string, ...any) *sql.Row
+}, event int64) int64 {
+	var id int64
+	db.QueryRow(`SELECT plan_id FROM event WHERE id = ?`, event).Scan(&id)
+	return id
+}
+
+func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
+	e := newPrefEnv(t)
+	other, _ := e.s.CreatePerson(ctx, e.org.Slug, "Ola", "Ola Prøve")
+	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt")
+	e.s.SetPersonTask(ctx, e.org.Slug, "Ola", other.ID, e.lyd.ID, "ikke")
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "godt"})
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Ola", other.ID, map[int64]string{e.ev[0].ID: "ikke", e.ev[1].ID: "darlig"})
+	mine := e.me(t)
+	theirs, err := e.s.GetMe(ctx, e.org.Slug, e.plan.Slug, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.Tasks[1].Level != "godt" || theirs.Tasks[1].Level != "ikke" {
+		t.Errorf("task answers: %+v / %+v", mine.Tasks, theirs.Tasks)
+	}
+	if mine.Events[0].Level != "godt" || mine.Events[1].Level != "" || theirs.Events[0].Level != "ikke" || theirs.Events[1].Level != "darlig" {
+		t.Errorf("event answers: %+v / %+v", mine.Events, theirs.Events)
+	}
+}

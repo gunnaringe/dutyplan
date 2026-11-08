@@ -67,6 +67,7 @@ function link(path, text, props) {
 function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
+    if (parts[2] === 'p' && parts[3] && parts[4] === 'meg' && parts[5]) return { page: 'me', org: parts[1], plan: parts[3], person: parts[5] };
     if (parts[2] === 'p' && parts[3]) return { page: 'plan', org: parts[1], plan: parts[3] };
     if (parts[2] === 'oppsett') return { page: 'setup', org: parts[1] };
     return { page: 'org', org: parts[1] };
@@ -115,8 +116,9 @@ async function pageHome() {
 
 function logTable(entries) {
   if (!entries.length) return h('p', { class: 'muted' }, 'Ingen endringer ennå.');
-  return h('table', { class: 'log' }, h('tbody', {}, entries.map((e) =>
-    h('tr', {}, h('td', {}, fmtTime(e.at)), h('td', {}, e.actor), h('td', {}, e.action + (e.plan ? ' (' + e.plan + ')' : '')), h('td', {}, e.detail)))));
+  return h('ul', { class: 'log' }, entries.map((e) => h('li', {},
+    h('span', { class: 'when' }, fmtTime(e.at)), h('span', { class: 'who' }, e.actor),
+    h('span', { class: 'what' }, e.action + (e.plan ? ' (' + e.plan + ')' : '')), h('span', { class: 'detail' }, e.detail))));
 }
 
 async function pageOrg(r, org, people) {
@@ -212,19 +214,32 @@ function dayTypeSelect(dayTypes, value, onchange, label) {
 
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log] = await Promise.all([
+  const [plan, dates, dayTypes, log, people] = await Promise.all([
     api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
-    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`)]);
+    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people')]);
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
   const rows = dates.map((d) => {
-    const note = h('input', { type: 'text', value: d.note, maxlength: '200', 'aria-label': 'Merknad ' + d.date + ' ' + d.day_type, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
-    return h('tr', {}, h('td', {}, fmtDate(d.date)),
-      h('td', {}, dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + d.date + ' ' + d.day_type)),
-      h('td', {}, note),
-      h('td', {}, h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett hendelsen ' + d.date + ' (' + d.day_type + ')', onclick: async () => { if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh(); } }, 'Slett')));
+    const label = d.date + ' ' + d.day_type;
+    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: 'Merknad', 'aria-label': 'Merknad ' + label, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
+    return h('li', { class: 'event-row' },
+      h('strong', { class: 'when' }, fmtDate(d.date)),
+      dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + label),
+      note,
+      h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett hendelsen ' + label, onclick: async () => {
+        if (!confirm(`Slette hendelsen ${fmtDate(d.date)} (${d.day_type})? Svarene folk har gitt for den, forsvinner også.`)) return;
+        if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
+      } }, 'Slett'));
   });
+
+  const active = people.filter((p) => p.active);
+  const pick = h('select', { 'aria-label': 'Velg navnet ditt' }, h('option', { value: '' }, 'Velg navnet ditt…'), active.map((p) => h('option', { value: String(p.id) }, p.name)));
+  const mine = (id) => `/o/${enc(r.org)}/p/${enc(r.plan)}/meg/${id}`;
+  const fillIn = section('Fyll ut når du kan',
+    active.length ? h('div', { class: 'row-inline' }, pick, h('button', { type: 'button', onclick: () => { if (pick.value) go(mine(pick.value)); } }, 'Åpne min side')) : h('p', { class: 'muted' }, 'Legg til personer på ', link(`/o/${enc(r.org)}`, 'organisasjonssiden'), ' først.'),
+    active.length ? h('p', { class: 'muted small' }, 'Hver person har sin egen side. Lenken kan sendes til personen.') : '',
+    active.length ? h('div', { class: 'chips' }, active.map((p) => link(mine(p.id), p.name, { class: 'chip' }))) : '');
 
   const noTypes = !dayTypes.length;
   let addForm = '', bulkForm = '';
@@ -254,16 +269,100 @@ async function pagePlan(r, org) {
   return h('div', {},
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
     h('h1', {}, plan.name),
+    fillIn,
     section('Hendelser',
       noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
-      dates.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Dato'), h('th', {}, 'Dagtype'), h('th', {}, 'Merknad'), h('th', {}, ''))), h('tbody', {}, rows)) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),
+      dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),
       addForm),
     section('Legg til flere hendelser (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
-    h('p', { class: 'muted small' }, 'Preferanser og selve planleggingen kommer i neste faser.'),
+    h('p', { class: 'muted small' }, 'Selve planleggingen kommer i en senere fase.'),
     section('Endringslogg for planen', logTable(log)));
 }
 
+const TASK_LEVELS = [['ikke', 'Ikke'], ['darlig', 'Dårlig'], ['noytral', 'Nøytral'], ['godt', 'Godt']];
+const EVENT_LEVELS = [['ikke', 'Passer ikke'], ['darlig', 'Dårlig'], ['godt', 'Godt']];
+
+// Gruppe av knapper der én kan være valgt (aria-pressed). set(level) oppdaterer visningen uten å tegne siden på nytt.
+function seg(label, options, current, onpick) {
+  const buttons = options.map(([value, text]) => h('button', { type: 'button', 'data-level': value, 'aria-pressed': String(current === value), onclick: () => onpick(value) }, text));
+  return { el: h('div', { class: 'seg', role: 'group', 'aria-label': label }, buttons),
+    set(level) { buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === level))); } };
+}
+
+// «Min side»: hva jeg kan være med på (per organisasjon) og når jeg kan (per hendelse i planen). Svarene lagres med en gang.
+async function pageMe(r, org) {
+  const base = `/orgs/${enc(r.org)}`;
+  const [plan, me] = await Promise.all([api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/me`)]);
+  const taskPath = (id) => `${base}/people/${me.person.id}/tasks/${id}`;
+  const availPath = `${base}/plans/${enc(r.plan)}/people/${me.person.id}/availability`;
+  const refresh = () => render();
+  const list = (cls, items) => h('ul', { class: cls }, items);
+
+  // --- oppgaver
+  const chosen = me.tasks.filter((t) => t.level);
+  const rest = me.tasks.filter((t) => !t.level);
+  const taskRows = chosen.map((t) => {
+    const ctl = seg('Hvor gjerne: ' + t.name, TASK_LEVELS, t.level, async (v) => { if (v !== t.level && await write(() => api('PUT', taskPath(t.task_id), { level: v }))) { t.level = v; ctl.set(v); } });
+    return h('li', { class: 'card-row' },
+      h('div', { class: 'row-head' }, h('strong', {}, t.name), h('button', { type: 'button', class: 'link-button', 'aria-label': 'Ta bort ' + t.name, onclick: async () => { if (await write(() => api('DELETE', taskPath(t.task_id)))) refresh(); } }, 'Ta bort')),
+      ctl.el);
+  });
+  const addRows = rest.map((t) => h('li', { class: 'card-row row-head' }, h('strong', {}, t.name),
+    h('button', { type: 'button', 'aria-label': 'Legg til ' + t.name, onclick: async () => { if (await write(() => api('PUT', taskPath(t.task_id), { level: 'noytral' }))) refresh(); } }, 'Legg til')));
+  const taskSection = section('Hva kan du være med på?',
+    !me.tasks.length ? h('p', { class: 'muted' }, 'Ingen oppgaver er satt opp ennå. ', link(`/o/${enc(r.org)}/oppsett`, 'Oppsett')) : '',
+    chosen.length ? list('cards', taskRows) : (me.tasks.length ? h('p', { class: 'muted' }, 'Du har ikke valgt noen oppgaver ennå. Velg de du kan tenke deg.') : ''),
+    me.tasks.length ? h('details', { open: !chosen.length }, h('summary', {}, chosen.length ? 'Velg flere oppgaver' : 'Velg oppgaver'), rest.length ? list('cards', addRows) : h('p', { class: 'muted' }, 'Du har valgt alle oppgavene.')) : '');
+
+  // --- når kan du? Ett svar per hendelse: passer ikke / dårlig / godt, ikke markert er nøytralt.
+  const levels = {};
+  me.events.forEach((e) => { levels[e.event_id] = e.level; });
+  const ctls = {};
+  const summary = h('p', { class: 'muted small', 'aria-live': 'polite' });
+  const updateSummary = () => {
+    const c = { ikke: 0, darlig: 0, godt: 0 };
+    Object.values(levels).forEach((l) => { if (l) c[l]++; });
+    summary.textContent = `${c.ikke} passer ikke · ${c.darlig} dårlig · ${c.godt} godt · ${me.events.length - c.ikke - c.darlig - c.godt} nøytrale`;
+  };
+  async function setLevels(changes) {
+    if (!(await write(() => api('PUT', availPath, { levels: changes })))) return false;
+    for (const [id, l] of Object.entries(changes)) { levels[id] = l; ctls[id].set(l); }
+    updateSummary();
+    return true;
+  }
+  const rows = me.events.map((e) => {
+    const ctl = seg('Kan du ' + fmtDate(e.date) + '?', EVENT_LEVELS, e.level, (v) => setLevels({ [e.event_id]: levels[e.event_id] === v ? '' : v }));
+    ctls[e.event_id] = ctl;
+    return h('li', { class: 'avail-row' },
+      h('div', { class: 'what' }, h('strong', { class: 'when' }, fmtDate(e.date)), h('span', { class: 'muted small' }, e.day_type + (e.note ? ' · ' + e.note : ''))), ctl.el);
+  });
+  const all = (v) => async () => {
+    const changes = {};
+    for (const e of me.events) if ((levels[e.event_id] || '') !== v) changes[e.event_id] = v;
+    if (!Object.keys(changes).length) return;
+    const overwritten = me.events.filter((e) => levels[e.event_id] && levels[e.event_id] !== v).length;
+    if (overwritten && !confirm(`Dette endrer ${overwritten} svar du allerede har gitt. Fortsette?`)) return;
+    await setLevels(changes);
+  };
+  updateSummary();
+  const bulk = me.events.length ? h('div', { class: 'row-inline' }, h('span', { class: 'muted small' }, 'Sett alle:'),
+    h('button', { type: 'button', class: 'ghost', onclick: all('ikke') }, 'Passer ikke'), h('button', { type: 'button', class: 'ghost', onclick: all('darlig') }, 'Dårlig'),
+    h('button', { type: 'button', class: 'ghost', onclick: all('godt') }, 'Godt'), h('button', { type: 'button', class: 'ghost', onclick: all('') }, 'Fjern alle')) : '';
+
+  const root = h('div', {},
+    h('p', { class: 'small' }, link(`/o/${enc(r.org)}/p/${enc(r.plan)}`, '← ' + plan.name)),
+    h('h1', {}, me.person.name),
+    h('p', { class: 'muted' }, 'Svarene lagres med en gang. Hendelsen gjelder, ikke dagen: har du to hendelser samme dag, svarer du på hver for seg.'),
+    me.person.active ? '' : h('p', { class: 'err' }, 'Denne personen er markert som inaktiv.'),
+    taskSection,
+    section('Når kan du? ' + plan.name,
+      me.events.length ? [h('p', { class: 'muted small' }, 'Trykk på et valg. Trykk på det samme igjen for å fjerne svaret (da regnes det som nøytralt).'), bulk, summary, list('avail', rows)] : h('p', { class: 'muted' }, 'Det er ikke lagt inn noen hendelser i denne planen ennå.')));
+  root.dataset.person = me.person.name;
+  return root;
+}
+
 let renderSeq = 0;
+let lastPath = '';
 async function render() {
   const seq = ++renderSeq;
   const main = document.getElementById('main');
@@ -275,9 +374,17 @@ async function render() {
       [org, people] = await Promise.all([api('GET', '/orgs/' + enc(r.org)), api('GET', `/orgs/${enc(r.org)}/people`)]);
       store.set('org', r.org);
     }
-    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : pagePlan(r, org)]);
+    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : r.page === 'me' ? pageMe(r, org) : pagePlan(r, org)]);
     if (seq !== renderSeq || !body) return;
+    const y = location.pathname === lastPath ? window.scrollY : 0;  // samme side på nytt (etter en endring): bli stående
     main.replaceChildren(body);
+    lastPath = location.pathname;
+    window.scrollTo(0, y);
+    if (r.page === 'me' && body.dataset.person && !store.get('actor').trim()) {  // den som åpner sin egen side er nok personen selv
+      store.set('actor', body.dataset.person);
+      const a = document.getElementById('actor');
+      if (a) a.value = body.dataset.person;
+    }
     document.title = (r.page === 'plan' ? '' : '') + 'Tjenesteplan' + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;

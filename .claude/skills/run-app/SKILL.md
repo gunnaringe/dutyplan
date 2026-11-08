@@ -13,6 +13,6 @@ Alt via mise. Ingen innlogging; organisasjonen ligger i adressen.
   Standarddatabasen `tjenesteplan.db` (i repoets rot, ikke i git) har dem allerede.
 - **API (JSON):** `GET /api/orgs`, `POST /api/orgs {"name"}`, `GET|POST /api/orgs/{org}/plans`, `/people`, `PATCH /people/{id}`,
   `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, og per plan `/plans/{plan}/events` (+ `/bulk`, `PATCH|DELETE /{id}`),
-  `GET /api/orgs/{org}/log?plan=&limit=`. Skrivinger trenger `Content-Type: application/json` og `X-Actor: <prosentkodet navn>`.
+  `GET /api/orgs/{org}/log?plan=&limit=`. Personens svar: `GET /plans/{plan}/people/{id}/me`, `PUT|DELETE /people/{id}/tasks/{task}` (`{level}`), `PUT /plans/{plan}/people/{id}/availability` (`{levels: {eventId: ikke|darlig|godt|""}}`). Skrivinger trenger `Content-Type: application/json` og `X-Actor: <prosentkodet navn>`.
   Eksempel: `curl -s -H 'Content-Type: application/json' -H 'X-Actor: Ola' -d '{"name":"Menigheten"}' $URL/api/orgs`.
 - Bruk bare oppdiktede navn i data du legger inn og committer.
