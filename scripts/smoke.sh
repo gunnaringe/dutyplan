@@ -69,6 +69,11 @@ code 200 GET /api/orgs/org-b/plans/host-2026/events
 [ "$(cat "$tmp/body")" = "[]" ] || fail "B ser A sine datoer: $(cat "$tmp/body")"
 
 sh scripts/seed-demo.sh "$url" >/dev/null || fail "seedskriptet feilet"
+sh scripts/seed-demo.sh "$url" >/dev/null || fail "seedskriptet feilet ved andre kjøring"   # idempotent: ingenting dobles
+code 200 GET /api/orgs/test/people
+[ "$(grep -o '"name"' "$tmp/body" | wc -l)" -eq 8 ] || fail "seedet skal gi 8 personer: $(cat "$tmp/body")"
+code 200 GET /api/orgs/test/plans/host-2026/events
+[ "$(grep -o '"date"' "$tmp/body" | wc -l)" -eq 21 ] || fail "seedet skal gi 21 hendelser (søndager 2.8. - 20.12.)"
 code 200 GET /api/orgs/test/combinations
 [ "$(grep -o '"level":"kan_ikke"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"upraktisk"' "$tmp/body" | wc -l)" -eq 1 ] || fail "seedet kombinasjoner er feil: $(cat "$tmp/body")"
 
