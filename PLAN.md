@@ -227,8 +227,8 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 
 ## Testing
 
-- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 32 regler i
-  modellen én om gangen og krever at en test feiler; stille når alt er fanget.
+- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 65 regler i
+  planleggeren (Python) og appen (Go, særlig organisasjonsavgrensningen) én om gangen og krever at en test feiler; stille når alt er fanget.
 - Alt kjøres via mise (`mise.toml`: python og uv i eksakte versjoner, stille oppgaver); se `CLAUDE.md`.
 - **Uavhengig sjekker** som kontrollerer at en ferdig plan ikke bryter noe hardt krav. Tilfeldige instanser
   kjøres gjennom solver + sjekker.
@@ -248,4 +248,4 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 - Folk må faktisk fylle ut. Derfor bare én dato-kalender per person og skjult det som er uvedkommende.
 - Uten innlogging kan en feilklikk eller en uvitende bruker endre andres svar. Endringsloggen og sikkerhetskopien er
   det som fanger det.
-- Python i Go-imaget gjør bygget og imaget større. Avgjøres i fase 1.
+- Python i Go-imaget gjør bygget og imaget større. Avgjøres når planleggeren kobles til appen (fase 4).
