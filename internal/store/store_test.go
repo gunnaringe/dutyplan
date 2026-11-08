@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,9 +37,10 @@ func TestMigrationsRunOnceAndAreIdempotent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		files, _ := fs.ReadDir(migrationFiles, "migrations")
 		var n int
-		if err := s.DB().QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != 1 {
-			t.Fatalf("run %d: %d migrations recorded, err %v", i, n, err)
+		if err := s.DB().QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&n); err != nil || n != len(files) || n < 2 {
+			t.Fatalf("run %d: %d migrations recorded for %d files, err %v", i, n, len(files), err)
 		}
 		s.Close()
 	}

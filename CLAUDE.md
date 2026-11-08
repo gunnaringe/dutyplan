@@ -2,7 +2,7 @@
 
 Fordeler oppgaver på datoer med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) virker alene; appens første del (Go + SQLite + vanilla JS)
-har organisasjoner, planer, personer og endringslogg. Oppsett av oppgaver/datoer, preferanser og kobling til planleggeren er neste faser.
+har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, datoer). Preferanser (personsiden) og kobling til planleggeren er neste faser.
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/api` (JSON-API + serverer frontenden),
 `web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).
@@ -25,6 +25,7 @@ Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, al
   (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), tjeneren har ingen «gjeldende organisasjon». Hvert oppslag avgrenses av organisasjonen, og
   en plan/person fra en annen organisasjon gir 404 (isolasjonstestene og `tenant:`-mutasjonene vokter dette). Ingen innlogging.
 - **Alle skrivinger går gjennom `store.write`** (krever aktør i `X-Actor`, logger i samme transaksjon). Ikke skriv til databasen utenom den.
+- **Ingen regnearkstøtte** (verken import eller eksport). Brukeren vil ikke ha det; ikke foreslå det på nytt.
 - **Generelt verktøy.** Oppgaver, personer, grupper, datoer og dagtyper er data admin lager. Ingen kirkebegreper i kode, datamodell eller regler.
 - **Ingen særregler for enkeltting.** En **gruppe** er et navngitt sett personer. Den kan stå i en manuell rute eller foreslås av planleggeren
   (`group_tasks`); medlemmene er da opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag.

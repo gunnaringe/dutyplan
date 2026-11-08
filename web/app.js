@@ -47,6 +47,7 @@ async function write(action) {
     say('');
     return true;
   } catch (e) {
+    if (e.cancelled) return false;
     say(e.code === 'conflict' ? 'Finnes allerede: ' + e.message : e.message, 'err');
     return false;
   }
@@ -67,6 +68,7 @@ function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
     if (parts[2] === 'p' && parts[3]) return { page: 'plan', org: parts[1], plan: parts[3] };
+    if (parts[2] === 'oppsett') return { page: 'setup', org: parts[1] };
     return { page: 'org', org: parts[1] };
   }
   return { page: 'home' };
@@ -128,6 +130,7 @@ async function pageOrg(r, org, people) {
       onchange: async (e) => { if (await write(() => api('PATCH', `/orgs/${enc(r.org)}/people/${p.id}`, { proposable: e.target.checked }))) refresh(); else e.target.checked = p.proposable; } }))));
   return h('div', {},
     h('h1', {}, org.name),
+    h('p', {}, link(`/o/${enc(r.org)}/oppsett`, 'Oppsett: oppgaver, dagtyper og kombinasjoner →')),
     h('h2', {}, 'Planer'),
     plans.length ? h('ul', { class: 'plain' }, plans.map((p) => h('li', {}, link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, p.name)))) : h('p', { class: 'muted' }, 'Ingen planer ennå. Lag en, f.eks. «Høst 2026».'),
     nameForm('Ny plan, f.eks. Høst 2026', 'Opprett plan', async (name) => { const p = await api('POST', `/orgs/${enc(r.org)}/plans`, { name }); go(`/o/${enc(r.org)}/p/${enc(p.slug)}`); }),
@@ -139,14 +142,125 @@ async function pageOrg(r, org, people) {
     logTable(log));
 }
 
+const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const SELECT_LEVELS = [['standard', 'standard'], ['kan_ikke', 'kan ikke kombineres'], ['upraktisk', 'upraktisk'], ['praktisk', 'praktisk'], ['bor', 'bør kombineres']];
+
+function section(title, ...kids) { return h('section', {}, h('h2', {}, title), ...kids); }
+
+async function pageSetup(r, org) {
+  const base = `/orgs/${enc(r.org)}`;
+  const [tasks, dayTypes, combos] = await Promise.all([api('GET', base + '/tasks'), api('GET', base + '/day-types'), api('GET', base + '/combinations')]);
+  const refresh = () => render();
+  const act = (fn) => async () => { if (await write(fn)) refresh(); };
+
+  const taskRows = tasks.map((t) => h('tr', {},
+    h('td', {}, t.name),
+    h('td', {}, h('input', { type: 'checkbox', 'aria-label': 'Fordeles av planleggeren: ' + t.name, checked: t.planned,
+      onchange: async (e) => { if (await write(() => api('PATCH', `${base}/tasks/${t.id}`, { planned: e.target.checked }))) refresh(); else e.target.checked = t.planned; } })),
+    h('td', {}, h('button', { type: 'button', class: 'danger', onclick: act(async () => { if (confirm(`Slette «${t.name}»?`)) await api('DELETE', `${base}/tasks/${t.id}`); else throw Object.assign(new Error('Avbrutt'), { cancelled: true }); }) }, 'Slett'))));
+
+  const pasted = h('textarea', { rows: '4', placeholder: 'Flere oppgaver på en gang: ett navn per linje', 'aria-label': 'Flere oppgaver, ett navn per linje' });
+
+  const dayTypeBlocks = dayTypes.map((d) => {
+    const inputs = tasks.map((t) => {
+      const cur = d.tasks.find((x) => x.task_id === t.id);
+      return { t, input: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.slots) : '0', 'aria-label': `Plasser for ${t.name} på ${d.name}` }) };
+    });
+    const name = h('input', { type: 'text', value: d.name, maxlength: '80', 'aria-label': 'Navn på dagtype' });
+    return h('div', { class: 'card' },
+      h('div', { class: 'row-inline' }, name,
+        h('button', { type: 'button', onclick: act(() => api('PATCH', `${base}/day-types/${d.id}`, { name: name.value })) }, 'Gi nytt navn'),
+        h('button', { type: 'button', class: 'danger', onclick: act(async () => { if (confirm(`Slette dagtypen «${d.name}»?`)) await api('DELETE', `${base}/day-types/${d.id}`); else throw Object.assign(new Error('Avbrutt'), { cancelled: true }); }) }, 'Slett')),
+      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Oppgave'), h('th', {}, 'Plasser (0 = ikke med)'))),
+        h('tbody', {}, inputs.map(({ t, input }) => h('tr', {}, h('td', {}, t.name), h('td', {}, input))))) : h('p', { class: 'muted' }, 'Lag oppgaver først.'),
+      tasks.length ? h('button', { type: 'button', onclick: act(() => api('PUT', `${base}/day-types/${d.id}/tasks`, {
+        tasks: inputs.map(({ t, input }) => ({ task_id: t.id, slots: parseInt(input.value, 10) || 0 })).filter((x) => x.slots > 0),
+      })) }, 'Lagre oppgaver') : '');
+  });
+
+  const taskName = (id) => (tasks.find((t) => t.id === id) || {}).name;
+  const level = (a, b) => (combos.find((c) => c.a === a && c.b === b) || { level: 'standard' }).level;
+  const pairRows = [];
+  for (let i = 0; i < tasks.length; i++) for (let j = i + 1; j < tasks.length; j++) {
+    const x = tasks[i], y = tasks[j];
+    const select = h('select', { 'aria-label': `${x.name} og ${y.name}`, onchange: async (e) => { if (!(await write(() => api('PUT', base + '/combinations', { a: x.id, b: y.id, level: e.target.value })))) e.target.value = level(Math.min(x.id, y.id), Math.max(x.id, y.id)); } },
+      SELECT_LEVELS.map(([v, label]) => h('option', { value: v, selected: v === level(Math.min(x.id, y.id), Math.max(x.id, y.id)) }, label)));
+    pairRows.push(h('tr', {}, h('td', {}, taskName(x.id) + ' + ' + taskName(y.id)), h('td', {}, select)));
+  }
+
+  return h('div', {},
+    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
+    h('h1', {}, 'Oppsett'),
+    h('p', { class: 'muted' }, 'Dette gjelder alle planene i organisasjonen. Alt her lager du selv.'),
+    section('Oppgaver',
+      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Navn'), h('th', {}, 'Fordeles av planleggeren'), h('th', {}, ''))), h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, 'Ingen oppgaver ennå.'),
+      nameForm('Ny oppgave', 'Legg til', async (name) => { await api('POST', base + '/tasks', { name }); refresh(); }),
+      h('form', { class: 'stack', onsubmit: async (e) => { e.preventDefault(); if (await write(async () => { await api('POST', base + '/tasks/bulk', { names: pasted.value }); })) refresh(); } },
+        pasted, h('button', { type: 'submit' }, 'Legg til alle'))),
+    section('Dagtyper',
+      h('p', { class: 'muted small' }, 'En dagtype sier hvilke oppgaver en dato har og hvor mange plasser (f.eks. «Gudstjeneste»: Lyd 1, Kafé 3).'),
+      dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, 'Ingen dagtyper ennå.'),
+      nameForm('Ny dagtype, f.eks. Gudstjeneste', 'Opprett', async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
+    section('Hva kan kombineres samme dag?',
+      h('p', { class: 'muted small' }, '«Standard» regnes som upraktisk. Innstillingen er felles for alle i organisasjonen.'),
+      pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : h('p', { class: 'muted' }, 'Lag minst to oppgaver først.')));
+}
+
+function dayTypeSelect(dayTypes, value, onchange, label) {
+  return h('select', { 'aria-label': label, onchange }, dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === value }, d.name)));
+}
+
 async function pagePlan(r, org) {
-  const [plan, log] = await Promise.all([api('GET', `/orgs/${enc(r.org)}/plans/${enc(r.plan)}`), api('GET', `/orgs/${enc(r.org)}/log?limit=30&plan=${enc(r.plan)}`)]);
+  const base = `/orgs/${enc(r.org)}`;
+  const [plan, dates, dayTypes, log] = await Promise.all([
+    api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/dates`),
+    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`)]);
+  const refresh = () => render();
+  const dpath = `${base}/plans/${enc(r.plan)}/dates`;
+
+  const rows = dates.map((d) => {
+    const note = h('input', { type: 'text', value: d.note, maxlength: '200', 'aria-label': 'Merknad ' + d.date, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
+    return h('tr', {}, h('td', {}, fmtDate(d.date)),
+      h('td', {}, dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + d.date)),
+      h('td', {}, note),
+      h('td', {}, h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett ' + d.date, onclick: async () => { if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh(); } }, 'Slett')));
+  });
+
+  const noTypes = !dayTypes.length;
+  let addForm = '', bulkForm = '';
+  if (!noTypes) {
+    const date = h('input', { type: 'date', required: true, 'aria-label': 'Dato' });
+    const typeSel = h('select', { 'aria-label': 'Dagtype' }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
+    const noteIn = h('input', { type: 'text', placeholder: 'Merknad (valgfri)', maxlength: '200', 'aria-label': 'Merknad' });
+    addForm = h('form', { class: 'row', onsubmit: async (e) => { e.preventDefault(); if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value }))) refresh(); } },
+      date, typeSel, noteIn, h('button', { type: 'submit' }, 'Legg til dato'));
+
+    const from = h('input', { type: 'date', required: true, 'aria-label': 'Fra' });
+    const to = h('input', { type: 'date', required: true, 'aria-label': 'Til' });
+    const days = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((n, i) => ({ n, v: i + 1, box: h('input', { type: 'checkbox', checked: i === 6, 'aria-label': n }) }));
+    const bType = h('select', { 'aria-label': 'Dagtype for alle' }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
+    bulkForm = h('form', { class: 'stack', onsubmit: async (e) => {
+      e.preventDefault();
+      let res;
+      if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10) }); })) {
+        await render(); say(`${res.created.length} nye datoer${res.skipped.length ? ', ' + res.skipped.length + ' fantes fra før' : ''}.`);
+      }
+    } },
+      h('div', { class: 'row-inline' }, h('label', {}, 'Fra ', from), h('label', {}, 'Til ', to)),
+      h('div', { class: 'row-inline' }, days.map((x) => h('label', { class: 'chip' }, x.box, ' ' + x.n))),
+      h('div', { class: 'row-inline' }, bType, h('button', { type: 'submit' }, 'Legg til alle')));
+  }
+
   return h('div', {},
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
     h('h1', {}, plan.name),
-    h('p', { class: 'muted' }, 'Oppsett av oppgaver og datoer, preferanser og selve planleggingen kommer i neste faser. Planen finnes og kan velges.'),
-    h('h2', {}, 'Endringslogg for planen'),
-    logTable(log));
+    section('Datoer',
+      noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til datoer.') : '',
+      dates.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Dato'), h('th', {}, 'Dagtype'), h('th', {}, 'Merknad'), h('th', {}, ''))), h('tbody', {}, rows)) : h('p', { class: 'muted' }, 'Ingen datoer ennå.'),
+      addForm),
+    section('Legg til flere datoer (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
+    h('p', { class: 'muted small' }, 'Preferanser og selve planleggingen kommer i neste faser.'),
+    section('Endringslogg for planen', logTable(log)));
 }
 
 let renderSeq = 0;
@@ -161,7 +275,7 @@ async function render() {
       [org, people] = await Promise.all([api('GET', '/orgs/' + enc(r.org)), api('GET', `/orgs/${enc(r.org)}/people`)]);
       store.set('org', r.org);
     }
-    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : pagePlan(r, org)]);
+    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : pagePlan(r, org)]);
     if (seq !== renderSeq || !body) return;
     main.replaceChildren(body);
     document.title = (r.page === 'plan' ? '' : '') + 'Tjenesteplan' + (org ? ' · ' + org.name : '');

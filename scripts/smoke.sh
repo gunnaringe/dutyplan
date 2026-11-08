@@ -59,6 +59,14 @@ grep -q '"proposable":true' "$tmp/body" || fail "A sin person ble endret via B"
 code 200 GET / && grep -q Tjenesteplan "$tmp/body" || fail "forsiden mangler"
 code 200 GET /o/org-a/p/host-2026
 
+code 201 POST /api/orgs/org-a/day-types '{"name":"Helg"}'
+dt=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
+[ -n "$dt" ] || fail "fant ikke dagtype-id"
+code 404 POST /api/orgs/org-b/plans/host-2026/dates "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"   # A sin dagtype på B sin dato
+code 201 POST /api/orgs/org-a/plans/host-2026/dates "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"
+code 200 GET /api/orgs/org-b/plans/host-2026/dates
+[ "$(cat "$tmp/body")" = "[]" ] || fail "B ser A sine datoer: $(cat "$tmp/body")"
+
 stop
 start                                                                  # samme database etter omstart
 code 200 GET /api/orgs

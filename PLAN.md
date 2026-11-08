@@ -1,6 +1,6 @@
 # Tjenesteplan: plan
 
-Arbeidstittel. Status 2026-11-07: **planleggeren (`solver/`) virker alene; appens første del (organisasjoner, planer, personer, endringslogg) er bygget. Lokalt git-repo, ikke på GitHub.**
+Arbeidstittel. Status 2026-11-08: **planleggeren (`solver/`) virker alene; appen har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper, kombinasjoner, datoer). Lokalt git-repo, ikke på GitHub.**
 Første bruksområde og testdata: en kirkes tjenesteplan for høsten 2026 (oppdiktede navn i repoet). Verktøyet er generelt; se *Generelt*.
 
 ## Mål
@@ -31,6 +31,7 @@ bokmål først, men tekstene skal kunne byttes ut.
   dag (se *Manuelle ruter, grupper og utvalg*).
 - **Gruppearbeid teller som ett oppdrag per medlem** i fordelingen (samlet, per oppgave og i historikken), både for
   manuelle og foreslåtte grupper. Historikken for neste periode regnes ut slik av backenden.
+- **Ingen regnearkstøtte**: verken import fra eller eksport til regneark (bestemt 2026-11-08). Alt legges inn i appen.
 - Ingen kompetanser og ingen betingede krav («når X, så Y»). Utvalg dekker det.
 - Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom datoer. Det er kombinasjonsinnstillingen
   som styrer hva som kan, bør og ikke bør samme dag. (Begge ble prøvd og tatt ut etter ønske 2026-11-04.)
@@ -85,7 +86,8 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001):* `organization`, `plan`, `person`, `change_log`. Resten er planlagt og kommer med sine faser.
+*Bygget (migrering 001–002):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `slot_date`. Resten kommer med sine faser.
+Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
 |---|---|---|
@@ -110,7 +112,10 @@ organisasjon, deles av alle planene; det som hører til en periode, ligger under
 Historikk til planleggeren er tidligere planers publiserte tildelinger i **samme organisasjon**.
 Alle oppslag er avgrenset av organisasjonen; en plan eller person fra en annen organisasjon gir 404.
 
-Rader i et eksisterende ark som bare er informasjon (tema, kollekt), er ikke oppgaver og hører ikke inn i planleggeren.
+**Datoer:** en dato hører til én plan og har en dagtype. API-et bruker id (`/dates/{id}`), og databasen har `UNIQUE (plan_id, date)`,
+så to hendelser samme dag i én plan støttes ikke ennå (kjent begrensning; kan løsnes uten å endre API-et). «Alle søndager i et tidsrom» legger til
+datoer for valgte ukedager (ISO 1 = mandag … 7 = søndag, regnet ut i Go, ikke i nettleseren), høyst 366 dager om gangen; datoer som finnes, hoppes over.
+Sletting av en oppgave som er i en dagtype, eller en dagtype som har datoer, nektes (409); kombinasjoner følger oppgaven.
 
 ### Samme skala overalt
 Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjoner bruker
@@ -183,10 +188,10 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 
 0. **Spike (gjort 2026-11-03, oppdatert 11-04)**: `solver/`, se resultatene under. Ingen app ennå.
 1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
-2. **Oppsett og import**: oppgaver, dagtyper, datoer. Lim inn/CSV fra arket.
+2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, datoer (enkeltvis og alle valgte ukedager i et tidsrom).
 3. **Personsiden**: oppgavepreferanser og dato-kalender med tegning/trykk (som i `whenever/`).
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser.
-5. **Plan og eksport**: rutenett som i arket, «mine oppdrag», kopier som tabell/CSV, kalenderfeed per person.
+5. **Plan**: rutenett (datoer bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.
@@ -235,7 +240,7 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 2. Ingen innlogging i første versjon. Uoffentlig adresse, `noindex`, endringslogg.
 3. Solver som Python-underprosess i samme image som Go-backenden.
 4. Én plan per periode (f.eks. semester), med historikk som telles med i neste.
-5. Eksport via kopier/CSV. Ingen direkte skriving i Google Sheets.
+5. Ingen regnearkstøtte (hverken import eller eksport).
 
 ## Risiko
 

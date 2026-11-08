@@ -28,3 +28,12 @@ th { color: var(--muted); font-weight: 600; font-size: .875rem; }
 #msg.err { color: var(--err); }
 #msg.ok { color: var(--accent); }
 .log td:first-child { white-space: nowrap; color: var(--muted); }
+
+button.danger { background: transparent; color: var(--err); border-color: var(--err); }
+.row-inline { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0; }
+form.stack { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0; }
+textarea { font: inherit; width: 100%; padding: .5rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--bg); color: var(--fg); }
+.card { border: 1px solid var(--line); border-radius: .6rem; padding: .75rem; margin: .75rem 0; }
+.chip { display: inline-flex; gap: .25rem; align-items: center; border: 1px solid var(--line); border-radius: 1rem; padding: .15rem .6rem; }
+.err { color: var(--err); }
+input[type=number] { width: 5rem; }

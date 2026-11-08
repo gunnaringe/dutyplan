@@ -44,6 +44,8 @@ func New(st *store.Store, static fs.FS, log *slog.Logger) http.Handler {
 
 	mux.HandleFunc("GET /api/orgs/{org}/log", s.listLog)
 
+	s.setupRoutes(mux)
+
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })
 
 	index := func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "index.html") }
