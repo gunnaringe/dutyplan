@@ -168,12 +168,20 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 - **Organisasjonen ligger i adressen**, både i siden (`/o/<org>/p/<plan>`) og API-et (`/api/orgs/{org}/...`). Tjeneren har ingen
   «gjeldende organisasjon», så å bytte er bare å gå til en annen adresse. Organisasjonslisten kan leses av alle som når adressen.
 - **Fremmednøkler** er av som standard i SQLite på hver tilkobling og slås på i DSN-en; en test sjekker at de håndheves.
-- **Solveren er et Python-program med `ortools`** som Go starter som underprosess:
-  JSON inn på stdin, JSON ut på stdout, tidsgrense. Samme container-image. Kontrakten er liten og kan testes
-  uten resten av appen. Jeg valgte dette fordi OR-Tools ikke har en støttet Go-binding, og fordi Python-eksemplene
-  for turnusplanlegging ligner mest på dette problemet.
-- Alternativ om det blir tungvint: ren Python-backend, eller CP-SAT i nettleseren via et av
-  WebAssembly-byggene (uprøvd og ikke offisielt).
+- **Solveren er et Python-program med `ortools`** som Go starter som underprosess: JSON inn på stdin, JSON ut på stdout,
+  tidsgrense. Samme container-image. Kontrakten er liten og kan testes uten resten av appen. **Python beholdes** (brukerens svar
+  2026-11-08: «hvis Python er bedre egnet kan det beholdes»). Grunnen er at det er samme CP-SAT-løser, pip-pakken `ortools` er ferdigbygd
+  med de native bibliotekene, og modellen har 80 tester og 79 mutasjoner.
+- **Go-alternativer, undersøkt 2026-11-08:**
+  - *Offisielt Go-API for CP-SAT* (`github.com/google/or-tools/ortools/sat/go/cpmodel`): finnes, men er et cgo-skall rundt OR-Tools sitt
+    C-API. Det har ingen versjonsmerking (pseudoversjon fra oktober 2026), ingen kjente brukere, og bygges med Bazel mot det native
+    biblioteket, ikke som en vanlig Go-avhengighet. Appen ville mistet «én statisk binær» og fått en tung bygg-kjede, og modellen og alle
+    testene måtte portes. Brukbart senere hvis Python blir et problem.
+  - *Uoffisielt cgo-skall* (`irfansharif/solver`): bundet til OR-Tools 9.1, sist endret april 2023. Ikke aktuelt.
+  - *Rene Go-biblioteker for begrensninger* (f.eks. `centipede`, `go-constraint-solver`): løser tilfredsstillbarhet med tilbakesporing, ikke
+    optimering med jevn fordeling. Ikke likeverdige.
+  - *MIP-løsere via cgo* (f.eks. HiGHS): krever også et native bibliotek, og er svakere enn CP-SAT på denne typen problem.
+  - Jeg fant ingen ren Go-løser som kan det CP-SAT gjør her.
 
 ### Tilgang uten innlogging
 Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. Konsekvensene:
@@ -251,4 +259,4 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 - Folk må faktisk fylle ut. Derfor bare én liste per person og skjult det som er uvedkommende.
 - Uten innlogging kan en feilklikk eller en uvitende bruker endre andres svar. Endringsloggen og sikkerhetskopien er
   det som fanger det.
-- Python i Go-imaget gjør bygget og imaget større. Avgjøres når planleggeren kobles til appen (fase 4).
+- Python i Go-imaget gjør bygget og imaget større. Besluttet: Python beholdes (se *Arkitektur*). Fase 4 må pakke Python og `ortools` inn i imaget.
