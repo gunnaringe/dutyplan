@@ -228,6 +228,8 @@ func TestExplain(t *testing.T) {
 			"Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."},
 		{map[string]any{"kandidater": 2.0, "opptatt": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
 			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
+		{map[string]any{"kandidater": 1.0, "opptatt": map[string]any{"p1": []any{"t2 (g1)"}}},
+			"1 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (t2 (g1))."},
 	}
 	for _, c := range cases {
 		if got := Explain(c.why, person, task); got != c.want {

@@ -40,7 +40,11 @@ func Explain(why map[string]any, person func(string) string, task func(string) s
 			arr, _ := busy[k].([]any)
 			for _, t := range arr {
 				if s, ok := t.(string); ok {
-					ts = append(ts, task(s))
+					name := task(s)
+					if name == "" { // not a plain task id (the solver also says «t3 (g1)» for a group's task): show it as it is
+						name = s
+					}
+					ts = append(ts, name)
 				}
 			}
 			items = append(items, fmt.Sprintf("%s (%s)", person(k), strings.Join(ts, ", ")))
