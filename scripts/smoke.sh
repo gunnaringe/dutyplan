@@ -68,6 +68,10 @@ code 201 POST /api/orgs/org-a/plans/host-2026/events "{\"date\":\"2026-08-09\",\
 code 200 GET /api/orgs/org-b/plans/host-2026/events
 [ "$(cat "$tmp/body")" = "[]" ] || fail "B ser A sine datoer: $(cat "$tmp/body")"
 
+sh scripts/seed-demo.sh "$url" >/dev/null || fail "seedskriptet feilet"
+code 200 GET /api/orgs/test/combinations
+[ "$(grep -o '"level":"kan_ikke"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"upraktisk"' "$tmp/body" | wc -l)" -eq 1 ] || fail "seedet kombinasjoner er feil: $(cat "$tmp/body")"
+
 stop
 start                                                                  # samme database etter omstart
 code 200 GET /api/orgs

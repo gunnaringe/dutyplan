@@ -9,7 +9,7 @@ Alt via mise. Ingen innlogging; organisasjonen ligger i adressen.
   isolasjon, aktørkrav, omstart; stopper den igjen; én linje) og `mise run app:ui` (headless nettleser, ca. 10 s).
 - **Kjøre den selv:** `mise run app:run -- --addr 127.0.0.1:8080 --db /tmp/tp.db` i bakgrunnen (skriver `tjenesteplan: http://...`). Stopp den
   på PID-en du startet, ikke med `pkill`. Standarddatabasen `tjenesteplan.db` ligger i arbeidsmappen; bruk `--db /tmp/...` til prøving.
-- **Testdata:** `mise run app:seed -- <adresse>` legger organisasjonen «Test» (`/o/test`) med oppgavene Lovsang, Lyd og Bilde inn i en kjørende app. Trygt å kjøre flere ganger.
+- **Testdata:** `mise run app:seed -- <adresse>` legger organisasjonen «Test» (`/o/test`) med oppgavene Lovsang, Lyd og Bilde inn i en kjørende app, med Lyd+Bilde upraktisk og begge «kan ikke» med Lovsang. Trygt å kjøre flere ganger.
   Standarddatabasen `tjenesteplan.db` (i repoets rot, ikke i git) har dem allerede.
 - **API (JSON):** `GET /api/orgs`, `POST /api/orgs {"name"}`, `GET|POST /api/orgs/{org}/plans`, `/people`, `PATCH /people/{id}`,
   `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, og per plan `/plans/{plan}/events` (+ `/bulk`, `PATCH|DELETE /{id}`),
