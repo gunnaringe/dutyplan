@@ -1,4 +1,5 @@
 """python -m tjenesteplan_solver            < inndata.json > utdata.json
+python -m tjenesteplan_solver --check      som over, men svaret får «violations»: brudd funnet av den uavhengige sjekkeren
 python -m tjenesteplan_solver check inndata.json utdata.json
 """
 
@@ -21,7 +22,10 @@ def main(argv: list[str]) -> int:
         print("OK" if not problems else f"{len(problems)} brudd")
         return 1 if problems else 0
     data = json.load(sys.stdin)
-    json.dump(solve(data), sys.stdout, ensure_ascii=False, indent=1)
+    result = solve(data)
+    if len(argv) == 2 and argv[1] == "--check":
+        result["violations"] = check(data, result)
+    json.dump(result, sys.stdout, ensure_ascii=False, indent=1)
     sys.stdout.write("\n")
     return 0
 

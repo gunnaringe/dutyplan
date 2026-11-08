@@ -12,6 +12,7 @@ Filene gjenopprettes alltid; sikkerhetskopier ligger i solver/.mutation-backup/ 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -94,6 +95,23 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("masseoppretting dupliserer ved gjentakelse", "internal/store/events.go", "(SELECT 1 FROM event WHERE org_id = ? AND plan_id = ? AND date = ? AND day_type_id = ?)", "(SELECT 1 WHERE 0)"),
     ("ukedager nummereres feil", "internal/store/events.go", "(int(t.Weekday())+6)%7 + 1", "int(t.Weekday())"),
     ("masseoppretting uten grense", "internal/store/events.go", "if t.Sub(f) > maxBulkSpanDays*24*time.Hour {", "if false {"),
+    # planlegging (fase 4)
+    ("tenant: kjøring hentes uten org og plan", "internal/store/runs.go", "FROM plan_run WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid)", "FROM plan_run WHERE id = ? AND ? > 0 AND ? > 0`, id, oid, pid)"),
+    ("tenant: kjøring hentes uten plan", "internal/store/runs.go", "FROM plan_run WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid)", "FROM plan_run WHERE id = ? AND org_id = ? AND ? > 0`, id, oid, pid)"),
+    ("tenant: kjøringer listes uten org og plan", "internal/store/runs.go", "FROM plan_run WHERE org_id = ? AND plan_id = ? ORDER BY id DESC LIMIT ?", "FROM plan_run WHERE ? > 0 AND ? > 0 ORDER BY id DESC LIMIT ?"),
+    ("tenant: kjøringer listes uten plan", "internal/store/runs.go", "FROM plan_run WHERE org_id = ? AND plan_id = ? ORDER BY id DESC LIMIT ?", "FROM plan_run WHERE org_id = ? AND ? > 0 ORDER BY id DESC LIMIT ?"),
+    ("frøet telles ikke opp", "internal/store/runs.go", "return int(last.Int64) + 1, nil", "return int(last.Int64), nil"),
+    ("gamle kjøringer ryddes ikke", "internal/store/runs.go", "DELETE FROM plan_run WHERE plan_id = ? AND id NOT IN", "DELETE FROM plan_run WHERE plan_id = ? AND 0 = 1 AND id NOT IN"),
+    ("ferdig kjøring kan avsluttes på nytt", "internal/store/runs.go", 'if status != "running" {', "if false {"),
+    ("bare én kjøring om gangen", "internal/planner/service.go", "if s.running {", "if false {"),
+    ("tidsgrense uten nedre grense", "internal/planner/service.go", "if p.TimeLimit < MinTimeLimit || p.TimeLimit > MaxTimeLimit {", "if p.TimeLimit > MaxTimeLimit {"),
+    ("tidsgrense uten øvre grense", "internal/planner/service.go", "if p.TimeLimit < MinTimeLimit || p.TimeLimit > MaxTimeLimit {", "if p.TimeLimit < MinTimeLimit {"),
+    ("inaktiv person planlegges", "internal/planner/input.go", "if !person.Active { // an inactive person is not planned", "if false { // an inactive person is not planned"),
+    ("«kan ikke foreslås» sendes ikke til planleggeren", "internal/planner/input.go", "}{pid(person.ID), person.Proposable})", "}{pid(person.ID), true})"),
+    ("utdatert plan oppdages ikke", "internal/planner/view.go", "v.Run.Stale = hash != r.InputHash", "v.Run.Stale = hash == \"\""),
+    ("kontrollen leses ikke fra svaret", "internal/planner/view.go", 'v.Run.Violations = out.Violations', 'v.Run.Violations = []string{}'),
+    ("API: planlegging uten planlegger gir ikke 503", "internal/api/runs.go", "case errors.Is(err, planner.ErrUnavailable):", "case false:"),
+    ("API: opptatt gir ikke 409", "internal/api/runs.go", "case errors.Is(err, planner.ErrBusy):", "case false:"),
     # personens svar (fase 3)
     ("tenant: person hentes uten org", "internal/store/preferences.go", "FROM person WHERE id = ? AND org_id = ?`, id, oid).", "FROM person WHERE id = ? AND ? > 0`, id, oid)."),
     ("tenant: oppgave hentes uten org ved valg", "internal/store/preferences.go", "WHERE id = ? AND org_id = ? AND planned = 1`, taskID, oid)", "WHERE id = ? AND ? > 0 AND planned = 1`, taskID, oid)"),
@@ -121,7 +139,10 @@ def run_tests(target: str) -> tuple[int, str]:
     if target.endswith(".py"):
         r = subprocess.run([sys.executable, "-m", "pytest", "-x", *TESTS], cwd=ROOT, capture_output=True, text=True, check=False)
         return r.returncode, r.stdout
-    r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=REPO, capture_output=True, text=True, check=False)
+    # Uten planlegger i miljøet hoppes de to testene mot den ekte løseren over (ca. 1,3 s hver gang). Reglene skal fanges
+    # av testene med falsk løser; en mutasjon bare de ekte testene fanger, skal vises som OVERLEVDE.
+    env = {**os.environ, "TJENESTEPLAN_SOLVER": ""}
+    r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=REPO, capture_output=True, text=True, check=False, env=env)
     out = r.stdout + r.stderr
     if r.returncode != 0 and ("build failed" in out or "setup failed" in out):
         return 99, out

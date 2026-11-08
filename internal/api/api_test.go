@@ -12,15 +12,21 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/gunnaringe/tjenesteplan/internal/planner"
 	"github.com/gunnaringe/tjenesteplan/internal/store"
 )
 
 type env struct {
-	t *testing.T
-	h http.Handler
+	t  *testing.T
+	h  http.Handler
+	st *store.Store
+	pl *planner.Service
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith: a server whose planner runs the given solver (nil = no planner configured).
+func newEnvWith(t *testing.T, solver planner.Solver) *env {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
@@ -28,7 +34,9 @@ func newEnv(t *testing.T) *env {
 	}
 	t.Cleanup(func() { st.Close() })
 	static := fstest.MapFS{"index.html": {Data: []byte("<!doctype html>INDEX")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
-	return &env{t, New(st, static, slog.New(slog.NewTextHandler(io.Discard, nil)))}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	pl := planner.New(st, solver, 1, log)
+	return &env{t: t, h: New(st, pl, static, log), st: st, pl: pl}
 }
 
 type reply struct {

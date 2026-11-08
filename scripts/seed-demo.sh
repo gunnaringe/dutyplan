@@ -2,7 +2,7 @@
 # Testdata til en kjørende app: organisasjonen «Test» med
 #   - oppgavene Lovsang, Lyd og Bilde, og kombinasjonene Lyd + Bilde = upraktisk (bør ikke),
 #     Lyd + Lovsang og Bilde + Lovsang = kan ikke kombineres,
-#   - åtte personer (oppdiktede navn),
+#   - åtte personer (oppdiktede navn) som har valgt hva de kan stille på,
 #   - dagtypen «Gudstjeneste» (Lovsang 1, Lyd 1, Bilde 1 plass),
 #   - planen «Høst 2026» med en hendelse hver søndag 2. august - 20. desember (21 stk).
 # Kan kjøres flere ganger (det som finnes fra før, hoppes over). Bruk: mise run app:seed [-- http://127.0.0.1:8080]
@@ -51,4 +51,21 @@ case "$code" in 201|409) ;; *) echo "seed: planen ble avvist ($code): $(cat /tmp
 code=$(api POST /api/orgs/test/plans/host-2026/events/bulk "{\"from\":\"2026-08-01\",\"to\":\"2026-12-20\",\"weekdays\":[7],\"day_type_id\":$dt}")
 [ "$code" = 201 ] || { echo "seed: hendelsene ble avvist ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
 
-echo "seed: ok. $url/o/test: Lovsang, Lyd, Bilde (Lyd+Bilde upraktisk, begge kan ikke med Lovsang), 8 personer, plan Høst 2026 med 21 søndager"
+# Hva folk kan stille på (svar per person): nok til at «Planlegg» gir en plan.
+people=$(curl -s "$url/api/orgs/test/people")
+pid() { printf '%s' "$people" | sed -n "s/.*\"id\":\([0-9]*\),\"name\":\"$1\".*/\1/p"; }
+choose() { # choose <person> <oppgave-id> <nivå>
+  id=$(pid "$1"); [ -n "$id" ] || { echo "seed: fant ikke personen $1"; exit 1; }
+  code=$(api PUT "/api/orgs/test/people/$id/tasks/$2" "{\"level\":\"$3\"}")
+  [ "$code" = 204 ] || grep -q 'nothing to change' /tmp/seed-body.$$ || { echo "seed: svaret for $1 ble avvist ($code): $(cat /tmp/seed-body.$$)"; exit 1; }  # uendret svar er ikke en feil
+}
+choose "Kari Test" "$lyd" noytral;      choose "Kari Test" "$bilde" godt
+choose "Ola Prøve" "$lyd" godt;         choose "Ola Prøve" "$lovsang" noytral
+choose "Mona Eksempel" "$lyd" noytral;  choose "Mona Eksempel" "$lovsang" godt
+choose "Pia Demo" "$bilde" noytral
+choose "Ingrid Prøve" "$bilde" noytral; choose "Ingrid Prøve" "$lovsang" godt
+choose "Njål Eksempel" "$lovsang" noytral; choose "Njål Eksempel" "$lyd" darlig
+choose "Sunniva Test" "$lovsang" noytral;  choose "Sunniva Test" "$bilde" godt
+choose "Jon Demo" "$lyd" noytral;       choose "Jon Demo" "$lovsang" godt
+
+echo "seed: ok. $url/o/test: Lovsang, Lyd, Bilde (Lyd+Bilde upraktisk, begge kan ikke med Lovsang), 8 personer med oppgavevalg, plan Høst 2026 med 21 søndager (trykk «Planlegg»)"

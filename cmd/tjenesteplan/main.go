@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gunnaringe/tjenesteplan/internal/api"
+	"github.com/gunnaringe/tjenesteplan/internal/planner"
 	"github.com/gunnaringe/tjenesteplan/internal/store"
 	"github.com/gunnaringe/tjenesteplan/web"
 )
@@ -22,6 +25,8 @@ import (
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on (port 0 picks a free one)")
 	dbPath := flag.String("db", "tjenesteplan.db", "SQLite database file (created if missing)")
+	solverCmd := flag.String("solver", os.Getenv("TJENESTEPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m tjenesteplan_solver\" (default $TJENESTEPLAN_SOLVER; empty = no planning)")
+	workers := flag.Int("workers", min(runtime.NumCPU(), 8), "threads the planner may use")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -32,13 +37,27 @@ func main() {
 	}
 	defer st.Close()
 
+	// A run that was going when the server stopped can never finish: say so instead of leaving it «running».
+	if n, err := st.FailRunningRuns(context.Background()); err != nil {
+		log.Error("close interrupted runs", "err", err)
+		os.Exit(1)
+	} else if n > 0 {
+		log.Warn("marked interrupted runs as failed", "runs", n)
+	}
+	var solver planner.Solver
+	if argv := strings.Fields(*solverCmd); len(argv) > 0 {
+		solver = planner.ExecSolver{Argv: argv}
+	} else {
+		log.Warn("no planner configured (--solver / TJENESTEPLAN_SOLVER): everything but «Planlegg» works")
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("listen", "err", err)
 		os.Exit(1)
 	}
 	srv := &http.Server{
-		Handler:           api.New(st, web.Files, log),
+		Handler:           api.New(st, planner.New(st, solver, *workers, log), web.Files, log),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

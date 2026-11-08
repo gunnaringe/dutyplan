@@ -212,11 +212,78 @@ function dayTypeSelect(dayTypes, value, onchange, label) {
   return h('select', { 'aria-label': label, onchange }, dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === value }, d.name)));
 }
 
+// «Plan»: siste kjøring av planleggeren som en liste over hendelser (mobil først), med knapp for å planlegge eller prøve igjen.
+// Kjøringen skjer i tjeneren; panelet spør etter status hvert sekund til den er ferdig og tegner bare seg selv på nytt.
+function planPanel(r, canPlan, first) {
+  const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/runs`;
+  const box = h('div', { class: 'plan-panel' });
+  const limits = [[10, '10 s'], [20, '20 s'], [60, '60 s']];
+  const limitSel = h('select', { 'aria-label': 'Tid planleggeren får' }, limits.map(([v, t]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, t)));
+  limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
+  let timer = 0;
+
+  async function start() {
+    let view;
+    if (await write(async () => { const res = await api('POST', path, { time_limit: parseInt(limitSel.value, 10) }); view = await api('GET', `${path}/${res.id}`); })) show(view);
+  }
+  async function poll() {
+    if (!box.isConnected) return;  // siden er byttet ut
+    try { show(await api('GET', `${path}/latest`)); } catch (e) { say(e.message, 'err'); }
+  }
+  function show(view) {
+    clearTimeout(timer);
+    box.replaceChildren(...body(view));
+    if (view && view.run.status === 'running') timer = setTimeout(poll, 1000);
+  }
+
+  function cell(c, taskName) {
+    const who = c.people.map((p) => h('span', { class: 'person' }, p.name, p.weak ? h('span', { class: 'tag' }, 'dårlig') : ''));
+    if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? 'Ikke fylt' : `Mangler ${c.missing}`));
+    return [h('div', { class: 'task' }, taskName),
+      h('div', {}, h('div', { class: 'who' }, who), c.missing > 0 && c.explanation ? h('div', { class: 'small muted' }, c.explanation) : '')];
+  }
+
+  function body(view) {
+    const running = !!view && view.run.status === 'running';
+    const out = [h('div', { class: 'row-inline' },
+      h('button', { type: 'button', disabled: !canPlan || running, onclick: start }, running ? 'Planlegger…' : view ? 'Prøv igjen' : 'Planlegg'),
+      h('label', { class: 'small muted' }, 'Tid ', limitSel))];
+    if (!canPlan) out.push(h('p', { class: 'muted' }, 'Planleggeren er ikke satt opp på denne tjeneren.'));
+    if (!view) { out.push(h('p', { class: 'muted' }, 'Ingen plan er laget ennå. Når folk har svart, trykk «Planlegg».')); return out; }
+    const run = view.run;
+    if (running) { out.push(h('p', { role: 'status' }, `Planlegger … det tar opptil ${run.time_limit} sekunder.`)); return out; }
+    if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, 'Planleggingen feilet: ' + (run.error || 'ukjent feil'))); return out; }
+
+    out.push(h('p', { class: 'small muted' }, `Laget av ${run.actor} ${fmtTime(run.finished_at || run.started_at)}. ` + (run.solver_status === 'OPTIMAL' ? 'Beste mulige plan funnet.' : 'God plan funnet; kan finnes en enda bedre om den får mer tid.')));
+    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, 'Svar eller oppsett er endret siden denne planen ble laget. Trykk «Prøv igjen» for en oppdatert plan.'));
+    if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, 'Den uavhengige kontrollen fant brudd mot reglene:'), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
+    else if (run.checked) out.push(h('p', { class: 'small muted' }, 'Kontrollert uavhengig: ingen brudd mot reglene.'));
+    if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
+
+    const names = new Map(view.tasks.map((t) => [t.id, t.name]));
+    out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
+      h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
+      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => cell(c, names.get(c.task_id) || '?')))))));
+    if (view.weak.length) out.push(h('details', {}, h('summary', {}, `Kompromisser (${view.weak.length})`), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
+    if (view.load.length) out.push(h('details', {}, h('summary', {}, 'Fordeling'), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, `${l.name}: ${l.count} (jevn andel ${l.target.toLocaleString('nb-NO')})`)))));
+    return out;
+  }
+
+  show(first);
+  return box;
+}
+
+// Siste kjøring, eller null. Lista er alltid 200; å spørre rett etter «latest» uten kjøringer ville gi 404 i nettleserens konsoll.
+async function latestRun(path) {
+  return (await api('GET', path)).length ? api('GET', path + '/latest') : null;
+}
+
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log, people] = await Promise.all([
+  const [plan, dates, dayTypes, log, people, health, latest] = await Promise.all([
     api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
-    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people')]);
+    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people'),
+    api('GET', '/health'), latestRun(`${base}/plans/${enc(r.plan)}/runs`)]);
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
@@ -270,12 +337,12 @@ async function pagePlan(r, org) {
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
     h('h1', {}, plan.name),
     fillIn,
+    section('Plan', planPanel(r, !!health.planner, latest)),
     section('Hendelser',
       noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
       dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),
       addForm),
     section('Legg til flere hendelser (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
-    h('p', { class: 'muted small' }, 'Selve planleggingen kommer i en senere fase.'),
     section('Endringslogg for planen', logTable(log)));
 }
 

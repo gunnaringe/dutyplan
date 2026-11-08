@@ -15,6 +15,8 @@ UV_PYTHON_DOWNLOADS = "never"
 UV_PYTHON_PREFERENCE = "only-system"
 UV_LOCKED = "1"
 UV_PROJECT_ENVIRONMENT = "{{config_root}}/solver/.venv"
+# Slik starter appen planleggeren (delt på mellomrom, ingen anførselstegn). Krever mise run setup. Appen leser den som --solver.
+TJENESTEPLAN_SOLVER = "{{config_root}}/solver/.venv/bin/python -m tjenesteplan_solver"
 
 [tasks.setup]
 description = "Python-pakkene fra uv.lock (kjør etter mise install)"
@@ -79,7 +81,7 @@ quiet = true
 run = "sh scripts/smoke.sh"
 
 [tasks.mutations]
-description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 30 s). Stille ved suksess. Args: --only tekst, --list"
+description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 90 s). Stille ved suksess. Args: --only tekst, --list"
 quiet = true
 dir = "{{config_root}}/solver"
 run = "uv run python scripts/mutations.py"

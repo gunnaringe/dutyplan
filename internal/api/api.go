@@ -14,21 +14,30 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/gunnaringe/tjenesteplan/internal/planner"
 	"github.com/gunnaringe/tjenesteplan/internal/store"
 )
 
 type server struct {
-	st     *store.Store
-	static fs.FS
-	log    *slog.Logger
+	st      *store.Store
+	planner *planner.Service
+	static  fs.FS
+	log     *slog.Logger
 }
 
-// New builds the handler. static must contain index.html, app.js and style.css.
-func New(st *store.Store, static fs.FS, log *slog.Logger) http.Handler {
-	s := &server{st: st, static: static, log: log}
+// New builds the handler. static must contain index.html, app.js and style.css. pl may be nil: planning then answers
+// 503 «unavailable» and everything else works.
+func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) http.Handler {
+	if pl == nil {
+		pl = planner.New(st, nil, 1, log)
+	}
+	s := &server{st: st, planner: pl, static: static, log: log}
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
+	// planner: can this server plan at all? The page hides «Planlegg» when not.
+	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]bool{"ok": true, "planner": s.planner.Available()})
+	})
 
 	mux.HandleFunc("GET /api/orgs", s.listOrgs)
 	mux.HandleFunc("POST /api/orgs", s.createOrg)
@@ -45,6 +54,7 @@ func New(st *store.Store, static fs.FS, log *slog.Logger) http.Handler {
 	mux.HandleFunc("GET /api/orgs/{org}/log", s.listLog)
 
 	s.setupRoutes(mux)
+	s.runsRoutes(mux)
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })
 

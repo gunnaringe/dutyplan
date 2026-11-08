@@ -12,6 +12,7 @@ const { spawn } = require('child_process');
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-ui-'));
+  if (!process.env.TJENESTEPLAN_SOLVER) throw new Error('TJENESTEPLAN_SOLVER mangler (kjør via mise run app:ui)');
   const srv = spawn(path.join(__dirname, '../bin/tjenesteplan'), ['--addr', '127.0.0.1:0', '--db', path.join(dir, 'ui.db')], { stdio: ['ignore', 'pipe', 'pipe'] });
   let base = '';
   await new Promise((res, rej) => {
@@ -136,9 +137,40 @@ const { spawn } = require('child_process');
     await page.click('.avail-row:first-child button[data-level="godt"]');  // trykk på valgt svar igjen fjerner det
     await page.waitForSelector('.avail-row:first-child button[aria-pressed="true"]', { state: 'detached' });
 
+    // --- fase 4: planlegg ---
+    const kariUrl = page.url().replace(base, '');
+    await page.goto(base + '/o/menigheten');
+    await page.waitForSelector('input[aria-label="Kan foreslås: Kari Test"]');
+    await page.check('input[aria-label="Kan foreslås: Kari Test"]');  // slått av tidligere i testen
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Kan foreslås: Kari Test"]').checked && document.body.innerText.includes('true -> false') && document.body.innerText.includes('false -> true'));
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await h1is('Høst 2026');
+    ok((await page.innerText('main')).includes('Ingen plan er laget ennå'), 'planen er tom før første kjøring');
+    await page.getByRole('button', { name: 'Planlegg', exact: true }).click();
+    await page.waitForSelector('.plan-event', { timeout: 20000 });
+    let panel = await page.innerText('.plan-panel');
+    ok(panel.includes('Kari Test'), 'Kari fikk Lyd: ' + panel);
+    ok(panel.includes('Kontrollert uavhengig: ingen brudd'), 'kontrollen ble kjørt: ' + panel);
+    ok(panel.includes('Ikke fylt') && panel.includes('har ikke valgt oppgaven'), 'plasser som ikke kan fylles, forklares: ' + panel);
+    ok((await page.locator('.plan-event').count()) === 5, 'en rad per hendelse');
+    await page.getByRole('button', { name: 'Prøv igjen' }).click();
+    await page.waitForSelector('.plan-panel p:has-text("Planlegger")', { timeout: 3000 }).catch(() => {});  // kan være ferdig før vi rekker å se den
+    await page.waitForSelector('button:has-text("Prøv igjen"):not([disabled])', { timeout: 20000 });
+    ok((await page.locator('.plan-event').count()) === 5, 'ny plan etter «Prøv igjen»');
+    // planen blir utdatert når et svar endres
+    await page.goto(base + kariUrl);
+    await h1is('Kari Test');
+    await page.click('.avail-row:nth-child(2) button[data-level="darlig"]');
+    await page.waitForSelector('.avail-row:nth-child(2) button[data-level="darlig"][aria-pressed="true"]');
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await page.waitForSelector('.plan-panel .warn');
+    ok((await page.innerText('.plan-panel')).includes('endret siden denne planen ble laget'), 'utdatert plan merkes');
+    await page.getByRole('button', { name: 'Prøv igjen' }).click();
+    await page.waitForSelector('.plan-panel .warn', { state: 'detached', timeout: 20000 });
+
     // ingen side skal bli bredere enn en mobilskjerm
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const url of ['/o/menigheten', '/o/menigheten/oppsett', '/o/menigheten/p/host-2026', page.url().replace(base, '')]) {
+    for (const url of ['/o/menigheten', '/o/menigheten/oppsett', '/o/menigheten/p/host-2026', kariUrl]) {
       await page.goto(base + url);
       await page.waitForSelector('h1');
       await page.waitForTimeout(150);

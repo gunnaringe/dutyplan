@@ -1,0 +1,571 @@
+package planner
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gunnaringe/tjenesteplan/internal/store"
+)
+
+var ctx = context.Background()
+
+type world struct {
+	st                  *store.Store
+	org                 store.Org
+	plan                store.Plan
+	lovsang, lyd, bilde store.Task
+	dt                  store.DayType
+	events              []store.Event
+	people              map[string]store.Person
+}
+
+// newWorld: one organisation, three tasks (Lovsang is manual-only), a day type with one place each, a plan with
+// four Sundays and six people who have chosen tasks and marked a few dates.
+func newWorld(t *testing.T, orgName string) world {
+	t.Helper()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return populate(t, st, orgName)
+}
+
+func populate(t *testing.T, st *store.Store, orgName string) world {
+	t.Helper()
+	w := world{st: st, people: map[string]store.Person{}}
+	var err error
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	w.org, err = st.CreateOrg(ctx, "T", orgName, "")
+	must(err)
+	w.lovsang, err = st.CreateTask(ctx, w.org.Slug, "T", "Lovsang", false)
+	must(err)
+	w.lyd, err = st.CreateTask(ctx, w.org.Slug, "T", "Lyd", true)
+	must(err)
+	w.bilde, err = st.CreateTask(ctx, w.org.Slug, "T", "Bilde", true)
+	must(err)
+	must(st.SetCombination(ctx, w.org.Slug, "T", w.lyd.ID, w.bilde.ID, "kan_ikke"))
+	w.dt, err = st.CreateDayType(ctx, w.org.Slug, "T", "Gudstjeneste")
+	must(err)
+	_, err = st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.lyd.ID, Slots: 1}, {TaskID: w.bilde.ID, Slots: 1}, {TaskID: w.lovsang.ID, Slots: 1}})
+	must(err)
+	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "T", "Høst 2026", "")
+	must(err)
+	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
+		ev, err := st.AddEvent(ctx, w.org.Slug, w.plan.Slug, "T", d, w.dt.ID, "")
+		must(err)
+		w.events = append(w.events, ev)
+	}
+	for _, n := range []string{"Aslaug", "Birger", "Cecilie", "Dina", "Embla", "Frode"} {
+		p, err := st.CreatePerson(ctx, w.org.Slug, "T", n)
+		must(err)
+		w.people[n] = p
+	}
+	choose := func(person string, task store.Task, level string) {
+		must(st.SetPersonTask(ctx, w.org.Slug, person, w.people[person].ID, task.ID, level))
+	}
+	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
+		choose(n, w.lyd, "noytral")
+	}
+	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
+		choose(n, w.bilde, "noytral")
+	}
+	choose("Frode", w.lyd, "ikke") // takes part but never wants it
+	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Aslaug", w.people["Aslaug"].ID, map[int64]string{w.events[0].ID: "ikke"}))
+	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Dina", w.people["Dina"].ID, map[int64]string{w.events[1].ID: "ikke", w.events[2].ID: "godt"}))
+	return w
+}
+
+func (w world) data(t *testing.T) store.PlanningData {
+	t.Helper()
+	d, err := w.st.GetPlanningData(ctx, w.org.Slug, w.plan.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
+func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	off := false
+	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
+	gone := false
+	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Frode"].ID, store.PersonPatch{Active: &gone})
+	input, hash, snap, err := BuildInput(w.data(t), Params{TimeLimit: 7, Seed: 3, Workers: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in map[string]any
+	if err := json.Unmarshal(input, &in); err != nil {
+		t.Fatal(err)
+	}
+	if got := in["params"].(map[string]any); got["time_limit"].(float64) != 7 || got["seed"].(float64) != 3 || got["workers"].(float64) != 2 {
+		t.Errorf("params %v", got)
+	}
+	people := in["people"].([]any)
+	if len(people) != 5 { // Frode is inactive
+		t.Fatalf("active people only: %v", people)
+	}
+	proposable := map[string]bool{}
+	for _, p := range people {
+		m := p.(map[string]any)
+		proposable[m["id"].(string)] = m["proposable"].(bool)
+	}
+	if proposable[pid(w.people["Embla"].ID)] || !proposable[pid(w.people["Aslaug"].ID)] {
+		t.Errorf("proposable flag: %v", proposable)
+	}
+	if _, ok := in["person_tasks"].(map[string]any)[pid(w.people["Frode"].ID)]; ok {
+		t.Error("an inactive person's answers must not be sent")
+	}
+	pt := in["person_tasks"].(map[string]any)[pid(w.people["Cecilie"].ID)].(map[string]any)
+	if pt[tid(w.lyd.ID)] != "noytral" || pt[tid(w.bilde.ID)] != "noytral" {
+		t.Errorf("Cecilie's tasks: %v", pt)
+	}
+	pd := in["person_dates"].(map[string]any)[pid(w.people["Dina"].ID)].(map[string]any)
+	if pd[eid(w.events[1].ID)] != "ikke" || pd[eid(w.events[2].ID)] != "godt" {
+		t.Errorf("Dina's dates: %v", pd)
+	}
+	combos := in["combinations"].([]any)
+	if len(combos) != 1 || combos[0].(map[string]any)["level"] != "kan_ikke" {
+		t.Errorf("combinations: %v", combos)
+	}
+	tasks := map[string]bool{}
+	for _, x := range in["tasks"].([]any) {
+		m := x.(map[string]any)
+		tasks[m["id"].(string)] = m["planned"].(bool)
+	}
+	if tasks[tid(w.lovsang.ID)] || !tasks[tid(w.lyd.ID)] {
+		t.Errorf("planned flags: %v", tasks)
+	}
+	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[did(w.dt.ID)].(map[string]any)) != 3 {
+		t.Errorf("events and day type: %v %v", in["dates"], in["day_type_tasks"])
+	}
+	// the snapshot only names the planner's tasks and the active people
+	if len(snap.Tasks) != 2 || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.lovsang.ID] != 0 || snap.Slots[w.dt.ID][w.lyd.ID] != 1 {
+		t.Errorf("snapshot: %+v", snap)
+	}
+	// deterministic, and the hash ignores seed and time limit but not the data
+	again, hash2, _, _ := BuildInput(w.data(t), Params{TimeLimit: 7, Seed: 3, Workers: 2})
+	_, hash3, _, _ := BuildInput(w.data(t), Params{TimeLimit: 60, Seed: 9})
+	if string(again) != string(input) || hash != hash2 || hash != hash3 {
+		t.Error("the input must be deterministic and the hash independent of the knobs")
+	}
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Birger", w.people["Birger"].ID, map[int64]string{w.events[3].ID: "darlig"})
+	if _, hash4, _, _ := BuildInput(w.data(t), Params{}); hash4 == hash {
+		t.Error("a change in the data must change the hash")
+	}
+}
+
+func TestBuildInputOnlyContainsTheOrganisationsOwnData(t *testing.T) {
+	w := newWorld(t, "Org A")
+	b := populate(t, w.st, "Org B")
+	for _, c := range []struct {
+		name  string
+		w     world
+		other world
+	}{{"A", w, b}, {"B", b, w}} {
+		input, _, _, err := BuildInput(c.w.data(t), Params{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		own := map[string]bool{}
+		for _, p := range c.w.people {
+			own[pid(p.ID)] = true
+		}
+		var in struct {
+			People []struct {
+				ID string `json:"id"`
+			} `json:"people"`
+			Dates []struct {
+				ID string `json:"id"`
+			} `json:"dates"`
+		}
+		json.Unmarshal(input, &in)
+		for _, p := range in.People {
+			if !own[p.ID] {
+				t.Errorf("%s: input has a person that is not theirs: %s", c.name, p.ID)
+			}
+		}
+		for _, p := range c.other.people {
+			if strings.Contains(string(input), `"`+pid(p.ID)+`"`) {
+				t.Errorf("%s: the other organisation's person %s is in the input", c.name, pid(p.ID))
+			}
+		}
+		for _, e := range c.other.events {
+			if strings.Contains(string(input), `"`+eid(e.ID)+`"`) {
+				t.Errorf("%s: the other organisation's event %s is in the input", c.name, eid(e.ID))
+			}
+		}
+	}
+}
+
+func TestExplain(t *testing.T) {
+	person := func(id string) string { return map[string]string{"p1": "Aslaug", "p2": "Birger", "p3": "Cecilie"}[id] }
+	task := func(id string) string { return map[string]string{"t1": "Lyd", "t2": "Lovsang"}[id] }
+	cases := []struct {
+		why  map[string]any
+		want string
+	}{
+		{map[string]any{"kandidater": 0.0}, "Ingen kan ta denne."},
+		{map[string]any{"kandidater": 0.0, "ikke_med": 3.0, "dato_ikke": []any{"p1", "p2"}},
+			"Ingen kan ta denne: passer ikke: Aslaug, Birger; 3 har ikke valgt oppgaven."},
+		{map[string]any{"kandidater": 0.0, "oppgave_ikke": []any{"p3"}, "ikke_foreslaas": []any{"p1"}},
+			"Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."},
+		{map[string]any{"kandidater": 2.0, "opptatt": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
+			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
+	}
+	for _, c := range cases {
+		if got := Explain(c.why, person, task); got != c.want {
+			t.Errorf("\n got %q\nwant %q", got, c.want)
+		}
+	}
+}
+
+// ---- the service, with a fake solver ----------------------------------------------------------------------------
+
+type fakeSolver struct {
+	reply func(ctx context.Context, input []byte) ([]byte, error)
+}
+
+func (f fakeSolver) Solve(c context.Context, input []byte) ([]byte, error) { return f.reply(c, input) }
+
+func newService(w world, f func(ctx context.Context, input []byte) ([]byte, error)) *Service {
+	return New(w.st, fakeSolver{f}, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+// cannedAnswer: Aslaug takes Lyd on event 1 (weak: «dårlig»), Cecilie takes Bilde on event 1; Lyd on event 2 is empty.
+func cannedAnswer(w world) []byte {
+	out := map[string]any{
+		"status": "FEASIBLE", "wall_time": 1.5,
+		"assignments": []map[string]any{
+			{"date": eid(w.events[0].ID), "task": tid(w.lyd.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "noytral", "date_level": "darlig"},
+			{"date": eid(w.events[0].ID), "task": tid(w.bilde.ID), "person": pid(w.people["Cecilie"].ID), "task_level": "noytral", "date_level": "noytral"},
+		},
+		"unfilled": []map[string]any{{"date": eid(w.events[1].ID), "task": tid(w.lyd.ID), "missing": 1,
+			"why": map[string]any{"kandidater": 0, "dato_ikke": []string{pid(w.people["Aslaug"].ID)}}}},
+		"load":       map[string]any{pid(w.people["Aslaug"].ID): map[string]any{"count": 1, "target": 1.26, "capacity": 4, "history": 0}},
+		"violations": []string{},
+	}
+	b, _ := json.Marshal(out)
+	return b
+}
+
+func waitDone(t *testing.T, s *Service) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { s.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run did not finish")
+	}
+}
+
+func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	var sent []byte
+	s := newService(w, func(_ context.Context, input []byte) ([]byte, error) { sent = input; return cannedAnswer(w), nil })
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s)
+	var in struct {
+		Params struct {
+			Seed      int     `json:"seed"`
+			TimeLimit float64 `json:"time_limit"`
+			Workers   int     `json:"workers"`
+		} `json:"params"`
+	}
+	json.Unmarshal(sent, &in)
+	if in.Params.Seed != 1 || in.Params.TimeLimit != 5 || in.Params.Workers != 1 {
+		t.Errorf("params the solver got: %+v", in.Params)
+	}
+	v, err := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Run.Status != "done" || v.Run.SolverStatus != "FEASIBLE" || !v.Run.Checked || len(v.Run.Violations) != 0 || v.Run.Stale {
+		t.Errorf("run: %+v", v.Run)
+	}
+	if len(v.Tasks) != 2 || v.Tasks[0].Name != "Bilde" || v.Tasks[1].Name != "Lyd" {
+		t.Errorf("columns are the planner's tasks in name order: %+v", v.Tasks)
+	}
+	if len(v.Events) != 4 || len(v.Events[0].Cells) != 2 {
+		t.Fatalf("events: %+v", v.Events)
+	}
+	lyd0 := v.Events[0].Cells[1]
+	if lyd0.Slots != 1 || len(lyd0.People) != 1 || lyd0.People[0].Name != "Aslaug" || !lyd0.People[0].Weak || lyd0.Missing != 0 {
+		t.Errorf("first Lyd cell: %+v", lyd0)
+	}
+	lyd1 := v.Events[1].Cells[1]
+	if lyd1.Missing != 1 || len(lyd1.People) != 0 || !strings.Contains(lyd1.Explanation, "passer ikke: Aslaug") {
+		t.Errorf("empty cell with its reason: %+v", lyd1)
+	}
+	if len(v.Weak) != 1 || !strings.Contains(v.Weak[0], "Aslaug fikk Lyd 2026-08-09") || !strings.Contains(v.Weak[0], "hendelsen") {
+		t.Errorf("compromises: %v", v.Weak)
+	}
+	if len(v.Load) != 1 || v.Load[0].Name != "Aslaug" || v.Load[0].Target != 1.3 {
+		t.Errorf("load: %+v", v.Load)
+	}
+
+	// the names are the ones from the start of the run; the run is stale once the data changes
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Aslaug", w.people["Aslaug"].ID, map[int64]string{w.events[3].ID: "ikke"})
+	if v, _ = s.View(ctx, w.org.Slug, w.plan.Slug, id); !v.Run.Stale {
+		t.Error("a change after the run makes it stale")
+	}
+	// a second run counts the seed up
+	var seed2 []byte
+	s2 := newService(w, func(_ context.Context, input []byte) ([]byte, error) { seed2 = input; return cannedAnswer(w), nil })
+	s2.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	waitDone(t, s2)
+	json.Unmarshal(seed2, &in)
+	if in.Params.Seed != 2 {
+		t.Errorf("try again must change the seed: %d", in.Params.Seed)
+	}
+}
+
+func TestTheIndependentCheckIsReportedWhetherItFoundBreachesOrNeverRan(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	for name, c := range map[string]struct {
+		answer     string
+		checked    bool
+		violations []string
+	}{
+		"breaches":  {`{"status":"FEASIBLE","assignments":[],"unfilled":[],"load":{},"violations":["Aslaug har to oppgaver"]}`, true, []string{"Aslaug har to oppgaver"}},
+		"clean":     {`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`, true, nil},
+		"unchecked": {`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{}}`, false, nil},
+	} {
+		s := newService(w, func(context.Context, []byte) ([]byte, error) { return []byte(c.answer), nil })
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitDone(t, s)
+		v, err := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.Run.Checked != c.checked || strings.Join(v.Run.Violations, "|") != strings.Join(c.violations, "|") {
+			t.Errorf("%s: checked %v violations %v", name, v.Run.Checked, v.Run.Violations)
+		}
+	}
+}
+
+func TestRunFailuresAreStoredWithAReason(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	for name, c := range map[string]struct {
+		reply func(context.Context, []byte) ([]byte, error)
+		want  string
+	}{
+		"crash":    {func(context.Context, []byte) ([]byte, error) { return nil, errors.New("exit status 1: boom") }, "boom"},
+		"not json": {func(context.Context, []byte) ([]byte, error) { return []byte("hei"), nil }, "ikke kunne leses"},
+		"no plan":  {func(context.Context, []byte) ([]byte, error) { return []byte(`{"status":"INFEASIBLE"}`), nil }, "INFEASIBLE"},
+		"panic":    {func(context.Context, []byte) ([]byte, error) { panic("uff") }, "intern feil"},
+		"timeout":  {func(c context.Context, _ []byte) ([]byte, error) { <-c.Done(); return nil, ErrTimeout }, "for lang tid"},
+	} {
+		s := newService(w, c.reply)
+		s.timeoutOverride = 100 * time.Millisecond
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+		if err != nil {
+			t.Fatal(name, err)
+		}
+		waitDone(t, s)
+		v, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+		if v.Run.Status != "failed" || !strings.Contains(v.Run.Error, c.want) || len(v.Events) != 0 {
+			t.Errorf("%s: %+v", name, v.Run)
+		}
+	}
+}
+
+func TestOnlyOneRunAtATimeAndSensibleRefusals(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	release := make(chan struct{})
+	s := newService(w, func(_ context.Context, _ []byte) ([]byte, error) { <-release; return cannedAnswer(w), nil })
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5}); !errors.Is(err, ErrBusy) {
+		t.Errorf("a second run while one is going: %v", err)
+	}
+	close(release)
+	waitDone(t, s)
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5}); err != nil {
+		t.Errorf("after the first finished: %v", err)
+	}
+	waitDone(t, s)
+
+	for name, p := range map[string]Params{"too short": {TimeLimit: 1}, "too long": {TimeLimit: 1000}} {
+		if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", p); !errors.Is(err, store.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "", Params{TimeLimit: 5}); !errors.Is(err, store.ErrActor) {
+		t.Errorf("without an actor: %v", err)
+	}
+	if _, err := s.Start(ctx, w.org.Slug, "ingen", "Ola", Params{TimeLimit: 5}); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown plan: %v", err)
+	}
+	if _, err := New(w.st, nil, 1, nil).Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{}); !errors.Is(err, ErrUnavailable) {
+		t.Errorf("no solver: %v", err)
+	}
+	empty, _ := w.st.CreatePlan(ctx, w.org.Slug, "T", "Tom plan", "")
+	if _, err := s.Start(ctx, w.org.Slug, empty.Slug, "Ola", Params{TimeLimit: 5}); !errors.Is(err, ErrNothingToPlan) || !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("a plan without events: %v", err)
+	}
+}
+
+func TestRunsAreInvisibleToOtherOrganisations(t *testing.T) {
+	w := newWorld(t, "Org A")
+	b := populate(t, w.st, "Org B")
+	s := newService(w, func(_ context.Context, _ []byte) ([]byte, error) { return cannedAnswer(w), nil })
+	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	waitDone(t, s)
+	if _, err := s.View(ctx, b.org.Slug, b.plan.Slug, id); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("B views A's run: %v", err)
+	}
+	if l, _ := s.List(ctx, b.org.Slug, b.plan.Slug); len(l) != 0 {
+		t.Errorf("B lists A's runs: %v", l)
+	}
+}
+
+// ---- the real solver ---------------------------------------------------------------------------------------------
+
+func realSolver(t *testing.T) Solver {
+	t.Helper()
+	cmd := os.Getenv("TJENESTEPLAN_SOLVER")
+	if cmd == "" {
+		t.Skip("TJENESTEPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
+	}
+	return ExecSolver{Argv: strings.Fields(cmd)}
+}
+
+func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
+	solver := realSolver(t)
+	w := newWorld(t, "Menighet")
+	off := false
+	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off}) // Embla may not be proposed
+	inactive := false
+	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Birger"].ID, store.PersonPatch{Active: &inactive}) // Birger is not planned
+	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	run := func() RunView {
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitDone(t, s)
+		v, err := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v.Run.Status != "done" {
+			t.Fatalf("run failed: %s", v.Run.Error)
+		}
+		return v
+	}
+	v := run()
+	if !v.Run.Checked || len(v.Run.Violations) != 0 {
+		t.Fatalf("the independent checker found: %v (checked %v)", v.Run.Violations, v.Run.Checked)
+	}
+	who := map[string]map[string][]string{} // event date -> task -> people
+	for _, e := range v.Events {
+		who[e.Date] = map[string][]string{}
+		for _, c := range e.Cells {
+			var names []string
+			for _, p := range c.People {
+				names = append(names, p.Name)
+			}
+			name := ""
+			for _, tk := range v.Tasks {
+				if tk.ID == c.TaskID {
+					name = tk.Name
+				}
+			}
+			who[e.Date][name] = names
+		}
+	}
+	// Lyd can be Aslaug or Cecilie (Birger inactive, Frode said «ikke»); Aslaug cannot on 9 Aug. Bilde: Cecilie or Dina (Embla may not be proposed).
+	for date, tasks := range who {
+		for _, n := range tasks["Lyd"] {
+			if n != "Aslaug" && n != "Cecilie" || (date == "2026-08-09" && n == "Aslaug") {
+				t.Errorf("%s Lyd: %s is not allowed", date, n)
+			}
+		}
+		for _, n := range tasks["Bilde"] {
+			if n != "Cecilie" && n != "Dina" || (date == "2026-08-16" && n == "Dina") {
+				t.Errorf("%s Bilde: %s is not allowed", date, n)
+			}
+		}
+		// Lyd and Bilde cannot be combined, so Cecilie never has both on one event
+		if len(tasks["Lyd"]) == 1 && len(tasks["Bilde"]) == 1 && tasks["Lyd"][0] == tasks["Bilde"][0] {
+			t.Errorf("%s: %s has both Lyd and Bilde", date, tasks["Lyd"][0])
+		}
+	}
+	for _, e := range v.Events {
+		for _, c := range e.Cells {
+			if c.Missing > 0 {
+				t.Errorf("%s: a place is empty although people could take it: %s", e.Date, c.Explanation)
+			}
+		}
+	}
+
+	// the same data and seed give the same plan (one worker, small problem: solved to the end)
+	assign := func(v RunView) string {
+		var parts []string
+		for _, e := range v.Events {
+			for _, c := range e.Cells {
+				for _, p := range c.People {
+					parts = append(parts, fmt.Sprintf("%s/%d/%s", e.Date, c.TaskID, p.Name))
+				}
+			}
+		}
+		sort.Strings(parts)
+		return strings.Join(parts, ",")
+	}
+	if a, b := assign(v), assign(run()); a != b {
+		t.Errorf("the same input must give the same plan:\n%s\n%s", a, b)
+	}
+}
+
+func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
+	solver := realSolver(t)
+	w := newWorld(t, "Menighet")
+	// nobody wants Bilde any more: remove the three who chose it
+	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
+		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.bilde.ID)
+	}
+	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	waitDone(t, s)
+	v, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+	if v.Run.Status != "done" || len(v.Run.Violations) != 0 {
+		t.Fatalf("%+v", v.Run)
+	}
+	for _, e := range v.Events {
+		var bilde *Cell
+		for i := range e.Cells {
+			if e.Cells[i].TaskID == w.bilde.ID {
+				bilde = &e.Cells[i]
+			}
+		}
+		if bilde == nil || bilde.Missing != 1 || !strings.Contains(bilde.Explanation, "Ingen kan ta denne") || !strings.Contains(bilde.Explanation, "har ikke valgt oppgaven") {
+			t.Errorf("%s: %+v", e.Date, bilde)
+		}
+	}
+}

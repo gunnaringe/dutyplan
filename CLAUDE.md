@@ -1,10 +1,12 @@
 # tjenesteplan
 
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
-Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) virker alene; appens første del (Go + SQLite + vanilla JS)
-har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser). Personsiden («Min side») er bygget. Kobling til planleggeren er neste fase.
+Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
+personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser), «Min side», og «Planlegg» på planen (fase 4 omgang 1).
+Neste: manuelle ruter, utvalg, grupper, låse og publisere (omgang 2).
 
-Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/api` (JSON-API + serverer frontenden),
+Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
+starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
 `web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).
 
 ## Kjør billig (les dette først)
@@ -16,6 +18,8 @@ Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, al
 - **Ikke les** `PLAN.md` i sin helhet (ca. 200 linjer). `grep -n '^## ' PLAN.md`, les bare seksjonen du trenger.
   Ikke les `solver/fixtures/host2026.json` eller `solver/uv.lock` (store, genererte); bruk `mise run plan -- --info`.
 - Ikke be om `--full`, `measure:*` eller `app:ui` uten grunn; de er dyre eller trenger sibling-avhengigheter.
+- Appen finner planleggeren via `TJENESTEPLAN_SOLVER` (satt i `mise.toml`, krever `mise run setup`); uten den hoppes de to testene mot den ekte
+  løseren over og «Planlegg» er avslått. Mutasjonene kjører Go-testene uten den, så regler må fanges av testene med falsk løser.
 - Filstier til `plan`, `solve` og `check` er relative til repoets rot. Nye Python-pakker: `mise run add -- pakke` (og `mise run lock`);
   `UV_LOCKED=1` sperrer ellers endring av `uv.lock`.
 

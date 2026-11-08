@@ -87,7 +87,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001–004):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`. Resten kommer med sine faser.
+*Bygget (migrering 001–005):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`. Resten kommer med sine faser.
 Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
@@ -107,7 +107,7 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 | `selection` | plan | **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges |
 | `assignment` | plan | hendelse, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
 | `assignment_member` | plan | **øyeblikksbilde** av medlemmene i en gruppe-tildeling når planen publiseres (ett oppdrag per medlem). Uten den endrer historikken seg når gruppen endres |
-| `plan_run` | plan | parametere, resultat, mål, forklaringer, publisert ja/nei |
+| `plan_run` | plan | status (running/done/failed), frø, tidsgrense, hvem startet, hash av inndata, inndata, øyeblikksbilde av navn og plasser, svar fra planleggeren, feilmelding. De 20 nyeste per plan beholdes. *Ikke bygget ennå:* publisert ja/nei |
 | `change_log` | organisasjon (+ valgfri plan) | hvem (oppgitt navn), hva, når. Skrives i samme transaksjon som endringen |
 
 Historikk til planleggeren er tidligere planers publiserte tildelinger i **samme organisasjon**.
@@ -171,7 +171,7 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 - **Solveren er et Python-program med `ortools`** som Go starter som underprosess: JSON inn på stdin, JSON ut på stdout,
   tidsgrense. Samme container-image. Kontrakten er liten og kan testes uten resten av appen. **Python beholdes** (brukerens svar
   2026-11-08: «hvis Python er bedre egnet kan det beholdes»). Grunnen er at det er samme CP-SAT-løser, pip-pakken `ortools` er ferdigbygd
-  med de native bibliotekene, og modellen har 80 tester og 79 mutasjoner.
+  med de native bibliotekene, og modellen har egne tester og mutasjoner for hver regel.
 - **Go-alternativer, undersøkt 2026-11-08:**
   - *Offisielt Go-API for CP-SAT* (`github.com/google/or-tools/ortools/sat/go/cpmodel`): finnes, men er et cgo-skall rundt OR-Tools sitt
     C-API. Det har ingen versjonsmerking (pseudoversjon fra oktober 2026), ingen kjente brukere, og bygges med Bazel mot det native
@@ -182,6 +182,19 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
     optimering med jevn fordeling. Ikke likeverdige.
   - *MIP-løsere via cgo* (f.eks. HiGHS): krever også et native bibliotek, og er svakere enn CP-SAT på denne typen problem.
   - Jeg fant ingen ren Go-løser som kan det CP-SAT gjør her.
+
+### Kjøring av planleggeren (bygget, fase 4 omgang 1)
+- `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit, seed}`, begge valgfrie) svarer 202 med id med en gang; kjøringen går i bakgrunnen og siden
+  spør `GET .../runs/{id|latest}` hvert sekund. Bare **én kjøring om gangen** i hele tjeneren (409 `busy`), tidsgrense 5–120 s (standard 20).
+  Uten planlegger konfigurert (`--solver` / `$TJENESTEPLAN_SOLVER`) svarer API-et 503 og `/api/health` har `"planner": false`; resten av appen virker.
+- Go bygger inndata fra databasen (`internal/planner/input.go`): bare aktive personer, id-ene `t<id>/e<id>/d<id>/p<id>`, «kan foreslås»,
+  oppgavevalg, tilgjengelighet per hendelse og kombinasjoner. Hashen av inndata (uten frø og tid) lagres, så en gammel plan kan merkes **utdatert**
+  når svar eller oppsett er endret siden.
+- Planleggeren startes med `--check`: den uavhengige sjekkeren går over svaret og `violations` lagres og vises. Svar som ikke er gyldig JSON med status
+  OPTIMAL/FEASIBLE, tidsavbrudd og krasj blir en **feilet kjøring med årsak**, aldri en halv plan. Kjøringer som sto som «running» ved oppstart merkes feilet.
+- Visningen (`internal/planner/view.go`) setter navn og oppgaver fra øyeblikksbildet og gir hver tom plass en forklaring på norsk
+  (`explain.go`: passer ikke, ikke valgt oppgaven, kan ikke foreslås, opptatt med noe annet). «Prøv igjen» teller frøet opp.
+- *Gjenstår i fase 4:* manuelle ruter og utvalg i appen, grupper, låse og publisere, historikk fra publiserte planer.
 
 ### Tilgang uten innlogging
 Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. Konsekvensene:
@@ -201,7 +214,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
 2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
-4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser.
+4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). *Omgang 2:* manuelle ruter, utvalg, grupper, låse, publisere og historikk.
 5. **Plan**: rutenett (hendelser bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
@@ -238,7 +251,7 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 
 ## Testing
 
-- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 65 regler i
+- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 95 regler i
   planleggeren (Python) og appen (Go, særlig organisasjonsavgrensningen) én om gangen og krever at en test feiler; stille når alt er fanget.
 - Alt kjøres via mise (`mise.toml`: python og uv i eksakte versjoner, stille oppgaver); se `CLAUDE.md`.
 - **Uavhengig sjekker** som kontrollerer at en ferdig plan ikke bryter noe hardt krav. Tilfeldige instanser

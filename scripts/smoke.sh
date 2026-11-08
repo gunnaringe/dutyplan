@@ -77,10 +77,31 @@ code 200 GET /api/orgs/test/plans/host-2026/events
 code 200 GET /api/orgs/test/combinations
 [ "$(grep -o '"level":"kan_ikke"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"upraktisk"' "$tmp/body" | wc -l)" -eq 1 ] || fail "seedet kombinasjoner er feil: $(cat "$tmp/body")"
 
+# planlegging med den ekte planleggeren: kjøringen er ferdig, kontrollert uten brudd, og usynlig for en annen organisasjon
+# (org-a har en plan med samme navn, host-2026)
+[ -n "${TJENESTEPLAN_SOLVER:-}" ] || fail "TJENESTEPLAN_SOLVER mangler (kjør via mise run app:smoke)"
+code 202 POST /api/orgs/test/plans/host-2026/runs '{"time_limit":5}'
+run=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
+[ -n "$run" ] || fail "fant ikke kjøringens id"
+status=running; i=0
+while [ "$status" = running ] && [ "$i" -lt 150 ]; do
+  code 200 GET "/api/orgs/test/plans/host-2026/runs/$run"
+  status=$(sed -n 's/.*"status":"\([a-z]*\)".*/\1/p' "$tmp/body")
+  [ "$status" != running ] || { i=$((i + 1)); sleep 0.2; }
+done
+[ "$status" = done ] || fail "planleggingen ble ikke ferdig ($status): $(head -c 400 "$tmp/body")"
+grep -q '"checked":true' "$tmp/body" && grep -q '"violations":\[\]' "$tmp/body" || fail "kontrollen fant brudd eller ble ikke kjørt: $(head -c 400 "$tmp/body")"
+[ "$(grep -o '"cells"' "$tmp/body" | wc -l)" -eq 21 ] || fail "planen skal ha en rad per hendelse (21)"
+code 404 GET "/api/orgs/org-a/plans/host-2026/runs/$run"
+code 404 GET /api/orgs/org-a/plans/host-2026/runs/latest
+code 400 POST /api/orgs/org-a/plans/host-2026/runs '{"time_limit":5}'        # org-a har ingen oppgaver å fordele
+
 stop
 start                                                                  # samme database etter omstart
 code 200 GET /api/orgs
 grep -q '"org-a"' "$tmp/body" && grep -q '"org-b"' "$tmp/body" || fail "organisasjonene ligger ikke igjen etter omstart"
 code 200 GET /api/orgs/org-a/log
 [ "$(grep -o '"action"' "$tmp/body" | wc -l)" -ge 4 ] || fail "endringsloggen ligger ikke igjen etter omstart"
+code 200 GET "/api/orgs/test/plans/host-2026/runs/latest"
+grep -q '"status":"done"' "$tmp/body" || fail "planen ligger ikke igjen etter omstart"
 echo "smoke: ok"
