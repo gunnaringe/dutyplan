@@ -8,7 +8,8 @@ Inndata og utdata er vanlige dict-er (JSON). Nivåer er ASCII i ledningsformatet
 Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
 
   tasks:               [{"id", "planned": true}]
-  dates:               [{"id": "2026-09-20", "type": "helg"}]
+  dates:               [{"id": "2026-09-20", "type": "helg"}]   hendelser: id er vilkårlig tekst, og to hendelser samme kalenderdag har to ulike id-er.
+                       Alt (tilgjengelighet, kombinasjoner, gruppeopptatthet, plasser) gjelder hendelsen, ikke kalenderdagen.
   day_type_tasks:      {"helg": {"vakt": 1, "kafe": 3}}
   people:              [{"id", "proposable": true}]   proposable=false: planleggeren velger aldri personen (manuelle ruter går an)
   person_tasks:        {person: {task: nivå}}          person er med på oppgaven hvis nøkkelen finnes

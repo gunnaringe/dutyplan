@@ -540,3 +540,26 @@ def test_historikk_virker_ogsa_i_det_samlede_leddet():
         params={"history_weight": 0.5, "w_task_fair": 0, "w_task_range": 0},
     )
     assert count(run(inst), "a") == 0  # a har allerede 3 (halvt av 6) og får sin andel dekket
+
+
+def test_to_hendelser_samme_dag_er_uavhengige():
+    """Tilgjengelighet gjelder hendelsen, ikke kalenderdagen: a kan morgen men ikke kveld, b omvendt."""
+    morgen, kveld = "2026-08-09#1", "2026-08-09#2"
+    inst = base(people=("a", "b"), n_dates=1)
+    inst["dates"] = [{"id": morgen, "type": "g"}, {"id": kveld, "type": "g"}]
+    inst["person_dates"] = {"a": {kveld: "ikke"}, "b": {morgen: "ikke"}}
+    res = run(inst)
+    assert who(res, "t", morgen) == ["a"] and who(res, "t", kveld) == ["b"]
+
+
+def test_kombinasjoner_gjelder_hendelsen_ikke_kalenderdagen():
+    """Samme person kan ha Lyd på én hendelse og Bilde på en annen samme dag, selv om de ikke kan kombineres i en hendelse."""
+    e1, e2 = "2026-08-09#1", "2026-08-09#2"
+    inst = base(people=("a",), n_dates=1, tasks={"lyd": 1, "bilde": 1},
+                combinations=[{"a": "lyd", "b": "bilde", "level": "kan_ikke"}], params=NO_FAIR)
+    inst["dates"] = [{"id": e1, "type": "g"}, {"id": e2, "type": "g"}]
+    inst["person_tasks"]["a"] = {"lyd": "godt", "bilde": "godt"}
+    res = run(inst)
+    per_event = {e: [a["task"] for a in res["assignments"] if a["date"] == e] for e in (e1, e2)}
+    assert all(len(ts) == 1 for ts in per_event.values())  # aldri begge i samme hendelse
+    assert len(res["assignments"]) == 2 and sum(u["missing"] for u in res["unfilled"]) == 2

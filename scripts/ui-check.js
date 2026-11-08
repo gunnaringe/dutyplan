@@ -104,9 +104,14 @@ const { spawn } = require('child_process');
     await page.fill('input[aria-label="Til"]', '2026-08-31');
     await page.getByRole('button', { name: 'Legg til alle' }).click();
     await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026"]').length === 5);
-    ok((await page.textContent('#msg')).includes('5 nye datoer'), 'fem søndager i august 2026');
-    await page.click('button[aria-label="Slett 2026-08-30"]');
-    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026"]').length === 4);
+    ok((await page.textContent('#msg')).includes('5 nye hendelser'), 'fem søndager i august 2026');
+    // en ekstra hendelse samme dag er bare en hendelse til
+    await page.fill('input[aria-label="Dato"]', '2026-08-09');
+    await page.fill('input[aria-label="Merknad"]', 'kveld');
+    await page.click('text=Legg til hendelse');
+    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026-08-09"]').length === 2);
+    await page.click('button[aria-label^="Slett hendelsen 2026-08-30"]');
+    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Dagtype 2026"]').length === 5);
 
     ok(errors.length === 0, 'konsollfeil: ' + errors.join(' | ') + ' 404 på: ' + notFound.join(', '));
     console.log('ui-check: ok');

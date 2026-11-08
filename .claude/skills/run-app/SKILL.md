@@ -10,7 +10,7 @@ Alt via mise. Ingen innlogging; organisasjonen ligger i adressen.
 - **Kjøre den selv:** `mise run app:run -- --addr 127.0.0.1:8080 --db /tmp/tp.db` i bakgrunnen (skriver `tjenesteplan: http://...`). Stopp den
   på PID-en du startet, ikke med `pkill`. Standarddatabasen `tjenesteplan.db` ligger i arbeidsmappen; bruk `--db /tmp/...` til prøving.
 - **API (JSON):** `GET /api/orgs`, `POST /api/orgs {"name"}`, `GET|POST /api/orgs/{org}/plans`, `/people`, `PATCH /people/{id}`,
-  `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, og per plan `/plans/{plan}/dates` (+ `/bulk`, `PATCH|DELETE /{id}`),
+  `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, og per plan `/plans/{plan}/events` (+ `/bulk`, `PATCH|DELETE /{id}`),
   `GET /api/orgs/{org}/log?plan=&limit=`. Skrivinger trenger `Content-Type: application/json` og `X-Actor: <prosentkodet navn>`.
   Eksempel: `curl -s -H 'Content-Type: application/json' -H 'X-Actor: Ola' -d '{"name":"Menigheten"}' $URL/api/orgs`.
 - Bruk bare oppdiktede navn i data du legger inn og committer.

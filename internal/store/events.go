@@ -10,13 +10,14 @@ import (
 	"unicode/utf8"
 )
 
-// Limits for adding dates in bulk, so a typo cannot create a flood of rows.
+// Limits for adding events in bulk, so a typo cannot create a flood of rows.
 const (
-	maxBulkSpanDays = 366
-	maxDatesPerCall = 400
+	maxBulkSpanDays  = 366
+	maxEventsPerCall = 400
 )
 
-type SlotDate struct {
+// Event is one occasion in a plan: a date and a day type (and a note). It is the unit that people are available for.
+type Event struct {
 	ID        int64  `json:"id"`
 	Date      string `json:"date"` // YYYY-MM-DD
 	DayTypeID int64  `json:"day_type_id"`
@@ -40,7 +41,7 @@ func cleanNote(raw string) (string, error) {
 	return n, nil
 }
 
-func (s *Store) ListDates(ctx context.Context, orgSlug, planSlug string) ([]SlotDate, error) {
+func (s *Store) ListEvents(ctx context.Context, orgSlug, planSlug string) ([]Event, error) {
 	oid, err := orgID(ctx, s.db, orgSlug)
 	if err != nil {
 		return nil, err
@@ -50,15 +51,15 @@ func (s *Store) ListDates(ctx context.Context, orgSlug, planSlug string) ([]Slot
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT d.id, d.date, d.day_type_id, t.name, d.note
-		FROM slot_date d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
-		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY d.date`, oid, pid)
+		FROM event d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY d.date, d.id`, oid, pid)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []SlotDate{}
+	out := []Event{}
 	for rows.Next() {
-		var d SlotDate
+		var d Event
 		if err := rows.Scan(&d.ID, &d.Date, &d.DayTypeID, &d.DayType, &d.Note); err != nil {
 			return nil, err
 		}
@@ -67,10 +68,10 @@ func (s *Store) ListDates(ctx context.Context, orgSlug, planSlug string) ([]Slot
 	return out, rows.Err()
 }
 
-func getDate(ctx context.Context, q dbq, oid, pid, id int64) (SlotDate, error) {
-	var d SlotDate
+func getEvent(ctx context.Context, q dbq, oid, pid, id int64) (Event, error) {
+	var d Event
 	err := q.QueryRowContext(ctx, `SELECT d.id, d.date, d.day_type_id, t.name, d.note
-		FROM slot_date d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		FROM event d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
 		WHERE d.id = ? AND d.org_id = ? AND d.plan_id = ?`, id, oid, pid).Scan(&d.ID, &d.Date, &d.DayTypeID, &d.DayType, &d.Note)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, ErrNotFound
@@ -78,15 +79,15 @@ func getDate(ctx context.Context, q dbq, oid, pid, id int64) (SlotDate, error) {
 	return d, err
 }
 
-func (s *Store) AddDate(ctx context.Context, orgSlug, planSlug, actor, date string, dayTypeID int64, note string) (SlotDate, error) {
+func (s *Store) AddEvent(ctx context.Context, orgSlug, planSlug, actor, date string, dayTypeID int64, note string) (Event, error) {
 	if _, ok := parseISODate(date); !ok {
-		return SlotDate{}, fmt.Errorf("%w: date must be YYYY-MM-DD", ErrInvalid)
+		return Event{}, fmt.Errorf("%w: date must be YYYY-MM-DD", ErrInvalid)
 	}
 	note, err := cleanNote(note)
 	if err != nil {
-		return SlotDate{}, err
+		return Event{}, err
 	}
-	var out SlotDate
+	var out Event
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -99,26 +100,24 @@ func (s *Store) AddDate(ctx context.Context, orgSlug, planSlug, actor, date stri
 		if err := inOrg(ctx, tx, "day_type", oid, dayTypeID); err != nil {
 			return logEntry{}, err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO slot_date (org_id, plan_id, date, day_type_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		// Events are independent: the same date may have several (they differ by day type and note).
+		res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, day_type_id, note, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 			oid, pid, date, dayTypeID, note, s.stamp())
-		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: date %s is already in the plan", ErrConflict, date)
-		}
 		if err != nil {
 			return logEntry{}, err
 		}
 		id, _ := res.LastInsertId()
-		if out, err = getDate(ctx, tx, oid, pid, id); err != nil {
+		if out, err = getEvent(ctx, tx, oid, pid, id); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "date.add", detail: date + " " + out.DayType}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "event.add", detail: date + " " + out.DayType}, nil
 	})
 	return out, err
 }
 
-// AddDatesBulk adds every date from..to (inclusive) that falls on one of the ISO weekdays. Dates already in the plan
-// are skipped and reported, not errors.
-func (s *Store) AddDatesBulk(ctx context.Context, orgSlug, planSlug, actor, from, to string, weekdays []int, dayTypeID int64) (created []SlotDate, skipped []string, err error) {
+// AddEventsBulk adds an event for every date from..to (inclusive) that falls on one of the ISO weekdays. A date that
+// already has an event of the same day type is skipped and reported, not an error.
+func (s *Store) AddEventsBulk(ctx context.Context, orgSlug, planSlug, actor, from, to string, weekdays []int, dayTypeID int64) (created []Event, skipped []string, err error) {
 	f, ok1 := parseISODate(from)
 	t, ok2 := parseISODate(to)
 	if !ok1 || !ok2 || t.Before(f) {
@@ -146,8 +145,8 @@ func (s *Store) AddDatesBulk(ctx context.Context, orgSlug, planSlug, actor, from
 	if len(dates) == 0 {
 		return nil, nil, fmt.Errorf("%w: no dates match", ErrInvalid)
 	}
-	if len(dates) > maxDatesPerCall {
-		return nil, nil, fmt.Errorf("%w: at most %d dates at a time", ErrInvalid, maxDatesPerCall)
+	if len(dates) > maxEventsPerCall {
+		return nil, nil, fmt.Errorf("%w: at most %d dates at a time", ErrInvalid, maxEventsPerCall)
 	}
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		created, skipped = nil, nil
@@ -163,8 +162,11 @@ func (s *Store) AddDatesBulk(ctx context.Context, orgSlug, planSlug, actor, from
 			return logEntry{}, err
 		}
 		for _, d := range dates {
-			res, err := tx.ExecContext(ctx, `INSERT INTO slot_date (org_id, plan_id, date, day_type_id, note, created_at) VALUES (?, ?, ?, ?, '', ?)
-				ON CONFLICT (plan_id, date) DO NOTHING`, oid, pid, d, dayTypeID, s.stamp())
+			// Running the same bulk add twice must not duplicate: an event with the same date and day type counts as present.
+			res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, day_type_id, note, created_at)
+				SELECT ?, ?, ?, ?, '', ? WHERE NOT EXISTS
+				(SELECT 1 FROM event WHERE org_id = ? AND plan_id = ? AND date = ? AND day_type_id = ?)`,
+				oid, pid, d, dayTypeID, s.stamp(), oid, pid, d, dayTypeID)
 			if err != nil {
 				return logEntry{}, err
 			}
@@ -173,24 +175,24 @@ func (s *Store) AddDatesBulk(ctx context.Context, orgSlug, planSlug, actor, from
 				continue
 			}
 			id, _ := res.LastInsertId()
-			sd, err := getDate(ctx, tx, oid, pid, id)
+			sd, err := getEvent(ctx, tx, oid, pid, id)
 			if err != nil {
 				return logEntry{}, err
 			}
 			created = append(created, sd)
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "date.bulk", detail: fmt.Sprintf("%d nye datoer, %d fantes fra før (%s – %s)", len(created), len(skipped), from, to)}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "event.bulk", detail: fmt.Sprintf("%d nye hendelser, %d fantes fra før (%s – %s)", len(created), len(skipped), from, to)}, nil
 	})
 	return created, skipped, err
 }
 
-type DatePatch struct {
+type EventPatch struct {
 	DayTypeID *int64  `json:"day_type_id"`
 	Note      *string `json:"note"`
 }
 
-func (s *Store) UpdateDate(ctx context.Context, orgSlug, planSlug, actor string, id int64, patch DatePatch) (SlotDate, error) {
-	var out SlotDate
+func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug, actor string, id int64, patch EventPatch) (Event, error) {
+	var out Event
 	if patch.Note != nil {
 		n, err := cleanNote(*patch.Note)
 		if err != nil {
@@ -207,7 +209,7 @@ func (s *Store) UpdateDate(ctx context.Context, orgSlug, planSlug, actor string,
 		if err != nil {
 			return logEntry{}, err
 		}
-		cur, err := getDate(ctx, tx, oid, pid, id)
+		cur, err := getEvent(ctx, tx, oid, pid, id)
 		if err != nil {
 			return logEntry{}, err
 		}
@@ -227,18 +229,18 @@ func (s *Store) UpdateDate(ctx context.Context, orgSlug, planSlug, actor string,
 		if len(changes) == 0 {
 			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE slot_date SET day_type_id = ?, note = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, dt, note, id, oid, pid); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE event SET day_type_id = ?, note = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, dt, note, id, oid, pid); err != nil {
 			return logEntry{}, err
 		}
-		if out, err = getDate(ctx, tx, oid, pid, id); err != nil {
+		if out, err = getEvent(ctx, tx, oid, pid, id); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "date.update", detail: fmt.Sprintf("%s: %s", out.Date, strings.Join(changes, ", "))}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "event.update", detail: fmt.Sprintf("%s: %s", out.Date, strings.Join(changes, ", "))}, nil
 	})
 	return out, err
 }
 
-func (s *Store) DeleteDate(ctx context.Context, orgSlug, planSlug, actor string, id int64) error {
+func (s *Store) DeleteEvent(ctx context.Context, orgSlug, planSlug, actor string, id int64) error {
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -248,13 +250,13 @@ func (s *Store) DeleteDate(ctx context.Context, orgSlug, planSlug, actor string,
 		if err != nil {
 			return logEntry{}, err
 		}
-		cur, err := getDate(ctx, tx, oid, pid, id)
+		cur, err := getEvent(ctx, tx, oid, pid, id)
 		if err != nil {
 			return logEntry{}, err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM slot_date WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM event WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "date.delete", detail: cur.Date + " " + cur.DayType}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "event.delete", detail: cur.Date + " " + cur.DayType}, nil
 	})
 }

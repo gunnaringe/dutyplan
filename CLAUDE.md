@@ -1,8 +1,8 @@
 # tjenesteplan
 
-Fordeler oppgaver på datoer med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
+Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) virker alene; appens første del (Go + SQLite + vanilla JS)
-har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, datoer). Preferanser (personsiden) og kobling til planleggeren er neste faser.
+har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser). Preferanser (personsiden) og kobling til planleggeren er neste faser.
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/api` (JSON-API + serverer frontenden),
 `web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).
@@ -25,16 +25,18 @@ Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, al
   (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), tjeneren har ingen «gjeldende organisasjon». Hvert oppslag avgrenses av organisasjonen, og
   en plan/person fra en annen organisasjon gir 404 (isolasjonstestene og `tenant:`-mutasjonene vokter dette). Ingen innlogging.
 - **Alle skrivinger går gjennom `store.write`** (krever aktør i `X-Actor`, logger i samme transaksjon). Ikke skriv til databasen utenom den.
+- **Hendelsen er enheten, ikke datoen.** Hendelser er selvstendige: to kan ligge på samme dag. Tilgjengelighet («kan jeg»), kombinasjoner, plasser
+  og gruppe-opptatthet gjelder hendelsen. Planleggerens «dates» er hendelser (id er vilkårlig tekst).
 - **Ingen regnearkstøtte** (verken import eller eksport). Brukeren vil ikke ha det; ikke foreslå det på nytt.
-- **Generelt verktøy.** Oppgaver, personer, grupper, datoer og dagtyper er data admin lager. Ingen kirkebegreper i kode, datamodell eller regler.
+- **Generelt verktøy.** Oppgaver, personer, grupper, hendelser og dagtyper er data admin lager. Ingen kirkebegreper i kode, datamodell eller regler.
 - **Ingen særregler for enkeltting.** En **gruppe** er et navngitt sett personer. Den kan stå i en manuell rute eller foreslås av planleggeren
   (`group_tasks`); medlemmene er da opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag.
   Et **utvalg** (bare disse personene/gruppene kan velges) dekker «egen lydtekniker» og liknende. Ingen kompetanser eller betingede krav.
 - **Kan foreslås** er en innstilling per person og per gruppe (standard ja). Nei = planleggeren velger dem aldri; manuelle ruter går an.
 - **Gruppearbeid = ett oppdrag per medlem** i fordelingen (samlet, per oppgave, historikk).
-- **Tatt ut etter ønske:** maks oppgaver per person per dag, og hvile mellom datoer. Ikke legg dem tilbake uten å spørre.
+- **Tatt ut etter ønske:** maks oppgaver per person per dag, og hvile mellom hendelser. Ikke legg dem tilbake uten å spørre.
 - **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
-- Hver person velger selv hvilke oppgaver hen er med på; én dato-kalender per person (*passer ikke / dårlig / godt*), valgfri egen per oppgave.
+- Hver person velger selv hvilke oppgaver hen er med på; én liste per person med svar per hendelse (*passer ikke / dårlig / godt*), valgfri egen liste per oppgave.
 - «Lik fordeling» = per oppgave (hovedleddet); samlet antall er et svakere vern. En avveining brukeren eier.
 
 ## Testing og data

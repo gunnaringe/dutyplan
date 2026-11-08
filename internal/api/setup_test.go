@@ -45,25 +45,30 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	}
 
 	// dates: single, then bulk by weekday
-	var d store.SlotDate
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/dates", map[string]any{"date": "2026-08-09", "day_type_id": dt.ID, "note": "Alle sammen"}).json(&d)
-	var bulkDates struct {
-		Created []store.SlotDate `json:"created"`
-		Skipped []string         `json:"skipped"`
+	var d store.Event
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/events", map[string]any{"date": "2026-08-09", "day_type_id": dt.ID, "note": "Alle sammen"}).json(&d)
+	var second store.Event // a second event on the same date is just another event
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/events", map[string]any{"date": "2026-08-09", "day_type_id": dt.ID, "note": "kveld"}).json(&second)
+	if second.ID == d.ID || second.Date != d.Date {
+		t.Errorf("two events on one date: %+v / %+v", d, second)
 	}
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/dates/bulk",
+	var bulkDates struct {
+		Created []store.Event `json:"created"`
+		Skipped []string      `json:"skipped"`
+	}
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/events/bulk",
 		map[string]any{"from": "2026-08-09", "to": "2026-08-30", "weekdays": []int{7}, "day_type_id": dt.ID}).json(&bulkDates)
 	if len(bulkDates.Created) != 3 || len(bulkDates.Skipped) != 1 || bulkDates.Skipped[0] != "2026-08-09" {
 		t.Errorf("bulk: %+v", bulkDates)
 	}
 
-	var dates []store.SlotDate
-	e.mustDo(200, "GET", "/api/orgs/org-a/plans/host-2026/dates", nil).json(&dates)
-	if len(dates) != 4 || dates[0].Note != "Alle sammen" {
+	var dates []store.Event
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/host-2026/events", nil).json(&dates)
+	if len(dates) != 5 || dates[0].Note != "Alle sammen" || dates[1].Note != "kveld" {
 		t.Errorf("dates: %+v", dates)
 	}
-	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/plans/host-2026/dates/%d", dates[1].ID), map[string]any{"note": "Høstferie"})
-	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/plans/host-2026/dates/%d", dates[1].ID), nil)
+	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/plans/host-2026/events/%d", dates[1].ID), map[string]any{"note": "Høstferie"})
+	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/plans/host-2026/events/%d", dates[1].ID), nil)
 	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", bulk.Created[0].ID), nil) // unused: allowed, and its combination goes too
 	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
 	if len(combos) != 0 {
@@ -89,8 +94,8 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Lyd"}).json(&taskA)
 	e.mustDo(201, "POST", "/api/orgs/org-b/tasks", map[string]any{"name": "Lyd"}).json(&taskB) // same name in both is fine
 	e.mustDo(201, "POST", "/api/orgs/org-a/day-types", map[string]string{"name": "Helg"}).json(&dtA)
-	var dateA store.SlotDate
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/dates", map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID}).json(&dateA)
+	var dateA store.Event
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/host-2026/events", map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID}).json(&dateA)
 
 	notFound := func(method, path string, body any) {
 		t.Helper()
@@ -98,27 +103,27 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 			t.Errorf("%s %s = %d %s, want 404", method, path, r.code, r.body)
 		}
 	}
-	notFound("POST", "/api/orgs/org-b/plans/host-2026/dates", map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID})
-	notFound("POST", "/api/orgs/org-b/plans/host-2026/dates/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": dtA.ID})
+	notFound("POST", "/api/orgs/org-b/plans/host-2026/events", map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID})
+	notFound("POST", "/api/orgs/org-b/plans/host-2026/events/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": dtA.ID})
 	notFound("PUT", fmt.Sprintf("/api/orgs/org-b/day-types/%d/tasks", dtA.ID), map[string]any{"tasks": []map[string]int64{{"task_id": taskB.ID, "slots": 1}}})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/day-types/%d", dtA.ID), nil)
 	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "bor"})
-	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/dates/%d", dateA.ID), map[string]any{"note": "x"})
-	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/dates/%d", dateA.ID), nil)
-	notFound("GET", "/api/orgs/org-a/plans/ingen/dates", nil)
+	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/events/%d", dateA.ID), map[string]any{"note": "x"})
+	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/events/%d", dateA.ID), nil)
+	notFound("GET", "/api/orgs/org-a/plans/ingen/events", nil)
 	notFound("PATCH", "/api/orgs/org-a/tasks/abc", map[string]any{"name": "x"})
 
-	var datesB []store.SlotDate
-	e.mustDo(200, "GET", "/api/orgs/org-b/plans/host-2026/dates", nil).json(&datesB)
+	var datesB []store.Event
+	e.mustDo(200, "GET", "/api/orgs/org-b/plans/host-2026/events", nil).json(&datesB)
 	var tasksB []store.Task
 	e.mustDo(200, "GET", "/api/orgs/org-b/tasks", nil).json(&tasksB)
 	if len(datesB) != 0 || len(tasksB) != 1 || tasksB[0].ID != taskB.ID {
 		t.Errorf("B must see only its own: %v %v", datesB, tasksB)
 	}
-	var datesA []store.SlotDate
-	e.mustDo(200, "GET", "/api/orgs/org-a/plans/host-2026/dates", nil).json(&datesA)
+	var datesA []store.Event
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/host-2026/events", nil).json(&datesA)
 	if len(datesA) != 1 || datesA[0].Note != "" {
 		t.Errorf("A's date untouched: %+v", datesA)
 	}
@@ -137,13 +142,13 @@ func TestSetupWritesNeedAnActorAndValidInput(t *testing.T) {
 		{"DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", task.ID), nil},
 		{"POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Kafé"}},
 		{"PUT", "/api/orgs/org-a/combinations", map[string]any{"a": 1, "b": 2, "level": "bor"}},
-		{"POST", "/api/orgs/org-a/plans/host-2026/dates/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": 1}},
+		{"POST", "/api/orgs/org-a/plans/host-2026/events/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": 1}},
 	} {
 		if r := e.do(c.method, c.path, "", c.body); r.code != 400 || r.errCode() != "actor_required" {
 			t.Errorf("%s %s without actor: %d %s", c.method, c.path, r.code, r.body)
 		}
 	}
-	if r := e.do("POST", "/api/orgs/org-a/plans/host-2026/dates", "T", map[string]any{"date": "morgen", "day_type_id": 1}); r.code != 400 {
+	if r := e.do("POST", "/api/orgs/org-a/plans/host-2026/events", "T", map[string]any{"date": "morgen", "day_type_id": 1}); r.code != 400 {
 		t.Errorf("bad date: %d", r.code)
 	}
 	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", "T", map[string]any{"names": strings.Repeat("a\n", 3) + " "}); r.code != 201 {

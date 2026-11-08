@@ -24,11 +24,11 @@ func (s *server) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/combinations", s.listCombinations)
 	mux.HandleFunc("PUT /api/orgs/{org}/combinations", s.setCombination)
 
-	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/dates", s.listDates)
-	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/dates", s.addDate)
-	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/dates/bulk", s.addDatesBulk)
-	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}/dates/{id}", s.updateDate)
-	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/dates/{id}", s.deleteDate)
+	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/events", s.listEvents)
+	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/events", s.addEvent)
+	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/events/bulk", s.addEventsBulk)
+	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}/events/{id}", s.updateEvent)
+	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/events/{id}", s.deleteEvent)
 }
 
 // idParam reads a numeric path value; anything else is simply "not found".
@@ -216,8 +216,8 @@ func (s *server) setCombination(w http.ResponseWriter, r *http.Request) {
 
 // ---- dates ---------------------------------------------------------------------------------------------------
 
-func (s *server) listDates(w http.ResponseWriter, r *http.Request) {
-	v, err := s.st.ListDates(r.Context(), r.PathValue("org"), r.PathValue("plan"))
+func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
+	v, err := s.st.ListEvents(r.Context(), r.PathValue("org"), r.PathValue("plan"))
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -225,7 +225,7 @@ func (s *server) listDates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, v)
 }
 
-func (s *server) addDate(w http.ResponseWriter, r *http.Request) {
+func (s *server) addEvent(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Date      string `json:"date"`
 		DayTypeID int64  `json:"day_type_id"`
@@ -234,7 +234,7 @@ func (s *server) addDate(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.AddDate(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Date, b.DayTypeID, b.Note)
+	d, err := s.st.AddEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Date, b.DayTypeID, b.Note)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -242,7 +242,7 @@ func (s *server) addDate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, d)
 }
 
-func (s *server) addDatesBulk(w http.ResponseWriter, r *http.Request) {
+func (s *server) addEventsBulk(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		From      string `json:"from"`
 		To        string `json:"to"`
@@ -252,13 +252,13 @@ func (s *server) addDatesBulk(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	created, skipped, err := s.st.AddDatesBulk(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID)
+	created, skipped, err := s.st.AddEventsBulk(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
 	if created == nil {
-		created = []store.SlotDate{}
+		created = []store.Event{}
 	}
 	if skipped == nil {
 		skipped = []string{}
@@ -266,16 +266,16 @@ func (s *server) addDatesBulk(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]any{"created": created, "skipped": skipped})
 }
 
-func (s *server) updateDate(w http.ResponseWriter, r *http.Request) {
+func (s *server) updateEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.idParam(w, r)
 	if !ok {
 		return
 	}
-	var p store.DatePatch
+	var p store.EventPatch
 	if !decode(w, r, &p) {
 		return
 	}
-	d, err := s.st.UpdateDate(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, p)
+	d, err := s.st.UpdateEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, p)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -283,10 +283,10 @@ func (s *server) updateDate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, d)
 }
 
-func (s *server) deleteDate(w http.ResponseWriter, r *http.Request) {
+func (s *server) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.idParam(w, r)
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteDate(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
+	noContent(w, s.st.DeleteEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
 }

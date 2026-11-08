@@ -198,7 +198,7 @@ async function pageSetup(r, org) {
       h('form', { class: 'stack', onsubmit: async (e) => { e.preventDefault(); if (await write(async () => { await api('POST', base + '/tasks/bulk', { names: pasted.value }); })) refresh(); } },
         pasted, h('button', { type: 'submit' }, 'Legg til alle'))),
     section('Dagtyper',
-      h('p', { class: 'muted small' }, 'En dagtype sier hvilke oppgaver en dato har og hvor mange plasser (f.eks. «Gudstjeneste»: Lyd 1, Kafé 3).'),
+      h('p', { class: 'muted small' }, 'En dagtype sier hvilke oppgaver en hendelse har og hvor mange plasser (f.eks. «Gudstjeneste»: Lyd 1, Kafé 3).'),
       dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, 'Ingen dagtyper ennå.'),
       nameForm('Ny dagtype, f.eks. Gudstjeneste', 'Opprett', async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
     section('Hva kan kombineres samme dag?',
@@ -213,17 +213,17 @@ function dayTypeSelect(dayTypes, value, onchange, label) {
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
   const [plan, dates, dayTypes, log] = await Promise.all([
-    api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/dates`),
+    api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
     api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`)]);
   const refresh = () => render();
-  const dpath = `${base}/plans/${enc(r.plan)}/dates`;
+  const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
   const rows = dates.map((d) => {
-    const note = h('input', { type: 'text', value: d.note, maxlength: '200', 'aria-label': 'Merknad ' + d.date, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
+    const note = h('input', { type: 'text', value: d.note, maxlength: '200', 'aria-label': 'Merknad ' + d.date + ' ' + d.day_type, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
     return h('tr', {}, h('td', {}, fmtDate(d.date)),
-      h('td', {}, dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + d.date)),
+      h('td', {}, dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + d.date + ' ' + d.day_type)),
       h('td', {}, note),
-      h('td', {}, h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett ' + d.date, onclick: async () => { if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh(); } }, 'Slett')));
+      h('td', {}, h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett hendelsen ' + d.date + ' (' + d.day_type + ')', onclick: async () => { if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh(); } }, 'Slett')));
   });
 
   const noTypes = !dayTypes.length;
@@ -233,7 +233,7 @@ async function pagePlan(r, org) {
     const typeSel = h('select', { 'aria-label': 'Dagtype' }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
     const noteIn = h('input', { type: 'text', placeholder: 'Merknad (valgfri)', maxlength: '200', 'aria-label': 'Merknad' });
     addForm = h('form', { class: 'row', onsubmit: async (e) => { e.preventDefault(); if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value }))) refresh(); } },
-      date, typeSel, noteIn, h('button', { type: 'submit' }, 'Legg til dato'));
+      date, typeSel, noteIn, h('button', { type: 'submit' }, 'Legg til hendelse'));
 
     const from = h('input', { type: 'date', required: true, 'aria-label': 'Fra' });
     const to = h('input', { type: 'date', required: true, 'aria-label': 'Til' });
@@ -243,7 +243,7 @@ async function pagePlan(r, org) {
       e.preventDefault();
       let res;
       if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10) }); })) {
-        await render(); say(`${res.created.length} nye datoer${res.skipped.length ? ', ' + res.skipped.length + ' fantes fra før' : ''}.`);
+        await render(); say(`${res.created.length} nye hendelser${res.skipped.length ? ', ' + res.skipped.length + ' fantes fra før' : ''}.`);
       }
     } },
       h('div', { class: 'row-inline' }, h('label', {}, 'Fra ', from), h('label', {}, 'Til ', to)),
@@ -254,11 +254,11 @@ async function pagePlan(r, org) {
   return h('div', {},
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
     h('h1', {}, plan.name),
-    section('Datoer',
-      noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til datoer.') : '',
-      dates.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Dato'), h('th', {}, 'Dagtype'), h('th', {}, 'Merknad'), h('th', {}, ''))), h('tbody', {}, rows)) : h('p', { class: 'muted' }, 'Ingen datoer ennå.'),
+    section('Hendelser',
+      noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
+      dates.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Dato'), h('th', {}, 'Dagtype'), h('th', {}, 'Merknad'), h('th', {}, ''))), h('tbody', {}, rows)) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),
       addForm),
-    section('Legg til flere datoer (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
+    section('Legg til flere hendelser (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
     h('p', { class: 'muted small' }, 'Preferanser og selve planleggingen kommer i neste faser.'),
     section('Endringslogg for planen', logTable(log)));
 }

@@ -1,22 +1,22 @@
 # Tjenesteplan: plan
 
-Arbeidstittel. Status 2026-11-08: **planleggeren (`solver/`) virker alene; appen har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper, kombinasjoner, datoer). Lokalt git-repo, ikke på GitHub.**
+Arbeidstittel. Status 2026-11-08: **planleggeren (`solver/`) virker alene; appen har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper, kombinasjoner, hendelser). Lokalt git-repo, ikke på GitHub.**
 Første bruksområde og testdata: en kirkes tjenesteplan for høsten 2026 (oppdiktede navn i repoet). Verktøyet er generelt; se *Generelt*.
 
 ## Mål
 
-Fordele oppgaver (lyd, bilde, møteleder, vakter, … hva som helst) på datoer i en periode slik at
+Fordele oppgaver (lyd, bilde, møteleder, vakter, … hva som helst) på hendelser i en periode slik at
 
 1. **harde krav aldri brytes** (passer ikke, kan ikke kombineres, manuelt utvalg),
 2. **preferanser følges så godt det går**, og
 3. **fordelingen blir mest mulig lik**, også på tvers av semestre.
 
 Folk legger selv inn når det passer. Planleggeren gir et *forslag*; det som er
-lagt inn for hånd (f.eks. at et kor synger en bestemt dato) er *låst* og flyttes aldri.
+lagt inn for hånd (f.eks. at et kor synger på en bestemt hendelse) er *låst* og flyttes aldri.
 
 ## Generelt
 
-Bruksområdet er generelt. **Alt er data som admin lager selv**: oppgaver, personer, grupper (team), datoer og dagtyper,
+Bruksområdet er generelt. **Alt er data som admin lager selv**: oppgaver, personer, grupper (team), hendelser og dagtyper,
 og innstillingene mellom dem. Ingenting i planleggeren, datamodellen eller språket i appen er bundet til kirke.
 Navn som Lyd, Kirkekoret, Gudstjeneste og Alpha finnes bare i testdataene og som eksempler her. Appen får norsk
 bokmål først, men tekstene skal kunne byttes ut.
@@ -33,7 +33,7 @@ bokmål først, men tekstene skal kunne byttes ut.
   manuelle og foreslåtte grupper. Historikken for neste periode regnes ut slik av backenden.
 - **Ingen regnearkstøtte**: verken import fra eller eksport til regneark (bestemt 2026-11-08). Alt legges inn i appen.
 - Ingen kompetanser og ingen betingede krav («når X, så Y»). Utvalg dekker det.
-- Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom datoer. Det er kombinasjonsinnstillingen
+- Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom hendelser. Det er kombinasjonsinnstillingen
   som styrer hva som kan, bør og ikke bør samme dag. (Begge ble prøvd og tatt ut etter ønske 2026-11-04.)
 
 ## Hvordan det brukes
@@ -44,40 +44,41 @@ bokmål først, men tekstene skal kunne byttes ut.
   personen krysse av for flere. Det som ikke er avkrysset, vises ikke og blir aldri tildelt personlig (unntatt via en gruppe admin
   har satt opp for oppgaven, se *Manuelle ruter, grupper og utvalg*).
 - Velger preferanse per oppgave: *ikke / dårlig / nøytral / godt*. Folk er ulike, og det er opp til dem.
-- Velger for hver dato: *passer ikke / dårlig / godt* (ikke markert = nøytral). **Én kalender gjelder
-  alle oppgavene personen er med på.** Lyd og Bilde har samme preferanse, så det er ett valg per dato.
-- Har en oppgave et annet mønster, slår personen på **«egen kalender for denne oppgaven»** (av som standard).
-  Da får oppgaven sin egen kalender, som starter som en kopi av den felles.
+- Velger for hver **hendelse**: *passer ikke / dårlig / godt* (ikke markert = nøytral). **Én liste gjelder
+  alle oppgavene personen er med på.** Lyd og Bilde har samme preferanse, så det er ett valg per hendelse.
+  Det er hendelsen som gjelder, ikke kalenderdagen: to hendelser samme dag har hvert sitt svar.
+- Har en oppgave et annet mønster, slår personen på **«egen liste for denne oppgaven»** (av som standard).
+  Da får oppgaven sin egen liste, som starter som en kopi av den felles.
 - Ser planen og egne oppdrag.
 
 **Oppsett og planlegging** (en del av samme app, ikke et eget område)
-- Oppgaver, personer, grupper, datoer og dagtyper, **felles innstilling for hvilke oppgaver som kan kombineres**,
+- Oppgaver, personer, grupper, hendelser og dagtyper, **felles innstilling for hvilke oppgaver som kan kombineres**,
   manuelle ruter og utvalg. Kjøre planleggeren, se forklaringer, publisere.
 
 **Manuelle ruter, grupper og utvalg** (to generelle verktøy som dekker «kor synger», «egen lydtekniker» og alt liknende)
-- Admin kan legge inn en **manuell rute** for en oppgave og dato: en person, en **gruppe** eller en tekst
+- Admin kan legge inn en **manuell rute** for en oppgave og hendelse: en person, en **gruppe** eller en tekst
   (f.eks. «Gjest utenfra»). Den er låst og teller som en fylt plass. En gruppe eller tekst kan fylle flere plasser (`fills`).
 - En **gruppe** i en manuell rute gjør medlemmene opptatt med den oppgaven den dagen. Hva de kan ha i tillegg, styres av den
   felles kombinasjonsinnstillingen, uten særregel. Eksempel: gruppen «Kirkekoret» står på oppgaven «Lovsang» 20.9, og
   *Lovsang × Lyd* og *Lovsang × Bilde* er satt til «kan ikke kombineres». Da er medlemmene ute av Lyd og Bilde den dagen.
   Står paret på «upraktisk» eller «praktisk» i stedet, blir det en straff eller en bonus, ikke et forbud.
-- Admin kan sette et **utvalg** for en oppgave og dato: bare disse kan velges. Planleggeren velger blant dem.
+- Admin kan sette et **utvalg** for en oppgave og hendelse: bare disse kan velges. Planleggeren velger blant dem.
   «Egen lydtekniker når koret synger» er et utvalg for Lyd på to personer som er med på oppgaven og ikke synger.
   Er antallet i utvalget like stort som antall plasser, er det i praksis en manuell tildeling.
 - Utvalget er et vanlig hardt krav. Står noen i utvalget som har «passer ikke» den dagen eller ikke er med på
   oppgaven, kommer det som forklaring (og en tom plass hvis ingen i utvalget går).
-- Står et gruppemedlem på «passer ikke» den dagen en manuell gruppe er satt opp, beholdes det manuelle valget, med en advarsel.
+- Står et gruppemedlem på «passer ikke» på hendelsen en manuell gruppe er satt opp for, beholdes det manuelle valget, med en advarsel.
 - **Foreslåtte grupper, det admin må sette opp:** for hver gruppe hvilke oppgaver den kan foreslås til, hvor mange plasser den
-  fyller og et nivå. Én som har «passer ikke» en dato, utelukker hele gruppen den datoen; et par er altså ikke brukbart en dato
-  noen av dem er borte.
+  fyller og et nivå. Én som har «passer ikke» på en hendelse, utelukker hele gruppen fra den hendelsen; et par er altså ikke brukbart på en hendelse
+  noen av dem ikke kan.
 - **Kan foreslås, per person og per gruppe** (standard ja). Står den på nei, velger planleggeren aldri personen eller gruppen selv
   (heller ikke gjennom et utvalg), men admin kan fortsatt legge dem inn for hånd. En gruppe foreslås heller ikke hvis et medlem
   ikke kan foreslås. Gruppen foreslås til de oppgavene admin har satt opp for den, uavhengig av om medlemmene selv har krysset av
   for oppgaven; det er denne innstillingen som styrer det.
 - **Foreslåtte grupper:** admin setter opp hvilke oppgaver en gruppe kan foreslås til (`group_task`). Gruppen er en kandidat
-  på lik linje med en person og fyller `fills` plasser. Den er utelukket en dato hvis ett medlem har «passer ikke» (eller har
+  på lik linje med en person og fyller `fills` plasser. Den er utelukket fra en hendelse hvis ett medlem har «passer ikke» (eller har
   sagt «ikke» til oppgaven), hvis gruppen står utenfor et utvalg, eller hvis medlemmene er opptatt via en annen gruppe.
-  Datopoengene er snittet av medlemmenes ønsker; oppgavenivået settes på gruppen. Medlemmenes egen deltakelse i oppgaven
+  Poengene for hendelsen er snittet av medlemmenes ønsker; oppgavenivået settes på gruppen. Medlemmenes egen deltakelse i oppgaven
   trengs ikke. Et utvalg kan nevne både personer og grupper.
 - To grupper med felles medlem kan ikke begge velges samme dag hvis det er samme oppgave eller «kan ikke kombineres».
 
@@ -86,7 +87,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001–002):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `slot_date`. Resten kommer med sine faser.
+*Bygget (migrering 001–003):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`. Resten kommer med sine faser.
 Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
@@ -100,11 +101,11 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 | `day_type`, `day_type_task` | organisasjon | dagtyper admin lager, hvilke oppgaver som gjelder for dem, og antall plasser |
 | `task_combination` | organisasjon | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
 | `person_task` | organisasjon | om personen er med på oppgaven (eget valg, skjult som standard) og nivå |
-| `slot_date` | plan | dato, dagtype, merknad |
-| `person_date` | plan | nivå per dato, felles for personens oppgaver |
-| `person_task_calendar` | plan | settes på når en oppgave har «egen kalender»; da brukes den i stedet for den felles |
-| `selection` | plan | **utvalg** for én oppgave på én dato: de eneste personer og grupper som kan velges |
-| `assignment` | plan | dato, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
+| `event` | plan | **hendelse**: dato, dagtype, merknad. Selvstendig enhet; flere på samme dag er lov |
+| `person_event` | plan | nivå per hendelse, felles for personens oppgaver |
+| `person_task_event` | plan | settes på når en oppgave har «egen liste»; da brukes den i stedet for den felles |
+| `selection` | plan | **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges |
+| `assignment` | plan | hendelse, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
 | `assignment_member` | plan | **øyeblikksbilde** av medlemmene i en gruppe-tildeling når planen publiseres (ett oppdrag per medlem). Uten den endrer historikken seg når gruppen endres |
 | `plan_run` | plan | parametere, resultat, mål, forklaringer, publisert ja/nei |
 | `change_log` | organisasjon (+ valgfri plan) | hvem (oppgitt navn), hva, når. Skrives i samme transaksjon som endringen |
@@ -112,33 +113,35 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 Historikk til planleggeren er tidligere planers publiserte tildelinger i **samme organisasjon**.
 Alle oppslag er avgrenset av organisasjonen; en plan eller person fra en annen organisasjon gir 404.
 
-**Datoer:** en dato hører til én plan og har en dagtype. API-et bruker id (`/dates/{id}`), og databasen har `UNIQUE (plan_id, date)`,
-så to hendelser samme dag i én plan støttes ikke ennå (kjent begrensning; kan løsnes uten å endre API-et). «Alle søndager i et tidsrom» legger til
-datoer for valgte ukedager (ISO 1 = mandag … 7 = søndag, regnet ut i Go, ikke i nettleseren), høyst 366 dager om gangen; datoer som finnes, hoppes over.
-Sletting av en oppgave som er i en dagtype, eller en dagtype som har datoer, nektes (409); kombinasjoner følger oppgaven.
+**Hendelser:** en hendelse hører til én plan og har en dato og en dagtype (og en merknad). Hendelser er **selvstendige**: to kan ligge på
+samme dag (f.eks. en gudstjeneste og en medarbeiderkveld, eller to vakter), og tilgjengelighet, kombinasjoner, plasser og gruppe-opptatthet gjelder
+hendelsen, aldri kalenderdagen. API-et bruker id (`/events/{id}`). «Alle søndager i et tidsrom» legger til en hendelse per valgt ukedag
+(ISO 1 = mandag … 7 = søndag, regnet ut i Go, ikke i nettleseren), høyst 366 dager om gangen; en hendelse med samme dato og dagtype hoppes over,
+så samme kjøring to ganger ikke dupliserer. Rekkefølgen innen en dato er opprettelsesrekkefølgen (ingen klokkeslett ennå).
+Sletting av en oppgave som er i en dagtype, eller en dagtype som har hendelser, nektes (409); kombinasjoner følger oppgaven.
 
 ### Samme skala overalt
-Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjoner bruker
+Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjoner bruker
 **kan ikke / upraktisk / praktisk / bør**.
 
 ## Planleggeren (CP-SAT)
 
-Én ja/nei-variabel per (person, oppgave, dato) som er mulig etter filtrering. Typisk 1–2 tusen variabler.
+Én ja/nei-variabel per (person, oppgave, hendelse) som er mulig etter filtrering. Typisk 1–2 tusen variabler.
 
 **Harde krav**
-- «ikke» på dato eller oppgave fjerner variabelen. Det samme gjør «ikke med på oppgaven».
-- Utvalg (`selection`): alle utenfor utvalget fjernes for den oppgaven og datoen.
-- Antall plasser per oppgave og dato (låste ruter regnes med).
+- «ikke» på hendelse eller oppgave fjerner variabelen. Det samme gjør «ikke med på oppgaven».
+- Utvalg (`selection`): alle utenfor utvalget fjernes for den oppgaven og hendelsen.
+- Antall plasser per oppgave og hendelse (låste ruter regnes med).
 - Oppgavepar som *kan ikke kombineres*: høyst én av dem per person per dag.
 - Gruppe i en manuell rute eller foreslått av planleggeren: hvert medlem er opptatt med gruppens oppgave. Paret (gruppens oppgave,
   medlemmets andre oppgave) følger kombinasjonsinnstillingen (forbud, straff eller bonus), og medlemmet kan ikke ta en ekstra
   plass på samme oppgave.
 
 **Mål (poeng, justeres mot testdataene)**
-- Pluss for «godt», minus for «dårlig», på dato og oppgave.
+- Pluss for «godt», minus for «dårlig», på hendelse og oppgave.
 - Pluss/minus for *praktisk*, *upraktisk* og *bør kombineres*.
 - **Jevn fordeling, per oppgave (hovedleddet)**: De som kan en oppgave, deler den likt. Hver persons mål er sin andel av
-  oppgavens plasser, regnet ut fra hvor mange datoer personen kan stille. Målet er sjelden et helt tall, så det er et
+  oppgavens plasser, regnet ut fra hvor mange hendelser personen kan stille. Målet er sjelden et helt tall, så det er et
   **bånd** [nedre, øvre hele tall] som er «jevnt nok», og bare det utenfor båndet koster. I tillegg straffes det verste
   avviket per oppgave, så ikke én person tar hele avviket.
 - **Samlet antall oppdrag (vern mot overbelastning)**: samme type bånd over alle oppgaver, med lavere vekt. Gruppearbeid
@@ -175,7 +178,7 @@ Dato og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjon
 ### Tilgang uten innlogging
 Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. Konsekvensene:
 - **Alle med adressen kan se og endre alt**, også andres tilgjengelighet og planen. Preferansene er bare
-  nivåer per dato og oppgave, uten fritekst, så det er lite å lekke, men de er ikke private.
+  nivåer per hendelse og oppgave, uten fritekst, så det er lite å lekke, men de er ikke private.
 - Det som gjør det forsvarlig: appen legges på en adresse som ikke er lenket noe sted og bes holdes utenfor
   søkemotorer (`noindex`), **`change_log`** viser hvem (oppgitt navn) som endret hva og når,
   og SQLite tas sikkerhetskopi av.
@@ -188,10 +191,10 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 
 0. **Spike (gjort 2026-11-03, oppdatert 11-04)**: `solver/`, se resultatene under. Ingen app ennå.
 1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
-2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, datoer (enkeltvis og alle valgte ukedager i et tidsrom).
-3. **Personsiden**: oppgavepreferanser og dato-kalender med tegning/trykk (som i `whenever/`).
+2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
+3. **Personsiden**: oppgavepreferanser og tilgjengelighet per hendelse med trykk/tegning (som i `whenever/`).
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser.
-5. **Plan**: rutenett (datoer bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
+5. **Plan**: rutenett (hendelser bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.
@@ -202,7 +205,7 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 
 - **Reglene holder.** Hver regel har en test som feiler hvis regelen fjernes (prøvd ved å bryte modellen én regel av
   gangen). En uavhengig sjekker kontrollerer harde krav på alle planer. Utvalg, grupper i manuelle ruter (med kombinasjonsinnstillingen), foreslåtte team og par, den låste
-  personen og tekstrutene virker på testdataene (18 personer, 17 datoer, 7 oppgaver, 4 team/par, ca. 120 tildelinger).
+  personen og tekstrutene virker på testdataene (18 personer, 17 hendelser, 7 oppgaver, 4 team/par, ca. 120 tildelinger).
 - **Størrelse og tid.** Etter at hvile og dagstak ble tatt ut, kommer en gyldig og brukbar plan etter ca. 2 sekunder, og
   kvaliteten bedres til ca. 20 s. Solveren **beviser ikke** at planen er best mulig (øvre grense tettner ikke), så resultatet
   er et *forslag* innenfor tidsgrensen. Ulike frø gir litt ulike planer; «prøv en gang til» er derfor en nyttig knapp.
@@ -245,7 +248,7 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 ## Risiko
 
 - Vektene for poeng og jevn fordeling må finjusteres med ekte ønsker, ellers føles forslagene rare.
-- Folk må faktisk fylle ut. Derfor bare én dato-kalender per person og skjult det som er uvedkommende.
+- Folk må faktisk fylle ut. Derfor bare én liste per person og skjult det som er uvedkommende.
 - Uten innlogging kan en feilklikk eller en uvitende bruker endre andres svar. Endringsloggen og sikkerhetskopien er
   det som fanger det.
 - Python i Go-imaget gjør bygget og imaget større. Avgjøres når planleggeren kobles til appen (fase 4).

@@ -78,7 +78,7 @@ func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
 		t.Errorf("task used by a day type must not be deleted, got %v", err)
 	}
 	plan, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Høst 2026", "")
-	if _, err := s.AddDate(ctx, o.Slug, plan.Slug, "Ola", "2026-08-09", dt.ID, ""); err != nil {
+	if _, err := s.AddEvent(ctx, o.Slug, plan.Slug, "Ola", "2026-08-09", dt.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	before++
@@ -92,8 +92,8 @@ func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
 		t.Errorf("task still there: %v", tasks)
 	}
 	// once nothing uses them, both can go
-	dates, _ := s.ListDates(ctx, o.Slug, plan.Slug)
-	s.DeleteDate(ctx, o.Slug, plan.Slug, "Ola", dates[0].ID)
+	dates, _ := s.ListEvents(ctx, o.Slug, plan.Slug)
+	s.DeleteEvent(ctx, o.Slug, plan.Slug, "Ola", dates[0].ID)
 	if err := s.DeleteDayType(ctx, o.Slug, "Ola", dt.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +151,10 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	dtB, _ := s.CreateDayType(ctx, b.Slug, "Eva", "Type B")
 	planB, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
 
-	if _, err := s.AddDate(ctx, b.Slug, planB.Slug, "Eva", "2026-08-09", dtA.ID, ""); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AddEvent(ctx, b.Slug, planB.Slug, "Eva", "2026-08-09", dtA.ID, ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's day type on B's date: want ErrNotFound, got %v", err)
 	}
-	if _, _, err := s.AddDatesBulk(ctx, b.Slug, planB.Slug, "Eva", "2026-08-01", "2026-08-31", []int{7}, dtA.ID); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.AddEventsBulk(ctx, b.Slug, planB.Slug, "Eva", "2026-08-01", "2026-08-31", []int{7}, dtA.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's day type in a bulk add: %v", err)
 	}
 	if _, err := s.SetDayTypeTasks(ctx, b.Slug, "Eva", dtB.ID, []DayTypeTask{{taskA.ID, 1}}); !errors.Is(err, ErrNotFound) {
@@ -209,7 +209,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 		name, stmt string
 		args       []any
 	}{
-		{"date with A's day type", `INSERT INTO slot_date (org_id, plan_id, date, day_type_id, created_at) VALUES (?, ?, '2026-08-09', ?, 'x')`, []any{orgB, planBID, dtA.ID}},
+		{"date with A's day type", `INSERT INTO event (org_id, plan_id, date, day_type_id, created_at) VALUES (?, ?, '2026-08-09', ?, 'x')`, []any{orgB, planBID, dtA.ID}},
 		{"B's day type holding A's task", `INSERT INTO day_type_task (org_id, day_type_id, task_id, slots) VALUES (?, ?, ?, 1)`, []any{orgB, dtB.ID, taskA.ID}},
 		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'bor')`, []any{orgB, taskA.ID, taskB.ID}},
 	} {
