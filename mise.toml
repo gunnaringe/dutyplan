@@ -67,6 +67,11 @@ depends = ["app:build"]
 quiet = true
 run = "node scripts/ui-check.js"
 
+[tasks."app:seed"]
+description = "Legg testdata inn i en kjørende app: organisasjonen «Test» med oppgavene Lovsang, Lyd og Bilde. Args: -- http://127.0.0.1:8080"
+quiet = true
+run = "sh scripts/seed-demo.sh"
+
 [tasks."app:smoke"]
 description = "Start appen på en midlertidig database, lag to organisasjoner, sjekk isolasjonen med curl, stopp den igjen (ca. 5 s)"
 depends = ["app:build"]
