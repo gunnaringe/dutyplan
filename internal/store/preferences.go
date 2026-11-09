@@ -109,7 +109,7 @@ func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID in
 // SetPersonTask makes the person take part in a task (or changes how much they want it).
 func (s *Store) SetPersonTask(ctx context.Context, orgSlug, actor string, personID, taskID int64, level string) error {
 	if !taskLevels[level] {
-		return fmt.Errorf("%w: level must be ikke, poor, neutral or good", ErrInvalid)
+		return fmt.Errorf("%w: level must be never, poor, neutral or good", ErrInvalid)
 	}
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		oid, err := orgID(ctx, tx, orgSlug)
@@ -131,7 +131,7 @@ func (s *Store) SetPersonTask(ctx context.Context, orgSlug, actor string, person
 			return logEntry{}, err
 		}
 		if before == level {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, ?)
 			ON CONFLICT (person_id, task_id) DO UPDATE SET level = excluded.level`, oid, personID, taskID, level); err != nil {
@@ -162,7 +162,7 @@ func (s *Store) RemovePersonTask(ctx context.Context, orgSlug, actor string, per
 		if _, err := tx.ExecContext(ctx, `DELETE FROM person_task WHERE person_id = ? AND task_id = ? AND org_id = ?`, personID, taskID, oid); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, action: "pref.task", detail: fmt.Sprintf("%s: %s fjernet", p.Name, name)}, nil
+		return logEntry{orgID: oid, action: "pref.task", detail: fmt.Sprintf("%s: %s removed", p.Name, name)}, nil
 	})
 }
 
@@ -177,11 +177,11 @@ func orDash(s string) string {
 // of "" means neutral and removes the answer. All or nothing; every event must belong to this plan.
 func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor string, personID int64, levels map[int64]string) error {
 	if len(levels) == 0 || len(levels) > maxAvailabilityPerCall {
-		return fmt.Errorf("%w: give 1-%d events", ErrInvalid, maxAvailabilityPerCall)
+		return Invalid("levels_count", map[string]any{"max": maxAvailabilityPerCall}, "give 1-%d events", maxAvailabilityPerCall)
 	}
 	for _, l := range levels {
 		if l != "" && !eventLevels[l] {
-			return fmt.Errorf("%w: level must be ikke, poor, good or empty", ErrInvalid)
+			return fmt.Errorf("%w: level must be never, poor, good or empty", ErrInvalid)
 		}
 	}
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
@@ -233,12 +233,12 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 			counts[orDash(want)]++
 		}
 		if changed == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		var parts []string
 		for _, l := range []string{"never", "poor", "good", "–"} {
 			if counts[l] > 0 {
-				name := map[string]string{"never": "passer ikke", "poor": "dårlig", "good": "good", "–": "fjernet"}[l]
+				name := map[string]string{"never": "never", "poor": "poor", "good": "good", "–": "removed"}[l]
 				parts = append(parts, strconv.Itoa(counts[l])+" "+name)
 			}
 		}

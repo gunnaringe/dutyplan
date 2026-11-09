@@ -82,7 +82,7 @@ func TestWeightsAreStoredAsWhatDiffersFromTheDefault(t *testing.T) {
 		t.Fatalf("back to the defaults: %v %v", got, err)
 	}
 	log, _ = s.ListLog(ctx, o.Slug, p1.Slug, 1)
-	if !strings.HasPrefix(log[0].Detail, "tilbake til standard (w_fair 12 -> 10") {
+	if !strings.HasPrefix(log[0].Detail, "back to the defaults (w_fair 12 -> 10") {
 		t.Errorf("log: %+v", log)
 	}
 	if _, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 10.0}); !errors.Is(err, ErrInvalid) {

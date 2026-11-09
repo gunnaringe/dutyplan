@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"runtime/debug"
 	"sync"
@@ -14,9 +13,9 @@ import (
 )
 
 var (
-	ErrBusy          = errors.New("en planlegging pågår allerede; vent til den er ferdig")
-	ErrUnavailable   = errors.New("planleggeren er ikke satt opp på denne tjeneren")
-	ErrNothingToPlan = fmt.Errorf("%w: ingenting å planlegge; legg inn hendelser, dagtyper med oppgaver og personer først", store.ErrInvalid)
+	ErrBusy          = errors.New("a planning run is already in progress; wait for it to finish")
+	ErrUnavailable   = errors.New("the planner is not set up on this server")
+	ErrNothingToPlan = store.Invalid("nothing_to_plan", nil, "nothing to plan: add events, day types with tasks and people first")
 )
 
 const (
@@ -62,7 +61,7 @@ func (s *Service) Start(ctx context.Context, orgSlug, planSlug, actor string, p 
 		p.TimeLimit = DefaultTimeLimit
 	}
 	if p.TimeLimit < MinTimeLimit || p.TimeLimit > MaxTimeLimit {
-		return 0, fmt.Errorf("%w: tidsgrensen må være %d-%d sekunder", store.ErrInvalid, MinTimeLimit, MaxTimeLimit)
+		return 0, store.Invalid("time_limit", map[string]any{"min": MinTimeLimit, "max": MaxTimeLimit}, "the time limit must be %d-%d seconds", MinTimeLimit, MaxTimeLimit)
 	}
 	data, err := s.st.GetPlanningData(ctx, orgSlug, planSlug)
 	if err != nil {

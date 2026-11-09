@@ -36,7 +36,7 @@ func parseISODate(s string) (time.Time, bool) {
 func cleanNote(raw string) (string, error) {
 	n := strings.TrimSpace(raw)
 	if utf8.RuneCountInString(n) > 200 || !validText(n) {
-		return "", fmt.Errorf("%w: note must be at most 200 printable characters", ErrInvalid)
+		return "", Invalid("note_too_long", nil, "note must be at most 200 printable characters")
 	}
 	return n, nil
 }
@@ -81,7 +81,7 @@ func getEvent(ctx context.Context, q dbq, oid, pid, id int64) (Event, error) {
 
 func (s *Store) AddEvent(ctx context.Context, orgSlug, planSlug, actor, date string, dayTypeID int64, note string) (Event, error) {
 	if _, ok := parseISODate(date); !ok {
-		return Event{}, fmt.Errorf("%w: date must be YYYY-MM-DD", ErrInvalid)
+		return Event{}, Invalid("date_invalid", nil, "date must be YYYY-MM-DD")
 	}
 	note, err := cleanNote(note)
 	if err != nil {
@@ -121,20 +121,20 @@ func (s *Store) AddEventsBulk(ctx context.Context, orgSlug, planSlug, actor, fro
 	f, ok1 := parseISODate(from)
 	t, ok2 := parseISODate(to)
 	if !ok1 || !ok2 || t.Before(f) {
-		return nil, nil, fmt.Errorf("%w: from and to must be YYYY-MM-DD with from <= to", ErrInvalid)
+		return nil, nil, Invalid("range_invalid", nil, "from and to must be YYYY-MM-DD with from <= to")
 	}
 	if t.Sub(f) > maxBulkSpanDays*24*time.Hour {
-		return nil, nil, fmt.Errorf("%w: the range can be at most %d days", ErrInvalid, maxBulkSpanDays)
+		return nil, nil, Invalid("range_too_long", map[string]any{"max": maxBulkSpanDays}, "the range can be at most %d days", maxBulkSpanDays)
 	}
 	want := map[int]bool{}
 	for _, w := range weekdays {
 		if w < 1 || w > 7 {
-			return nil, nil, fmt.Errorf("%w: weekdays are 1 (Monday) to 7 (Sunday)", ErrInvalid)
+			return nil, nil, Invalid("weekdays_invalid", nil, "weekdays are 1 (Monday) to 7 (Sunday)")
 		}
 		want[w] = true
 	}
 	if len(want) == 0 {
-		return nil, nil, fmt.Errorf("%w: choose at least one weekday", ErrInvalid)
+		return nil, nil, Invalid("weekdays_none", nil, "choose at least one weekday")
 	}
 	var dates []string
 	for d := f; !d.After(t); d = d.AddDate(0, 0, 1) {
@@ -143,10 +143,10 @@ func (s *Store) AddEventsBulk(ctx context.Context, orgSlug, planSlug, actor, fro
 		}
 	}
 	if len(dates) == 0 {
-		return nil, nil, fmt.Errorf("%w: no dates match", ErrInvalid)
+		return nil, nil, Invalid("no_dates", nil, "no dates match")
 	}
 	if len(dates) > maxEventsPerCall {
-		return nil, nil, fmt.Errorf("%w: at most %d dates at a time", ErrInvalid, maxEventsPerCall)
+		return nil, nil, Invalid("too_many_dates", map[string]any{"max": maxEventsPerCall}, "at most %d dates at a time", maxEventsPerCall)
 	}
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		created, skipped = nil, nil
@@ -181,7 +181,7 @@ func (s *Store) AddEventsBulk(ctx context.Context, orgSlug, planSlug, actor, fro
 			}
 			created = append(created, sd)
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "event.bulk", detail: fmt.Sprintf("%d nye hendelser, %d fantes fra før (%s – %s)", len(created), len(skipped), from, to)}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "event.bulk", detail: fmt.Sprintf("%d new events, %d already existed (%s – %s)", len(created), len(skipped), from, to)}, nil
 	})
 	return created, skipped, err
 }
@@ -227,7 +227,7 @@ func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug, actor string
 			changes = append(changes, "note")
 		}
 		if len(changes) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE event SET day_type_id = ?, note = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, dt, note, id, oid, pid); err != nil {
 			return logEntry{}, err

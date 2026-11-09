@@ -79,7 +79,7 @@ func (s *server) setAvailability(w http.ResponseWriter, r *http.Request) {
 	for k, v := range b.Levels {
 		id, err := strconv.ParseInt(k, 10, 64)
 		if err != nil {
-			writeJSON(w, 400, apiError{"invalid", "event ids must be numbers"})
+			writeJSON(w, 400, apiError{Error: "invalid", Message: "event ids must be numbers"})
 			return
 		}
 		levels[id] = v

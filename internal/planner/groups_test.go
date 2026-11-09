@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -86,8 +87,8 @@ func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 	if len(snap.Groups) != 1 || snap.Groups[0].Name != "Koret" || len(snap.Groups[0].Members) != 2 {
 		t.Errorf("snapshot groups: %+v", snap.Groups)
 	}
-	if len(snap.Warnings) != 1 || !strings.Contains(snap.Warnings[0], "Tomt") || strings.Contains(strings.Join(snap.Warnings, ""), "Rolig") {
-		t.Errorf("a group that was meant to take part but has nobody is worth a warning, an unused empty one is not: %v", snap.Warnings)
+	if len(snap.rendered(i18n.EN)) != 1 || !strings.Contains(snap.rendered(i18n.EN)[0], "Tomt") || strings.Contains(strings.Join(snap.rendered(i18n.EN), ""), "Rolig") {
+		t.Errorf("a group that was meant to take part but has nobody is worth a warning, an unused empty one is not: %v", snap.rendered(i18n.EN))
 	}
 
 	// kan foreslås is passed on, and changing a group makes the stored run out of date
@@ -203,14 +204,14 @@ func TestTheViewShowsGroupsManualCellsAndLockedPeopleWithNames(t *testing.T) {
 		t.Errorf("no phantom place for a task the planner does not distribute: %+v", c)
 	}
 	// the explanation speaks about the group, by name
-	if c := cell(1, w.lyd); c == nil || !strings.Contains(c.Explanation, "Kirkekoret: Aslaug passer ikke") {
+	if c := cell(1, w.lyd); c == nil || !strings.Contains(c.Explanation, "Kirkekoret: Aslaug cannot attend") {
 		t.Errorf("explanation: %+v", c)
 	}
-	if len(v.Weak) != 1 || v.Weak[0] != "Birger (som medlem av Kirkekoret) fikk Lyd 2026-08-09, selv om det er «dårlig» for hendelsen." {
+	if len(v.Weak) != 1 || v.Weak[0] != "Birger (as a member of Kirkekoret) got Lyd 2026-08-09, even though it is «poor» for the event." {
 		t.Errorf("compromise for a group member: %v", v.Weak)
 	}
 	// warnings: names, and silent for the designed use of «kan ikke foreslås»
-	if len(v.Warnings) != 1 || v.Warnings[0] != "Frode er satt på Lyd 2026-08-16 for hånd, selv om hen ikke har valgt oppgaven." {
+	if len(v.Warnings) != 1 || v.Warnings[0] != "Frode was set on Lyd 2026-08-16 by hand, even though they have not chosen the task." {
 		t.Errorf("warnings: %v", v.Warnings)
 	}
 }
@@ -247,8 +248,8 @@ func TestTheRealSolverProposesAGroupAndKeepsItsMembersOccupied(t *testing.T) {
 	}
 	for ev := range v.Events {
 		lyd, bilde := cellOf(ev, w.lyd), cellOf(ev, w.bilde)
-		if ev == 1 { // Dina has «passer ikke» on this event, which rules the whole group out
-			if lyd.Missing != 1 || len(lyd.Groups) != 0 || !strings.Contains(lyd.Explanation, "Koret: Dina passer ikke") {
+		if ev == 1 { // Dina has «never» on this event, which rules the whole group out
+			if lyd.Missing != 1 || len(lyd.Groups) != 0 || !strings.Contains(lyd.Explanation, "Koret: Dina cannot attend") {
 				t.Errorf("event 1 Lyd: %+v", lyd)
 			}
 			continue

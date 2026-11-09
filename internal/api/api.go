@@ -114,9 +114,13 @@ func recoverer(next http.Handler, log *slog.Logger) http.Handler {
 
 // ---- helpers -------------------------------------------------------------------------------------------------
 
+// apiError is the body of every refused request. Error is the kind (not_found, invalid, conflict, ...), Code and
+// Params say precisely what was wrong so the page can write it in the user's language, and Message is the English text.
 type apiError struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
+	Error   string         `json:"error"`
+	Code    string         `json:"code,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
+	Message string         `json:"message"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -126,33 +130,43 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// coded builds the error body, with the code and parameters when the error carries them.
+func coded(kind string, err error) apiError {
+	e := apiError{Error: kind, Message: err.Error()}
+	var c *store.Coded
+	if errors.As(err, &c) {
+		e.Code, e.Params = c.Code, c.Params
+	}
+	return e
+}
+
 func writeErr(w http.ResponseWriter, log *slog.Logger, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeJSON(w, 404, apiError{"not_found", "not found"})
+		writeJSON(w, 404, apiError{Error: "not_found", Message: "not found"})
 	case errors.Is(err, store.ErrConflict):
-		writeJSON(w, 409, apiError{"conflict", err.Error()})
+		writeJSON(w, 409, coded("conflict", err))
 	case errors.Is(err, store.ErrActor):
-		writeJSON(w, 400, apiError{"actor_required", "send who you are in the X-Actor header (percent-encoded)"})
+		writeJSON(w, 400, apiError{Error: "actor_required", Message: "send who you are in the X-Actor header (percent-encoded)"})
 	case errors.Is(err, store.ErrInvalid):
-		writeJSON(w, 400, apiError{"invalid", err.Error()})
+		writeJSON(w, 400, coded("invalid", err))
 	default:
 		log.Error("request failed", "err", err)
-		writeJSON(w, 500, apiError{"internal", "internal error"})
+		writeJSON(w, 500, apiError{Error: "internal", Message: "internal error"})
 	}
 }
 
 // decode reads a small JSON body; unknown fields are an error so typos do not pass silently.
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if ct := r.Header.Get("Content-Type"); len(ct) < 16 || ct[:16] != "application/json" {
-		writeJSON(w, 415, apiError{"unsupported_media_type", "send Content-Type: application/json"})
+		writeJSON(w, 415, apiError{Error: "unsupported_media_type", Message: "send Content-Type: application/json"})
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		writeJSON(w, 400, apiError{"invalid", "bad JSON body: " + err.Error()})
+		writeJSON(w, 400, apiError{Error: "invalid", Message: "bad JSON body: " + err.Error()})
 		return false
 	}
 	return true

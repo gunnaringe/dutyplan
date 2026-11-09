@@ -26,7 +26,11 @@ function say(text, kind) {
   m.className = text ? kind || 'ok' : '';
 }
 
+// The language the server writes explanations and warnings in (until the page has a language switch: Norwegian).
+const currentLang = () => 'nb';
+
 async function api(method, path, body) {
+  if (method === 'GET' && /\/(runs|assignments)/.test(path)) path += (path.includes('?') ? '&' : '?') + 'lang=' + currentLang();
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') headers['X-Actor'] = encodeURIComponent(store.get('actor'));

@@ -5,12 +5,18 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 )
 
-// Namer turns the solver's ids (p3, t2, g1, e5) into the names the run was made with.
+// Namer turns the solver's ids (p3, t2, g1, e5) into the names the run was made with, and says in which language the
+// sentences are written.
 type Namer struct {
 	Person, Task, Group, Event func(string) string
+	L                          i18n.Lang
 }
+
+func (n Namer) t(key string, args ...any) string { return i18n.T(n.L, key, args...) }
 
 var busyGroupTask = regexp.MustCompile(`^(t\d+) \((g\d+)\)$`)
 
@@ -29,24 +35,20 @@ func (n Namer) groupWhy(g, reason string) string {
 	switch kind {
 	case "not_proposable":
 		if who != "" {
-			return fmt.Sprintf("%s kan ikke foreslås fordi %s ikke kan foreslås", name, n.Person(who))
+			return n.t("explain.group.not_proposable_by", name, n.Person(who))
 		}
-		return name + " kan ikke foreslås"
+		return n.t("explain.group.not_proposable", name)
 	case "too_many_places":
-		return name + " trenger flere plasser enn det er igjen"
+		return n.t("explain.group.too_many_places", name)
 	case "outside_selection":
-		return name + " står utenfor utvalget"
-	case "task_never":
-		return fmt.Sprintf("%s: %s har sagt «ikke» til oppgaven", name, n.Person(who))
-	case "event_never":
-		return fmt.Sprintf("%s: %s passer ikke", name, n.Person(who))
-	case "busy":
-		return fmt.Sprintf("%s: %s er opptatt med noe annet", name, n.Person(who))
+		return n.t("explain.group.outside_selection", name)
+	case "task_never", "event_never", "busy":
+		return n.t("explain.group."+kind, name, n.Person(who))
 	}
 	return ""
 }
 
-// Explain turns the solver's «why is this place empty» (who was ruled out, and for what) into one Norwegian sentence.
+// Explain turns the solver's «why is this place empty» (who was ruled out, and for what) into one sentence.
 func Explain(why map[string]any, n Namer) string {
 	list := func(v any) []string {
 		arr, _ := v.([]any)
@@ -60,9 +62,8 @@ func Explain(why map[string]any, n Namer) string {
 	}
 	var parts []string
 	if _, has := why["outside_selection"]; has || why["selection"] != nil || why["selection_groups"] != nil {
-		v := list(why["selection"])
 		var names []string
-		names = append(names, v...)
+		names = append(names, list(why["selection"])...)
 		if arr, _ := why["selection_groups"].([]any); len(arr) > 0 {
 			for _, g := range arr {
 				if s, ok := g.(string); ok {
@@ -70,23 +71,19 @@ func Explain(why map[string]any, n Namer) string {
 				}
 			}
 		}
-		s := "utvalget er tomt"
+		s := n.t("explain.selection_empty")
 		if len(names) > 0 {
-			s = "utvalget er " + strings.Join(names, ", ")
+			s = n.t("explain.selection", strings.Join(names, ", "))
 		}
 		if c, _ := why["outside_selection"].(float64); c > 0 {
-			s += fmt.Sprintf(" (%d andre står utenfor)", int(c))
+			s += n.t("explain.selection_outside", int(c))
 		}
 		parts = append(parts, s)
 	}
-	if v := list(why["event_never"]); len(v) > 0 {
-		parts = append(parts, "passer ikke: "+strings.Join(v, ", "))
-	}
-	if v := list(why["task_never"]); len(v) > 0 {
-		parts = append(parts, "har sagt «ikke» til oppgaven: "+strings.Join(v, ", "))
-	}
-	if v := list(why["not_proposable"]); len(v) > 0 {
-		parts = append(parts, "kan ikke foreslås: "+strings.Join(v, ", "))
+	for _, key := range []string{"event_never", "task_never", "not_proposable"} {
+		if v := list(why[key]); len(v) > 0 {
+			parts = append(parts, n.t("explain."+key, strings.Join(v, ", ")))
+		}
 	}
 	if busy, _ := why["busy"].(map[string]any); len(busy) > 0 {
 		keys := make([]string, 0, len(busy))
@@ -109,10 +106,10 @@ func Explain(why map[string]any, n Namer) string {
 			}
 			items = append(items, fmt.Sprintf("%s (%s)", n.Person(k), strings.Join(ts, ", ")))
 		}
-		parts = append(parts, "opptatt med noe annet på hendelsen: "+strings.Join(items, ", "))
+		parts = append(parts, n.t("explain.busy", strings.Join(items, ", ")))
 	}
 	if c, _ := why["not_in_task"].(float64); c > 0 {
-		parts = append(parts, fmt.Sprintf("%d har ikke valgt oppgaven", int(c)))
+		parts = append(parts, n.t("explain.not_in_task", int(c)))
 	}
 	if groups, _ := why["groups"].(map[string]any); len(groups) > 0 {
 		keys := make([]string, 0, len(groups))
@@ -128,9 +125,9 @@ func Explain(why map[string]any, n Namer) string {
 			}
 		}
 	}
-	head := "Ingen kan ta denne"
+	head := n.t("explain.none")
 	if c, _ := why["candidates"].(float64); c > 0 {
-		head = fmt.Sprintf("%d kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har", int(c))
+		head = n.t("explain.some", int(c))
 	}
 	if len(parts) == 0 {
 		return head + "."
@@ -144,8 +141,9 @@ var (
 	warnLockedGroup = regexp.MustCompile(`^(\S+) is locked on (\S+) (\S+) while group (\S+) is on (\S+)$`)
 )
 
-// TranslateWarning writes one of the solver's warnings with names instead of ids. An empty result means the warning
-// is not worth showing: a manual cell for someone who «kan ikke foreslås» is how that setting is meant to be used.
+// TranslateWarning writes one of the solver's warnings with names instead of ids, in the language of the Namer. An
+// empty result means the warning is not worth showing: a manual cell for someone who «cannot be proposed» is how that
+// setting is meant to be used.
 func TranslateWarning(w string, n Namer) string {
 	if m := warnLocked.FindStringSubmatch(w); m != nil {
 		person, task, ev := n.Person(m[1]), n.Task(m[2]), n.Event(m[3])
@@ -153,24 +151,18 @@ func TranslateWarning(w string, n Namer) string {
 		switch kind {
 		case "not_proposable":
 			return ""
-		case "not_in_task":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen ikke har valgt oppgaven.", person, task, ev)
-		case "task_never":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen har sagt «ikke» til oppgaven.", person, task, ev)
-		case "event_never":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om det ikke passer.", person, task, ev)
-		case "outside_selection":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen står utenfor utvalget.", person, task, ev)
+		case "not_in_task", "task_never", "event_never", "outside_selection":
+			return n.t("warn.manual."+kind, person, task, ev)
 		case "busy":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen er opptatt med %s.", person, task, ev, n.busy(rest))
+			return n.t("warn.manual.busy", person, task, ev, n.busy(rest))
 		}
-		return fmt.Sprintf("%s er satt på %s %s for hånd, selv om «%s».", person, task, ev, m[4])
+		return n.t("warn.manual.other", person, task, ev, m[4])
 	}
 	if m := warnGroupMember.FindStringSubmatch(w); m != nil {
-		return fmt.Sprintf("%s er satt på %s %s for hånd, men %s har sagt at det ikke passer.", n.Group(m[1]), n.Task(m[2]), n.Event(m[3]), n.Person(m[4]))
+		return n.t("warn.manual.group_member", n.Group(m[1]), n.Task(m[2]), n.Event(m[3]), n.Person(m[4]))
 	}
 	if m := warnLockedGroup.FindStringSubmatch(w); m != nil {
-		return fmt.Sprintf("%s er satt på %s %s for hånd samtidig som %s står på %s; de to kan ikke kombineres.", n.Person(m[1]), n.Task(m[2]), n.Event(m[3]), n.Group(m[4]), n.Task(m[5]))
+		return n.t("warn.manual.locked_with_group", n.Person(m[1]), n.Task(m[2]), n.Event(m[3]), n.Group(m[4]), n.Task(m[5]))
 	}
 	return w
 }

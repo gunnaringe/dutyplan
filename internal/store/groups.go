@@ -108,7 +108,7 @@ func (s *Store) CreateGroup(ctx context.Context, orgSlug, actor, name string) (G
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO grp (org_id, name, created_at) VALUES (?, ?, ?)`, oid, name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: group %q", ErrConflict, name)
+			return logEntry{}, exists("group", name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -152,11 +152,11 @@ func (s *Store) UpdateGroup(ctx context.Context, orgSlug, actor string, id int64
 			g.Proposable = *patch.Proposable
 		}
 		if len(changes) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE grp SET name = ?, proposable = ? WHERE id = ? AND org_id = ?`, g.Name, g.Proposable, id, oid)
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: group %q", ErrConflict, g.Name)
+			return logEntry{}, exists("group", g.Name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -212,7 +212,7 @@ func (s *Store) SetGroupMembers(ctx context.Context, orgSlug, actor string, id i
 			}
 		}
 		if len(removed)+len(added) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		sort.Strings(added)
 		sort.Strings(removed)
@@ -245,13 +245,13 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 	seen := map[int64]bool{}
 	for _, t := range tasks {
 		if t.Fills < 1 || t.Fills > 50 {
-			return Group{}, fmt.Errorf("%w: fills must be 1-50", ErrInvalid)
+			return Group{}, Invalid("fills_range", nil, "fills must be 1-50")
 		}
 		if !groupTaskLevels[t.Level] {
-			return Group{}, fmt.Errorf("%w: level must be poor, neutral or good", ErrInvalid)
+			return Group{}, Invalid("level_invalid", nil, "level must be poor, neutral or good")
 		}
 		if seen[t.TaskID] {
-			return Group{}, fmt.Errorf("%w: a task can be listed once", ErrInvalid)
+			return Group{}, Invalid("task_twice", nil, "a task can be listed once")
 		}
 		seen[t.TaskID] = true
 	}
@@ -274,7 +274,7 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 				return logEntry{}, err
 			}
 			if !planned {
-				return logEntry{}, fmt.Errorf("%w: the planner does not distribute that task, so it cannot propose a group for it", ErrInvalid)
+				return logEntry{}, Invalid("task_not_distributed", nil, "the planner does not distribute that task, so it cannot propose a group for it")
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM grp_task WHERE group_id = ? AND org_id = ?`, id, oid); err != nil {
@@ -288,7 +288,7 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 		if g, err = groupIn(ctx, tx, oid, id); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, action: "group.tasks", detail: fmt.Sprintf("%s: %d oppgaver", g.Name, len(tasks))}, nil
+		return logEntry{orgID: oid, action: "group.tasks", detail: fmt.Sprintf("%s: %d tasks", g.Name, len(tasks))}, nil
 	})
 	return g, err
 }
@@ -305,7 +305,7 @@ func (s *Store) DeleteGroup(ctx context.Context, orgSlug, actor string, id int64
 			return logEntry{}, err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM grp WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return logEntry{}, fmt.Errorf("%w: group %q is used in a manual cell or a selection; remove it there first", ErrConflict, g.Name)
+			return logEntry{}, inUse("group", g.Name, "a manual cell or a selection")
 		} else if err != nil {
 			return logEntry{}, err
 		}

@@ -125,8 +125,15 @@ type Snapshot struct {
 	People []SnapPerson            `json:"people"`
 	Slots  map[int64]map[int64]int `json:"slots"` // day type -> task -> places
 	Groups []SnapGroup             `json:"groups,omitempty"`
-	// Warnings are things the planner was not told about, such as a manual cell for a person who is no longer active.
-	Warnings []string `json:"warnings,omitempty"`
+	// Notes are things the planner was not told about, such as a manual cell for a person who is no longer active. They are
+	// stored as a code and arguments and written in the page's language when the run is shown.
+	Notes []Note `json:"notes,omitempty"`
+}
+
+// Note is one such thing: a code (see the catalogs, «note.<code>») and what goes into the sentence.
+type Note struct {
+	Code string   `json:"code"`
+	Args []string `json:"args"`
 }
 
 // SnapGroup is a group as the run saw it: the active members only.
@@ -261,7 +268,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 		}
 		if len(sg.Members) == 0 {
 			if len(g.Tasks) > 0 {
-				snap.Warnings = append(snap.Warnings, "Gruppen «"+g.Name+"» har ingen aktive medlemmer og er ikke med i planleggingen.")
+				snap.Notes = append(snap.Notes, Note{"group_no_members", []string{g.Name}})
 			}
 			continue
 		}
@@ -298,13 +305,13 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 		switch {
 		case c.PersonID != nil:
 			if !active[*c.PersonID] {
-				snap.Warnings = append(snap.Warnings, "Ruten for "+personName[*c.PersonID]+" på "+where(c.EventID, c.TaskID)+" er ikke med fordi personen ikke er aktiv.")
+				snap.Notes = append(snap.Notes, Note{"inactive_person_cell", []string{personName[*c.PersonID], where(c.EventID, c.TaskID)}})
 				continue
 			}
 			l.Person = pid(*c.PersonID)
 		case c.GroupID != nil:
 			if !groups[*c.GroupID] {
-				snap.Warnings = append(snap.Warnings, "Ruten for gruppen «"+groupName[*c.GroupID]+"» på "+where(c.EventID, c.TaskID)+" er ikke med fordi gruppen ikke har aktive medlemmer.")
+				snap.Notes = append(snap.Notes, Note{"group_cell_no_members", []string{groupName[*c.GroupID], where(c.EventID, c.TaskID)}})
 				continue
 			}
 			l.Group, l.Fills = gid(*c.GroupID), c.Fills
@@ -326,7 +333,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			}
 		}
 		if len(sp.People)+len(sp.Groups) == 0 { // the restriction stays: nobody can be chosen, and the place says why
-			snap.Warnings = append(snap.Warnings, "Utvalget for "+where(pl.EventID, pl.TaskID)+" har ingen aktive personer eller grupper, så ingen kan velges.")
+			snap.Notes = append(snap.Notes, Note{"empty_selection", []string{where(pl.EventID, pl.TaskID)}})
 		}
 		in.Pools = append(in.Pools, sp)
 	}

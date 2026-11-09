@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -87,8 +88,8 @@ func TestBuildInputSendsManualCellsAndSelections(t *testing.T) {
 	if !strings.Contains(raw, `"people":[],"groups":["`+gid(koret.ID)+`"]`) {
 		t.Errorf("an empty list is [] and never null (the solver would fail on null): %s", raw)
 	}
-	if len(snap.Warnings) != 0 {
-		t.Errorf("nothing to warn about: %v", snap.Warnings)
+	if len(snap.rendered(i18n.EN)) != 0 {
+		t.Errorf("nothing to warn about: %v", snap.rendered(i18n.EN))
 	}
 	// the stored run is out of date when a manual cell or a selection changes
 	w.pool(t, w.events[2], w.lyd, []string{"Aslaug"})
@@ -126,8 +127,8 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 	if len(locked) != 2 {
 		t.Errorf("the group and the text stay: %+v", locked)
 	}
-	if len(snap.Warnings) != 2 || !strings.Contains(snap.Warnings[0], "Ruten for Aslaug på Lyd 2026-08-09") {
-		t.Errorf("the run says it left her out (and that her selection on 16 Aug is now empty): %v", snap.Warnings)
+	if len(snap.rendered(i18n.EN)) != 2 || !strings.Contains(snap.rendered(i18n.EN)[0], "The cell for Aslaug on Lyd 2026-08-09") {
+		t.Errorf("the run says it left her out (and that her selection on 16 Aug is now empty): %v", snap.rendered(i18n.EN))
 	}
 	if fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Birger"].ID)}) {
 		t.Errorf("an inactive person leaves the selection: %+v", pools[0])
@@ -136,8 +137,8 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 	if len(pools) != 2 || len(pools[1].People) != 0 || len(pools[1].Groups) != 0 {
 		t.Errorf("the restriction stays when everyone in it is gone: %+v", pools)
 	}
-	if !strings.Contains(strings.Join(snap.Warnings, "|"), "Utvalget for Lyd 2026-08-16 har ingen aktive") {
-		t.Errorf("warnings: %v", snap.Warnings)
+	if !strings.Contains(strings.Join(snap.rendered(i18n.EN), "|"), "The selection for Lyd 2026-08-16 has no active") {
+		t.Errorf("warnings: %v", snap.rendered(i18n.EN))
 	}
 
 	// a group without active members: its manual cell and its place in a selection go too
@@ -151,8 +152,8 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 	if len(pools[0].Groups) != 0 {
 		t.Errorf("the group leaves the selection: %+v", pools[0])
 	}
-	if !strings.Contains(strings.Join(snap.Warnings, "|"), "gruppen «Koret» på Lovsang 2026-08-16") {
-		t.Errorf("warnings: %v", snap.Warnings)
+	if !strings.Contains(strings.Join(snap.rendered(i18n.EN), "|"), "group «Koret» on Lovsang 2026-08-16") {
+		t.Errorf("warnings: %v", snap.rendered(i18n.EN))
 	}
 }
 
@@ -264,7 +265,7 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 	}
 	v = run()
 	lyd = cellOf(v, ev, w.lyd)
-	if lyd.Missing != 1 || !strings.Contains(lyd.Explanation, "utvalget er Aslaug, Cecilie") || !strings.Contains(lyd.Explanation, "passer ikke: Aslaug, Cecilie") {
+	if lyd.Missing != 1 || !strings.Contains(lyd.Explanation, "the selection is Aslaug, Cecilie") || !strings.Contains(lyd.Explanation, "cannot attend: Aslaug, Cecilie") {
 		t.Errorf("the explanation: %+v", lyd)
 	}
 }

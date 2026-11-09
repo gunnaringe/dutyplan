@@ -44,7 +44,7 @@ type Pool struct {
 // distinct drops repeated ids and keeps the order; it refuses a list that is too long.
 func distinct(ids []int64) ([]int64, error) {
 	if len(ids) > maxEventsPerWrite {
-		return nil, fmt.Errorf("%w: at most %d events at a time", ErrInvalid, maxEventsPerWrite)
+		return nil, Invalid("too_many_events", map[string]any{"max": maxEventsPerWrite}, "at most %d events at a time", maxEventsPerWrite)
 	}
 	seen := map[int64]bool{}
 	out := make([]int64, 0, len(ids))
@@ -126,21 +126,21 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 		}
 	}
 	if kinds != 1 {
-		return nil, 0, fmt.Errorf("%w: give exactly one of person, group or text", ErrInvalid)
+		return nil, 0, Invalid("cell_kind", nil, "give exactly one of person, group or text")
 	}
 	fills := in.Fills
 	if fills == 0 {
 		fills = 1
 	}
 	if fills < 1 || fills > 50 || (in.PersonID != 0 && fills != 1) {
-		return nil, 0, fmt.Errorf("%w: places must be 1-50 (a person fills one)", ErrInvalid)
+		return nil, 0, Invalid("cell_fills", nil, "places must be 1-50 (a person fills one)")
 	}
 	events, err := distinct(in.EventIDs)
 	if err != nil {
 		return nil, 0, err
 	}
 	if len(events) == 0 {
-		return nil, 0, fmt.Errorf("%w: choose at least one event", ErrInvalid)
+		return nil, 0, Invalid("choose_events", nil, "choose at least one event")
 	}
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		created, skipped = nil, 0
@@ -168,7 +168,7 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 				return logEntry{}, err
 			}
 			if !active {
-				return logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, what)
+				return logEntry{}, Invalid("person_inactive", map[string]any{"name": what}, "%s is not active", what)
 			}
 			person = in.PersonID
 		case in.GroupID != 0:
@@ -210,7 +210,7 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 			created = append(created, c)
 		}
 		if len(created) == 0 {
-			return logEntry{}, fmt.Errorf("%w: that manual cell already exists", ErrConflict)
+			return logEntry{}, Conflict("cell_exists", nil, "that manual cell already exists")
 		}
 		return logEntry{orgID: oid, planID: &pid, action: "cell.add", detail: clip(fmt.Sprintf("%s: %s, %s", taskName, what, datesText(dates)), 200)}, nil
 	})
@@ -224,7 +224,7 @@ func datesText(dates []string) string {
 	if len(dates) <= 3 {
 		return strings.Join(dates, ", ")
 	}
-	return fmt.Sprintf("%d hendelser (%s ...)", len(dates), strings.Join(dates[:3], ", "))
+	return fmt.Sprintf("%d events (%s ...)", len(dates), strings.Join(dates[:3], ", "))
 }
 
 // DeleteCell removes one manual cell of this plan. The planner may then choose for the place again.
@@ -309,7 +309,7 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug, actor string, ev
 		return err
 	}
 	if len(events) == 0 {
-		return fmt.Errorf("%w: choose at least one event", ErrInvalid)
+		return Invalid("choose_events", nil, "choose at least one event")
 	}
 	people, err = distinct(people)
 	if err != nil {
@@ -336,7 +336,7 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug, actor string, ev
 			return logEntry{}, err
 		}
 		if !planned {
-			return logEntry{}, fmt.Errorf("%w: the planner does not distribute %q, so there is nothing to select for", ErrInvalid, taskName)
+			return logEntry{}, Invalid("task_not_distributed", nil, "the planner does not distribute %q, so there is nothing to select for", taskName)
 		}
 		var names []string
 		for _, p := range people {
@@ -348,7 +348,7 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug, actor string, ev
 				return logEntry{}, err
 			}
 			if !active {
-				return logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, n)
+				return logEntry{}, Invalid("person_inactive", map[string]any{"name": n}, "%s is not active", n)
 			}
 			names = append(names, n)
 		}

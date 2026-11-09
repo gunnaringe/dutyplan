@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/planner"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
@@ -23,7 +24,7 @@ func (s *server) myAssignments(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	v, err := s.planner.Mine(r.Context(), r.PathValue("org"), r.PathValue("plan"), id)
+	v, err := s.planner.Mine(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, i18n.Parse(r.URL.Query().Get("lang")))
 	if err != nil {
 		s.writeRunErr(w, err)
 		return
@@ -34,9 +35,9 @@ func (s *server) myAssignments(w http.ResponseWriter, r *http.Request) {
 func (s *server) writeRunErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, planner.ErrBusy):
-		writeJSON(w, 409, apiError{"busy", err.Error()})
+		writeJSON(w, 409, apiError{Error: "busy", Message: err.Error()})
 	case errors.Is(err, planner.ErrUnavailable):
-		writeJSON(w, 503, apiError{"unavailable", err.Error()})
+		writeJSON(w, 503, apiError{Error: "unavailable", Message: err.Error()})
 	default:
 		writeErr(w, s.log, err)
 	}
@@ -88,7 +89,7 @@ func (s *server) getRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	v, err := s.planner.View(r.Context(), org, plan, id)
+	v, err := s.planner.View(r.Context(), org, plan, id, i18n.Parse(r.URL.Query().Get("lang")))
 	if err != nil {
 		s.writeRunErr(w, err)
 		return

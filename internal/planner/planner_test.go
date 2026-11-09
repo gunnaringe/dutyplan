@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -231,65 +232,81 @@ func testNames() Namer {
 	}
 }
 
+// both holds one sentence in each language.
+type both struct{ en, nb string }
+
 func TestExplain(t *testing.T) {
-	const busy = "1 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har"
+	someEN := "1 could have taken it, but are needed elsewhere or cannot be combined with something they already have"
+	someNB := "1 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har"
 	cases := []struct {
 		why  map[string]any
-		want string
+		want both
 	}{
-		{map[string]any{"candidates": 0.0}, "Ingen kan ta denne."},
+		{map[string]any{"candidates": 0.0}, both{"Nobody can take this.", "Ingen kan ta denne."}},
 		{map[string]any{"candidates": 0.0, "not_in_task": 3.0, "event_never": []any{"p1", "p2"}},
-			"Ingen kan ta denne: passer ikke: Aslaug, Birger; 3 har ikke valgt oppgaven."},
+			both{"Nobody can take this: cannot attend: Aslaug, Birger; 3 have not chosen the task.", "Ingen kan ta denne: passer ikke: Aslaug, Birger; 3 har ikke valgt oppgaven."}},
 		{map[string]any{"candidates": 0.0, "task_never": []any{"p3"}, "not_proposable": []any{"p1"}},
-			"Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."},
+			both{"Nobody can take this: said «never» to the task: Cecilie; cannot be proposed: Aslaug.", "Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."}},
 		{map[string]any{"candidates": 2.0, "busy": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
-			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
+			both{"2 could have taken it, but are needed elsewhere or cannot be combined with something they already have: busy with something else at the event: Aslaug (Lyd, Lovsang), Birger (Lyd).",
+				"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."}},
 		// a group's task is named with the group
 		{map[string]any{"candidates": 1.0, "busy": map[string]any{"p1": []any{"t2 (g1)"}}},
-			busy + ": opptatt med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."},
-		// the utvalg and who is outside it
+			both{someEN + ": busy with something else at the event: Aslaug (Lovsang (Kirkekoret)).", someNB + ": opptatt med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."}},
+		// the selection and who is outside it
 		{map[string]any{"candidates": 0.0, "selection": []any{"p1", "p2"}, "selection_groups": []any{"g1"}, "outside_selection": 4.0},
-			"Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."},
-		{map[string]any{"candidates": 0.0, "selection": []any{"p1"}}, "Ingen kan ta denne: utvalget er Aslaug."},
-		{map[string]any{"candidates": 0.0, "outside_selection": 3.0}, "Ingen kan ta denne: utvalget er tomt (3 andre står utenfor)."},
+			both{"Nobody can take this: the selection is Aslaug, Birger, Kirkekoret (4 others are outside it).", "Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."}},
+		{map[string]any{"candidates": 0.0, "selection": []any{"p1"}}, both{"Nobody can take this: the selection is Aslaug.", "Ingen kan ta denne: utvalget er Aslaug."}},
+		{map[string]any{"candidates": 0.0, "outside_selection": 3.0},
+			both{"Nobody can take this: the selection is empty (3 others are outside it).", "Ingen kan ta denne: utvalget er tomt (3 andre står utenfor)."}},
 		// why a group could not be proposed; a group that could have been is not mentioned
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{
-			"g1": "event_never:p2", "g2": "candidate"}},
-			"Ingen kan ta denne: Kirkekoret: Birger passer ikke."},
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{
-			"g1": "not_proposable", "g2": "too_many_places"}},
-			"Ingen kan ta denne: Bandet trenger flere plasser enn det er igjen; Kirkekoret kan ikke foreslås."},
+		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "event_never:p2", "g2": "candidate"}},
+			both{"Nobody can take this: Kirkekoret: Birger cannot attend.", "Ingen kan ta denne: Kirkekoret: Birger passer ikke."}},
+		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable", "g2": "too_many_places"}},
+			both{"Nobody can take this: Bandet needs more places than are left; Kirkekoret cannot be proposed.", "Ingen kan ta denne: Bandet trenger flere plasser enn det er igjen; Kirkekoret kan ikke foreslås."}},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable:p3", "g2": "outside_selection"}},
-			"Ingen kan ta denne: Bandet står utenfor utvalget; Kirkekoret kan ikke foreslås fordi Cecilie ikke kan foreslås."},
+			both{"Nobody can take this: Bandet is outside the selection; Kirkekoret cannot be proposed because Cecilie cannot be proposed.", "Ingen kan ta denne: Bandet står utenfor utvalget; Kirkekoret kan ikke foreslås fordi Cecilie ikke kan foreslås."}},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "task_never:p1", "g2": "busy:p2"}},
-			"Ingen kan ta denne: Bandet: Birger er opptatt med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."},
+			both{"Nobody can take this: Bandet: Birger is busy with something else; Kirkekoret: Aslaug said «never» to the task.", "Ingen kan ta denne: Bandet: Birger er opptatt med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."}},
 	}
 	for _, c := range cases {
-		if got := Explain(c.why, testNames()); got != c.want {
-			t.Errorf("\n got %q\nwant %q", got, c.want)
+		for l, want := range map[i18n.Lang]string{i18n.EN: c.want.en, i18n.NB: c.want.nb} {
+			n := testNames()
+			n.L = l
+			if got := Explain(c.why, n); got != want {
+				t.Errorf("%s:\n got %q\nwant %q", l, got, want)
+			}
 		}
 	}
 }
 
 func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
-	n := testNames()
-	for in, want := range map[string]string{
-		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer.",
-		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven.",
-		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven.",
-		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget.",
-		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret).",
-		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer.",
-		"p2 is locked on t1 e5 while group g1 is on t2":                          "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres.",
-		"noe annet fra solveren": "noe annet fra solveren",
-	} {
-		if got := TranslateWarning(in, n); got != want {
-			t.Errorf("\n got %q\nwant %q", got, want)
+	cases := map[string]both{
+		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          {"Aslaug was set on Lyd 2026-08-09 by hand, even though it does not suit them.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer."},
+		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          {"Aslaug was set on Lyd 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
+		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           {"Aslaug was set on Lyd 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
+		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    {"Aslaug was set on Lyd 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
+		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         {"Aslaug was set on Lyd 2026-08-09 by hand, even though they are busy with Lovsang (Kirkekoret).", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret)."},
+		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": {"Kirkekoret was set on Lovsang 2026-08-09 by hand, but Cecilie has said it does not suit.", "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer."},
+		"p2 is locked on t1 e5 while group g1 is on t2":                          {"Birger was set on Lyd 2026-08-09 by hand while Kirkekoret is on Lovsang; the two cannot be combined.", "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres."},
+		"something else from the solver":                                         {"something else from the solver", "something else from the solver"},
+	}
+	for in, want := range cases {
+		for l, w := range map[i18n.Lang]string{i18n.EN: want.en, i18n.NB: want.nb} {
+			n := testNames()
+			n.L = l
+			if got := TranslateWarning(in, n); got != w {
+				t.Errorf("%s:\n got %q\nwant %q", l, got, w)
+			}
 		}
 	}
-	// a manual cell for someone who «kan ikke foreslås» is how that setting is meant to be used: no warning
-	if got := TranslateWarning("locked: p1 on t1 e5 breaks «not_proposable» (manual choice kept)", n); got != "" {
-		t.Errorf("must be silent, got %q", got)
+	// a manual cell for someone who «cannot be proposed» is how that setting is meant to be used: no warning
+	for _, l := range []i18n.Lang{i18n.EN, i18n.NB} {
+		n := testNames()
+		n.L = l
+		if got := TranslateWarning("locked: p1 on t1 e5 breaks «not_proposable» (manual choice kept)", n); got != "" {
+			t.Errorf("must be silent, got %q", got)
+		}
 	}
 }
 
@@ -374,10 +391,10 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 		t.Errorf("first Lyd cell: %+v", lyd0)
 	}
 	lyd1 := v.Events[1].Cells[1]
-	if lyd1.Missing != 1 || len(lyd1.People) != 0 || !strings.Contains(lyd1.Explanation, "passer ikke: Aslaug") {
+	if lyd1.Missing != 1 || len(lyd1.People) != 0 || !strings.Contains(lyd1.Explanation, "cannot attend: Aslaug") {
 		t.Errorf("empty cell with its reason: %+v", lyd1)
 	}
-	if len(v.Weak) != 1 || !strings.Contains(v.Weak[0], "Aslaug fikk Lyd 2026-08-09") || !strings.Contains(v.Weak[0], "hendelsen") {
+	if len(v.Weak) != 1 || !strings.Contains(v.Weak[0], "Aslaug got Lyd 2026-08-09") || !strings.Contains(v.Weak[0], "the event") {
 		t.Errorf("compromises: %v", v.Weak)
 	}
 	if len(v.Load) != 1 || v.Load[0].Name != "Aslaug" || v.Load[0].Target != 1.3 {
@@ -626,7 +643,7 @@ func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 				bilde = &e.Cells[i]
 			}
 		}
-		if bilde == nil || bilde.Missing != 1 || !strings.Contains(bilde.Explanation, "Ingen kan ta denne") || !strings.Contains(bilde.Explanation, "har ikke valgt oppgaven") {
+		if bilde == nil || bilde.Missing != 1 || !strings.Contains(bilde.Explanation, "Nobody can take this") || !strings.Contains(bilde.Explanation, "have not chosen the task") {
 			t.Errorf("%s: %+v", e.Date, bilde)
 		}
 	}
@@ -655,5 +672,59 @@ func TestEmptyListsAreSentAsListsNeverAsNull(t *testing.T) {
 		if list, ok := in[key].([]any); !ok || list == nil {
 			t.Errorf("%s must be a list, got %v", key, in[key])
 		}
+	}
+}
+
+// rendered writes the snapshot's notes in one language, as the view does.
+func (sn Snapshot) rendered(l i18n.Lang) []string {
+	var out []string
+	for _, n := range sn.Notes {
+		args := make([]any, len(n.Args))
+		for i, a := range n.Args {
+			args[i] = a
+		}
+		out = append(out, i18n.T(l, "note."+n.Code, args...))
+	}
+	return out
+}
+
+func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
+	w := newWorld(t, "Menighet")
+	// a manual cell for someone who is then deactivated: the run notes that it left the cell out
+	w.cell(t, w.events[2], w.lyd, store.NewCell{PersonID: w.people["Cecilie"].ID})
+	inactive := false
+	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Cecilie"].ID, store.PersonPatch{Active: &inactive})
+	s := newService(w, func(context.Context, []byte) ([]byte, error) { return cannedAnswer(w), nil })
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s)
+	en, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id)
+	nb, err := s.View(ctx, w.org.Slug, w.plan.Slug, id, i18n.NB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct{ en, nb string }{
+		"compromise":  {en.Weak[0], nb.Weak[0]},
+		"explanation": {en.Events[1].Cells[1].Explanation, nb.Events[1].Cells[1].Explanation},
+		"note":        {en.Warnings[0], nb.Warnings[0]},
+	} {
+		if c.en == c.nb || c.en == "" {
+			t.Errorf("%s must differ between the languages: %q / %q", name, c.en, c.nb)
+		}
+	}
+	if !strings.Contains(nb.Weak[0], "Aslaug fikk Lyd 2026-08-09") || !strings.Contains(nb.Weak[0], "hendelsen") {
+		t.Errorf("compromise in Norwegian: %v", nb.Weak)
+	}
+	if !strings.Contains(nb.Events[1].Cells[1].Explanation, "passer ikke: Aslaug") || !strings.HasPrefix(nb.Events[1].Cells[1].Explanation, "Ingen kan ta denne") {
+		t.Errorf("explanation in Norwegian: %q", nb.Events[1].Cells[1].Explanation)
+	}
+	if !strings.Contains(nb.Warnings[0], "Ruten for Cecilie på Lyd 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for Cecilie on Lyd 2026-08-23") {
+		t.Errorf("notes: %q / %q", nb.Warnings, en.Warnings)
+	}
+	// the stored run does not depend on the language: asking for Norwegian does not change what English shows afterwards
+	if again, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id); again.Weak[0] != en.Weak[0] {
+		t.Errorf("English changed: %q", again.Weak)
 	}
 }

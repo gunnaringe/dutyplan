@@ -32,6 +32,38 @@ var (
 	ErrActor    = errors.New("actor required")
 )
 
+// Coded is an error of one of the kinds above that also carries a stable code and parameters, so the web page can write
+// the message in the user's language. Msg is the English text, which is what everything else shows.
+type Coded struct {
+	Kind   error
+	Code   string
+	Params map[string]any
+	Msg    string
+}
+
+func (e *Coded) Error() string { return e.Kind.Error() + ": " + e.Msg }
+func (e *Coded) Unwrap() error { return e.Kind }
+
+// Invalid is a refused request (400) with a code, parameters (may be nil) and an English message.
+func Invalid(code string, params map[string]any, format string, args ...any) error {
+	return &Coded{ErrInvalid, code, params, fmt.Sprintf(format, args...)}
+}
+
+// Conflict is a request that clashes with what exists (409).
+func Conflict(code string, params map[string]any, format string, args ...any) error {
+	return &Coded{ErrConflict, code, params, fmt.Sprintf(format, args...)}
+}
+
+func exists(kind, name string) error {
+	return Conflict("already_exists", map[string]any{"kind": kind, "name": name}, "%s %q", kind, name)
+}
+
+func inUse(kind, name, by string) error {
+	return Conflict("in_use", map[string]any{"kind": kind, "name": name}, "%s %q is used by %s; remove it there first", kind, name, by)
+}
+
+var errNothingToChange = func() error { return Invalid("nothing_to_change", nil, "nothing to change") }
+
 // Store is safe for concurrent use. It uses a single connection: simple, and plenty for this app.
 type Store struct {
 	db  *sql.DB
@@ -177,7 +209,7 @@ func validText(s string) bool {
 func cleanName(raw, what string) (string, error) {
 	n := strings.TrimSpace(raw)
 	if n == "" || utf8.RuneCountInString(n) > 80 || !validText(n) {
-		return "", fmt.Errorf("%w: %s must be 1-80 printable characters", ErrInvalid, what)
+		return "", Invalid("name_invalid", map[string]any{"what": what}, "%s must be 1-80 printable characters", what)
 	}
 	return n, nil
 }
@@ -210,7 +242,7 @@ func cleanSlug(slug, name string) (string, error) {
 		slug = Slugify(name)
 	}
 	if len(slug) < 2 || len(slug) > 40 || slug != Slugify(slug) {
-		return "", fmt.Errorf("%w: slug must be 2-40 characters of a-z, 0-9 and hyphens", ErrInvalid)
+		return "", Invalid("slug_invalid", nil, "slug must be 2-40 characters of a-z, 0-9 and hyphens")
 	}
 	return slug, nil
 }
@@ -239,7 +271,7 @@ func (s *Store) CreateOrg(ctx context.Context, actor, name, slug string) (Org, e
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		res, err := tx.ExecContext(ctx, `INSERT INTO organization (slug, name, created_at) VALUES (?, ?, ?)`, o.Slug, o.Name, o.CreatedAt)
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: organisation %q", ErrConflict, o.Slug)
+			return logEntry{}, exists("organisation", o.Slug)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -314,7 +346,7 @@ func (s *Store) CreatePlan(ctx context.Context, orgSlug, actor, name, slug strin
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: plan %q", ErrConflict, p.Slug)
+			return logEntry{}, exists("plan", p.Slug)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -379,7 +411,7 @@ func (s *Store) CreatePerson(ctx context.Context, orgSlug, actor, name string) (
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, created_at) VALUES (?, ?, ?)`, oid, p.Name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: person %q", ErrConflict, p.Name)
+			return logEntry{}, exists("person", p.Name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -455,12 +487,12 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug, actor string, id int6
 			p.Proposable = *patch.Proposable
 		}
 		if len(changes) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, active = ?, proposable = ? WHERE id = ? AND org_id = ?`,
 			p.Name, p.Active, p.Proposable, id, oid)
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: person %q", ErrConflict, p.Name)
+			return logEntry{}, exists("person", p.Name)
 		}
 		if err != nil {
 			return logEntry{}, err

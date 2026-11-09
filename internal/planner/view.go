@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -127,6 +128,14 @@ type RunView struct {
 	Warnings []string   `json:"warnings"`
 }
 
+// langOf is the optional language argument: English unless one is given.
+func langOf(lang []i18n.Lang) i18n.Lang {
+	if len(lang) > 0 {
+		return lang[0]
+	}
+	return i18n.EN
+}
+
 func parseID(s string, prefix string) (int64, bool) {
 	if !strings.HasPrefix(s, prefix) {
 		return 0, false
@@ -136,7 +145,8 @@ func parseID(s string, prefix string) (int64, bool) {
 }
 
 // View reads a run and shows it with the names of the time it was made. A run that is still going, or failed, has no grid.
-func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int64) (RunView, error) {
+func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int64, lang ...i18n.Lang) (RunView, error) {
+	l := langOf(lang)
 	var v RunView
 	r, err := s.st.GetRun(ctx, orgSlug, planSlug, runID)
 	if err != nil {
@@ -154,11 +164,11 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	}
 	var snap Snapshot
 	if err := json.Unmarshal(r.SnapshotJSON, &snap); err != nil {
-		return v, fmt.Errorf("kjøringens øyeblikksbilde kan ikke leses: %w", err)
+		return v, fmt.Errorf("the run's snapshot cannot be read: %w", err)
 	}
 	var out solverOutput
 	if err := json.Unmarshal(r.OutputJSON, &out); err != nil {
-		return v, fmt.Errorf("kjøringens svar kan ikke leses: %w", err)
+		return v, fmt.Errorf("the run's answer cannot be read: %w", err)
 	}
 	v.Run.SolverStatus, v.Run.WallTime = out.Status, out.WallTime
 	var raw map[string]json.RawMessage
@@ -199,7 +209,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return id
 	}
-	names := Namer{Person: personName, Task: taskName, Group: groupName, Event: eventName}
+	names := Namer{Person: personName, Task: taskName, Group: groupName, Event: eventName, L: l}
 	memberNames := func(ids []string) []string {
 		out := make([]string, 0, len(ids))
 		for _, id := range ids {
@@ -209,7 +219,13 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		return out
 	}
 
-	v.Warnings = append(v.Warnings, snap.Warnings...)
+	for _, note := range snap.Notes {
+		args := make([]any, len(note.Args))
+		for i, a := range note.Args {
+			args[i] = a
+		}
+		v.Warnings = append(v.Warnings, i18n.T(l, "note."+note.Code, args...))
+	}
 	for _, w := range out.Warnings {
 		if t := TranslateWarning(w, names); t != "" {
 			v.Warnings = append(v.Warnings, t)
@@ -288,18 +304,18 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	}
 
 	for _, c := range out.Concessions {
-		what := "hendelsen"
+		what := "event"
 		switch {
 		case c.TaskLevel == "poor" && c.DateLevel == "poor":
-			what = "hendelsen og oppgaven"
+			what = "both"
 		case c.TaskLevel == "poor":
-			what = "oppgaven"
+			what = "task"
 		}
 		who := personName(c.Person)
 		if c.Group != "" {
-			who += " (som medlem av " + groupName(c.Group) + ")"
+			who += i18n.T(l, "compromise.member_of", groupName(c.Group))
 		}
-		v.Weak = append(v.Weak, fmt.Sprintf("%s fikk %s %s, selv om det er «dårlig» for %s.", who, taskName(c.Task), eventName(c.Date), what))
+		v.Weak = append(v.Weak, i18n.T(l, "compromise", who, taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
 	}
 
 	// A day-type place the answer says nothing about is shown as missing, never dropped silently.
@@ -307,7 +323,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		for task, n := range snap.Slots[e.DayTypeID] {
 			if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {
 				c := cell(eid(e.ID), tid(task))
-				c.missing, c.why = n, "Planleggeren sa ingenting om denne plassen."
+				c.missing, c.why = n, i18n.T(l, "explain.silent")
 			}
 		}
 	}

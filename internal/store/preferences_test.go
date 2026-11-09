@@ -93,7 +93,7 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 		t.Errorf("removed: %q", got)
 	}
 	log := mustLog(t, e.s, e.org.Slug, "")
-	if log[0].Action != "pref.task" || !strings.Contains(log[0].Detail, "Kari Test: Lyd fjernet") || log[0].Actor != "Kari" {
+	if log[0].Action != "pref.task" || !strings.Contains(log[0].Detail, "Kari Test: Lyd removed") || log[0].Actor != "Kari" {
 		t.Errorf("log: %+v", log[0])
 	}
 }
@@ -134,7 +134,7 @@ func TestAvailabilityPerEvent(t *testing.T) {
 		t.Errorf("the valid half must not be stored: %q", got)
 	}
 	log := mustLog(t, e.s, e.org.Slug, e.plan.Slug)
-	if log[0].Action != "pref.availability" || !strings.Contains(log[0].Detail, "1 fjernet") {
+	if log[0].Action != "pref.availability" || !strings.Contains(log[0].Detail, "1 removed") {
 		t.Errorf("log: %+v", log[0])
 	}
 	// one log line per call, never one per event

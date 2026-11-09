@@ -60,7 +60,7 @@ func (s *Store) CreateRun(ctx context.Context, orgSlug, planSlug, actor string, 
 			(SELECT id FROM plan_run WHERE plan_id = ? ORDER BY id DESC LIMIT ?)`, pid, pid, maxRunsPerPlan); err != nil {
 			return logEntry{}, err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "plan.run", detail: fmt.Sprintf("kjøring #%d, frø %d, %d s", id, seed, timeLimit)}, nil
+		return logEntry{orgID: oid, planID: &pid, action: "plan.run", detail: fmt.Sprintf("run #%d, seed %d, %d s", id, seed, timeLimit)}, nil
 	})
 	return id, err
 }
@@ -78,13 +78,13 @@ func (s *Store) FinishRun(ctx context.Context, runID int64, output []byte, errMs
 		if status != "running" {
 			return logEntry{}, fmt.Errorf("%w: run %d is already %s", ErrConflict, runID, status)
 		}
-		action, detail := "plan.run.done", fmt.Sprintf("kjøring #%d er ferdig", runID)
+		action, detail := "plan.run.done", fmt.Sprintf("run #%d finished", runID)
 		if errMsg != "" {
 			errMsg = clip(errMsg, 500)
 			if _, err := tx.ExecContext(ctx, `UPDATE plan_run SET status = 'failed', error = ?, finished_at = ? WHERE id = ?`, errMsg, s.stamp(), runID); err != nil {
 				return logEntry{}, err
 			}
-			action, detail = "plan.run.failed", fmt.Sprintf("kjøring #%d feilet: %s", runID, clip(errMsg, 120))
+			action, detail = "plan.run.failed", fmt.Sprintf("run #%d failed: %s", runID, clip(errMsg, 120))
 		} else if _, err := tx.ExecContext(ctx, `UPDATE plan_run SET status = 'done', output_json = ?, finished_at = ? WHERE id = ?`, string(output), s.stamp(), runID); err != nil {
 			return logEntry{}, err
 		}

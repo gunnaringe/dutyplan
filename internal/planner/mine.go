@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 
+	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -38,7 +39,7 @@ type Mine struct {
 
 // Mine reads the plan's newest finished run (a run that is still going or failed is not a plan) and picks out what the
 // person has in it, in the order of the events. The person must belong to the organisation.
-func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID int64) (Mine, error) {
+func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID int64, lang ...i18n.Lang) (Mine, error) {
 	m := Mine{Assignments: []MyAssignment{}}
 	var err error
 	if m.Person, err = s.st.GetPerson(ctx, orgSlug, personID); err != nil {
@@ -52,7 +53,7 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 		if r.Status != "done" {
 			continue
 		}
-		v, err := s.View(ctx, orgSlug, planSlug, r.ID)
+		v, err := s.View(ctx, orgSlug, planSlug, r.ID, lang...)
 		if err != nil {
 			return m, err
 		}

@@ -66,7 +66,7 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, actor, name string, pla
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, created_at) VALUES (?, ?, ?, ?)`, oid, t.Name, t.Planned, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: task %q", ErrConflict, t.Name)
+			return logEntry{}, exists("task", t.Name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -96,7 +96,7 @@ func (s *Store) CreateTasks(ctx context.Context, orgSlug, actor, lines string, p
 		}
 	}
 	if len(names) == 0 || len(names) > 200 {
-		return nil, nil, fmt.Errorf("%w: give 1-200 task names, one per line", ErrInvalid)
+		return nil, nil, Invalid("tasks_bulk_count", nil, "give 1-200 task names, one per line")
 	}
 	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		created, skipped = nil, nil
@@ -116,7 +116,7 @@ func (s *Store) CreateTasks(ctx context.Context, orgSlug, actor, lines string, p
 			id, _ := res.LastInsertId()
 			created = append(created, Task{ID: id, Name: n, Planned: planned})
 		}
-		return logEntry{orgID: oid, action: "task.create", detail: fmt.Sprintf("%d nye oppgaver, %d fantes fra før", len(created), len(skipped))}, nil
+		return logEntry{orgID: oid, action: "task.create", detail: fmt.Sprintf("%d new tasks, %d already existed", len(created), len(skipped))}, nil
 	})
 	return created, skipped, err
 }
@@ -178,11 +178,11 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug, actor string, id int64,
 			t.Planned = *patch.Planned
 		}
 		if len(changes) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE task SET name = ?, planned = ? WHERE id = ? AND org_id = ?`, t.Name, t.Planned, id, oid)
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: task %q", ErrConflict, t.Name)
+			return logEntry{}, exists("task", t.Name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -208,7 +208,7 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug, actor string, id int64)
 			return logEntry{}, err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return logEntry{}, fmt.Errorf("%w: task %q is used by a day type, a group or a manual cell; remove it there first", ErrConflict, name)
+			return logEntry{}, inUse("task", name, "a day type, a group or a manual cell")
 		} else if err != nil {
 			return logEntry{}, err
 		}
@@ -242,7 +242,7 @@ func (s *Store) CreateDayType(ctx context.Context, orgSlug, actor, name string) 
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO day_type (org_id, name, created_at) VALUES (?, ?, ?)`, oid, d.Name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: day type %q", ErrConflict, d.Name)
+			return logEntry{}, exists("day type", d.Name)
 		}
 		if err != nil {
 			return logEntry{}, err
@@ -317,10 +317,10 @@ func (s *Store) RenameDayType(ctx context.Context, orgSlug, actor string, id int
 			return logEntry{}, err
 		}
 		if old == name {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		if _, err = tx.ExecContext(ctx, `UPDATE day_type SET name = ? WHERE id = ? AND org_id = ?`, name, id, oid); isUnique(err) {
-			return logEntry{}, fmt.Errorf("%w: day type %q", ErrConflict, name)
+			return logEntry{}, exists("day type", name)
 		} else if err != nil {
 			return logEntry{}, err
 		}
@@ -344,10 +344,10 @@ func (s *Store) SetDayTypeTasks(ctx context.Context, orgSlug, actor string, id i
 	seen := map[int64]bool{}
 	for _, t := range tasks {
 		if t.Slots < 1 || t.Slots > 50 {
-			return DayType{}, fmt.Errorf("%w: slots must be 1-50", ErrInvalid)
+			return DayType{}, Invalid("slots_range", nil, "slots must be 1-50")
 		}
 		if seen[t.TaskID] {
-			return DayType{}, fmt.Errorf("%w: a task can be listed once", ErrInvalid)
+			return DayType{}, Invalid("task_twice", nil, "a task can be listed once")
 		}
 		seen[t.TaskID] = true
 	}
@@ -382,7 +382,7 @@ func (s *Store) SetDayTypeTasks(ctx context.Context, orgSlug, actor string, id i
 				d = x
 			}
 		}
-		return logEntry{orgID: oid, action: "daytype.tasks", detail: fmt.Sprintf("%s: %d oppgaver", d.Name, len(tasks))}, nil
+		return logEntry{orgID: oid, action: "daytype.tasks", detail: fmt.Sprintf("%s: %d tasks", d.Name, len(tasks))}, nil
 	})
 	return d, err
 }
@@ -403,7 +403,7 @@ func (s *Store) DeleteDayType(ctx context.Context, orgSlug, actor string, id int
 			return logEntry{}, err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM day_type WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return logEntry{}, fmt.Errorf("%w: day type %q is used by dates in a plan", ErrConflict, name)
+			return logEntry{}, inUse("day type", name, "events in a plan")
 		} else if err != nil {
 			return logEntry{}, err
 		}
@@ -446,10 +446,10 @@ func (s *Store) ListCombinations(ctx context.Context, orgSlug string) ([]Combina
 // SetCombination stores the level for a pair of tasks (either order). Level "standard" removes the setting.
 func (s *Store) SetCombination(ctx context.Context, orgSlug, actor string, a, b int64, level string) error {
 	if a == b {
-		return fmt.Errorf("%w: a task cannot be combined with itself", ErrInvalid)
+		return Invalid("combination_self", nil, "a task cannot be combined with itself")
 	}
 	if level != "standard" && !combinationLevels[level] {
-		return fmt.Errorf("%w: level must be cannot, impractical, practical, bor or standard", ErrInvalid)
+		return Invalid("level_invalid", nil, "level must be cannot, impractical, practical, preferred or standard")
 	}
 	if a > b {
 		a, b = b, a

@@ -34,7 +34,7 @@ var WeightSpecs = []WeightSpec{
 	num("w_task_fair", 0, 0, 100),   // the same per task (equal share of each task, so unequal totals)
 	num("w_task_range", 0, 0, 100),  // the worst deviation per task
 	num("w_task.good", 2, 0, 100),   // someone gets a task they said «good» to
-	num("w_task.poor", -4, -100, 0), // ... or «dårlig»
+	num("w_task.poor", -4, -100, 0), // ... or «poor»
 	num("w_date.good", 3, 0, 100),   // the same for an event
 	num("w_date.poor", -6, -100, 0),
 	num("w_combo.preferred", 6, 0, 100), // two tasks the same day that «bør kombineres»
@@ -59,7 +59,7 @@ func cleanWeights(in map[string]any) (map[string]any, error) {
 	for key, raw := range in {
 		spec, ok := weightSpec(key)
 		if !ok {
-			return nil, fmt.Errorf("%w: unknown weight %q", ErrInvalid, key)
+			return nil, Invalid("weight_unknown", map[string]any{"key": key}, "unknown weight %q", key)
 		}
 		switch spec.Kind {
 		case "choice":
@@ -69,7 +69,7 @@ func cleanWeights(in map[string]any) (map[string]any, error) {
 				valid = valid || o == s
 			}
 			if !isStr || !valid {
-				return nil, fmt.Errorf("%w: %s must be one of %s", ErrInvalid, key, strings.Join(spec.Options, ", "))
+				return nil, Invalid("weight_choice", map[string]any{"key": key}, "%s must be one of %s", key, strings.Join(spec.Options, ", "))
 			}
 			if s != spec.Default {
 				out[key] = s
@@ -84,10 +84,10 @@ func cleanWeights(in map[string]any) (map[string]any, error) {
 			case int64:
 				v = float64(x)
 			default:
-				return nil, fmt.Errorf("%w: %s must be a number", ErrInvalid, key)
+				return nil, Invalid("weight_type", map[string]any{"key": key}, "%s must be a number", key)
 			}
 			if math.IsNaN(v) || math.IsInf(v, 0) || v < spec.Min || v > spec.Max {
-				return nil, fmt.Errorf("%w: %s must be between %g and %g", ErrInvalid, key, spec.Min, spec.Max)
+				return nil, Invalid("weight_range", map[string]any{"key": key, "min": spec.Min, "max": spec.Max}, "%s must be between %g and %g", key, spec.Min, spec.Max)
 			}
 			if v != spec.Default {
 				out[key] = v
@@ -166,7 +166,7 @@ func (s *Store) SetWeights(ctx context.Context, orgSlug, planSlug, actor string,
 			}
 		}
 		if len(changes) == 0 {
-			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
+			return logEntry{}, errNothingToChange()
 		}
 		sort.Strings(changes)
 		b, _ := json.Marshal(clean)
@@ -175,7 +175,7 @@ func (s *Store) SetWeights(ctx context.Context, orgSlug, planSlug, actor string,
 		}
 		detail := strings.Join(changes, "; ")
 		if len(clean) == 0 {
-			detail = "tilbake til standard (" + detail + ")"
+			detail = "back to the defaults (" + detail + ")"
 		}
 		return logEntry{orgID: oid, planID: &pid, action: "plan.weights", detail: clip(detail, 200)}, nil
 	})
