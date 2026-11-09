@@ -234,7 +234,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
-5. **Plan**: rutenett (hendelser bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
+5. **Plan**: rutenett (hendelser bortover, oppgaver nedover) og «mine oppdrag». *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.

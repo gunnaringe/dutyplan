@@ -3,7 +3,7 @@
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
 personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
-utvalg og «Lås» (fase 4 omgang 1-2). Neste: rutenett/«mine oppdrag»/kalenderfeed (fase 5), utrulling på kate (fase 6). Publisering er ikke bygget (siste kjøring er planen).
+utvalg og «Lås» (fase 4 omgang 1-2). Neste: rutenett og «mine oppdrag» (fase 5), utrulling på kate (fase 6). Publisering er ikke bygget (siste kjøring er planen).
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
 starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
@@ -32,6 +32,7 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 - **Hendelsen er enheten, ikke datoen.** Hendelser er selvstendige: to kan ligge på samme dag. Tilgjengelighet («kan jeg»), kombinasjoner, plasser
   og gruppe-opptatthet gjelder hendelsen. Planleggerens «dates» er hendelser (id er vilkårlig tekst).
 - **Ingen regnearkstøtte** (verken import eller eksport). Brukeren vil ikke ha det; ikke foreslå det på nytt.
+- **Ingen kalenderfeed** (`.ics`, abonnement eller nedlasting; droppet 2026-11-09). Ikke foreslå det på nytt uten at publisering og klokkeslett på hendelser finnes.
 - **Generelt verktøy.** Oppgaver, personer, grupper, hendelser og dagtyper er data admin lager. Ingen kirkebegreper i kode, datamodell eller regler.
 - **Ingen særregler for enkeltting.** En **gruppe** er et navngitt sett personer. Den kan stå i en manuell rute eller foreslås av planleggeren
   (`group_tasks`); medlemmene er da opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag.
