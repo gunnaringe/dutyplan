@@ -216,6 +216,25 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Prøv igjen' }).click();
     await page.waitForSelector('.plan-panel .warn', { state: 'detached', timeout: 20000 });
 
+    // en gruppe som en manuell rute nevner, kan ikke slettes, og meldingen sier det (ikke «finnes allerede»)
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await page.click('summary:has-text("Ny manuell rute")');
+    const grpForm = page.locator('form:has(input[placeholder^="Tekst"])');
+    await grpForm.locator('summary:has-text("Hendelser")').click();
+    await grpForm.locator('input[aria-label="2026-08-23 Gudstjeneste"]').check();
+    await grpForm.locator('select[aria-label="Hva settes inn"]').selectOption('group');
+    await grpForm.locator('button[type=submit]').click();
+    await page.waitForSelector('.rule:has-text("Koret")');
+    await page.goto(base + '/o/menigheten/oppsett');
+    await page.waitForSelector('input[aria-label="Navn på gruppen"]');
+    const beforeConflict = errors.length;  // 409 er riktig svar her, og nettleseren logger den som en feil
+    await page.locator('.card:has(input[aria-label="Navn på gruppen"]) button.danger').click();  // bekreftelsen godtas
+    await page.waitForFunction(() => document.getElementById('msg').textContent.includes('Kan ikke slettes, den er i bruk'));
+    errors.length = beforeConflict;
+    ok(!(await page.textContent('#msg')).includes('Finnes allerede'), 'i bruk er ikke «finnes allerede»: ' + (await page.textContent('#msg')));
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await page.click('button[aria-label^="Fjern ruten"][aria-label*="Koret"]');
+    await page.waitForSelector('.rule:has-text("Koret")', { state: 'detached' });
     // «Lås» gjør et forslag til en manuell rute (og planen blir utdatert); «Fjern» tar den bort igjen
     await page.locator('button[aria-label^="Lås Kari Test"]').first().click();
     await page.waitForSelector('.rule:has-text("Lyd: Kari Test")');

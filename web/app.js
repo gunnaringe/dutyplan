@@ -36,6 +36,12 @@ async function api(method, path, body) {
   return data;
 }
 
+// 409 betyr enten at noe finnes fra før (opprettelse) eller at noe er i bruk (sletting); tjenerens tekst sier hvilket.
+function conflictText(message) {
+  const rest = message.replace(/^already exists: /, '');
+  return / is used /.test(rest) ? 'Kan ikke slettes, den er i bruk: ' + rest : 'Finnes allerede: ' + rest;
+}
+
 // Skrivehandlinger: krever et navn øverst, viser feil i stedet for å kaste.
 async function write(action) {
   if (!store.get('actor').trim()) {
@@ -48,7 +54,7 @@ async function write(action) {
     return true;
   } catch (e) {
     if (e.cancelled) return false;
-    say(e.code === 'conflict' ? 'Finnes allerede: ' + e.message : e.message, 'err');
+    say(e.code === 'conflict' ? conflictText(e.message) : e.message, 'err');
     return false;
   }
 }
@@ -416,7 +422,7 @@ async function pagePlan(r, org) {
       dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + label),
       note,
       h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett hendelsen ' + label, onclick: async () => {
-        if (!confirm(`Slette hendelsen ${fmtDate(d.date)} (${d.day_type})? Svarene folk har gitt for den, forsvinner også.`)) return;
+        if (!confirm(`Slette hendelsen ${fmtDate(d.date)} (${d.day_type})? Svarene folk har gitt for den, og manuelle ruter og utvalg for den, forsvinner også.`)) return;
         if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
       } }, 'Slett'));
   });
