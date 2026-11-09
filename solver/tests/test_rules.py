@@ -294,7 +294,7 @@ def test_gruppe_medlem_med_ikke_gir_advarsel_og_manuelt_valg_beholdes():
     inst, d = group_inst("cannot")
     inst.setdefault("person_dates", {})["a"] = {d[0]: "never"}
     res = solve(inst)
-    assert any("«ikke»" in w for w in res["warnings"])
+    assert any("«never»" in w for w in res["warnings"])
     assert res["manual"]
 
 

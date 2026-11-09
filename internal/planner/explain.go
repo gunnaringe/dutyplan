@@ -139,9 +139,9 @@ func Explain(why map[string]any, n Namer) string {
 }
 
 var (
-	warnLocked      = regexp.MustCompile(`^låst: (\S+) på (\S+) (\S+) bryter «([^»]+)» \(manuelt valg beholdt\)$`)
-	warnGroupMember = regexp.MustCompile(`^gruppe (\S+) står på (\S+) (\S+), men (\S+) har «ikke» den dagen \(manuelt valg beholdt\)$`)
-	warnLockedGroup = regexp.MustCompile(`^(\S+) er låst på (\S+) (\S+) samtidig som gruppe (\S+) står på (\S+)$`)
+	warnLocked      = regexp.MustCompile(`^locked: (\S+) on (\S+) (\S+) breaks «([^»]+)» \(manual choice kept\)$`)
+	warnGroupMember = regexp.MustCompile(`^group (\S+) is on (\S+) (\S+), but (\S+) has «never» that day \(manual choice kept\)$`)
+	warnLockedGroup = regexp.MustCompile(`^(\S+) is locked on (\S+) (\S+) while group (\S+) is on (\S+)$`)
 )
 
 // TranslateWarning writes one of the solver's warnings with names instead of ids. An empty result means the warning

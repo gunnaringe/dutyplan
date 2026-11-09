@@ -142,8 +142,8 @@ func groupAnswer(w world, koret store.Group) []byte {
 				"candidates": 0, "groups": map[string]any{g: "event_never:" + pid(w.people["Aslaug"].ID)}}},
 		},
 		"warnings": []string{
-			"låst: " + pid(w.people["Cecilie"].ID) + " på " + tid(w.bilde.ID) + " " + e0 + " bryter «not_proposable» (manuelt valg beholdt)",
-			"låst: " + pid(w.people["Frode"].ID) + " på " + tid(w.lyd.ID) + " " + e1 + " bryter «not_in_task» (manuelt valg beholdt)",
+			"locked: " + pid(w.people["Cecilie"].ID) + " on " + tid(w.bilde.ID) + " " + e0 + " breaks «not_proposable» (manual choice kept)",
+			"locked: " + pid(w.people["Frode"].ID) + " on " + tid(w.lyd.ID) + " " + e1 + " breaks «not_in_task» (manual choice kept)",
 		},
 		"load": map[string]any{}, "violations": []string{},
 	}

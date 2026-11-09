@@ -274,13 +274,13 @@ func TestExplain(t *testing.T) {
 func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 	n := testNames()
 	for in, want := range map[string]string{
-		"låst: p1 på t1 e5 bryter «event_never» (manuelt valg beholdt)":               "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer.",
-		"låst: p1 på t1 e5 bryter «not_in_task» (manuelt valg beholdt)":               "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven.",
-		"låst: p1 på t1 e5 bryter «task_never» (manuelt valg beholdt)":                "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven.",
-		"låst: p1 på t1 e5 bryter «outside_selection» (manuelt valg beholdt)":         "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget.",
-		"låst: p1 på t1 e5 bryter «busy:t2 (g1)» (manuelt valg beholdt)":              "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret).",
-		"gruppe g1 står på t2 e5, men p3 har «ikke» den dagen (manuelt valg beholdt)": "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer.",
-		"p2 er låst på t1 e5 samtidig som gruppe g1 står på t2":                       "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres.",
+		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer.",
+		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven.",
+		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven.",
+		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget.",
+		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret).",
+		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer.",
+		"p2 is locked on t1 e5 while group g1 is on t2":                          "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres.",
 		"noe annet fra solveren": "noe annet fra solveren",
 	} {
 		if got := TranslateWarning(in, n); got != want {
@@ -288,7 +288,7 @@ func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 		}
 	}
 	// a manual cell for someone who «kan ikke foreslås» is how that setting is meant to be used: no warning
-	if got := TranslateWarning("låst: p1 på t1 e5 bryter «not_proposable» (manuelt valg beholdt)", n); got != "" {
+	if got := TranslateWarning("locked: p1 on t1 e5 breaks «not_proposable» (manual choice kept)", n); got != "" {
 		t.Errorf("must be silent, got %q", got)
 	}
 }
