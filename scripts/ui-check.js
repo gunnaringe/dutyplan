@@ -170,6 +170,27 @@ const { spawn } = require('child_process');
     await page.goto(base + '/o/menigheten/p/host-2026');
     await h1is('Høst 2026');
     ok((await page.innerText('main')).includes('Ingen plan er laget ennå'), 'planen er tom før første kjøring');
+    // manuelle ruter og utvalg, for flere hendelser om gangen: en gjest på Lyd første søndag, og Kari alene i utvalget for Lyd 16. august
+    await page.click('summary:has-text("Ny manuell rute")');
+    const addForm = page.locator('form:has(input[placeholder^="Tekst"])');
+    await addForm.locator('summary:has-text("Hendelser")').click();
+    await addForm.locator('input[aria-label="2026-08-02 Gudstjeneste"]').check();
+    await addForm.locator('select[aria-label="Oppgave for ruten"]').selectOption({ label: 'Lyd' });
+    await addForm.locator('select[aria-label="Hva settes inn"]').selectOption('text');
+    await addForm.locator('input[aria-label="Tekst"]').fill('Gjest utenfra');
+    await addForm.locator('button[type=submit]').click();
+    await page.waitForSelector('.rule:has-text("Lyd: Gjest utenfra")');
+    await page.click('summary:has-text("Nytt utvalg")');
+    const poolForm = page.locator('form:has(select[aria-label="Oppgave for utvalget"])');
+    await poolForm.locator('summary:has-text("Hendelser")').click();
+    await poolForm.locator('input[aria-label="2026-08-16 Gudstjeneste"]').check();
+    await poolForm.locator('select[aria-label="Oppgave for utvalget"]').selectOption({ label: 'Lyd' });
+    await poolForm.locator('input[aria-label="Utvalg: Kari Test"]').check();
+    await poolForm.locator('button[type=submit]').click();
+    await page.waitForSelector('.rule:has-text("Utvalg Lyd: Kari Test")');
+    await page.click('summary:has-text("Ny manuell rute")');
+    await page.locator('form:has(input[placeholder^="Tekst"]) button[type=submit]').click();  // ingen hendelse valgt: forklaring, ikke feil
+    await page.waitForFunction(() => document.getElementById('msg').textContent.includes('Velg minst én hendelse'));
     await page.getByRole('button', { name: 'Planlegg', exact: true }).click();
     await page.waitForSelector('.plan-event', { timeout: 20000 });
     let panel = await page.innerText('.plan-panel');
@@ -177,6 +198,8 @@ const { spawn } = require('child_process');
     ok(panel.includes('Kontrollert uavhengig: ingen brudd'), 'kontrollen ble kjørt: ' + panel);
     ok(panel.includes('Koret (Ola Test)'), 'gruppen er foreslått på Kafé, med medlemmene: ' + panel);
     ok(panel.includes('Mangler 2') && panel.includes('har ikke valgt oppgaven'), 'plasser som ikke kan fylles, forklares: ' + panel);
+    ok(panel.includes('Gjest utenfra'), 'den manuelle gjesten står på Lyd: ' + panel);
+    ok((await page.locator('.plan-event').nth(0).innerText()).includes('Gjest utenfra') && !(await page.locator('.plan-event').nth(0).innerText()).includes('Kari Test'), 'gjesten fyller plassen første søndag, så Kari får ikke Lyd da');
     ok((await page.locator('.plan-event').count()) === 5, 'en rad per hendelse');
     await page.getByRole('button', { name: 'Prøv igjen' }).click();
     await page.waitForSelector('.plan-panel p:has-text("Planlegger")', { timeout: 3000 }).catch(() => {});  // kan være ferdig før vi rekker å se den
@@ -192,6 +215,13 @@ const { spawn } = require('child_process');
     ok((await page.innerText('.plan-panel')).includes('endret siden denne planen ble laget'), 'utdatert plan merkes');
     await page.getByRole('button', { name: 'Prøv igjen' }).click();
     await page.waitForSelector('.plan-panel .warn', { state: 'detached', timeout: 20000 });
+
+    // «Lås» gjør et forslag til en manuell rute (og planen blir utdatert); «Fjern» tar den bort igjen
+    await page.locator('button[aria-label^="Lås Kari Test"]').first().click();
+    await page.waitForSelector('.rule:has-text("Lyd: Kari Test")');
+    await page.waitForSelector('.plan-panel .warn');
+    await page.click('button[aria-label^="Fjern ruten Lyd Gjest utenfra"]');
+    await page.waitForSelector('.rule:has-text("Gjest utenfra")', { state: 'detached' });
 
     // ingen side skal bli bredere enn en mobilskjerm
     await page.setViewportSize({ width: 390, height: 844 });

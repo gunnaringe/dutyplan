@@ -269,11 +269,16 @@ function planPanel(r, canPlan, first) {
     if (view && view.run.status === 'running') timer = setTimeout(poll, 1000);
   }
 
-  function cell(c, taskName) {
+  async function lock(evId, taskId, personId) {
+    if (await write(() => api('POST', `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/cells`, { events: [evId], task: taskId, person: personId }))) render();
+  }
+
+  function cell(c, taskName, evId) {
     const tag = (text, cls) => h('span', { class: 'tag' + (cls ? ' ' + cls : '') }, text);
     const times = (n) => (n > 1 ? ` ×${n}` : '');
     const who = [
-      ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag('låst', 'lock') : '', p.weak ? tag('dårlig') : '')),
+      ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag('låst', 'lock') : '', p.weak ? tag('dårlig') : '',
+        p.locked ? '' : h('button', { type: 'button', class: 'lockbtn', title: 'Behold ' + p.name + ' her i neste plan', 'aria-label': `Lås ${p.name} på ${taskName}`, onclick: () => lock(evId, c.task_id, p.id) }, 'Lås'))),
       ...c.groups.map((g) => h('span', { class: 'person' }, `${g.name} (${g.members.join(', ')})${times(g.fills)}`, g.locked ? tag('låst', 'lock') : '', g.weak ? tag('dårlig') : '')),
       ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag('låst', 'lock'))),
     ];
@@ -302,7 +307,7 @@ function planPanel(r, canPlan, first) {
     const names = new Map(view.tasks.map((t) => [t.id, t.name]));
     out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
       h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
-      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => cell(c, names.get(c.task_id) || '?')))))));
+      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => cell(c, names.get(c.task_id) || '?', ev.id)))))));
     if (view.weak.length) out.push(h('details', {}, h('summary', {}, `Kompromisser (${view.weak.length})`), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
     if (view.load.length) out.push(h('details', {}, h('summary', {}, 'Fordeling'), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, `${l.name}: ${l.count} (jevn andel ${l.target.toLocaleString('nb-NO')})`)))));
     return out;
@@ -312,6 +317,82 @@ function planPanel(r, canPlan, first) {
   return box;
 }
 
+// Flere hendelser om gangen: en utvidbar liste med avkrysning. selected() gir id-ene.
+function eventPicker(dates, label) {
+  const boxes = dates.map((d) => ({ d, box: h('input', { type: 'checkbox', 'aria-label': `${d.date} ${d.day_type}` }) }));
+  const summary = h('summary', {}, label);
+  const update = () => { const n = boxes.filter((x) => x.box.checked).length; summary.textContent = n ? `${label} (${n} valgt)` : label; };
+  boxes.forEach((x) => x.box.addEventListener('change', update));
+  const set = (v) => () => { boxes.forEach((x) => { x.box.checked = v; }); update(); };
+  const el = h('details', { class: 'picker' }, summary,
+    h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost', onclick: set(true) }, 'Velg alle'), h('button', { type: 'button', class: 'ghost', onclick: set(false) }, 'Fjern valg')),
+    h('div', { class: 'chips' }, boxes.map(({ d, box }) => h('label', { class: 'chip' }, box, ` ${d.date} ${d.day_type}`))));
+  return { el, selected: () => boxes.filter((x) => x.box.checked).map((x) => x.d.id) };
+}
+
+// Manuelle ruter (låst: planleggeren flytter dem aldri) og utvalg (bare disse kan velges), for flere hendelser om gangen.
+function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
+  const pbase = `${base}/plans/${enc(r.plan)}`;
+  const active = people.filter((p) => p.active);
+  const nameOf = (list, id) => (list.find((x) => x.id === id) || { name: '?' }).name;
+  if (!dates.length) return section('Manuelle ruter og utvalg', h('p', { class: 'muted' }, 'Legg til hendelser først.'));
+  const refresh = () => render();
+
+  const pick1 = eventPicker(dates, 'Hendelser');
+  const taskSel = h('select', { 'aria-label': 'Oppgave for ruten' }, tasks.map((t) => h('option', { value: String(t.id) }, t.name + (t.planned ? '' : ' (fordeles ikke)'))));
+  const kind = h('select', { 'aria-label': 'Hva settes inn' }, [['person', 'Person'], ['group', 'Gruppe'], ['text', 'Tekst']].map(([v, t]) => h('option', { value: v }, t)));
+  const personSel = h('select', { 'aria-label': 'Person' }, active.map((p) => h('option', { value: String(p.id) }, p.name)));
+  const groupSel = h('select', { 'aria-label': 'Gruppe', hidden: true }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
+  const textIn = h('input', { type: 'text', maxlength: '80', placeholder: 'Tekst, f.eks. Gjest utenfra', 'aria-label': 'Tekst', hidden: true });
+  const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': 'Antall plasser', hidden: true });
+  kind.addEventListener('change', () => { personSel.hidden = kind.value !== 'person'; groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; fills.hidden = kind.value === 'person'; });
+  const addForm = h('form', { class: 'stack', onsubmit: async (e) => {
+    e.preventDefault();
+    const events = pick1.selected();
+    if (!events.length) { say('Velg minst én hendelse.', 'err'); return; }
+    const body = { events, task: parseInt(taskSel.value, 10) };
+    if (kind.value === 'person') body.person = parseInt(personSel.value, 10);
+    else if (kind.value === 'group') { body.group = parseInt(groupSel.value, 10); body.fills = parseInt(fills.value, 10) || 1; }
+    else { body.label = textIn.value; body.fills = parseInt(fills.value, 10) || 1; }
+    let res;
+    if (await write(async () => { res = await api('POST', pbase + '/cells', body); })) { await render(); say(`${res.created.length} ruter lagt til${res.skipped ? ', ' + res.skipped + ' fantes fra før' : ''}.`); }
+  } }, pick1.el, h('div', { class: 'row-inline' }, taskSel, kind, personSel, groupSel, textIn, fills), h('button', { type: 'submit' }, 'Legg til rute'));
+
+  const pick2 = eventPicker(dates, 'Hendelser');
+  const poolTask = h('select', { 'aria-label': 'Oppgave for utvalget' }, tasks.filter((t) => t.planned).map((t) => h('option', { value: String(t.id) }, t.name)));
+  const pBoxes = active.map((p) => ({ p, box: h('input', { type: 'checkbox', 'aria-label': 'Utvalg: ' + p.name }) }));
+  const gBoxes = groups.map((g) => ({ g, box: h('input', { type: 'checkbox', 'aria-label': 'Utvalg, gruppe: ' + g.name }) }));
+  const poolForm = h('form', { class: 'stack', onsubmit: async (e) => {
+    e.preventDefault();
+    const events = pick2.selected();
+    if (!events.length) { say('Velg minst én hendelse.', 'err'); return; }
+    const people2 = pBoxes.filter((x) => x.box.checked).map((x) => x.p.id), groups2 = gBoxes.filter((x) => x.box.checked).map((x) => x.g.id);
+    if (await write(() => api('PUT', pbase + '/pools', { events, task: parseInt(poolTask.value, 10), people: people2, groups: groups2 }))) { await render(); say(people2.length + groups2.length ? `Utvalget er satt for ${events.length} hendelser.` : `Utvalget er fjernet for ${events.length} hendelser.`); }
+  } }, pick2.el, poolTask,
+  h('div', { class: 'chips' }, [...pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name)), ...gBoxes.map(({ g, box }) => h('label', { class: 'chip' }, box, ' ' + g.name + ' (gruppe)'))]),
+  h('button', { type: 'submit' }, 'Sett utvalg'), h('p', { class: 'muted small' }, 'Uten noen avkrysset fjernes utvalget for de valgte hendelsene.'));
+
+  const rows = dates.map((d) => ({ d, cs: cells.filter((c) => c.event_id === d.id), ps: pools.filter((p) => p.event_id === d.id) })).filter((x) => x.cs.length || x.ps.length);
+  const list = rows.length ? h('ul', { class: 'plain' }, rows.map(({ d, cs, ps }) => h('li', {},
+    h('strong', {}, fmtDate(d.date)), ' ', h('span', { class: 'muted' }, d.day_type),
+    cs.map((c) => {
+      const what = c.person_id ? nameOf(people, c.person_id) : c.group_id ? nameOf(groups, c.group_id) : c.label;
+      return h('div', { class: 'rule' }, h('span', {}, `${nameOf(tasks, c.task_id)}: ${what}${c.fills > 1 ? ' ×' + c.fills : ''}`),
+        h('button', { type: 'button', class: 'link-button', 'aria-label': `Fjern ruten ${nameOf(tasks, c.task_id)} ${what} ${d.date}`, onclick: async () => { if (await write(() => api('DELETE', `${pbase}/cells/${c.id}`))) refresh(); } }, 'Fjern'));
+    }),
+    ps.map((p) => {
+      const names = [...p.people.map((id) => nameOf(people, id)), ...p.groups.map((id) => nameOf(groups, id) + ' (gruppe)')];
+      return h('div', { class: 'rule' }, h('span', {}, `Utvalg ${nameOf(tasks, p.task_id)}: ${names.join(', ')}`),
+        h('button', { type: 'button', class: 'link-button', 'aria-label': `Fjern utvalget ${nameOf(tasks, p.task_id)} ${d.date}`, onclick: async () => { if (await write(() => api('PUT', pbase + '/pools', { events: [d.id], task: p.task_id, people: [], groups: [] }))) refresh(); } }, 'Fjern'));
+    })))) : h('p', { class: 'muted' }, 'Ingen manuelle ruter eller utvalg ennå.');
+
+  return section('Manuelle ruter og utvalg',
+    h('p', { class: 'muted small' }, 'En manuell rute er låst: planleggeren flytter den aldri, og den teller som en fylt plass. Et utvalg betyr at bare de som er krysset av kan velges for oppgaven. Begge kan settes for flere hendelser om gangen.'),
+    list,
+    h('details', {}, h('summary', {}, 'Ny manuell rute'), addForm),
+    h('details', {}, h('summary', {}, 'Nytt utvalg'), poolForm));
+}
+
 // Siste kjøring, eller null. Lista er alltid 200; å spørre rett etter «latest» uten kjøringer ville gi 404 i nettleserens konsoll.
 async function latestRun(path) {
   return (await api('GET', path)).length ? api('GET', path + '/latest') : null;
@@ -319,10 +400,11 @@ async function latestRun(path) {
 
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log, people, health, latest] = await Promise.all([
+  const [plan, dates, dayTypes, log, people, health, latest, tasks, groups, cells, pools] = await Promise.all([
     api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
     api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people'),
-    api('GET', '/health'), latestRun(`${base}/plans/${enc(r.plan)}/runs`)]);
+    api('GET', '/health'), latestRun(`${base}/plans/${enc(r.plan)}/runs`),
+    api('GET', base + '/tasks'), api('GET', base + '/groups'), api('GET', `${base}/plans/${enc(r.plan)}/cells`), api('GET', `${base}/plans/${enc(r.plan)}/pools`)]);
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
@@ -377,6 +459,7 @@ async function pagePlan(r, org) {
     h('h1', {}, plan.name),
     fillIn,
     section('Plan', planPanel(r, !!health.planner, latest)),
+    rulesSection(r, base, dates, tasks, groups, people, cells, pools),
     section('Hendelser',
       noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
       dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),

@@ -251,6 +251,7 @@ func TestExplain(t *testing.T) {
 		{map[string]any{"kandidater": 0.0, "utvalg": []any{"p1", "p2"}, "utvalg_grupper": []any{"g1"}, "utenfor_utvalg": 4.0},
 			"Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."},
 		{map[string]any{"kandidater": 0.0, "utvalg": []any{"p1"}}, "Ingen kan ta denne: utvalget er Aslaug."},
+		{map[string]any{"kandidater": 0.0, "utenfor_utvalg": 3.0}, "Ingen kan ta denne: utvalget er tomt (3 andre står utenfor)."},
 		// why a group could not be proposed; a group that could have been is not mentioned
 		{map[string]any{"kandidater": 0.0, "grupper": map[string]any{
 			"g1": "dato_ikke:p2", "g2": "kandidat"}},

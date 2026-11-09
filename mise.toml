@@ -81,7 +81,7 @@ quiet = true
 run = "sh scripts/smoke.sh"
 
 [tasks.mutations]
-description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 90 s). Stille ved suksess. Args: --only tekst, --list"
+description = "Bryt hver regel i modellen og sjekk at en test feiler (ca. 3 min). Stille ved suksess. Args: --only tekst, --list"
 quiet = true
 dir = "{{config_root}}/solver"
 run = "uv run python scripts/mutations.py"

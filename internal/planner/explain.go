@@ -59,7 +59,8 @@ func Explain(why map[string]any, n Namer) string {
 		return out
 	}
 	var parts []string
-	if v := list(why["utvalg"]); len(v) > 0 || why["utvalg_grupper"] != nil {
+	if _, has := why["utenfor_utvalg"]; has || why["utvalg"] != nil || why["utvalg_grupper"] != nil {
+		v := list(why["utvalg"])
 		var names []string
 		names = append(names, v...)
 		if arr, _ := why["utvalg_grupper"].([]any); len(arr) > 0 {
@@ -69,7 +70,10 @@ func Explain(why map[string]any, n Namer) string {
 				}
 			}
 		}
-		s := "utvalget er " + strings.Join(names, ", ")
+		s := "utvalget er tomt"
+		if len(names) > 0 {
+			s = "utvalget er " + strings.Join(names, ", ")
+		}
 		if c, _ := why["utenfor_utvalg"].(float64); c > 0 {
 			s += fmt.Sprintf(" (%d andre står utenfor)", int(c))
 		}

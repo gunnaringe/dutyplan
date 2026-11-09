@@ -2,8 +2,8 @@
 
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
-personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser), «Min side», og «Planlegg» på planen (fase 4 omgang 1).
-Neste: manuelle ruter, utvalg, grupper, låse og publisere (omgang 2).
+personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
+utvalg og «Lås» (fase 4 omgang 1-2). Neste: rutenett/«mine oppdrag»/kalenderfeed (fase 5), utrulling på kate (fase 6). Publisering er ikke bygget (siste kjøring er planen).
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
 starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
@@ -14,7 +14,7 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 - **Alt går via mise**: `mise install` (python, uv, go), `mise run setup` (Python-pakker), så `mise tasks`. Aldri python/uv/pytest/go direkte.
   Skills: `verify` (tester + mutasjoner), `run-planner` (planleggeren) og `run-app` (appen). Oppgavene er stille og gir ca. 1-8 linjer.
 - Vanlig løkke: endre → `mise run test:fast` (Go + Python-regler, ca. 5 s) → `mise run test` (alt, ca. 15 s) → ved regelendring
-  `mise run mutations -- --only <ord>` → før commit `mise run verify` (tester + alle mutasjoner + røyktest av appen).
+  `mise run mutations -- --only <ord>` (hele settet ca. 3 min) → før commit `mise run verify` (tester + alle mutasjoner + røyktest av appen).
 - **Ikke les** `PLAN.md` i sin helhet (ca. 200 linjer). `grep -n '^## ' PLAN.md`, les bare seksjonen du trenger.
   Ikke les `solver/fixtures/host2026.json` eller `solver/uv.lock` (store, genererte); bruk `mise run plan -- --info`.
 - Ikke be om `--full`, `measure:*` eller `app:ui` uten grunn; de er dyre eller trenger sibling-avhengigheter.
@@ -37,7 +37,8 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
   (`group_tasks`); medlemmene er da opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag.
   Et **utvalg** (bare disse personene/gruppene kan velges) dekker «egen lydtekniker» og liknende. Ingen kompetanser eller betingede krav.
 - **Kan foreslås** er en innstilling per person og per gruppe (standard ja). Nei = planleggeren velger dem aldri; manuelle ruter går an.
-- **Gruppearbeid = ett oppdrag per medlem** i fordelingen (samlet, per oppgave, historikk).
+- **Gruppearbeid = ett oppdrag per medlem** i fordelingen (samlet og per oppgave).
+- **Optimaliser kun innenfor én plan** (2026-11-09). Ingen historikk fra tidligere planer: appen sender aldri `history` eller `previous_plan` til planleggeren.
 - **Tatt ut etter ønske:** maks oppgaver per person per dag, og hvile mellom hendelser. Ikke legg dem tilbake uten å spørre.
 - **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
 - Hver person velger selv hvilke oppgaver hen er med på; én liste per person med svar per hendelse (*passer ikke / dårlig / godt*), valgfri egen liste per oppgave.

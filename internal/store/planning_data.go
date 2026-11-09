@@ -24,6 +24,8 @@ type PlanningData struct {
 	PersonEvents map[int64]map[int64]string // person -> event -> level (no row = neutral)
 	Combinations []Combination
 	Groups       []Group
+	Cells        []ManualCell // manual cells of the plan
+	Pools        []Pool       // selections (utvalg) of the plan
 }
 
 func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (PlanningData, error) {
@@ -120,6 +122,12 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	if d.Groups, err = listGroups(ctx, tx, oid); err != nil {
+		return d, err
+	}
+	if d.Cells, err = listCells(ctx, tx, oid, pid); err != nil {
+		return d, err
+	}
+	if d.Pools, err = listPools(ctx, tx, oid, pid); err != nil {
 		return d, err
 	}
 	return d, nil

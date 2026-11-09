@@ -1,21 +1,26 @@
 """Mutasjonssjekk: bryt én regel om gangen (planleggeren i Python og appen i Go) og se at minst én test feiler.
 
-    mise run mutations                 alle (ca. 30 s); stille ved suksess
+    mise run mutations                 alle (ca. 1-2 min); stille ved suksess
     mise run mutations -- --only gruppe   bare de som har «gruppe» i navnet
     mise run mutations -- --list       vis navnene
 
 Skriver bare det som krever handling: mutasjoner som overlevde (mangler en test), mønstre som ikke
 finnes lenger (utdatert liste) og mutasjoner som ikke lar seg kjøre. Avsluttes med én oppsummeringslinje.
-Filene gjenopprettes alltid; sikkerhetskopier ligger i solver/.mutation-backup/ mens det pågår.
+Go-mutasjonene kjøres parallelt i hver sin kopi av Go-kildene i en midlertidig mappe (repoet røres ikke), Python-mutasjonene
+i repoet mens de går. Python-filene gjenopprettes alltid; sikkerhetskopier ligger i solver/.mutation-backup/ mens det pågår.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent  # solver/
@@ -135,8 +140,39 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("plasser teller ikke tekster", "internal/planner/view.go", "c.Slots += x.Fills", "c.Slots += x.Fills * 0"),
     ("plass uten svar fra planleggeren droppes", "internal/planner/view.go", "if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {", "if false {"),
     ("advarsel om «kan ikke foreslås» vises", "internal/planner/explain.go", 'case "ikke_foreslaas":\n\t\t\treturn ""', 'case "ikke_foreslaas":\n\t\t\treturn "x"'),
-    ("utvalget nevnes ikke i forklaringen", "internal/planner/explain.go", 's := "utvalget er " + strings.Join(names, ", ")', 's := "utvalget er"'),
+    ("utvalget nevnes ikke i forklaringen", "internal/planner/explain.go", 's = "utvalget er " + strings.Join(names, ", ")', 's = "utvalget er"'),
     ("gruppeforklaring mangler", "internal/planner/explain.go", 'if r, _ := groups[g].(string); r != "" && r != "kandidat" {', 'if r, _ := groups[g].(string); false && r != "" {'),
+    # manuelle ruter og utvalg (omgang 2)
+    ("tenant: ruter listes uten org og plan", "internal/store/cells.go", "WHERE c.org_id = ? AND c.plan_id = ? ORDER BY", "WHERE ? > 0 AND ? > 0 ORDER BY"),
+    ("tenant: ruter listes uten plan", "internal/store/cells.go", "WHERE c.org_id = ? AND c.plan_id = ? ORDER BY", "WHERE c.org_id = ? AND ? > 0 ORDER BY"),
+    ("tenant: rute slettes uten plan", "internal/store/cells.go", "WHERE c.id = ? AND c.org_id = ? AND c.plan_id = ?`, id, oid, pid)", "WHERE c.id = ? AND c.org_id = ? AND ? > 0`, id, oid, pid)"),
+    ("tenant: utvalg listes uten plan", "internal/store/cells.go", "WHERE m.org_id = ? AND m.plan_id = ? ORDER BY", "WHERE m.org_id = ? AND ? > 0 ORDER BY"),
+    ("tenant: oppgave for rute slås opp uten org", "internal/store/cells.go", "SELECT name FROM task WHERE id = ? AND org_id = ?`, in.TaskID, oid)", "SELECT name FROM task WHERE id = ? AND ? > 0`, in.TaskID, oid)"),
+    ("tenant: person for rute slås opp uten org", "internal/store/cells.go", "SELECT name, active FROM person WHERE id = ? AND org_id = ?`, in.PersonID, oid)", "SELECT name, active FROM person WHERE id = ? AND ? > 0`, in.PersonID, oid)"),
+    ("tenant: gruppe for rute slås opp uten org", "internal/store/cells.go", "SELECT name FROM grp WHERE id = ? AND org_id = ?`, in.GroupID, oid)", "SELECT name FROM grp WHERE id = ? AND ? > 0`, in.GroupID, oid)"),
+    ("rute uten hendelse godtas", "internal/store/cells.go", "if len(events) == 0 {\n\t\treturn nil, 0, fmt.Errorf", "if false {\n\t\treturn nil, 0, fmt.Errorf"),
+    ("utvalg uten hendelse godtas", "internal/store/cells.go", 'if len(events) == 0 {\n\t\treturn fmt.Errorf("%w: choose at least one event"', 'if false {\n\t\treturn fmt.Errorf("%w: choose at least one event"'),
+    ("rute som nevner to ting eller ingen godtas", "internal/store/cells.go", "if kinds != 1 {", "if kinds > 5 {"),
+    ("en person fyller flere plasser i en rute", "internal/store/cells.go", " || (in.PersonID != 0 && fills != 1)", ""),
+    ("inaktiv person i en rute", "internal/store/cells.go", 'if !active {\n\t\t\t\treturn logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, what)', 'if false {\n\t\t\t\treturn logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, what)'),
+    ("inaktiv person i et utvalg", "internal/store/cells.go", 'if !active {\n\t\t\t\treturn logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, n)', 'if false {\n\t\t\t\treturn logEntry{}, fmt.Errorf("%w: %s is not active", ErrInvalid, n)'),
+    ("utvalg for oppgave som ikke fordeles", "internal/store/cells.go", "if !planned {", "if false {"),
+    ("samme rute to ganger gir ikke konflikt", "internal/store/cells.go", "if len(created) == 0 {", "if false {"),
+    ("hoppet over telles ikke", "internal/store/cells.go", "skipped++", "skipped += 0"),
+    ("utvalget erstattes ikke", "internal/store/cells.go", "AND event_id = ? AND task_id = ?`, oid, pid, ev, taskID)", "AND event_id = ? AND task_id = ? AND 0`, oid, pid, ev, taskID)"),
+    ("utvalg for én oppgave fjerner andres utvalg", "internal/store/cells.go", "AND event_id = ? AND task_id = ?`, oid, pid, ev, taskID)", "AND event_id = ? AND ? > 0`, oid, pid, ev, taskID)"),
+    ("samme person to ganger i samme rute", "internal/store/migrations/007_cells.sql", "CREATE UNIQUE INDEX manual_cell_person", "CREATE INDEX manual_cell_person"),
+    ("rute som nevner flere ting (CHECK)", "internal/store/migrations/007_cells.sql", "CHECK ((person_id IS NOT NULL) + (group_id IS NOT NULL) + (label IS NOT NULL) = 1),", "CHECK (1),"),
+    ("rute følger ikke hendelsen ved sletting", "internal/store/migrations/007_cells.sql", "REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE,", "REFERENCES event (org_id, plan_id, id),"),
+    ("manuell rute for inaktiv person sendes", "internal/planner/input.go", "if !active[*c.PersonID] {", "if false {"),
+    ("manuell gruppe-rute uten aktive medlemmer sendes", "internal/planner/input.go", "if !groups[*c.GroupID] {", "if false {"),
+    ("plasser for tekst-rute sendes ikke", "internal/planner/input.go", "l.Label, l.Fills = c.Label, c.Fills", "l.Label = c.Label"),
+    ("plasser for gruppe-rute sendes ikke", "internal/planner/input.go", "l.Group, l.Fills = gid(*c.GroupID), c.Fills", "l.Group = gid(*c.GroupID)"),
+    ("inaktiv person i utvalg sendes", "internal/planner/input.go", "for _, person := range pl.People {\n\t\t\tif active[person] {", "for _, person := range pl.People {\n\t\t\tif true {"),
+    ("gruppe uten aktive medlemmer i utvalg sendes", "internal/planner/input.go", "for _, g := range pl.Groups {\n\t\t\tif groups[g] {", "for _, g := range pl.Groups {\n\t\t\tif true {"),
+    ("tomt utvalg uten advarsel", "internal/planner/input.go", "if len(sp.People)+len(sp.Groups) == 0 {", "if false {"),
+    ("utvalg med null i stedet for tom liste", "internal/planner/input.go", "People: []string{}, Groups: []string{}}", "People: nil, Groups: nil}"),
+    ("tomt utvalg forklares ikke", "internal/planner/explain.go", 'if _, has := why["utenfor_utvalg"]; has || why["utvalg"] != nil || why["utvalg_grupper"] != nil {', 'if why["utvalg"] != nil || why["utvalg_grupper"] != nil {'),
     # personens svar (fase 3)
     ("tenant: person hentes uten org", "internal/store/preferences.go", "FROM person WHERE id = ? AND org_id = ?`, id, oid).", "FROM person WHERE id = ? AND ? > 0`, id, oid)."),
     ("tenant: oppgave hentes uten org ved valg", "internal/store/preferences.go", "WHERE id = ? AND org_id = ? AND planned = 1`, taskID, oid)", "WHERE id = ? AND ? > 0 AND planned = 1`, taskID, oid)"),
@@ -159,7 +195,27 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
 MUTATIONS: list[tuple[str, str, str, str]] = [(n, MODEL, a, b) for n, a, b in PY_MUTATIONS] + GO_MUTATIONS
 
 
-def run_tests(target: str) -> tuple[int, str]:
+GO_SOURCES = ["cmd", "internal", "web", "go.mod", "go.sum"]  # det Go-testene trenger
+_local = threading.local()
+_copies: list[Path] = []
+
+
+def go_copy() -> Path:
+    """Denne trådens egen kopi av Go-kildene (laget første gang), så mutasjoner kan kjøre samtidig."""
+    if not hasattr(_local, "dir"):
+        d = Path(tempfile.mkdtemp(prefix="tp-mut-"))
+        _copies.append(d)
+        for name in GO_SOURCES:
+            src = REPO / name
+            if src.is_dir():
+                shutil.copytree(src, d / name)
+            else:
+                shutil.copy2(src, d / name)
+        _local.dir = d
+    return _local.dir
+
+
+def run_tests(target: str, go_dir: Path | None = None) -> tuple[int, str]:
     """(0 = alle bestod; 1 = en test feilet; ellers = kunne ikke kjøres, f.eks. byggfeil)."""
     if target.endswith(".py"):
         r = subprocess.run([sys.executable, "-m", "pytest", "-x", *TESTS], cwd=ROOT, capture_output=True, text=True, check=False)
@@ -167,7 +223,7 @@ def run_tests(target: str) -> tuple[int, str]:
     # Uten planlegger i miljøet hoppes de to testene mot den ekte løseren over (ca. 1,3 s hver gang). Reglene skal fanges
     # av testene med falsk løser; en mutasjon bare de ekte testene fanger, skal vises som OVERLEVDE.
     env = {**os.environ, "TJENESTEPLAN_SOLVER": ""}
-    r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=REPO, capture_output=True, text=True, check=False, env=env)
+    r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=go_dir or REPO, capture_output=True, text=True, check=False, env=env)
     out = r.stdout + r.stderr
     if r.returncode != 0 and ("build failed" in out or "setup failed" in out):
         return 99, out
@@ -206,33 +262,66 @@ def main() -> int:
 
     files = sorted({f for _n, f, _a, _b in chosen})
     originals = {f: (REPO / f).read_text(encoding="utf-8") for f in files}
-    BACKUP.mkdir(exist_ok=True)
-    for f, text in originals.items():
-        (BACKUP / f.replace("/", "__")).write_text(text, encoding="utf-8")
-    problems: list[str] = []
-    caught = 0
+    py_files = [f for f in files if f.endswith(".py")]
+    if py_files:
+        BACKUP.mkdir(exist_ok=True)
+        for f in py_files:
+            (BACKUP / f.replace("/", "__")).write_text(originals[f], encoding="utf-8")
     t0 = time.time()
-    try:
-        for name, f, old, new in chosen:
-            original = originals[f]
-            if old not in original:
-                problems.append(f"UTDATERT  {name}: mønsteret finnes ikke i {f}")
-                continue
-            (REPO / f).write_text(original.replace(old, new, 1), encoding="utf-8")
-            rc, _out = run_tests(f if f.endswith(".py") else "x.go")
+
+    def verdict(name: str, rc: int) -> str | None:
+        if rc == 1:
+            return None
+        if rc == 0:
+            return f"OVERLEVDE {name}: ingen test feilet"
+        return f"UGYLDIG   {name}: testene kunne ikke kjøres (kode {rc}); byggfeil i mutasjonen?"
+
+    def try_go(item: tuple[str, str, str, str]) -> str | None:
+        name, f, old, new = item
+        original = originals[f]
+        if old not in original:
+            return f"UTDATERT  {name}: mønsteret finnes ikke i {f}"
+        path = go_copy() / f
+        path.write_text(original.replace(old, new, 1), encoding="utf-8")
+        try:
+            rc, _out = run_tests("x.go", go_copy())
+        finally:
+            path.write_text(original, encoding="utf-8")
+        return verdict(name, rc)
+
+    def try_py(item: tuple[str, str, str, str]) -> str | None:
+        name, f, old, new = item
+        original = originals[f]
+        if old not in original:
+            return f"UTDATERT  {name}: mønsteret finnes ikke i {f}"
+        (REPO / f).write_text(original.replace(old, new, 1), encoding="utf-8")
+        try:
+            rc, _out = run_tests(f)
+        finally:
             (REPO / f).write_text(original, encoding="utf-8")
-            if rc == 1:
-                caught += 1
-            elif rc == 0:
-                problems.append(f"OVERLEVDE {name}: ingen test feilet")
-            else:
-                problems.append(f"UGYLDIG   {name}: testene kunne ikke kjøres (kode {rc}); byggfeil i mutasjonen?")
+        return verdict(name, rc)
+
+    go_items = [m for m in chosen if not m[1].endswith(".py")]
+    py_items = [m for m in chosen if m[1].endswith(".py")]
+    results: dict[str, str | None] = {}
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, min(4, os.cpu_count() or 1))) as pool:
+            futures = {m[0]: pool.submit(try_go, m) for m in go_items}  # Go i parallell, hver i sin kopi
+            for m in py_items:  # Python i repoet, én om gangen, mens Go går
+                results[m[0]] = try_py(m)
+            for name, fut in futures.items():
+                results[name] = fut.result()
     finally:
-        for f, text in originals.items():
-            (REPO / f).write_text(text, encoding="utf-8")
-        for saved in BACKUP.iterdir():
-            saved.unlink()
-        BACKUP.rmdir()
+        for f in py_files:
+            (REPO / f).write_text(originals[f], encoding="utf-8")
+        if BACKUP.exists():
+            for saved in BACKUP.iterdir():
+                saved.unlink()
+            BACKUP.rmdir()
+        for d in _copies:
+            shutil.rmtree(d, ignore_errors=True)
+    problems = [results[m[0]] for m in chosen if results[m[0]]]
+    caught = len(chosen) - len(problems)
 
     for line in problems:
         print(line)

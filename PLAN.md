@@ -29,8 +29,8 @@ bokmål først, men tekstene skal kunne byttes ut.
   for oppgaver admin har satt opp for gruppen (`group_task`: hvilken oppgave, hvor mange plasser den fyller, og et nivå).
   I begge tilfeller er medlemmene opptatt med oppgaven, og den felles kombinasjonsinnstillingen avgjør hva de kan ha samme
   dag (se *Manuelle ruter, grupper og utvalg*).
-- **Gruppearbeid teller som ett oppdrag per medlem** i fordelingen (samlet, per oppgave og i historikken), både for
-  manuelle og foreslåtte grupper. Historikken for neste periode regnes ut slik av backenden.
+- **Gruppearbeid teller som ett oppdrag per medlem** i fordelingen (samlet og per oppgave), både for
+  manuelle og foreslåtte grupper.
 - **Ingen regnearkstøtte**: verken import fra eller eksport til regneark (bestemt 2026-11-08). Alt legges inn i appen.
 - Ingen kompetanser og ingen betingede krav («når X, så Y»). Utvalg dekker det.
 - Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom hendelser. Det er kombinasjonsinnstillingen
@@ -53,7 +53,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 
 **Oppsett og planlegging** (en del av samme app, ikke et eget område)
 - Oppgaver, personer, grupper, hendelser og dagtyper, **felles innstilling for hvilke oppgaver som kan kombineres**,
-  manuelle ruter og utvalg. Kjøre planleggeren, se forklaringer, publisere.
+  manuelle ruter og utvalg. Kjøre planleggeren, se forklaringer, låse forslag.
 
 **Manuelle ruter, grupper og utvalg** (to generelle verktøy som dekker «kor synger», «egen lydtekniker» og alt liknende)
 - Admin kan legge inn en **manuell rute** for en oppgave og hendelse: en person, en **gruppe** eller en tekst
@@ -87,7 +87,7 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001–005):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`. Resten kommer med sine faser.
+*Bygget (migrering 001–007):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`, `grp`, `grp_member`, `grp_task`, `manual_cell`, `pool_member`.
 Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
@@ -95,8 +95,8 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 | `organization` | | `slug` (unik, i adressen), navn |
 | `plan` | organisasjon | `slug` (unik i organisasjonen), navn. Erstatter «periode/semester» |
 | `person` | organisasjon | navn (unikt i organisasjonen), aktiv, **kan foreslås** (standard ja). Gjenbrukes i alle planer |
-| `group`, `group_member` | organisasjon | navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
-| `group_task` | organisasjon | oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
+| `group`, `group_member` | organisasjon | **bygget som `grp`, `grp_member`**: navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
+| `group_task` | organisasjon | **bygget som `grp_task`**: oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
 | `task` | organisasjon | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner) |
 | `day_type`, `day_type_task` | organisasjon | dagtyper admin lager, hvilke oppgaver som gjelder for dem, og antall plasser |
 | `task_combination` | organisasjon | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
@@ -104,13 +104,12 @@ Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`
 | `event` | plan | **hendelse**: dato, dagtype, merknad. Selvstendig enhet; flere på samme dag er lov |
 | `person_event` | plan | **bygget**: nivå per hendelse (passer ikke / dårlig / godt; ingen rad = nøytral), felles for personens oppgaver. Sammensatt fremmednøkkel (org, plan, hendelse) |
 | `person_task_event` | plan | *ikke bygget ennå*: settes på når en oppgave har «egen liste»; da brukes den i stedet for den felles |
-| `selection` | plan | **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges |
-| `assignment` | plan | hendelse, oppgave, plass, person, gruppe eller fritekst (+ `fills`), `locked`, kilde (manuell / plan) |
-| `assignment_member` | plan | **øyeblikksbilde** av medlemmene i en gruppe-tildeling når planen publiseres (ett oppdrag per medlem). Uten den endrer historikken seg når gruppen endres |
-| `plan_run` | plan | status (running/done/failed), frø, tidsgrense, hvem startet, hash av inndata, inndata, øyeblikksbilde av navn og plasser, svar fra planleggeren, feilmelding. De 20 nyeste per plan beholdes. *Ikke bygget ennå:* publisert ja/nei |
+| `pool_member` | plan | **bygget**: **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges (finnes det rader, er det et utvalg). Sammensatt fremmednøkkel mot (org, plan, hendelse) |
+| `manual_cell` | plan | **bygget**: manuell rute for en oppgave på en hendelse: én person, én gruppe eller en tekst (+ `fills` plasser for gruppe og tekst). Alltid låst. Forslag fra planleggeren lagres ikke her, men i `plan_run` |
+| `plan_run` | plan | status (running/done/failed), frø, tidsgrense, hvem startet, hash av inndata, inndata, øyeblikksbilde av navn og plasser, svar fra planleggeren, feilmelding. De 20 nyeste per plan beholdes. Siste kjøring er planen (publisering er ikke bygget) |
 | `change_log` | organisasjon (+ valgfri plan) | hvem (oppgitt navn), hva, når. Skrives i samme transaksjon som endringen |
 
-Historikk til planleggeren er tidligere planers publiserte tildelinger i **samme organisasjon**.
+**Optimalisering skjer bare innenfor én plan** (brukerens valg 2026-11-09). Tildelinger i tidligere planer teller ikke med: appen sender aldri `history` eller `previous_plan` til planleggeren (den kan fortsatt ta imot dem).
 Alle oppslag er avgrenset av organisasjonen; en plan eller person fra en annen organisasjon gir 404.
 
 **Hendelser:** en hendelse hører til én plan og har en dato og en dagtype (og en merknad). Hendelser er **selvstendige**: to kan ligge på
@@ -130,7 +129,7 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 
 **Harde krav**
 - «ikke» på hendelse eller oppgave fjerner variabelen. Det samme gjør «ikke med på oppgaven».
-- Utvalg (`selection`): alle utenfor utvalget fjernes for den oppgaven og hendelsen.
+- Utvalg (`pool_member`): alle utenfor utvalget fjernes for den oppgaven og hendelsen.
 - Antall plasser per oppgave og hendelse (låste ruter regnes med).
 - Oppgavepar som *kan ikke kombineres*: høyst én av dem per person per dag.
 - Gruppe i en manuell rute eller foreslått av planleggeren: hvert medlem er opptatt med gruppens oppgave. Paret (gruppens oppgave,
@@ -149,9 +148,9 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
   flere oppdrag enn plasser, og det regnes ikke inn i målet på forhånd.) Oppgavene har
   ulik etterspørsel (f.eks. 33 plasser på 7 personer for én oppgave, 17 på 5 for en annen), så samlet antall kan ikke bli likt uten å gjøre
   fordelingen per oppgave skjev. Vektene bestemmer avveiningen: se *Resultater fra spiken*.
-- **Historikk fra tidligere semestre, per oppgave**: den som har gjort mest av en oppgave, får litt mindre av akkurat
-  den. Teller halvt som standard (`history_weight`). Regnes ut fra tidligere semestres tildelinger.
-- Ved ny kjøring: straff endringer fra forrige plan, så ikke alt stokkes om.
+- **Historikk fra tidligere planer brukes ikke** (valg 2026-11-09). Planleggeren kan ta imot `history` per oppgave (teller halvt, `history_weight`),
+  men appen sender den ikke.
+- Ved ny kjøring kan planleggeren straffe endringer fra en forrige plan (`previous_plan`), men appen bruker det ikke. Det som skal bli stående, låses som manuell rute («Lås» på et forslag).
 - Tom plass er tillatt, men koster så mye at planleggeren bare gjør det når det ikke går ellers.
 
 **Forklaringer**: for hver tom plass eller brutt «dårlig» lages en kort tekst, f.eks. «Oppgave X 15.11: 4 aktuelle,
@@ -194,7 +193,18 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
   OPTIMAL/FEASIBLE, tidsavbrudd og krasj blir en **feilet kjøring med årsak**, aldri en halv plan. Kjøringer som sto som «running» ved oppstart merkes feilet.
 - Visningen (`internal/planner/view.go`) setter navn og oppgaver fra øyeblikksbildet og gir hver tom plass en forklaring på norsk
   (`explain.go`: passer ikke, ikke valgt oppgaven, kan ikke foreslås, opptatt med noe annet). «Prøv igjen» teller frøet opp.
-- *Gjenstår i fase 4:* manuelle ruter og utvalg i appen, grupper, låse og publisere, historikk fra publiserte planer.
+
+### Grupper, manuelle ruter og utvalg (bygget, fase 4 omgang 2)
+- **Grupper** (`/orgs/{org}/groups`, seksjonen «Grupper» under Oppsett): navn, medlemmer, «kan foreslås» og oppgavene planleggeren kan foreslå gruppen til
+  (plasser og nivå; bare oppgaver planleggeren fordeler). Slettes ikke mens en rute eller et utvalg nevner den (409).
+- **Manuelle ruter** (`/plans/{plan}/cells`) og **utvalg** (`/plans/{plan}/pools`): settes for flere hendelser om gangen, alt eller ingenting, bare hendelser i planen.
+  Ruter for personer må være aktive. En rute kan stå på en oppgave planleggeren ikke fordeler (f.eks. «Lovsang» for koret): kolonnen vises bare der det finnes ruter, og
+  oppgavens plasser i dagtypen gir ingen tomme ruter. «Lås» på et forslag i planen lager en manuell rute for personen.
+- **Aktive bare:** inaktive personer og grupper uten aktive medlemmer sendes aldri til planleggeren (den ville talt plassen uten å vite hvem). Det som nevner dem,
+  utelates, og kjøringen sier fra («Ruten for Aslaug på Lyd … er ikke med fordi personen ikke er aktiv»). Et utvalg som blir tomt, beholdes (ingen kan velges) med advarsel.
+- Planleggerens advarsler leses med navn; en rute for en person som «kan ikke foreslås» gir ingen advarsel (det er slik innstillingen er ment å brukes).
+- **Publisering er ikke bygget.** Brukerens svar 2026-11-09 («Ja … optimaliser kun innenfor en plan») ble lest som at siste kjøring er planen. Skal et forslag
+  kunne godtas eksplisitt (f.eks. for «mine oppdrag» i fase 5), legges det til da.
 
 ### Tilgang uten innlogging
 Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. Konsekvensene:
@@ -214,7 +224,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
 2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
-4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, forklaringer, godta og publiser. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). *Omgang 2:* manuelle ruter, utvalg, grupper, låse, publisere og historikk.
+4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
 5. **Plan**: rutenett (hendelser bortover, oppgaver nedover), «mine oppdrag», kalenderfeed per person.
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
@@ -263,7 +273,7 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
 1. Navn: «Tjenesteplan» (arbeidstittel). Adresse bestemmes ved utrulling.
 2. Ingen innlogging i første versjon. Uoffentlig adresse, `noindex`, endringslogg.
 3. Solver som Python-underprosess i samme image som Go-backenden.
-4. Én plan per periode (f.eks. semester), med historikk som telles med i neste.
+4. Én plan per periode (f.eks. semester). Optimalisering skjer bare innenfor planen; ingen historikk fra tidligere planer.
 5. Ingen regnearkstøtte (hverken import eller eksport).
 
 ## Risiko

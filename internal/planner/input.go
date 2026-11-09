@@ -48,7 +48,27 @@ type solverInput struct {
 	} `json:"combinations"`
 	Groups     []solverGroup     `json:"groups,omitempty"`
 	GroupTasks []solverGroupTask `json:"group_tasks,omitempty"`
+	Locked     []solverLocked    `json:"locked,omitempty"`
+	Pools      []solverPool      `json:"pools,omitempty"`
 	Params     *solverParams     `json:"params,omitempty"`
+}
+
+// solverLocked is a manual cell: a person, a group or a text; Fills only for the last two.
+type solverLocked struct {
+	Date   string `json:"date"`
+	Task   string `json:"task"`
+	Person string `json:"person,omitempty"`
+	Group  string `json:"group,omitempty"`
+	Label  string `json:"label,omitempty"`
+	Fills  int    `json:"fills,omitempty"`
+}
+
+// solverPool is a selection (utvalg): the only people and groups that can be chosen. The lists are never null.
+type solverPool struct {
+	Date   string   `json:"date"`
+	Task   string   `json:"task"`
+	People []string `json:"people"`
+	Groups []string `json:"groups"`
 }
 
 type solverGroup struct {
@@ -226,6 +246,62 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 				in.GroupTasks = append(in.GroupTasks, solverGroupTask{gid(g.ID), tid(t.TaskID), t.Fills, t.Level})
 			}
 		}
+	}
+	// Manual cells and selections. Whatever names someone who is not active, or a group left without active members,
+	// cannot be sent (the solver would count the place without knowing who): it is left out and the run says so.
+	evDate := map[int64]string{}
+	for _, e := range d.Events {
+		evDate[e.ID] = e.Date
+	}
+	taskName := map[int64]string{}
+	for _, t := range d.Tasks {
+		taskName[t.ID] = t.Name
+	}
+	personName := map[int64]string{}
+	for _, person := range d.People {
+		personName[person.ID] = person.Name
+	}
+	groupName := map[int64]string{}
+	for _, g := range d.Groups {
+		groupName[g.ID] = g.Name
+	}
+	where := func(ev, task int64) string { return taskName[task] + " " + evDate[ev] }
+	for _, c := range d.Cells {
+		l := solverLocked{Date: eid(c.EventID), Task: tid(c.TaskID)}
+		switch {
+		case c.PersonID != nil:
+			if !active[*c.PersonID] {
+				snap.Warnings = append(snap.Warnings, "Ruten for "+personName[*c.PersonID]+" på "+where(c.EventID, c.TaskID)+" er ikke med fordi personen ikke er aktiv.")
+				continue
+			}
+			l.Person = pid(*c.PersonID)
+		case c.GroupID != nil:
+			if !groups[*c.GroupID] {
+				snap.Warnings = append(snap.Warnings, "Ruten for gruppen «"+groupName[*c.GroupID]+"» på "+where(c.EventID, c.TaskID)+" er ikke med fordi gruppen ikke har aktive medlemmer.")
+				continue
+			}
+			l.Group, l.Fills = gid(*c.GroupID), c.Fills
+		default:
+			l.Label, l.Fills = c.Label, c.Fills
+		}
+		in.Locked = append(in.Locked, l)
+	}
+	for _, pl := range d.Pools {
+		sp := solverPool{Date: eid(pl.EventID), Task: tid(pl.TaskID), People: []string{}, Groups: []string{}}
+		for _, person := range pl.People {
+			if active[person] {
+				sp.People = append(sp.People, pid(person))
+			}
+		}
+		for _, g := range pl.Groups {
+			if groups[g] {
+				sp.Groups = append(sp.Groups, gid(g))
+			}
+		}
+		if len(sp.People)+len(sp.Groups) == 0 { // the restriction stays: nobody can be chosen, and the place says why
+			snap.Warnings = append(snap.Warnings, "Utvalget for "+where(pl.EventID, pl.TaskID)+" har ingen aktive personer eller grupper, så ingen kan velges.")
+		}
+		in.Pools = append(in.Pools, sp)
 	}
 	for _, c := range d.Combinations {
 		in.Combinations = append(in.Combinations, struct {
