@@ -1,6 +1,6 @@
 # Tjenesteplan: plan
 
-Arbeidstittel. Status 2026-11-08: **planleggeren (`solver/`) virker alene; appen har organisasjoner, planer, personer, endringslogg og oppsett (oppgaver, dagtyper, kombinasjoner, hendelser). Lokalt git-repo, ikke på GitHub.**
+Arbeidstittel. Status 2026-11-09: **planleggeren (`solver/`) er koblet til appen; fase 1–5 er bygget (se *Faser*). Utrulling er utsatt. Privat GitHub-repo `gunnaringe/dutyplan`.**
 Første bruksområde og testdata: en kirkes tjenesteplan for høsten 2026 (oppdiktede navn i repoet). Verktøyet er generelt; se *Generelt*.
 
 ## Mål
