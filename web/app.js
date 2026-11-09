@@ -151,7 +151,7 @@ async function pageOrg(r, org, people) {
 }
 
 const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const SELECT_LEVELS = [['standard', 'standard'], ['cannot', 'kan ikke kombineres'], ['impractical', 'impractical'], ['practical', 'practical'], ['preferred', 'bør kombineres']];
+const SELECT_LEVELS = [['standard', 'standard'], ['cannot', 'kan ikke kombineres'], ['impractical', 'upraktisk'], ['practical', 'praktisk'], ['preferred', 'bør kombineres']];
 
 const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
@@ -189,7 +189,7 @@ async function pageSetup(r, org) {
   });
 
   // Grupper: et navngitt sett personer (team, kor, par). Ingen egne regler; planleggeren kan foreslå dem til oppgavene som settes opp her,
-  // og en manuell rute kan nevne dem. Medlemmene regnes som busy med oppgaven, og kombinasjonene over avgjør hva de kan ha i tillegg.
+  // og en manuell rute kan nevne dem. Medlemmene regnes som opptatt med oppgaven, og kombinasjonene over avgjør hva de kan ha i tillegg.
   const plannedTasks = tasks.filter((t) => t.planned);
   const groupBlocks = groups.map((g) => {
     const gname = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': 'Navn på gruppen' });
@@ -241,7 +241,7 @@ async function pageSetup(r, org) {
       dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, 'Ingen dagtyper ennå.'),
       nameForm('Ny dagtype, f.eks. Gudstjeneste', 'Opprett', async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
     section('Grupper',
-      h('p', { class: 'muted small' }, 'En gruppe er et navngitt sett personer (et team, et kor, et par). Medlemmene er busy sammen når gruppen står på en oppgave, og kombinasjonene under avgjør hva de kan ha i tillegg. Settes «Kan foreslås» av, velger planleggeren aldri gruppen selv, men du kan sette den inn for hånd.'),
+      h('p', { class: 'muted small' }, 'En gruppe er et navngitt sett personer (et team, et kor, et par). Medlemmene er opptatt sammen når gruppen står på en oppgave, og kombinasjonene under avgjør hva de kan ha i tillegg. Settes «Kan foreslås» av, velger planleggeren aldri gruppen selv, men du kan sette den inn for hånd.'),
       groups.length ? groupBlocks : h('p', { class: 'muted' }, 'Ingen grupper ennå.'),
       nameForm('Ny gruppe, f.eks. Kirkekoret', 'Opprett', async (name) => { await api('POST', base + '/groups', { name }); refresh(); })),
     section('Hva kan kombineres samme dag?',
@@ -428,9 +428,9 @@ const WEIGHT_LABELS = {
   w_fair_range: ['Fordeling', 'Verste avvik, totalt', 'Poeng for den som ligger lengst fra sin andel, så ikke én person tar hele avviket.'],
   w_task_fair: ['Fordeling', 'Lik andel av hver oppgave', 'Som første, men per oppgave. Av som standard: slås den på, får de som tar flere oppgaver mer totalt enn de som tar én.'],
   w_task_range: ['Fordeling', 'Verste avvik, per oppgave', 'Som «verste avvik», men per oppgave.'],
-  'w_task.good': ['Ønsker', 'Får en oppgave de har sagt «good» til', 'Poeng for hver slik tildeling.'],
+  'w_task.good': ['Ønsker', 'Får en oppgave de har sagt «godt» til', 'Poeng for hver slik tildeling.'],
   'w_task.poor': ['Ønsker', 'Får en oppgave de har sagt «dårlig» til', 'Negativt tall: poeng trukket.'],
-  'w_date.good': ['Ønsker', 'Får en hendelse som passer good', 'Poeng for hver slik tildeling.'],
+  'w_date.good': ['Ønsker', 'Får en hendelse som passer godt', 'Poeng for hver slik tildeling.'],
   'w_date.poor': ['Ønsker', 'Får en hendelse som passer dårlig', 'Negativt tall: poeng trukket.'],
   'w_combo.preferred': ['Kombinasjoner', 'To oppgaver som bør kombineres samme dag', 'Poeng for hvert slikt par.'],
   'w_combo.practical': ['Kombinasjoner', 'To oppgaver som er praktiske å kombinere', 'Poeng for hvert slikt par.'],
@@ -461,7 +461,7 @@ function weightsSection(r, wr) {
     if (await write(() => api('PUT', path, { values }))) { await render(); say(text); }
   };
   return section('Vekting',
-    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel good, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
+    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel godt, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
     h('details', {}, h('summary', {}, wr.values && Object.keys(wr.values).length ? `Vis og endre vekting (${Object.keys(wr.values).length} endret)` : 'Vis og endre vekting'),
       h('div', { class: 'stack' }, blocks,
         h('div', { class: 'row-inline' },
@@ -610,7 +610,7 @@ async function pageMe(r, org) {
   const updateSummary = () => {
     const c = { never: 0, poor: 0, good: 0 };
     Object.values(levels).forEach((l) => { if (l) c[l]++; });
-    summary.textContent = `${c.ikke} passer ikke · ${c.poor} dårlig · ${c.good} good · ${me.events.length - c.ikke - c.poor - c.good} nøytrale`;
+    summary.textContent = `${c.never} passer ikke · ${c.poor} dårlig · ${c.good} godt · ${me.events.length - c.never - c.poor - c.good} nøytrale`;
   };
   async function setLevels(changes) {
     if (!(await write(() => api('PUT', availPath, { levels: changes })))) return false;

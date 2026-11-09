@@ -41,7 +41,7 @@ func (n Namer) groupWhy(g, reason string) string {
 	case "event_never":
 		return fmt.Sprintf("%s: %s passer ikke", name, n.Person(who))
 	case "busy":
-		return fmt.Sprintf("%s: %s er busy med noe annet", name, n.Person(who))
+		return fmt.Sprintf("%s: %s er opptatt med noe annet", name, n.Person(who))
 	}
 	return ""
 }
@@ -109,7 +109,7 @@ func Explain(why map[string]any, n Namer) string {
 			}
 			items = append(items, fmt.Sprintf("%s (%s)", n.Person(k), strings.Join(ts, ", ")))
 		}
-		parts = append(parts, "busy med noe annet på hendelsen: "+strings.Join(items, ", "))
+		parts = append(parts, "opptatt med noe annet på hendelsen: "+strings.Join(items, ", "))
 	}
 	if c, _ := why["not_in_task"].(float64); c > 0 {
 		parts = append(parts, fmt.Sprintf("%d har ikke valgt oppgaven", int(c)))
@@ -162,7 +162,7 @@ func TranslateWarning(w string, n Namer) string {
 		case "outside_selection":
 			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen står utenfor utvalget.", person, task, ev)
 		case "busy":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen er busy med %s.", person, task, ev, n.busy(rest))
+			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen er opptatt med %s.", person, task, ev, n.busy(rest))
 		}
 		return fmt.Sprintf("%s er satt på %s %s for hånd, selv om «%s».", person, task, ev, m[4])
 	}

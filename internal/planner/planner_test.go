@@ -243,10 +243,10 @@ func TestExplain(t *testing.T) {
 		{map[string]any{"candidates": 0.0, "task_never": []any{"p3"}, "not_proposable": []any{"p1"}},
 			"Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."},
 		{map[string]any{"candidates": 2.0, "busy": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
-			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: busy med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
+			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
 		// a group's task is named with the group
 		{map[string]any{"candidates": 1.0, "busy": map[string]any{"p1": []any{"t2 (g1)"}}},
-			busy + ": busy med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."},
+			busy + ": opptatt med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."},
 		// the utvalg and who is outside it
 		{map[string]any{"candidates": 0.0, "selection": []any{"p1", "p2"}, "selection_groups": []any{"g1"}, "outside_selection": 4.0},
 			"Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."},
@@ -262,7 +262,7 @@ func TestExplain(t *testing.T) {
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable:p3", "g2": "outside_selection"}},
 			"Ingen kan ta denne: Bandet står utenfor utvalget; Kirkekoret kan ikke foreslås fordi Cecilie ikke kan foreslås."},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "task_never:p1", "g2": "busy:p2"}},
-			"Ingen kan ta denne: Bandet: Birger er busy med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."},
+			"Ingen kan ta denne: Bandet: Birger er opptatt med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."},
 	}
 	for _, c := range cases {
 		if got := Explain(c.why, testNames()); got != c.want {
@@ -278,7 +278,7 @@ func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 		"låst: p1 på t1 e5 bryter «not_in_task» (manuelt valg beholdt)":               "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven.",
 		"låst: p1 på t1 e5 bryter «task_never» (manuelt valg beholdt)":                "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven.",
 		"låst: p1 på t1 e5 bryter «outside_selection» (manuelt valg beholdt)":         "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget.",
-		"låst: p1 på t1 e5 bryter «busy:t2 (g1)» (manuelt valg beholdt)":              "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er busy med Lovsang (Kirkekoret).",
+		"låst: p1 på t1 e5 bryter «busy:t2 (g1)» (manuelt valg beholdt)":              "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret).",
 		"gruppe g1 står på t2 e5, men p3 har «ikke» den dagen (manuelt valg beholdt)": "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer.",
 		"p2 er låst på t1 e5 samtidig som gruppe g1 står på t2":                       "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres.",
 		"noe annet fra solveren": "noe annet fra solveren",
