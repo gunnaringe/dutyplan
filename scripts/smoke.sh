@@ -56,7 +56,7 @@ code 200 GET /api/orgs/org-b/plans
 [ "$(grep -o '"slug"' "$tmp/body" | wc -l)" -eq 1 ] || fail "B ser andre planer enn sine egne: $(cat "$tmp/body")"
 code 200 GET /api/orgs/org-a/people
 grep -q '"proposable":true' "$tmp/body" || fail "A sin person ble endret via B"
-code 200 GET / && grep -q Tjenesteplan "$tmp/body" || fail "forsiden mangler"
+code 200 GET / && grep -q Dutyplan "$tmp/body" || fail "the front page is missing"
 code 200 GET /o/org-a/p/host-2026
 
 code 201 POST /api/orgs/org-a/day-types '{"name":"Helg"}'

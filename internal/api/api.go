@@ -25,7 +25,7 @@ type server struct {
 	log     *slog.Logger
 }
 
-// New builds the handler. static must contain index.html, app.js and style.css. pl may be nil: planning then answers
+// New builds the handler. static must contain index.html, i18n.js, app.js and style.css. pl may be nil: planning then answers
 // 503 «unavailable» and everything else works.
 func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) http.Handler {
 	if pl == nil {
@@ -34,7 +34,7 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	s := &server{st: st, planner: pl, static: static, log: log}
 	mux := http.NewServeMux()
 
-	// planner: can this server plan at all? The page hides «Planlegg» when not.
+	// planner: can this server plan at all? The page hides «Plan» when not.
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"ok": true, "planner": s.planner.Available()})
 	})
@@ -65,6 +65,7 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /o/{rest...}", index) // the page itself reads /o/<org>/p/<plan> from the address
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.HandleFunc("GET /i18n.js", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "i18n.js") })
 	mux.HandleFunc("GET /app.js", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "app.js") })
 	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "style.css") })
 
@@ -78,7 +79,7 @@ func (s *server) serveFile(w http.ResponseWriter, name string) {
 		return
 	}
 	switch {
-	case name == "app.js":
+	case name == "app.js" || name == "i18n.js":
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	case name == "style.css":
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")

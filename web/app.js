@@ -1,10 +1,11 @@
 'use strict';
-// Tjenesteplan: liten frontend uten rammeverk. Organisasjonen ligger i adressen (/o/<org>/...), så å bytte
-// organisasjon er bare å gå til en annen adresse. Ingen innlogging: «Hvem er du?» er selvoppgitt og brukes i endringsloggen.
+// Dutyplan: a small frontend without a framework. The organisation is in the address (/o/<org>/...), so switching
+// organisation is just going to another address. No login: «Who are you?» is self-declared and used in the change log.
+// All texts come from i18n.js (t, tn); the language is a per-browser choice.
 
 const store = {
   get: (k) => { try { return localStorage.getItem('tp.' + k) || ''; } catch (e) { return ''; } },
-  set: (k, v) => { try { localStorage.setItem('tp.' + k, v); } catch (e) { /* privat modus */ } },
+  set: (k, v) => { try { localStorage.setItem('tp.' + k, v); } catch (e) { /* private mode */ } },
 };
 
 function h(tag, props, ...kids) {
@@ -26,30 +27,43 @@ function say(text, kind) {
   m.className = text ? kind || 'ok' : '';
 }
 
-// The language the server writes explanations and warnings in (until the page has a language switch: Norwegian).
-const currentLang = () => 'nb';
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const locale = () => (currentLang === 'nb' ? 'nb-NO' : 'en-GB');
 
 async function api(method, path, body) {
-  if (method === 'GET' && /\/(runs|assignments)/.test(path)) path += (path.includes('?') ? '&' : '?') + 'lang=' + currentLang();
+  // The server writes explanations and warnings in the language of the page.
+  if (method === 'GET' && /\/(runs|assignments)/.test(path)) path += (path.includes('?') ? '&' : '?') + 'lang=' + currentLang;
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') headers['X-Actor'] = encodeURIComponent(store.get('actor'));
   const res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { code: data.error, status: res.status });
+  if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { kind: data.error, apiCode: data.code, params: data.params, status: res.status });
   return data;
 }
 
-// 409 betyr enten at noe finnes fra før (opprettelse) eller at noe er i bruk (sletting); tjenerens tekst sier hvilket.
-function conflictText(message) {
-  const rest = message.replace(/^already exists: /, '');
-  return / is used /.test(rest) ? 'Kan ikke slettes, den er i bruk: ' + rest : 'Finnes allerede: ' + rest;
+// The text for a refused request, in the page's language: from the error code and its parameters when the server sent
+// them, else from the kind of error, else the server's own (English) text.
+function errorText(e) {
+  if (e.apiCode && hasMsg('err.' + e.apiCode)) {
+    const p = { ...e.params };
+    if (typeof p.kind === 'string') p.kind = cap(hasMsg('kind.' + p.kind.replace(' ', '_')) ? t('kind.' + p.kind.replace(' ', '_')) : p.kind);
+    if (typeof p.what === 'string' && hasMsg('what.' + p.what)) p.what = t('what.' + p.what);
+    if (typeof p.key === 'string' && hasMsg('weight.' + p.key + '.label')) p.key = t('weight.' + p.key + '.label');
+    return t('err.' + e.apiCode, p);
+  }
+  if (e.kind && hasMsg('err.kind.' + e.kind)) return t('err.kind.' + e.kind);
+  return e.message || t('err.generic');
 }
 
-// Skrivehandlinger: krever et navn øverst, viser feil i stedet for å kaste.
+const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
+// Ask before something destructive; inside a write() action, a «no» ends the action quietly.
+function confirmed(text) { if (!confirm(text)) throw cancelled(); }
+
+// Writes: need a name at the top, and show the error instead of throwing.
 async function write(action) {
   if (!store.get('actor').trim()) {
-    say('Skriv hvem du er øverst på siden først. Navnet brukes i endringsloggen.', 'err');
+    say(t('common.need_actor'), 'err');
     return false;
   }
   try {
@@ -58,13 +72,15 @@ async function write(action) {
     return true;
   } catch (e) {
     if (e.cancelled) return false;
-    say(e.code === 'conflict' ? conflictText(e.message) : e.message, 'err');
+    say(errorText(e), 'err');
     return false;
   }
 }
 
 const enc = encodeURIComponent;
-const fmtTime = (iso) => new Date(iso).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' });
+const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 function go(path) {
   history.pushState({}, '', path);
@@ -77,9 +93,9 @@ function link(path, text, props) {
 function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
-    if (parts[2] === 'p' && parts[3] && parts[4] === 'meg' && parts[5]) return { page: 'me', org: parts[1], plan: parts[3], person: parts[5] };
+    if (parts[2] === 'p' && parts[3] && parts[4] === 'me' && parts[5]) return { page: 'me', org: parts[1], plan: parts[3], person: parts[5] };
     if (parts[2] === 'p' && parts[3]) return { page: 'plan', org: parts[1], plan: parts[3] };
-    if (parts[2] === 'oppsett') return { page: 'setup', org: parts[1] };
+    if (parts[2] === 'setup') return { page: 'setup', org: parts[1] };
     return { page: 'org', org: parts[1] };
   }
   return { page: 'home' };
@@ -87,16 +103,19 @@ function route() {
 
 async function renderHeader(r, people) {
   const orgs = await api('GET', '/orgs');
-  const select = h('select', { 'aria-label': 'Organisasjon', onchange: (e) => go(e.target.value === '' ? '/?bytt' : '/o/' + enc(e.target.value)) },
-    h('option', { value: '' }, r.org ? 'Bytt organisasjon…' : 'Velg organisasjon…'),
+  const select = h('select', { 'aria-label': t('header.org'), onchange: (e) => go(e.target.value === '' ? '/?switch' : '/o/' + enc(e.target.value)) },
+    h('option', { value: '' }, r.org ? t('header.switch_org') : t('header.choose_org')),
     orgs.map((o) => h('option', { value: o.slug, selected: o.slug === r.org }, o.name)));
-  const actor = h('input', { type: 'text', id: 'actor', list: 'people', value: store.get('actor'), placeholder: 'Skriv eller velg navnet ditt', maxlength: '80', autocomplete: 'off',
+  const actor = h('input', { type: 'text', id: 'actor', list: 'people', value: store.get('actor'), placeholder: t('header.who_placeholder'), maxlength: '80', autocomplete: 'off',
     onchange: (e) => store.set('actor', e.target.value.trim()) });
+  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); render(); } },
+    LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
   document.getElementById('top').replaceChildren(
-    link('/?bytt', 'Tjenesteplan', { class: 'brand' }),
-    h('label', {}, 'Organisasjon', select),
+    link('/?switch', t('brand'), { class: 'brand' }),
+    h('label', {}, t('header.org'), select),
     h('span', { class: 'spacer' }),
-    h('label', { title: 'Brukes i endringsloggen. Det er ingen innlogging.' }, 'Hvem er du?', actor),
+    h('label', { title: t('header.who_title') }, t('header.who'), actor),
+    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
     h('datalist', { id: 'people' }, (people || []).filter((p) => p.active).map((p) => h('option', { value: p.name }))));
 }
 
@@ -111,21 +130,21 @@ function nameForm(placeholder, button, onsubmit) {
 async function pageHome() {
   const orgs = await api('GET', '/orgs');
   const last = store.get('org');
-  if (last && !location.search.includes('bytt') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
+  if (last && !location.search.includes('switch') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
   return h('div', {},
-    h('h1', {}, 'Velg organisasjon'),
-    orgs.length ? h('ul', { class: 'plain' }, orgs.map((o) => h('li', {}, link('/o/' + enc(o.slug), o.name)))) : h('p', { class: 'muted' }, 'Ingen organisasjoner ennå. Lag den første under.'),
-    h('h2', {}, 'Ny organisasjon'),
-    nameForm('Navn, f.eks. Menigheten', 'Opprett', async (name) => {
+    h('h1', {}, t('home.title')),
+    orgs.length ? h('ul', { class: 'plain' }, orgs.map((o) => h('li', {}, link('/o/' + enc(o.slug), o.name)))) : h('p', { class: 'muted' }, t('home.none')),
+    h('h2', {}, t('home.new')),
+    nameForm(t('home.name_placeholder'), t('common.create'), async (name) => {
       const o = await api('POST', '/orgs', { name });
       store.set('org', o.slug);
       go('/o/' + enc(o.slug));
     }),
-    h('p', { class: 'muted small' }, 'Alle som kjenner adressen ser organisasjonene her. Det er ingen innlogging ennå.'));
+    h('p', { class: 'muted small' }, t('home.warning')));
 }
 
 function logTable(entries) {
-  if (!entries.length) return h('p', { class: 'muted' }, 'Ingen endringer ennå.');
+  if (!entries.length) return h('p', { class: 'muted' }, t('log.none'));
   return h('ul', { class: 'log' }, entries.map((e) => h('li', {},
     h('span', { class: 'when' }, fmtTime(e.at)), h('span', { class: 'who' }, e.actor),
     h('span', { class: 'what' }, e.action + (e.plan ? ' (' + e.plan + ')' : '')), h('span', { class: 'detail' }, e.detail))));
@@ -136,28 +155,29 @@ async function pageOrg(r, org, people) {
   const refresh = () => render();
   const peopleRows = people.map((p) => h('tr', {},
     h('td', {}, p.name),
-    h('td', {}, h('input', { type: 'checkbox', 'aria-label': 'Aktiv: ' + p.name, checked: p.active,
+    h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('org.active_aria', { name: p.name }), checked: p.active,
       onchange: async (e) => { if (await write(() => api('PATCH', `/orgs/${enc(r.org)}/people/${p.id}`, { active: e.target.checked }))) refresh(); else e.target.checked = p.active; } })),
-    h('td', {}, h('input', { type: 'checkbox', 'aria-label': 'Kan foreslås: ' + p.name, checked: p.proposable,
+    h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('common.can_be_proposed_aria', { name: p.name }), checked: p.proposable,
       onchange: async (e) => { if (await write(() => api('PATCH', `/orgs/${enc(r.org)}/people/${p.id}`, { proposable: e.target.checked }))) refresh(); else e.target.checked = p.proposable; } }))));
   return h('div', {},
     h('h1', {}, org.name),
-    h('p', {}, link(`/o/${enc(r.org)}/oppsett`, 'Oppsett: oppgaver, dagtyper og kombinasjoner →')),
-    h('h2', {}, 'Planer'),
-    plans.length ? h('ul', { class: 'plain' }, plans.map((p) => h('li', {}, link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, p.name)))) : h('p', { class: 'muted' }, 'Ingen planer ennå. Lag en, f.eks. «Høst 2026».'),
-    nameForm('Ny plan, f.eks. Høst 2026', 'Opprett plan', async (name) => { const p = await api('POST', `/orgs/${enc(r.org)}/plans`, { name }); go(`/o/${enc(r.org)}/p/${enc(p.slug)}`); }),
-    h('h2', {}, 'Personer'),
-    people.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Navn'), h('th', {}, 'Aktiv'), h('th', {}, 'Kan foreslås'))), h('tbody', {}, peopleRows)) : h('p', { class: 'muted' }, 'Ingen personer ennå.'),
-    nameForm('Ny person', 'Legg til', async (name) => { await api('POST', `/orgs/${enc(r.org)}/people`, { name }); refresh(); }),
-    h('p', { class: 'muted small' }, '«Kan foreslås» av: planleggeren velger aldri personen selv, men du kan legge dem inn for hånd.'),
-    h('h2', {}, 'Endringslogg'),
+    h('p', {}, link(`/o/${enc(r.org)}/setup`, t('org.setup_link'))),
+    h('h2', {}, t('org.plans')),
+    plans.length ? h('ul', { class: 'plain' }, plans.map((p) => h('li', {}, link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, p.name)))) : h('p', { class: 'muted' }, t('org.no_plans')),
+    nameForm(t('org.new_plan_placeholder'), t('org.create_plan'), async (name) => { const p = await api('POST', `/orgs/${enc(r.org)}/plans`, { name }); go(`/o/${enc(r.org)}/p/${enc(p.slug)}`); }),
+    h('h2', {}, t('org.people')),
+    people.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, t('common.name')), h('th', {}, t('org.col_active')), h('th', {}, t('common.can_be_proposed')))), h('tbody', {}, peopleRows)) : h('p', { class: 'muted' }, t('org.no_people')),
+    nameForm(t('org.new_person'), t('common.add'), async (name) => { await api('POST', `/orgs/${enc(r.org)}/people`, { name }); refresh(); }),
+    h('p', { class: 'muted small' }, t('org.proposable_hint')),
+    h('h2', {}, t('log.title')),
     logTable(log));
 }
 
-const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const SELECT_LEVELS = [['standard', 'standard'], ['cannot', 'kan ikke kombineres'], ['impractical', 'upraktisk'], ['practical', 'praktisk'], ['preferred', 'bør kombineres']];
-
-const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const SELECT_LEVELS = ['standard', 'cannot', 'impractical', 'practical', 'preferred'];
+const COMBO_OPTIONS = ['cannot', 'impractical', 'practical', 'preferred'];
+const GROUP_LEVELS = ['poor', 'neutral', 'good'];
+const TASK_LEVELS = [['never', 'level.task.never'], ['poor', 'level.poor'], ['neutral', 'level.neutral'], ['good', 'level.good']];
+const EVENT_LEVELS = [['never', 'level.event.never'], ['poor', 'level.poor'], ['good', 'level.good']];
 
 function section(title, ...kids) { return h('section', {}, h('h2', {}, title), ...kids); }
 
@@ -167,107 +187,108 @@ async function pageSetup(r, org) {
   const refresh = () => render();
   const act = (fn) => async () => { if (await write(fn)) refresh(); };
 
-  const taskRows = tasks.map((t) => h('tr', {},
-    h('td', {}, t.name),
-    h('td', {}, h('input', { type: 'checkbox', 'aria-label': 'Fordeles av planleggeren: ' + t.name, checked: t.planned,
-      onchange: async (e) => { if (await write(() => api('PATCH', `${base}/tasks/${t.id}`, { planned: e.target.checked }))) refresh(); else e.target.checked = t.planned; } })),
-    h('td', {}, h('button', { type: 'button', class: 'danger', onclick: act(async () => { if (confirm(`Slette «${t.name}»?`)) await api('DELETE', `${base}/tasks/${t.id}`); else throw Object.assign(new Error('Avbrutt'), { cancelled: true }); }) }, 'Slett'))));
+  const taskRows = tasks.map((tk) => h('tr', {},
+    h('td', {}, tk.name),
+    h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('setup.planned_aria', { name: tk.name }), checked: tk.planned,
+      onchange: async (e) => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { planned: e.target.checked }))) refresh(); else e.target.checked = tk.planned; } })),
+    h('td', {}, h('button', { type: 'button', class: 'danger', onclick: act(async () => { confirmed(t('setup.delete_task_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); }) }, t('common.delete')))));
 
-  const pasted = h('textarea', { rows: '4', placeholder: 'Flere oppgaver på en gang: ett navn per linje', 'aria-label': 'Flere oppgaver, ett navn per linje' });
+  const pasted = h('textarea', { rows: '4', placeholder: t('setup.bulk_placeholder'), 'aria-label': t('setup.bulk_aria') });
 
   const dayTypeBlocks = dayTypes.map((d) => {
-    const inputs = tasks.map((t) => {
-      const cur = d.tasks.find((x) => x.task_id === t.id);
-      return { t, input: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.slots) : '0', 'aria-label': `Plasser for ${t.name} på ${d.name}` }) };
+    const inputs = tasks.map((tk) => {
+      const cur = d.tasks.find((x) => x.task_id === tk.id);
+      return { tk, input: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.slots) : '0', 'aria-label': t('setup.places_aria', { task: tk.name, daytype: d.name }) }) };
     });
-    const name = h('input', { type: 'text', value: d.name, maxlength: '80', 'aria-label': 'Navn på dagtype' });
+    const name = h('input', { type: 'text', value: d.name, maxlength: '80', 'aria-label': t('setup.daytype_name_aria') });
     return h('div', { class: 'card' },
       h('div', { class: 'row-inline' }, name,
-        h('button', { type: 'button', onclick: act(() => api('PATCH', `${base}/day-types/${d.id}`, { name: name.value })) }, 'Gi nytt navn'),
-        h('button', { type: 'button', class: 'danger', onclick: act(async () => { if (confirm(`Slette dagtypen «${d.name}»?`)) await api('DELETE', `${base}/day-types/${d.id}`); else throw Object.assign(new Error('Avbrutt'), { cancelled: true }); }) }, 'Slett')),
-      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Oppgave'), h('th', {}, 'Plasser (0 = ikke med)'))),
-        h('tbody', {}, inputs.map(({ t, input }) => h('tr', {}, h('td', {}, t.name), h('td', {}, input))))) : h('p', { class: 'muted' }, 'Lag oppgaver først.'),
+        h('button', { type: 'button', onclick: act(() => api('PATCH', `${base}/day-types/${d.id}`, { name: name.value })) }, t('common.rename')),
+        h('button', { type: 'button', class: 'danger', onclick: act(async () => { confirmed(t('setup.delete_daytype_confirm', { name: d.name })); await api('DELETE', `${base}/day-types/${d.id}`); }) }, t('common.delete'))),
+      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, t('setup.col_task')), h('th', {}, t('setup.col_places')))),
+        h('tbody', {}, inputs.map(({ tk, input }) => h('tr', {}, h('td', {}, tk.name), h('td', {}, input))))) : h('p', { class: 'muted' }, t('setup.tasks_first')),
       tasks.length ? h('button', { type: 'button', onclick: act(() => api('PUT', `${base}/day-types/${d.id}/tasks`, {
-        tasks: inputs.map(({ t, input }) => ({ task_id: t.id, slots: parseInt(input.value, 10) || 0 })).filter((x) => x.slots > 0),
-      })) }, 'Lagre oppgaver') : '');
+        tasks: inputs.map(({ tk, input }) => ({ task_id: tk.id, slots: parseInt(input.value, 10) || 0 })).filter((x) => x.slots > 0),
+      })) }, t('setup.save_tasks')) : '');
   });
 
-  // Grupper: et navngitt sett personer (team, kor, par). Ingen egne regler; planleggeren kan foreslå dem til oppgavene som settes opp her,
-  // og en manuell rute kan nevne dem. Medlemmene regnes som opptatt med oppgaven, og kombinasjonene over avgjør hva de kan ha i tillegg.
-  const plannedTasks = tasks.filter((t) => t.planned);
+  // Groups: a named set of people (team, choir, couple). No rules of their own; the planner may propose them for the tasks set up here,
+  // and a manual cell can name them. The members count as busy with the task, and the combinations above decide what else they can have.
+  const plannedTasks = tasks.filter((tk) => tk.planned);
   const groupBlocks = groups.map((g) => {
-    const gname = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': 'Navn på gruppen' });
-    const boxes = people.filter((p) => p.active || g.members.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: g.members.includes(p.id), 'aria-label': `${p.name} i ${g.name}` }) }));
-    const rows = plannedTasks.map((t) => {
-      const cur = g.tasks.find((x) => x.task_id === t.id);
-      return { t,
-        fills: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.fills) : '0', 'aria-label': `Plasser ${g.name} fyller på ${t.name}` }),
-        level: h('select', { 'aria-label': `Hvor gjerne ${g.name} tar ${t.name}` }, GROUP_LEVELS.map(([v, label]) => h('option', { value: v, selected: v === (cur ? cur.level : 'neutral') }, label))) };
+    const gname = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': t('setup.group_name_aria') });
+    const boxes = people.filter((p) => p.active || g.members.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: g.members.includes(p.id), 'aria-label': t('setup.member_aria', { person: p.name, group: g.name }) }) }));
+    const rows = plannedTasks.map((tk) => {
+      const cur = g.tasks.find((x) => x.task_id === tk.id);
+      return { tk,
+        fills: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.fills) : '0', 'aria-label': t('setup.fills_aria', { group: g.name, task: tk.name }) }),
+        level: h('select', { 'aria-label': t('setup.level_aria', { group: g.name, task: tk.name }) }, GROUP_LEVELS.map((v) => h('option', { value: v, selected: v === (cur ? cur.level : 'neutral') }, t('level.' + v)))) };
     });
     return h('div', { class: 'card' },
       h('div', { class: 'row-inline' }, gname,
-        h('button', { type: 'button', onclick: act(() => api('PATCH', `${base}/groups/${g.id}`, { name: gname.value })) }, 'Gi nytt navn'),
-        h('label', { class: 'chip' }, h('input', { type: 'checkbox', checked: g.proposable, 'aria-label': 'Kan foreslås: ' + g.name,
-          onchange: async (e) => { if (await write(() => api('PATCH', `${base}/groups/${g.id}`, { proposable: e.target.checked }))) refresh(); else e.target.checked = g.proposable; } }), ' Kan foreslås'),
-        h('button', { type: 'button', class: 'danger', onclick: act(async () => { if (confirm(`Slette gruppen «${g.name}»?`)) await api('DELETE', `${base}/groups/${g.id}`); else throw Object.assign(new Error('Avbrutt'), { cancelled: true }); }) }, 'Slett')),
-      h('h3', {}, 'Medlemmer'),
-      boxes.length ? h('div', { class: 'chips' }, boxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name + (p.active ? '' : ' (inaktiv)')))) : h('p', { class: 'muted' }, 'Legg til personer på organisasjonssiden først.'),
-      boxes.length ? h('button', { type: 'button', onclick: act(() => api('PUT', `${base}/groups/${g.id}/members`, { people: boxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, 'Lagre medlemmer') : '',
-      h('h3', {}, 'Planleggeren kan foreslå gruppen til'),
-      plannedTasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Oppgave'), h('th', {}, 'Plasser (0 = ikke)'), h('th', {}, 'Hvor gjerne'))),
-        h('tbody', {}, rows.map(({ t, fills, level }) => h('tr', {}, h('td', {}, t.name), h('td', {}, fills), h('td', {}, level))))) : h('p', { class: 'muted' }, 'Ingen oppgaver som planleggeren fordeler.'),
+        h('button', { type: 'button', onclick: act(() => api('PATCH', `${base}/groups/${g.id}`, { name: gname.value })) }, t('common.rename')),
+        h('label', { class: 'chip' }, h('input', { type: 'checkbox', checked: g.proposable, 'aria-label': t('common.can_be_proposed_aria', { name: g.name }),
+          onchange: async (e) => { if (await write(() => api('PATCH', `${base}/groups/${g.id}`, { proposable: e.target.checked }))) refresh(); else e.target.checked = g.proposable; } }), ' ' + t('common.can_be_proposed')),
+        h('button', { type: 'button', class: 'danger', onclick: act(async () => { confirmed(t('setup.delete_group_confirm', { name: g.name })); await api('DELETE', `${base}/groups/${g.id}`); }) }, t('common.delete'))),
+      h('h3', {}, t('setup.members')),
+      boxes.length ? h('div', { class: 'chips' }, boxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name + (p.active ? '' : ' ' + t('setup.inactive'))))) : h('p', { class: 'muted' }, t('setup.add_people_first')),
+      boxes.length ? h('button', { type: 'button', onclick: act(() => api('PUT', `${base}/groups/${g.id}/members`, { people: boxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, t('setup.save_members')) : '',
+      h('h3', {}, t('setup.group_proposed_for')),
+      plannedTasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, t('setup.col_task')), h('th', {}, t('setup.col_places_group')), h('th', {}, t('setup.col_how_much')))),
+        h('tbody', {}, rows.map(({ tk, fills, level }) => h('tr', {}, h('td', {}, tk.name), h('td', {}, fills), h('td', {}, level))))) : h('p', { class: 'muted' }, t('setup.no_planned_tasks')),
       plannedTasks.length ? h('button', { type: 'button', onclick: act(() => api('PUT', `${base}/groups/${g.id}/tasks`, {
-        tasks: rows.map(({ t, fills, level }) => ({ task_id: t.id, fills: parseInt(fills.value, 10) || 0, level: level.value })).filter((x) => x.fills > 0),
-      })) }, 'Lagre oppgaver') : '');
+        tasks: rows.map(({ tk, fills, level }) => ({ task_id: tk.id, fills: parseInt(fills.value, 10) || 0, level: level.value })).filter((x) => x.fills > 0),
+      })) }, t('setup.save_tasks')) : '');
   });
 
-  const taskName = (id) => (tasks.find((t) => t.id === id) || {}).name;
+  const taskName = (id) => (tasks.find((tk) => tk.id === id) || {}).name;
   const level = (a, b) => (combos.find((c) => c.a === a && c.b === b) || { level: 'standard' }).level;
   const pairRows = [];
   for (let i = 0; i < tasks.length; i++) for (let j = i + 1; j < tasks.length; j++) {
     const x = tasks[i], y = tasks[j];
-    const select = h('select', { 'aria-label': `${x.name} og ${y.name}`, onchange: async (e) => { if (!(await write(() => api('PUT', base + '/combinations', { a: x.id, b: y.id, level: e.target.value })))) e.target.value = level(Math.min(x.id, y.id), Math.max(x.id, y.id)); } },
-      SELECT_LEVELS.map(([v, label]) => h('option', { value: v, selected: v === level(Math.min(x.id, y.id), Math.max(x.id, y.id)) }, label)));
+    const cur = level(Math.min(x.id, y.id), Math.max(x.id, y.id));
+    const select = h('select', { 'aria-label': `${x.name} + ${y.name}`, onchange: async (e) => { if (!(await write(() => api('PUT', base + '/combinations', { a: x.id, b: y.id, level: e.target.value })))) e.target.value = cur; } },
+      SELECT_LEVELS.map((v) => h('option', { value: v, selected: v === cur }, t('combo.' + v))));
     pairRows.push(h('tr', {}, h('td', {}, taskName(x.id) + ' + ' + taskName(y.id)), h('td', {}, select)));
   }
 
   return h('div', {},
-    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
-    h('h1', {}, 'Oppsett'),
-    h('p', { class: 'muted' }, 'Dette gjelder alle planene i organisasjonen. Alt her lager du selv.'),
-    section('Oppgaver',
-      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Navn'), h('th', {}, 'Fordeles av planleggeren'), h('th', {}, ''))), h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, 'Ingen oppgaver ennå.'),
-      nameForm('Ny oppgave', 'Legg til', async (name) => { await api('POST', base + '/tasks', { name }); refresh(); }),
+    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
+    h('h1', {}, t('setup.title')),
+    h('p', { class: 'muted' }, t('setup.intro')),
+    section(t('setup.tasks'),
+      tasks.length ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, t('common.name')), h('th', {}, t('setup.col_planned')), h('th', {}, ''))), h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('setup.none_tasks')),
+      nameForm(t('setup.new_task'), t('common.add'), async (name) => { await api('POST', base + '/tasks', { name }); refresh(); }),
       h('form', { class: 'stack', onsubmit: async (e) => { e.preventDefault(); if (await write(async () => { await api('POST', base + '/tasks/bulk', { names: pasted.value }); })) refresh(); } },
-        pasted, h('button', { type: 'submit' }, 'Legg til alle'))),
-    section('Dagtyper',
-      h('p', { class: 'muted small' }, 'En dagtype sier hvilke oppgaver en hendelse har og hvor mange plasser (f.eks. «Gudstjeneste»: Lyd 1, Kafé 3).'),
-      dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, 'Ingen dagtyper ennå.'),
-      nameForm('Ny dagtype, f.eks. Gudstjeneste', 'Opprett', async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
-    section('Grupper',
-      h('p', { class: 'muted small' }, 'En gruppe er et navngitt sett personer (et team, et kor, et par). Medlemmene er opptatt sammen når gruppen står på en oppgave, og kombinasjonene under avgjør hva de kan ha i tillegg. Settes «Kan foreslås» av, velger planleggeren aldri gruppen selv, men du kan sette den inn for hånd.'),
-      groups.length ? groupBlocks : h('p', { class: 'muted' }, 'Ingen grupper ennå.'),
-      nameForm('Ny gruppe, f.eks. Kirkekoret', 'Opprett', async (name) => { await api('POST', base + '/groups', { name }); refresh(); })),
-    section('Hva kan kombineres samme dag?',
-      h('p', { class: 'muted small' }, '«Standard» regnes som impractical. Innstillingen er felles for alle i organisasjonen.'),
-      pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : h('p', { class: 'muted' }, 'Lag minst to oppgaver først.')));
+        pasted, h('button', { type: 'submit' }, t('common.add_all')))),
+    section(t('setup.daytypes'),
+      h('p', { class: 'muted small' }, t('setup.daytypes_hint')),
+      dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, t('setup.none_daytypes')),
+      nameForm(t('setup.new_daytype'), t('common.create'), async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
+    section(t('setup.groups'),
+      h('p', { class: 'muted small' }, t('setup.groups_hint')),
+      groups.length ? groupBlocks : h('p', { class: 'muted' }, t('setup.none_groups')),
+      nameForm(t('setup.new_group'), t('common.create'), async (name) => { await api('POST', base + '/groups', { name }); refresh(); })),
+    section(t('setup.combos'),
+      h('p', { class: 'muted small' }, t('setup.combos_hint')),
+      pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : h('p', { class: 'muted' }, t('setup.combos_need_two'))));
 }
 
 function dayTypeSelect(dayTypes, value, onchange, label) {
   return h('select', { 'aria-label': label, onchange }, dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === value }, d.name)));
 }
 
-// «Plan»: siste kjøring av planleggeren som en liste over hendelser (mobil først), med knapp for å planlegge eller prøve igjen.
-// Kjøringen skjer i tjeneren; panelet spør etter status hvert sekund til den er ferdig og tegner bare seg selv på nytt.
+// «Plan»: the latest run of the planner as a list of events (mobile first), with a button to plan or try again.
+// The run happens on the server; the panel asks for status every second until it is done and redraws only itself.
 function planPanel(r, canPlan, first) {
   const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/runs`;
   const box = h('div', { class: 'plan-panel' });
   const limits = [[10, '10 s'], [20, '20 s'], [60, '60 s']];
-  const limitSel = h('select', { 'aria-label': 'Tid planleggeren får' }, limits.map(([v, t]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, t)));
+  const limitSel = h('select', { 'aria-label': t('run.limit_aria') }, limits.map(([v, text]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, text)));
   limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
   let timer = 0;
   let lastView = first;
-  // Rutenett på brede skjermer, liste på smale, til brukeren velger selv.
+  // Grid on wide screens, list on narrow ones, until the user chooses.
   const planView = () => store.get('planview') || (window.matchMedia('(min-width: 56rem)').matches ? 'grid' : 'list');
 
   async function start() {
@@ -275,8 +296,8 @@ function planPanel(r, canPlan, first) {
     if (await write(async () => { const res = await api('POST', path, { time_limit: parseInt(limitSel.value, 10) }); view = await api('GET', `${path}/${res.id}`); })) show(view);
   }
   async function poll() {
-    if (!box.isConnected) return;  // siden er byttet ut
-    try { show(await api('GET', `${path}/latest`)); } catch (e) { say(e.message, 'err'); }
+    if (!box.isConnected) return;  // the page has been replaced
+    try { show(await api('GET', `${path}/latest`)); } catch (e) { say(errorText(e), 'err'); }
   }
   function show(view) {
     lastView = view;
@@ -289,59 +310,59 @@ function planPanel(r, canPlan, first) {
     if (await write(() => api('POST', `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/cells`, { events: [evId], task: taskId, person: personId }))) render();
   }
 
-  // Hva som står i en rute: personer, grupper og tekster, og hva som mangler. compact (rutenettet): forklaringen bak en «Hvorfor?».
+  // What is in a cell: people, groups and texts, and what is missing. compact (the grid): the explanation behind a «Why?».
   function cellContent(c, taskName, evId, compact) {
     const tag = (text, cls) => h('span', { class: 'tag' + (cls ? ' ' + cls : '') }, text);
     const times = (n) => (n > 1 ? ` ×${n}` : '');
     const who = [
-      ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag('låst', 'lock') : '', p.weak ? tag('dårlig') : '',
-        p.locked ? '' : h('button', { type: 'button', class: 'lockbtn', title: 'Behold ' + p.name + ' her i neste plan', 'aria-label': `Lås ${p.name} på ${taskName}`, onclick: () => lock(evId, c.task_id, p.id) }, 'Lås'))),
-      ...c.groups.map((g) => h('span', { class: 'person' }, `${g.name} (${g.members.join(', ')})${times(g.fills)}`, g.locked ? tag('låst', 'lock') : '', g.weak ? tag('dårlig') : '')),
-      ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag('låst', 'lock'))),
+      ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag(t('cell.locked'), 'lock') : '', p.weak ? tag(t('cell.poor')) : '',
+        p.locked ? '' : h('button', { type: 'button', class: 'lockbtn', title: t('cell.lock_title', { name: p.name }), 'aria-label': t('cell.lock_aria', { name: p.name, task: taskName }), onclick: () => lock(evId, c.task_id, p.id) }, t('cell.lock')))),
+      ...c.groups.map((g) => h('span', { class: 'person' }, `${g.name} (${g.members.join(', ')})${times(g.fills)}`, g.locked ? tag(t('cell.locked'), 'lock') : '', g.weak ? tag(t('cell.poor')) : '')),
+      ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag(t('cell.locked'), 'lock'))),
     ];
-    if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? 'Ikke fylt' : `Mangler ${c.missing}`));
+    if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? t('cell.not_filled') : t('cell.missing', { n: c.missing })));
     const why = c.missing > 0 && c.explanation
-      ? (compact ? h('details', { class: 'why' }, h('summary', {}, 'Hvorfor?'), h('div', { class: 'small muted' }, c.explanation)) : h('div', { class: 'small muted' }, c.explanation))
+      ? (compact ? h('details', { class: 'why' }, h('summary', {}, t('cell.why')), h('div', { class: 'small muted' }, c.explanation)) : h('div', { class: 'small muted' }, c.explanation))
       : '';
     return h('div', {}, h('div', { class: 'who' }, who), why);
   }
 
-  // Rutenettet: hendelser bortover, oppgaver nedover. Det scroller sideveis i en egen boks, ikke siden.
+  // The grid: events across, tasks down. It scrolls sideways in its own box, not the page.
   function gridTable(view) {
     const head = h('tr', {}, h('th', { class: 'corner' }, ''),
       view.events.map((ev) => h('th', { scope: 'col' }, fmtShortDate(ev.date), h('div', { class: 'small muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : '')))));
-    const rows = view.tasks.map((t) => h('tr', {}, h('th', { scope: 'row' }, t.name),
-      view.events.map((ev) => { const c = ev.cells.find((x) => x.task_id === t.id); return h('td', {}, c ? cellContent(c, t.name, ev.id, true) : h('span', { class: 'muted' }, '–')); })));
+    const rows = view.tasks.map((tk) => h('tr', {}, h('th', { scope: 'row' }, tk.name),
+      view.events.map((ev) => { const c = ev.cells.find((x) => x.task_id === tk.id); return h('td', {}, c ? cellContent(c, tk.name, ev.id, true) : h('span', { class: 'muted' }, '–')); })));
     return h('div', { class: 'grid-scroll' }, h('table', { class: 'plan-grid' }, h('thead', {}, head), h('tbody', {}, rows)));
   }
 
   function body(view) {
     const running = !!view && view.run.status === 'running';
     const out = [h('div', { class: 'row-inline' },
-      h('button', { type: 'button', disabled: !canPlan || running, onclick: start }, running ? 'Planlegger…' : view ? 'Prøv igjen' : 'Planlegg'),
-      h('label', { class: 'small muted' }, 'Tid ', limitSel))];
-    if (!canPlan) out.push(h('p', { class: 'muted' }, 'Planleggeren er ikke satt opp på denne tjeneren.'));
-    if (!view) { out.push(h('p', { class: 'muted' }, 'Ingen plan er laget ennå. Når folk har svart, trykk «Planlegg».')); return out; }
+      h('button', { type: 'button', disabled: !canPlan || running, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')),
+      h('label', { class: 'small muted' }, t('run.time') + ' ', limitSel))];
+    if (!canPlan) out.push(h('p', { class: 'muted' }, t('run.no_planner')));
+    if (!view) { out.push(h('p', { class: 'muted' }, t('run.none_yet'))); return out; }
     const run = view.run;
-    if (running) { out.push(h('p', { role: 'status' }, `Planlegger … det tar opptil ${run.time_limit} sekunder.`)); return out; }
-    if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, 'Planleggingen feilet: ' + (run.error || 'ukjent feil'))); return out; }
+    if (running) { out.push(h('p', { role: 'status' }, t('run.running', { n: run.time_limit }))); return out; }
+    if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: run.error || t('run.unknown_error') }))); return out; }
 
-    out.push(h('p', { class: 'small muted' }, `Laget av ${run.actor} ${fmtTime(run.finished_at || run.started_at)}. ` + (run.solver_status === 'OPTIMAL' ? 'Beste mulige plan funnet.' : 'God plan funnet; kan finnes en enda bedre om den får mer tid.')));
-    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, 'Svar, oppsett eller vekting er endret siden denne planen ble laget. Trykk «Prøv igjen» for en oppdatert plan.'));
-    if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, 'Den uavhengige kontrollen fant brudd mot reglene:'), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
-    else if (run.checked) out.push(h('p', { class: 'small muted' }, 'Kontrollert uavhengig: ingen brudd mot reglene.'));
+    out.push(h('p', { class: 'small muted' }, t('run.made_by', { actor: run.actor, time: fmtTime(run.finished_at || run.started_at) }) + ' ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'))));
+    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, t('run.stale')));
+    if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
+    else if (run.checked) out.push(h('p', { class: 'small muted' }, t('run.checked_ok')));
     if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
 
-    const names = new Map(view.tasks.map((t) => [t.id, t.name]));
+    const names = new Map(view.tasks.map((tk) => [tk.id, tk.name]));
     const mode = planView();
-    out.push(h('div', { class: 'view-toggle', role: 'group', 'aria-label': 'Visning' },
-      [['list', 'Liste'], ['grid', 'Rutenett']].map(([v, text]) => h('button', { type: 'button', class: 'ghost', 'aria-pressed': String(mode === v), onclick: () => { store.set('planview', v); show(lastView); } }, text))));
+    out.push(h('div', { class: 'view-toggle', role: 'group', 'aria-label': t('run.view_aria') },
+      [['list', t('run.view_list')], ['grid', t('run.view_grid')]].map(([v, text]) => h('button', { type: 'button', class: 'ghost', 'aria-pressed': String(mode === v), onclick: () => { store.set('planview', v); show(lastView); } }, text))));
     if (mode === 'grid') out.push(gridTable(view));
     else out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
       h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
       h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => [h('div', { class: 'task' }, names.get(c.task_id) || '?'), cellContent(c, names.get(c.task_id) || '?', ev.id, false)]))))));
-    if (view.weak.length) out.push(h('details', {}, h('summary', {}, `Kompromisser (${view.weak.length})`), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
-    if (view.load.length) out.push(h('details', {}, h('summary', {}, 'Fordeling'), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, `${l.name}: ${l.count} (jevn andel ${l.target.toLocaleString('nb-NO')})`)))));
+    if (view.weak.length) out.push(h('details', {}, h('summary', {}, t('run.compromises', { n: view.weak.length })), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
+    if (view.load.length) out.push(h('details', {}, h('summary', {}, t('run.distribution')), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) }))))));
     return out;
   }
 
@@ -349,60 +370,60 @@ function planPanel(r, canPlan, first) {
   return box;
 }
 
-// Flere hendelser om gangen: en utvidbar liste med avkrysning. selected() gir id-ene.
+// Several events at a time: an expandable list with ticks. selected() gives the ids.
 function eventPicker(dates, label) {
   const boxes = dates.map((d) => ({ d, box: h('input', { type: 'checkbox', 'aria-label': `${d.date} ${d.day_type}` }) }));
   const summary = h('summary', {}, label);
-  const update = () => { const n = boxes.filter((x) => x.box.checked).length; summary.textContent = n ? `${label} (${n} valgt)` : label; };
+  const update = () => { const n = boxes.filter((x) => x.box.checked).length; summary.textContent = n ? t('rules.picker_selected', { label, n }) : label; };
   boxes.forEach((x) => x.box.addEventListener('change', update));
   const set = (v) => () => { boxes.forEach((x) => { x.box.checked = v; }); update(); };
   const el = h('details', { class: 'picker' }, summary,
-    h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost', onclick: set(true) }, 'Velg alle'), h('button', { type: 'button', class: 'ghost', onclick: set(false) }, 'Fjern valg')),
+    h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost', onclick: set(true) }, t('rules.select_all')), h('button', { type: 'button', class: 'ghost', onclick: set(false) }, t('rules.clear'))),
     h('div', { class: 'chips' }, boxes.map(({ d, box }) => h('label', { class: 'chip' }, box, ` ${d.date} ${d.day_type}`))));
   return { el, selected: () => boxes.filter((x) => x.box.checked).map((x) => x.d.id) };
 }
 
-// Manuelle ruter (låst: planleggeren flytter dem aldri) og utvalg (bare disse kan velges), for flere hendelser om gangen.
+// Manual cells (locked: the planner never moves them) and selections (only these can be picked), for several events at a time.
 function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
   const pbase = `${base}/plans/${enc(r.plan)}`;
   const active = people.filter((p) => p.active);
   const nameOf = (list, id) => (list.find((x) => x.id === id) || { name: '?' }).name;
-  if (!dates.length) return section('Manuelle ruter og utvalg', h('p', { class: 'muted' }, 'Legg til hendelser først.'));
+  if (!dates.length) return section(t('rules.title'), h('p', { class: 'muted' }, t('rules.add_events_first')));
   const refresh = () => render();
 
-  const pick1 = eventPicker(dates, 'Hendelser');
-  const taskSel = h('select', { 'aria-label': 'Oppgave for ruten' }, tasks.map((t) => h('option', { value: String(t.id) }, t.name + (t.planned ? '' : ' (fordeles ikke)'))));
-  const kind = h('select', { 'aria-label': 'Hva settes inn' }, [['person', 'Person'], ['group', 'Gruppe'], ['text', 'Tekst']].map(([v, t]) => h('option', { value: v }, t)));
-  const personSel = h('select', { 'aria-label': 'Person' }, active.map((p) => h('option', { value: String(p.id) }, p.name)));
-  const groupSel = h('select', { 'aria-label': 'Gruppe', hidden: true }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
-  const textIn = h('input', { type: 'text', maxlength: '80', placeholder: 'Tekst, f.eks. Gjest utenfra', 'aria-label': 'Tekst', hidden: true });
-  const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': 'Antall plasser', hidden: true });
+  const pick1 = eventPicker(dates, t('rules.events'));
+  const taskSel = h('select', { 'aria-label': t('rules.task_aria') }, tasks.map((tk) => h('option', { value: String(tk.id) }, tk.planned ? tk.name : t('rules.not_distributed', { name: tk.name }))));
+  const kind = h('select', { 'aria-label': t('rules.kind_aria') }, [['person', t('common.person')], ['group', t('common.group')], ['text', t('common.text')]].map(([v, text]) => h('option', { value: v }, text)));
+  const personSel = h('select', { 'aria-label': t('rules.person_aria') }, active.map((p) => h('option', { value: String(p.id) }, p.name)));
+  const groupSel = h('select', { 'aria-label': t('rules.group_aria'), hidden: true }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
+  const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('rules.text_placeholder'), 'aria-label': t('rules.text_aria'), hidden: true });
+  const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('rules.fills_aria'), hidden: true });
   kind.addEventListener('change', () => { personSel.hidden = kind.value !== 'person'; groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; fills.hidden = kind.value === 'person'; });
   const addForm = h('form', { class: 'stack', onsubmit: async (e) => {
     e.preventDefault();
     const events = pick1.selected();
-    if (!events.length) { say('Velg minst én hendelse.', 'err'); return; }
+    if (!events.length) { say(t('err.choose_events'), 'err'); return; }
     const body = { events, task: parseInt(taskSel.value, 10) };
     if (kind.value === 'person') body.person = parseInt(personSel.value, 10);
     else if (kind.value === 'group') { body.group = parseInt(groupSel.value, 10); body.fills = parseInt(fills.value, 10) || 1; }
     else { body.label = textIn.value; body.fills = parseInt(fills.value, 10) || 1; }
     let res;
-    if (await write(async () => { res = await api('POST', pbase + '/cells', body); })) { await render(); say(`${res.created.length} ruter lagt til${res.skipped ? ', ' + res.skipped + ' fantes fra før' : ''}.`); }
-  } }, pick1.el, h('div', { class: 'row-inline' }, taskSel, kind, personSel, groupSel, textIn, fills), h('button', { type: 'submit' }, 'Legg til rute'));
+    if (await write(async () => { res = await api('POST', pbase + '/cells', body); })) { await render(); say(t('rules.cells_added', { created: res.created.length, skipped: res.skipped || 0 })); }
+  } }, pick1.el, h('div', { class: 'row-inline' }, taskSel, kind, personSel, groupSel, textIn, fills), h('button', { type: 'submit' }, t('rules.add_cell')));
 
-  const pick2 = eventPicker(dates, 'Hendelser');
-  const poolTask = h('select', { 'aria-label': 'Oppgave for utvalget' }, tasks.filter((t) => t.planned).map((t) => h('option', { value: String(t.id) }, t.name)));
-  const pBoxes = active.map((p) => ({ p, box: h('input', { type: 'checkbox', 'aria-label': 'Utvalg: ' + p.name }) }));
-  const gBoxes = groups.map((g) => ({ g, box: h('input', { type: 'checkbox', 'aria-label': 'Utvalg, gruppe: ' + g.name }) }));
+  const pick2 = eventPicker(dates, t('rules.events'));
+  const poolTask = h('select', { 'aria-label': t('rules.pool_task_aria') }, tasks.filter((tk) => tk.planned).map((tk) => h('option', { value: String(tk.id) }, tk.name)));
+  const pBoxes = active.map((p) => ({ p, box: h('input', { type: 'checkbox', 'aria-label': t('rules.pool_person_aria', { name: p.name }) }) }));
+  const gBoxes = groups.map((g) => ({ g, box: h('input', { type: 'checkbox', 'aria-label': t('rules.pool_group_aria', { name: g.name }) }) }));
   const poolForm = h('form', { class: 'stack', onsubmit: async (e) => {
     e.preventDefault();
     const events = pick2.selected();
-    if (!events.length) { say('Velg minst én hendelse.', 'err'); return; }
+    if (!events.length) { say(t('err.choose_events'), 'err'); return; }
     const people2 = pBoxes.filter((x) => x.box.checked).map((x) => x.p.id), groups2 = gBoxes.filter((x) => x.box.checked).map((x) => x.g.id);
-    if (await write(() => api('PUT', pbase + '/pools', { events, task: parseInt(poolTask.value, 10), people: people2, groups: groups2 }))) { await render(); say(people2.length + groups2.length ? `Utvalget er satt for ${events.length} hendelser.` : `Utvalget er fjernet for ${events.length} hendelser.`); }
+    if (await write(() => api('PUT', pbase + '/pools', { events, task: parseInt(poolTask.value, 10), people: people2, groups: groups2 }))) { await render(); say(tn(people2.length + groups2.length ? 'rules.pool_set' : 'rules.pool_cleared', events.length)); }
   } }, pick2.el, poolTask,
-  h('div', { class: 'chips' }, [...pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name)), ...gBoxes.map(({ g, box }) => h('label', { class: 'chip' }, box, ' ' + g.name + ' (gruppe)'))]),
-  h('button', { type: 'submit' }, 'Sett utvalg'), h('p', { class: 'muted small' }, 'Uten noen avkrysset fjernes utvalget for de valgte hendelsene.'));
+  h('div', { class: 'chips' }, [...pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name)), ...gBoxes.map(({ g, box }) => h('label', { class: 'chip' }, box, ' ' + t('rules.group_suffix', { name: g.name })))]),
+  h('button', { type: 'submit' }, t('rules.set_pool')), h('p', { class: 'muted small' }, t('rules.pool_hint')));
 
   const rows = dates.map((d) => ({ d, cs: cells.filter((c) => c.event_id === d.id), ps: pools.filter((p) => p.event_id === d.id) })).filter((x) => x.cs.length || x.ps.length);
   const list = rows.length ? h('ul', { class: 'plain' }, rows.map(({ d, cs, ps }) => h('li', {},
@@ -410,63 +431,55 @@ function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
     cs.map((c) => {
       const what = c.person_id ? nameOf(people, c.person_id) : c.group_id ? nameOf(groups, c.group_id) : c.label;
       return h('div', { class: 'rule' }, h('span', {}, `${nameOf(tasks, c.task_id)}: ${what}${c.fills > 1 ? ' ×' + c.fills : ''}`),
-        h('button', { type: 'button', class: 'link-button', 'aria-label': `Fjern ruten ${nameOf(tasks, c.task_id)} ${what} ${d.date}`, onclick: async () => { if (await write(() => api('DELETE', `${pbase}/cells/${c.id}`))) refresh(); } }, 'Fjern'));
+        h('button', { type: 'button', class: 'link-button', 'aria-label': t('rules.remove_cell_aria', { task: nameOf(tasks, c.task_id), what, date: d.date }), onclick: async () => { if (await write(() => api('DELETE', `${pbase}/cells/${c.id}`))) refresh(); } }, t('common.remove')));
     }),
     ps.map((p) => {
-      const names = [...p.people.map((id) => nameOf(people, id)), ...p.groups.map((id) => nameOf(groups, id) + ' (gruppe)')];
-      return h('div', { class: 'rule' }, h('span', {}, `Utvalg ${nameOf(tasks, p.task_id)}: ${names.join(', ')}`),
-        h('button', { type: 'button', class: 'link-button', 'aria-label': `Fjern utvalget ${nameOf(tasks, p.task_id)} ${d.date}`, onclick: async () => { if (await write(() => api('PUT', pbase + '/pools', { events: [d.id], task: p.task_id, people: [], groups: [] }))) refresh(); } }, 'Fjern'));
-    })))) : h('p', { class: 'muted' }, 'Ingen manuelle ruter eller utvalg ennå.');
+      const names = [...p.people.map((id) => nameOf(people, id)), ...p.groups.map((id) => t('rules.group_suffix', { name: nameOf(groups, id) }))];
+      return h('div', { class: 'rule' }, h('span', {}, t('rules.pool_line', { task: nameOf(tasks, p.task_id), names: names.join(', ') })),
+        h('button', { type: 'button', class: 'link-button', 'aria-label': t('rules.remove_pool_aria', { task: nameOf(tasks, p.task_id), date: d.date }), onclick: async () => { if (await write(() => api('PUT', pbase + '/pools', { events: [d.id], task: p.task_id, people: [], groups: [] }))) refresh(); } }, t('common.remove')));
+    })))) : h('p', { class: 'muted' }, t('rules.none'));
 
-  return section('Manuelle ruter og utvalg',
-    h('p', { class: 'muted small' }, 'En manuell rute er låst: planleggeren flytter den aldri, og den teller som en fylt plass. Et utvalg betyr at bare de som er krysset av kan velges for oppgaven. Begge kan settes for flere hendelser om gangen.'),
+  return section(t('rules.title'),
+    h('p', { class: 'muted small' }, t('rules.hint')),
     list,
-    h('details', {}, h('summary', {}, 'Ny manuell rute'), addForm),
-    h('details', {}, h('summary', {}, 'Nytt utvalg'), poolForm));
+    h('details', {}, h('summary', {}, t('rules.new_cell')), addForm),
+    h('details', {}, h('summary', {}, t('rules.new_pool')), poolForm));
 }
 
-// Vekting: hva planleggeren legger vekt på, for denne planen. Tallene er poeng i planleggerens regnestykke; standardverdiene er et good
-// utgangspunkt. Bare det som avviker fra standard lagres, så en endret standard når planer som aldri valgte noe.
-const WEIGHT_LABELS = {
-  w_fair: ['Fordeling', 'Lik total belastning', 'Poeng trukket for hvert oppdrag en person ligger over eller under sin andel av alle oppdragene. Hovedleddet for lik fordeling.'],
-  w_fair_range: ['Fordeling', 'Verste avvik, totalt', 'Poeng for den som ligger lengst fra sin andel, så ikke én person tar hele avviket.'],
-  w_task_fair: ['Fordeling', 'Lik andel av hver oppgave', 'Som første, men per oppgave. Av som standard: slås den på, får de som tar flere oppgaver mer totalt enn de som tar én.'],
-  w_task_range: ['Fordeling', 'Verste avvik, per oppgave', 'Som «verste avvik», men per oppgave.'],
-  'w_task.good': ['Ønsker', 'Får en oppgave de har sagt «godt» til', 'Poeng for hver slik tildeling.'],
-  'w_task.poor': ['Ønsker', 'Får en oppgave de har sagt «dårlig» til', 'Negativt tall: poeng trukket.'],
-  'w_date.good': ['Ønsker', 'Får en hendelse som passer godt', 'Poeng for hver slik tildeling.'],
-  'w_date.poor': ['Ønsker', 'Får en hendelse som passer dårlig', 'Negativt tall: poeng trukket.'],
-  'w_combo.preferred': ['Kombinasjoner', 'To oppgaver som bør kombineres samme dag', 'Poeng for hvert slikt par.'],
-  'w_combo.practical': ['Kombinasjoner', 'To oppgaver som er praktiske å kombinere', 'Poeng for hvert slikt par.'],
-  'w_combo.impractical': ['Kombinasjoner', 'To oppgaver som er upraktiske å kombinere', 'Negativt tall: poeng trukket for hvert slikt par.'],
-  default_combination: ['Kombinasjoner', 'Oppgavepar uten innstilling regnes som', 'Gjelder par du ikke har satt under Oppsett.'],
+// Weighting: what the planner puts weight on, for this plan. The numbers are points in the planner's sum; the defaults are a good
+// starting point. Only what differs from the default is stored, so a changed default reaches plans that never chose anything.
+const WEIGHT_GROUP = {
+  w_fair: 'fair', w_fair_range: 'fair', w_task_fair: 'fair', w_task_range: 'fair',
+  'w_task.good': 'wishes', 'w_task.poor': 'wishes', 'w_date.good': 'wishes', 'w_date.poor': 'wishes',
+  'w_combo.preferred': 'combos', 'w_combo.practical': 'combos', 'w_combo.impractical': 'combos', default_combination: 'combos',
 };
-const COMBO_OPTIONS = { cannot: 'Kan ikke kombineres', impractical: 'Upraktisk', practical: 'Praktisk', preferred: 'Bør kombineres' };
+const weightLabel = (key) => t('weight.' + key + '.label');
+const weightGroup = (key) => t('weight.group.' + (WEIGHT_GROUP[key] || 'fair'));
 
 function weightsSection(r, wr) {
   const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/weights`;
   const inputs = wr.specs.map((spec) => {
     const cur = spec.key in wr.values ? wr.values[spec.key] : spec.default;
     const input = spec.kind === 'choice'
-      ? h('select', { 'aria-label': WEIGHT_LABELS[spec.key][1] }, spec.options.map((o) => h('option', { value: o, selected: o === cur }, COMBO_OPTIONS[o] || o)))
-      : h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': WEIGHT_LABELS[spec.key][1] });
+      ? h('select', { 'aria-label': weightLabel(spec.key) }, spec.options.map((o) => h('option', { value: o, selected: o === cur }, hasMsg('combo.' + o) ? t('combo.' + o) : o)))
+      : h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': weightLabel(spec.key) });
     return { spec, input, changed: spec.key in wr.values };
   });
-  const groups = [...new Set(wr.specs.map((x) => WEIGHT_LABELS[x.key][0]))];
+  const groups = [...new Set(wr.specs.map((x) => weightGroup(x.key)))];
   const blocks = groups.map((g) => h('div', { class: 'weight-group' }, h('h3', {}, g),
-    inputs.filter(({ spec }) => WEIGHT_LABELS[spec.key][0] === g).map(({ spec, input, changed }) => {
-      const [, label, hint] = WEIGHT_LABELS[spec.key];
-      const def = spec.kind === 'choice' ? COMBO_OPTIONS[spec.default] : spec.default;
+    inputs.filter(({ spec }) => weightGroup(spec.key) === g).map(({ spec, input, changed }) => {
+      const def = spec.kind === 'choice' ? t('combo.' + spec.default) : spec.default;
       return h('div', { class: 'weight-row' + (changed ? ' changed' : '') },
-        h('label', {}, h('span', { class: 'wlabel' }, label, changed ? h('span', { class: 'tag' }, 'endret') : ''), input),
-        h('div', { class: 'small muted' }, `${hint} Standard: ${def}.`));
+        h('label', {}, h('span', { class: 'wlabel' }, weightLabel(spec.key), changed ? h('span', { class: 'tag' }, t('weights.changed')) : ''), input),
+        h('div', { class: 'small muted' }, `${t('weight.' + spec.key + '.hint')} ${t('weights.default', { value: def })}`));
     })));
   const save = (values, text) => async () => {
     if (await write(() => api('PUT', path, { values }))) { await render(); say(text); }
   };
-  return section('Vekting',
-    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel godt, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
-    h('details', {}, h('summary', {}, wr.values && Object.keys(wr.values).length ? `Vis og endre vekting (${Object.keys(wr.values).length} endret)` : 'Vis og endre vekting'),
+  const nChanged = wr.values ? Object.keys(wr.values).length : 0;
+  return section(t('weights.title'),
+    h('p', { class: 'muted small' }, t('weights.hint')),
+    h('details', {}, h('summary', {}, nChanged ? t('weights.show_changed', { n: nChanged }) : t('weights.show')),
       h('div', { class: 'stack' }, blocks,
         h('div', { class: 'row-inline' },
           h('button', { type: 'button', onclick: () => {
@@ -475,12 +488,12 @@ function weightsSection(r, wr) {
               if (spec.kind === 'choice') values[spec.key] = input.value;
               else if (input.value.trim() !== '') values[spec.key] = Number(input.value);
             }
-            return save(values, 'Vekting lagret.')();
-          } }, 'Lagre vekting'),
-          h('button', { type: 'button', class: 'ghost', onclick: save({}, 'Vekting er satt tilbake til standard.') }, 'Tilbake til standard')))));
+            return save(values, t('weights.saved'))();
+          } }, t('weights.save')),
+          h('button', { type: 'button', class: 'ghost', onclick: save({}, t('weights.reset_done')) }, t('weights.reset'))))));
 }
 
-// Siste kjøring, eller null. Lista er alltid 200; å spørre rett etter «latest» uten kjøringer ville gi 404 i nettleserens konsoll.
+// The latest run, or null. The list is always 200; asking for «latest» right away with no runs would give a 404 in the browser console.
 async function latestRun(path) {
   return (await api('GET', path)).length ? api('GET', path + '/latest') : null;
 }
@@ -497,77 +510,73 @@ async function pagePlan(r, org) {
 
   const rows = dates.map((d) => {
     const label = d.date + ' ' + d.day_type;
-    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: 'Merknad', 'aria-label': 'Merknad ' + label, onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
+    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: t('plan.note'), 'aria-label': t('plan.note_aria', { label }), onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
     return h('li', { class: 'event-row' },
       h('strong', { class: 'when' }, fmtDate(d.date)),
-      dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, 'Dagtype ' + label),
+      dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, t('plan.daytype_of_aria', { label })),
       note,
-      h('button', { type: 'button', class: 'danger', 'aria-label': 'Slett hendelsen ' + label, onclick: async () => {
-        if (!confirm(`Slette hendelsen ${fmtDate(d.date)} (${d.day_type})? Svarene folk har gitt for den, og manuelle ruter og utvalg for den, forsvinner også.`)) return;
+      h('button', { type: 'button', class: 'danger', 'aria-label': t('plan.delete_event_aria', { label }), onclick: async () => {
+        if (!confirm(t('plan.delete_event_confirm', { date: fmtDate(d.date), daytype: d.day_type }))) return;
         if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
-      } }, 'Slett'));
+      } }, t('common.delete')));
   });
 
   const active = people.filter((p) => p.active);
-  const pick = h('select', { 'aria-label': 'Velg navnet ditt' }, h('option', { value: '' }, 'Velg navnet ditt…'), active.map((p) => h('option', { value: String(p.id) }, p.name)));
-  const mine = (id) => `/o/${enc(r.org)}/p/${enc(r.plan)}/meg/${id}`;
-  const fillIn = section('Fyll ut når du kan',
-    active.length ? h('div', { class: 'row-inline' }, pick, h('button', { type: 'button', onclick: () => { if (pick.value) go(mine(pick.value)); } }, 'Åpne min side')) : h('p', { class: 'muted' }, 'Legg til personer på ', link(`/o/${enc(r.org)}`, 'organisasjonssiden'), ' først.'),
-    active.length ? h('p', { class: 'muted small' }, 'Hver person har sin egen side. Lenken kan sendes til personen.') : '',
+  const pick = h('select', { 'aria-label': t('plan.pick_aria') }, h('option', { value: '' }, t('plan.pick_name')), active.map((p) => h('option', { value: String(p.id) }, p.name)));
+  const mine = (id) => `/o/${enc(r.org)}/p/${enc(r.plan)}/me/${id}`;
+  const fillIn = section(t('plan.fill_in'),
+    active.length ? h('div', { class: 'row-inline' }, pick, h('button', { type: 'button', onclick: () => { if (pick.value) go(mine(pick.value)); } }, t('plan.open_mine'))) : h('p', { class: 'muted' }, t('plan.add_people_a'), link(`/o/${enc(r.org)}`, t('plan.add_people_link')), t('plan.add_people_b')),
+    active.length ? h('p', { class: 'muted small' }, t('plan.personal_hint')) : '',
     active.length ? h('div', { class: 'chips' }, active.map((p) => link(mine(p.id), p.name, { class: 'chip' }))) : '');
 
   const noTypes = !dayTypes.length;
   let addForm = '', bulkForm = '';
   if (!noTypes) {
-    const date = h('input', { type: 'date', required: true, 'aria-label': 'Dato' });
-    const typeSel = h('select', { 'aria-label': 'Dagtype' }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
-    const noteIn = h('input', { type: 'text', placeholder: 'Merknad (valgfri)', maxlength: '200', 'aria-label': 'Merknad' });
+    const date = h('input', { type: 'date', required: true, 'aria-label': t('plan.date_aria') });
+    const typeSel = h('select', { 'aria-label': t('plan.daytype_aria') }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
+    const noteIn = h('input', { type: 'text', placeholder: t('plan.note_optional'), maxlength: '200', 'aria-label': t('plan.note') });
     addForm = h('form', { class: 'row', onsubmit: async (e) => { e.preventDefault(); if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value }))) refresh(); } },
-      date, typeSel, noteIn, h('button', { type: 'submit' }, 'Legg til hendelse'));
+      date, typeSel, noteIn, h('button', { type: 'submit' }, t('plan.add_event')));
 
-    const from = h('input', { type: 'date', required: true, 'aria-label': 'Fra' });
-    const to = h('input', { type: 'date', required: true, 'aria-label': 'Til' });
-    const days = ['Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør', 'Søn'].map((n, i) => ({ n, v: i + 1, box: h('input', { type: 'checkbox', checked: i === 6, 'aria-label': n }) }));
-    const bType = h('select', { 'aria-label': 'Dagtype for alle' }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
+    const from = h('input', { type: 'date', required: true, 'aria-label': t('plan.from') });
+    const to = h('input', { type: 'date', required: true, 'aria-label': t('plan.to') });
+    const days = [1, 2, 3, 4, 5, 6, 7].map((v) => ({ n: t('week.' + v), v, box: h('input', { type: 'checkbox', checked: v === 7, 'aria-label': t('week.' + v) }) }));
+    const bType = h('select', { 'aria-label': t('plan.bulk_type_aria') }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
     bulkForm = h('form', { class: 'stack', onsubmit: async (e) => {
       e.preventDefault();
       let res;
       if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10) }); })) {
-        await render(); say(`${res.created.length} nye hendelser${res.skipped.length ? ', ' + res.skipped.length + ' fantes fra før' : ''}.`);
+        await render(); say(t('plan.bulk_done', { created: res.created.length, skipped: res.skipped.length }));
       }
     } },
-      h('div', { class: 'row-inline' }, h('label', {}, 'Fra ', from), h('label', {}, 'Til ', to)),
+      h('div', { class: 'row-inline' }, h('label', {}, t('plan.from') + ' ', from), h('label', {}, t('plan.to') + ' ', to)),
       h('div', { class: 'row-inline' }, days.map((x) => h('label', { class: 'chip' }, x.box, ' ' + x.n))),
-      h('div', { class: 'row-inline' }, bType, h('button', { type: 'submit' }, 'Legg til alle')));
+      h('div', { class: 'row-inline' }, bType, h('button', { type: 'submit' }, t('common.add_all'))));
   }
 
   return h('div', {},
-    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, '← ' + org.name)),
+    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
     h('h1', {}, plan.name),
     fillIn,
-    section('Plan', planPanel(r, !!health.planner, latest)),
+    section(t('plan.section'), planPanel(r, !!health.planner, latest)),
     rulesSection(r, base, dates, tasks, groups, people, cells, pools),
     weightsSection(r, weights),
-    section('Hendelser',
-      noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
-      dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),
+    section(t('plan.events'),
+      noTypes ? h('p', { class: 'muted' }, t('plan.needs_daytype_a'), link(`/o/${enc(r.org)}/setup`, t('plan.needs_daytype_link')), t('plan.needs_daytype_b')) : '',
+      dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, t('plan.no_events')),
       addForm),
-    section('Legg til flere hendelser (f.eks. alle søndager)', noTypes ? h('p', { class: 'muted' }, 'Trenger en dagtype.') : bulkForm),
-    section('Endringslogg for planen', logTable(log)));
+    section(t('plan.bulk_title'), noTypes ? h('p', { class: 'muted' }, t('plan.needs_daytype')) : bulkForm),
+    section(t('log.title') + ': ' + plan.name, logTable(log)));
 }
 
-const GROUP_LEVELS = [['poor', 'Dårlig'], ['neutral', 'Nøytral'], ['good', 'Godt']];
-const TASK_LEVELS = [['never', 'Ikke'], ['poor', 'Dårlig'], ['neutral', 'Nøytral'], ['good', 'Godt']];
-const EVENT_LEVELS = [['never', 'Passer ikke'], ['poor', 'Dårlig'], ['good', 'Godt']];
-
-// Gruppe av knapper der én kan være valgt (aria-pressed). set(level) oppdaterer visningen uten å tegne siden på nytt.
+// A group of buttons where one can be chosen (aria-pressed). set(level) updates the view without redrawing the page.
 function seg(label, options, current, onpick) {
-  const buttons = options.map(([value, text]) => h('button', { type: 'button', 'data-level': value, 'aria-pressed': String(current === value), onclick: () => onpick(value) }, text));
+  const buttons = options.map(([value, key]) => h('button', { type: 'button', 'data-level': value, 'aria-pressed': String(current === value), onclick: () => onpick(value) }, t(key)));
   return { el: h('div', { class: 'seg', role: 'group', 'aria-label': label }, buttons),
     set(level) { buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === level))); } };
 }
 
-// «Min side»: hva jeg kan være med på (per organisasjon) og når jeg kan (per hendelse i planen). Svarene lagres med en gang.
+// «My page»: what I can take part in (per organisation) and when I can (per event in the plan). Answers are saved at once.
 async function pageMe(r, org) {
   const base = `/orgs/${enc(r.org)}`;
   const [plan, me, mine] = await Promise.all([api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/me`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/assignments`)]);
@@ -576,37 +585,36 @@ async function pageMe(r, org) {
   const refresh = () => render();
   const list = (cls, items) => h('ul', { class: cls }, items);
 
-
-  // --- mine oppdrag: fra siste ferdige plan
+  // --- my assignments: from the latest finished plan
   const mineSection = (() => {
-    if (!mine.has_plan) return section('Mine oppdrag', h('p', { class: 'muted' }, 'Ingen plan er laget ennå.'));
+    if (!mine.has_plan) return section(t('me.assignments'), h('p', { class: 'muted' }, t('me.no_plan')));
     const rows = mine.assignments.map((a) => h('li', { class: 'mine-row' },
       h('strong', {}, fmtDate(a.date)),
-      h('span', {}, a.task + (a.via ? ` (med ${a.via})` : ''), a.locked ? h('span', { class: 'tag lock' }, 'låst') : '', a.weak ? h('span', { class: 'tag' }, 'dårlig') : ''),
+      h('span', {}, a.via ? t('me.with', { task: a.task, via: a.via }) : a.task, a.locked ? h('span', { class: 'tag lock' }, t('cell.locked')) : '', a.weak ? h('span', { class: 'tag' }, t('cell.poor')) : ''),
       h('span', { class: 'small muted' }, a.day_type + (a.note ? ' · ' + a.note : ''))));
-    return section('Mine oppdrag',
-      h('p', { class: 'small muted' }, `Fra planen laget av ${mine.run.actor} ${fmtTime(mine.run.finished_at)}.`),
-      mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, 'Planen er laget før de siste endringene, så den kan endre seg.') : '',
-      rows.length ? [h('p', { class: 'small' }, `${rows.length} oppdrag`), h('ul', { class: 'mine' }, rows)] : h('p', { class: 'muted' }, 'Du har ingen oppdrag i denne planen.'));
+    return section(t('me.assignments'),
+      h('p', { class: 'small muted' }, t('me.from_plan', { actor: mine.run.actor, time: fmtTime(mine.run.finished_at) })),
+      mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, t('me.stale')) : '',
+      rows.length ? [h('p', { class: 'small' }, tn('me.count', rows.length)), h('ul', { class: 'mine' }, rows)] : h('p', { class: 'muted' }, t('me.none')));
   })();
 
-  // --- oppgaver
-  const chosen = me.tasks.filter((t) => t.level);
-  const rest = me.tasks.filter((t) => !t.level);
-  const taskRows = chosen.map((t) => {
-    const ctl = seg('Hvor gjerne: ' + t.name, TASK_LEVELS, t.level, async (v) => { if (v !== t.level && await write(() => api('PUT', taskPath(t.task_id), { level: v }))) { t.level = v; ctl.set(v); } });
+  // --- tasks
+  const chosen = me.tasks.filter((tk) => tk.level);
+  const rest = me.tasks.filter((tk) => !tk.level);
+  const taskRows = chosen.map((tk) => {
+    const ctl = seg(t('me.how_willing_aria', { name: tk.name }), TASK_LEVELS, tk.level, async (v) => { if (v !== tk.level && await write(() => api('PUT', taskPath(tk.task_id), { level: v }))) { tk.level = v; ctl.set(v); } });
     return h('li', { class: 'card-row' },
-      h('div', { class: 'row-head' }, h('strong', {}, t.name), h('button', { type: 'button', class: 'link-button', 'aria-label': 'Ta bort ' + t.name, onclick: async () => { if (await write(() => api('DELETE', taskPath(t.task_id)))) refresh(); } }, 'Ta bort')),
+      h('div', { class: 'row-head' }, h('strong', {}, tk.name), h('button', { type: 'button', class: 'link-button', 'aria-label': t('me.remove_aria', { name: tk.name }), onclick: async () => { if (await write(() => api('DELETE', taskPath(tk.task_id)))) refresh(); } }, t('common.remove'))),
       ctl.el);
   });
-  const addRows = rest.map((t) => h('li', { class: 'card-row row-head' }, h('strong', {}, t.name),
-    h('button', { type: 'button', 'aria-label': 'Legg til ' + t.name, onclick: async () => { if (await write(() => api('PUT', taskPath(t.task_id), { level: 'neutral' }))) refresh(); } }, 'Legg til')));
-  const taskSection = section('Hva kan du være med på?',
-    !me.tasks.length ? h('p', { class: 'muted' }, 'Ingen oppgaver er satt opp ennå. ', link(`/o/${enc(r.org)}/oppsett`, 'Oppsett')) : '',
-    chosen.length ? list('cards', taskRows) : (me.tasks.length ? h('p', { class: 'muted' }, 'Du har ikke valgt noen oppgaver ennå. Velg de du kan tenke deg.') : ''),
-    me.tasks.length ? h('details', { open: !chosen.length }, h('summary', {}, chosen.length ? 'Velg flere oppgaver' : 'Velg oppgaver'), rest.length ? list('cards', addRows) : h('p', { class: 'muted' }, 'Du har valgt alle oppgavene.')) : '');
+  const addRows = rest.map((tk) => h('li', { class: 'card-row row-head' }, h('strong', {}, tk.name),
+    h('button', { type: 'button', 'aria-label': t('me.add_aria', { name: tk.name }), onclick: async () => { if (await write(() => api('PUT', taskPath(tk.task_id), { level: 'neutral' }))) refresh(); } }, t('common.add'))));
+  const taskSection = section(t('me.tasks'),
+    !me.tasks.length ? h('p', { class: 'muted' }, t('me.no_tasks'), link(`/o/${enc(r.org)}/setup`, t('me.setup_link'))) : '',
+    chosen.length ? list('cards', taskRows) : (me.tasks.length ? h('p', { class: 'muted' }, t('me.no_chosen')) : ''),
+    me.tasks.length ? h('details', { open: !chosen.length }, h('summary', {}, chosen.length ? t('me.choose_more') : t('me.choose')), rest.length ? list('cards', addRows) : h('p', { class: 'muted' }, t('me.all_chosen'))) : '');
 
-  // --- når kan du? Ett svar per hendelse: passer ikke / dårlig / good, ikke markert er nøytralt.
+  // --- when can you? One answer per event: does not suit / poor / good; not marked counts as neutral.
   const levels = {};
   me.events.forEach((e) => { levels[e.event_id] = e.level; });
   const ctls = {};
@@ -614,7 +622,7 @@ async function pageMe(r, org) {
   const updateSummary = () => {
     const c = { never: 0, poor: 0, good: 0 };
     Object.values(levels).forEach((l) => { if (l) c[l]++; });
-    summary.textContent = `${c.never} passer ikke · ${c.poor} dårlig · ${c.good} godt · ${me.events.length - c.never - c.poor - c.good} nøytrale`;
+    summary.textContent = t('me.summary', { ...c, neutral: me.events.length - c.never - c.poor - c.good });
   };
   async function setLevels(changes) {
     if (!(await write(() => api('PUT', availPath, { levels: changes })))) return false;
@@ -623,7 +631,7 @@ async function pageMe(r, org) {
     return true;
   }
   const rows = me.events.map((e) => {
-    const ctl = seg('Kan du ' + fmtDate(e.date) + '?', EVENT_LEVELS, e.level, (v) => setLevels({ [e.event_id]: levels[e.event_id] === v ? '' : v }));
+    const ctl = seg(t('me.can_you', { date: fmtDate(e.date) }), EVENT_LEVELS, e.level, (v) => setLevels({ [e.event_id]: levels[e.event_id] === v ? '' : v }));
     ctls[e.event_id] = ctl;
     return h('li', { class: 'avail-row' },
       h('div', { class: 'what' }, h('strong', { class: 'when' }, fmtDate(e.date)), h('span', { class: 'muted small' }, e.day_type + (e.note ? ' · ' + e.note : ''))), ctl.el);
@@ -633,23 +641,23 @@ async function pageMe(r, org) {
     for (const e of me.events) if ((levels[e.event_id] || '') !== v) changes[e.event_id] = v;
     if (!Object.keys(changes).length) return;
     const overwritten = me.events.filter((e) => levels[e.event_id] && levels[e.event_id] !== v).length;
-    if (overwritten && !confirm(`Dette endrer ${overwritten} svar du allerede har gitt. Fortsette?`)) return;
+    if (overwritten && !confirm(tn('me.overwrite', overwritten))) return;
     await setLevels(changes);
   };
   updateSummary();
-  const bulk = me.events.length ? h('div', { class: 'row-inline' }, h('span', { class: 'muted small' }, 'Sett alle:'),
-    h('button', { type: 'button', class: 'ghost', onclick: all('never') }, 'Passer ikke'), h('button', { type: 'button', class: 'ghost', onclick: all('poor') }, 'Dårlig'),
-    h('button', { type: 'button', class: 'ghost', onclick: all('good') }, 'Godt'), h('button', { type: 'button', class: 'ghost', onclick: all('') }, 'Fjern alle')) : '';
+  const bulk = me.events.length ? h('div', { class: 'row-inline' }, h('span', { class: 'muted small' }, t('me.set_all')),
+    h('button', { type: 'button', class: 'ghost', onclick: all('never') }, t('level.event.never')), h('button', { type: 'button', class: 'ghost', onclick: all('poor') }, t('level.poor')),
+    h('button', { type: 'button', class: 'ghost', onclick: all('good') }, t('level.good')), h('button', { type: 'button', class: 'ghost', onclick: all('') }, t('me.clear_all'))) : '';
 
   const root = h('div', {},
-    h('p', { class: 'small' }, link(`/o/${enc(r.org)}/p/${enc(r.plan)}`, '← ' + plan.name)),
+    h('p', { class: 'small' }, link(`/o/${enc(r.org)}/p/${enc(r.plan)}`, t('common.back', { name: plan.name }))),
     h('h1', {}, me.person.name),
-    h('p', { class: 'muted' }, 'Svarene lagres med en gang. Hendelsen gjelder, ikke dagen: har du to hendelser samme dag, svarer du på hver for seg.'),
-    me.person.active ? '' : h('p', { class: 'err' }, 'Denne personen er markert som inaktiv.'),
+    h('p', { class: 'muted' }, t('me.intro')),
+    me.person.active ? '' : h('p', { class: 'err' }, t('me.inactive')),
     mineSection,
     taskSection,
-    section('Når kan du? ' + plan.name,
-      me.events.length ? [h('p', { class: 'muted small' }, 'Trykk på et valg. Trykk på det samme igjen for å fjerne svaret (da regnes det som nøytralt).'), bulk, summary, list('avail', rows)] : h('p', { class: 'muted' }, 'Det er ikke lagt inn noen hendelser i denne planen ennå.')));
+    section(t('me.when', { plan: plan.name }),
+      me.events.length ? [h('p', { class: 'muted small' }, t('me.avail_hint')), bulk, summary, list('avail', rows)] : h('p', { class: 'muted' }, t('me.no_events'))));
   root.dataset.person = me.person.name;
   return root;
 }
@@ -669,20 +677,20 @@ async function render() {
     }
     const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : r.page === 'me' ? pageMe(r, org) : pagePlan(r, org)]);
     if (seq !== renderSeq || !body) return;
-    const y = location.pathname === lastPath ? window.scrollY : 0;  // samme side på nytt (etter en endring): bli stående
+    const y = location.pathname === lastPath ? window.scrollY : 0;  // the same page again (after a change): stay where we are
     main.replaceChildren(body);
     lastPath = location.pathname;
     window.scrollTo(0, y);
-    if (r.page === 'me' && body.dataset.person && !store.get('actor').trim()) {  // den som åpner sin egen side er nok personen selv
+    if (r.page === 'me' && body.dataset.person && !store.get('actor').trim()) {  // whoever opens their own page is most likely that person
       store.set('actor', body.dataset.person);
       const a = document.getElementById('actor');
       if (a) a.value = body.dataset.person;
     }
-    document.title = (r.page === 'plan' ? '' : '') + 'Tjenesteplan' + (org ? ' · ' + org.name : '');
+    document.title = t('brand') + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;
     if (e.status === 404 && r.org) store.set('org', '');
-    main.replaceChildren(h('div', {}, h('h1', {}, e.status === 404 ? 'Fant ikke siden' : 'Noe gikk galt'), h('p', {}, link('/?bytt', 'Velg organisasjon')), h('p', { class: 'muted small' }, e.message)));
+    main.replaceChildren(h('div', {}, h('h1', {}, e.status === 404 ? t('page.not_found') : t('page.error')), h('p', {}, link('/?switch', t('page.choose_org'))), h('p', { class: 'muted small' }, errorText(e))));
   }
 }
 

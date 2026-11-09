@@ -33,7 +33,7 @@ func newEnvWith(t *testing.T, solver planner.Solver) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	static := fstest.MapFS{"index.html": {Data: []byte("<!doctype html>INDEX")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
+	static := fstest.MapFS{"index.html": {Data: []byte("<!doctype html>INDEX")}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pl := planner.New(st, solver, 1, log)
 	return &env{t: t, h: New(st, pl, static, log), st: st, pl: pl}
@@ -214,6 +214,12 @@ func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 		r := e.do("GET", path, "", nil)
 		if r.code != 200 || !strings.Contains(string(r.body), "INDEX") {
 			t.Errorf("%s = %d %q", path, r.code, r.body)
+		}
+	}
+	for _, js := range []string{"/app.js", "/i18n.js"} {
+		r := e.do("GET", js, "", nil)
+		if r.code != 200 || !strings.HasPrefix(r.hdr.Get("Content-Type"), "text/javascript") {
+			t.Errorf("%s = %d %v", js, r.code, r.hdr)
 		}
 	}
 	r := e.do("GET", "/app.js", "", nil)
