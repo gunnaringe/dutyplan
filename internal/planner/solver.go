@@ -18,10 +18,10 @@ type Solver interface {
 	Solve(ctx context.Context, input []byte) ([]byte, error)
 }
 
-// ExecSolver starts the Python solver as a subprocess (`python -m tjenesteplan_solver --check`). The environment it
+// ExecSolver starts the Python solver as a subprocess (`python -m dutyplan_solver --check`). The environment it
 // gets is minimal: it is given the plan's data on stdin and nothing else.
 type ExecSolver struct {
-	Argv []string // e.g. ["/path/to/.venv/bin/python", "-m", "tjenesteplan_solver"]
+	Argv []string // e.g. ["/path/to/.venv/bin/python", "-m", "dutyplan_solver"]
 }
 
 type limitedBuffer struct {

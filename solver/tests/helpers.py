@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from tjenesteplan_solver import check, solve
+from dutyplan_solver import check, solve
 
 NO_FAIR = {"w_fair": 0, "w_fair_range": 0, "w_task_fair": 0, "w_task_range": 0}
 

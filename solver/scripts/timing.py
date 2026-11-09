@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from tjenesteplan_solver import check, solve
+from dutyplan_solver import check, solve
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "host2026.json"
 

@@ -14,7 +14,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from tjenesteplan_solver import check, solve
+from dutyplan_solver import check, solve
 
 FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "host2026.json"
 

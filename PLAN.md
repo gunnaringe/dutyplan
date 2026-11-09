@@ -184,7 +184,7 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 ### Kjøring av planleggeren (bygget, fase 4 omgang 1)
 - `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit, seed}`, begge valgfrie) svarer 202 med id med en gang; kjøringen går i bakgrunnen og siden
   spør `GET .../runs/{id|latest}` hvert sekund. Bare **én kjøring om gangen** i hele tjeneren (409 `busy`), tidsgrense 5–120 s (standard 20).
-  Uten planlegger konfigurert (`--solver` / `$TJENESTEPLAN_SOLVER`) svarer API-et 503 og `/api/health` har `"planner": false`; resten av appen virker.
+  Uten planlegger konfigurert (`--solver` / `$DUTYPLAN_SOLVER`) svarer API-et 503 og `/api/health` har `"planner": false`; resten av appen virker.
 - Go bygger inndata fra databasen (`internal/planner/input.go`): bare aktive personer, id-ene `t<id>/e<id>/d<id>/p<id>`, «kan foreslås»,
   oppgavevalg, tilgjengelighet per hendelse og kombinasjoner. Hashen av inndata (uten frø og tid) lagres, så en gammel plan kan merkes **utdatert**
   når svar eller oppsett er endret siden.
@@ -241,7 +241,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
 5. **Plan (gjort 2026-11-09)**: **rutenett** (hendelser bortover, oppgaver nedover, fast første kolonne, sideveis rulling i egen boks; standard på brede skjermer, med «Liste / Rutenett»-valg som huskes) og **«mine oppdrag»** øverst på Min side. *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
-6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite. **Utsatt (brukerens valg 2026-11-09)**; ikke påbegynt. Husk når den tas opp: Python og `ortools` må med i imaget, `TJENESTEPLAN_SOLVER` må settes, og databasen trenger sikkerhetskopi.
+6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite. **Utsatt (brukerens valg 2026-11-09)**; ikke påbegynt. Husk når den tas opp: Python og `ortools` må med i imaget, `DUTYPLAN_SOLVER` må settes, og databasen trenger sikkerhetskopi.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.
 

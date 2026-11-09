@@ -1,6 +1,6 @@
 #!/bin/sh
 # Røyktest av den bygde binæren: to organisasjoner, isolasjon, aktørkrav, restart. Én linje ved suksess.
-# Forutsetter bin/tjenesteplan (mise run app:build). Stopper serveren på PID-en den startet selv.
+# Forutsetter bin/dutyplan (mise run app:build). Stopper serveren på PID-en den startet selv.
 set -eu
 cd "$(dirname "$0")/.."
 tmp=$(mktemp -d)
@@ -14,12 +14,12 @@ fail() { echo "smoke: FEIL: $*"; [ ! -s "$tmp/err" ] || sed 's/^/  server: /' "$
 
 start() {
   : >"$tmp/out"
-  bin/tjenesteplan --addr 127.0.0.1:0 --db "$tmp/smoke.db" >"$tmp/out" 2>"$tmp/err" &
+  bin/dutyplan --addr 127.0.0.1:0 --db "$tmp/smoke.db" >"$tmp/out" 2>"$tmp/err" &
   pid=$!
   url=""
   i=0
   while [ "$i" -lt 50 ]; do
-    url=$(sed -n 's/^tjenesteplan: //p' "$tmp/out")
+    url=$(sed -n 's/^dutyplan: //p' "$tmp/out")
     [ -z "$url" ] || break
     i=$((i + 1)); sleep 0.1
   done
@@ -79,7 +79,7 @@ code 200 GET /api/orgs/test/combinations
 
 # planlegging med den ekte planleggeren: kjøringen er ferdig, kontrollert uten brudd, og usynlig for en annen organisasjon
 # (org-a har en plan med samme navn, host-2026)
-[ -n "${TJENESTEPLAN_SOLVER:-}" ] || fail "TJENESTEPLAN_SOLVER mangler (kjør via mise run app:smoke)"
+[ -n "${DUTYPLAN_SOLVER:-}" ] || fail "DUTYPLAN_SOLVER mangler (kjør via mise run app:smoke)"
 code 202 POST /api/orgs/test/plans/host-2026/runs '{"time_limit":5}'
 run=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 [ -n "$run" ] || fail "fant ikke kjøringens id"

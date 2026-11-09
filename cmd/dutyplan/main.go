@@ -1,4 +1,4 @@
-// Command tjenesteplan serves the task-planning app: one binary, SQLite, embedded frontend. No login.
+// Command dutyplan serves the duty-planning app: one binary, SQLite, embedded frontend. No login.
 package main
 
 import (
@@ -24,8 +24,8 @@ import (
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on (port 0 picks a free one)")
-	dbPath := flag.String("db", "tjenesteplan.db", "SQLite database file (created if missing)")
-	solverCmd := flag.String("solver", os.Getenv("TJENESTEPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m tjenesteplan_solver\" (default $TJENESTEPLAN_SOLVER; empty = no planning)")
+	dbPath := flag.String("db", "dutyplan.db", "SQLite database file (created if missing)")
+	solverCmd := flag.String("solver", os.Getenv("DUTYPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m dutyplan_solver\" (default $DUTYPLAN_SOLVER; empty = no planning)")
 	workers := flag.Int("workers", min(runtime.NumCPU(), 8), "threads the planner may use")
 	flag.Parse()
 
@@ -48,7 +48,7 @@ func main() {
 	if argv := strings.Fields(*solverCmd); len(argv) > 0 {
 		solver = planner.ExecSolver{Argv: argv}
 	} else {
-		log.Warn("no planner configured (--solver / TJENESTEPLAN_SOLVER): everything but «Planlegg» works")
+		log.Warn("no planner configured (--solver / DUTYPLAN_SOLVER): everything but «Planlegg» works")
 	}
 
 	ln, err := net.Listen("tcp", *addr)
@@ -64,7 +64,7 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
-	fmt.Printf("tjenesteplan: http://%s\n", ln.Addr()) // the one line scripts and people look for
+	fmt.Printf("dutyplan: http://%s\n", ln.Addr()) // the one line scripts and people look for
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)

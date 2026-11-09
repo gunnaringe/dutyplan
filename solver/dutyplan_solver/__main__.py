@@ -1,7 +1,7 @@
-"""python -m tjenesteplan_solver            < inndata.json > utdata.json
-python -m tjenesteplan_solver --check      som over, men svaret får «violations»: brudd funnet av den uavhengige sjekkeren
-python -m tjenesteplan_solver check inndata.json utdata.json
-python -m tjenesteplan_solver --defaults   skriver standardparametrene (vektene m.m.) som JSON
+"""python -m dutyplan_solver            < inndata.json > utdata.json
+python -m dutyplan_solver --check      som over, men svaret får «violations»: brudd funnet av den uavhengige sjekkeren
+python -m dutyplan_solver check inndata.json utdata.json
+python -m dutyplan_solver --defaults   skriver standardparametrene (vektene m.m.) som JSON
 """
 
 import json

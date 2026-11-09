@@ -1,11 +1,11 @@
 # tjenesteplan
 
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
-Privat GitHub-repo: `gunnaringe/dutyplan` (mappen og Go-modulen `github.com/gunnaringe/dutyplan` heter det samme; programmet kalles fortsatt Tjenesteplan, og binæren, Python-pakken og `TJENESTEPLAN_SOLVER` beholder det navnet). Hold det privat, og sjekk at ingenting personlig er lagt til før du pusher (se «Testing og data»). Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
+Privat GitHub-repo: `gunnaringe/dutyplan` (mappen og Go-modulen `github.com/gunnaringe/dutyplan` heter det samme; programmet kalles fortsatt Tjenesteplan, og binæren, Python-pakken og `DUTYPLAN_SOLVER` beholder det navnet). Hold det privat, og sjekk at ingenting personlig er lagt til før du pusher (se «Testing og data»). Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
 personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
 utvalg og «Lås» (fase 4 omgang 1-2). Rutenett og «mine oppdrag» (fase 5) er bygget. Utrulling på kate (fase 6) er utsatt etter brukerens ønske (2026-11-09): ikke start på den uten å bli bedt om det. Publisering er ikke bygget (siste kjøring er planen).
 
-Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
+Oppbygging: `cmd/dutyplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
 starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
 `web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).
 
@@ -18,7 +18,7 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 - **Ikke les** `PLAN.md` i sin helhet (ca. 200 linjer). `grep -n '^## ' PLAN.md`, les bare seksjonen du trenger.
   Ikke les `solver/fixtures/host2026.json` eller `solver/uv.lock` (store, genererte); bruk `mise run plan -- --info`.
 - Ikke be om `--full`, `measure:*` eller `app:ui` uten grunn; de er dyre eller trenger sibling-avhengigheter.
-- Appen finner planleggeren via `TJENESTEPLAN_SOLVER` (satt i `mise.toml`, krever `mise run setup`); uten den hoppes de to testene mot den ekte
+- Appen finner planleggeren via `DUTYPLAN_SOLVER` (satt i `mise.toml`, krever `mise run setup`); uten den hoppes de to testene mot den ekte
   løseren over og «Planlegg» er avslått. Mutasjonene kjører Go-testene uten den, så regler må fanges av testene med falsk løser.
 - Filstier til `plan`, `solve` og `check` er relative til repoets rot. Nye Python-pakker: `mise run add -- pakke` (og `mise run lock`);
   `UV_LOCKED=1` sperrer ellers endring av `uv.lock`.

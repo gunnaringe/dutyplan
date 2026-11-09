@@ -1,7 +1,7 @@
-# tjenesteplan-solver (spike)
+# dutyplan-solver (spike)
 
 CP-SAT-planleggeren alene: JSON inn, JSON ut. Ingen app, ingen database. Se `../PLAN.md` for hvorfor,
-og toppen av `tjenesteplan_solver/model.py` for inndataformatet. Alt kjøres via mise fra repoets rot:
+og toppen av `dutyplan_solver/model.py` for inndataformatet. Alt kjøres via mise fra repoets rot:
 
     mise install && mise run setup      # python + uv + pakkene (første gang)
     mise tasks                          # alle oppgaver

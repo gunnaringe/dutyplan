@@ -16,7 +16,7 @@ UV_PYTHON_PREFERENCE = "only-system"
 UV_LOCKED = "1"
 UV_PROJECT_ENVIRONMENT = "{{config_root}}/solver/.venv"
 # Slik starter appen planleggeren (delt på mellomrom, ingen anførselstegn). Krever mise run setup. Appen leser den som --solver.
-TJENESTEPLAN_SOLVER = "{{config_root}}/solver/.venv/bin/python -m tjenesteplan_solver"
+DUTYPLAN_SOLVER = "{{config_root}}/solver/.venv/bin/python -m dutyplan_solver"
 
 [tasks.setup]
 description = "Python-pakkene fra uv.lock (kjør etter mise install)"
@@ -54,14 +54,14 @@ quiet = true
 run = "uv run pytest tests/test_rules.py"
 
 [tasks."app:build"]
-description = "Bygg appen til bin/tjenesteplan (én statisk binær med frontenden innebygd)"
+description = "Bygg appen til bin/dutyplan (én statisk binær med frontenden innebygd)"
 quiet = true
-run = "go build -o bin/tjenesteplan ./cmd/tjenesteplan"
+run = "go build -o bin/dutyplan ./cmd/dutyplan"
 
 [tasks."app:run"]
 description = "Kjør appen i forgrunnen. Skriver én linje med adressen. Args: -- --addr 127.0.0.1:8080 --db fil.db"
 quiet = true
-run = "go run ./cmd/tjenesteplan"
+run = "go run ./cmd/dutyplan"
 
 [tasks."app:ui"]
 description = "Nettlesersjekk av frontenden (headless Chromium mot en midlertidig server, ca. 10 s). Krever playwright-core fra ../scoreboard"
@@ -100,12 +100,12 @@ run = "uv run --project solver python solver/scripts/plan.py"
 [tasks.check]
 description = "Uavhengig sjekk av en ferdig plan: mise run check -- inndata.json utdata.json (stier fra repoets rot)"
 quiet = true
-run = "uv run --project solver python -m tjenesteplan_solver check"
+run = "uv run --project solver python -m dutyplan_solver check"
 
 [tasks.solve]
 description = "Planleggeren som filter: mise run solve < inndata.json > utdata.json"
 quiet = true
-run = "uv run --project solver python -m tjenesteplan_solver"
+run = "uv run --project solver python -m dutyplan_solver"
 
 [tasks.fixture]
 description = "Lag testdataene på nytt (solver/fixtures/host2026.json) fra make_host2026.py"

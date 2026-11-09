@@ -2,7 +2,7 @@
 
 import pytest
 from helpers import NO_FAIR, base, count, dates, run, who
-from tjenesteplan_solver import check, solve
+from dutyplan_solver import check, solve
 
 
 def test_ikke_pa_dato_gir_aldri_oppdrag():

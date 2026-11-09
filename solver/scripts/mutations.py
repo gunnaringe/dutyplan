@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent  # solver/
 REPO = ROOT.parent
 BACKUP = ROOT / ".mutation-backup"
-MODEL = "solver/tjenesteplan_solver/model.py"
+MODEL = "solver/dutyplan_solver/model.py"
 TESTS = ["tests/test_rules.py", "tests/test_random.py", "tests/test_fixture.py"]  # raskeste først, så -x stopper tidlig
 
 # (navn, mønster i model.py, erstatning). Mønsteret erstattes bare første gang det forekommer.
@@ -249,7 +249,7 @@ def run_tests(target: str, go_dir: Path | None = None) -> tuple[int, str]:
         return r.returncode, r.stdout
     # Uten planlegger i miljøet hoppes de to testene mot den ekte løseren over (ca. 1,3 s hver gang). Reglene skal fanges
     # av testene med falsk løser; en mutasjon bare de ekte testene fanger, skal vises som OVERLEVDE.
-    env = {**os.environ, "TJENESTEPLAN_SOLVER": ""}
+    env = {**os.environ, "DUTYPLAN_SOLVER": ""}
     r = subprocess.run(["go", "test", "-count=1", "-failfast", "./..."], cwd=go_dir or REPO, capture_output=True, text=True, check=False, env=env)
     out = r.stdout + r.stderr
     if r.returncode != 0 and ("build failed" in out or "setup failed" in out):

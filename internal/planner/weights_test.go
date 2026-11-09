@@ -66,7 +66,7 @@ func solverArgv(t *testing.T) []string {
 	t.Helper()
 	argv := strings.Fields(realSolverCommand())
 	if len(argv) == 0 {
-		t.Skip("TJENESTEPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
+		t.Skip("DUTYPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
 	}
 	return argv
 }

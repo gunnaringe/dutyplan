@@ -506,13 +506,13 @@ func TestRunsAreInvisibleToOtherOrganisations(t *testing.T) {
 
 // ---- the real solver ---------------------------------------------------------------------------------------------
 
-func realSolverCommand() string { return os.Getenv("TJENESTEPLAN_SOLVER") }
+func realSolverCommand() string { return os.Getenv("DUTYPLAN_SOLVER") }
 
 func realSolver(t *testing.T) Solver {
 	t.Helper()
 	cmd := realSolverCommand()
 	if cmd == "" {
-		t.Skip("TJENESTEPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
+		t.Skip("DUTYPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
 	}
 	return ExecSolver{Argv: strings.Fields(cmd)}
 }

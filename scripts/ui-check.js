@@ -12,8 +12,8 @@ const { spawn } = require('child_process');
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-ui-'));
-  if (!process.env.TJENESTEPLAN_SOLVER) throw new Error('TJENESTEPLAN_SOLVER mangler (kjør via mise run app:ui)');
-  const srv = spawn(path.join(__dirname, '../bin/tjenesteplan'), ['--addr', '127.0.0.1:0', '--db', path.join(dir, 'ui.db')], { stdio: ['ignore', 'pipe', 'pipe'] });
+  if (!process.env.DUTYPLAN_SOLVER) throw new Error('DUTYPLAN_SOLVER mangler (kjør via mise run app:ui)');
+  const srv = spawn(path.join(__dirname, '../bin/dutyplan'), ['--addr', '127.0.0.1:0', '--db', path.join(dir, 'ui.db')], { stdio: ['ignore', 'pipe', 'pipe'] });
   let base = '';
   await new Promise((res, rej) => {
     srv.stdout.on('data', (d) => { const m = /http:\/\/\S+/.exec(String(d)); if (m && !base) { base = m[0]; res(); } });
