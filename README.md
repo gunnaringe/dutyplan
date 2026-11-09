@@ -100,7 +100,7 @@ startup by forward-only migrations, so **take a backup before upgrading**. A con
 sqlite3 dutyplan.db ".backup 'dutyplan-backup.db'"
 ```
 
-or stop the server and copy the three files. Keep 20 runs per plan at most (the newest, plus the pinned one); older runs are
+or stop the server and copy the three files. The 20 newest runs of each plan are kept, plus the pinned one; older runs are
 removed when a new one starts.
 
 Deleting a plan removes its events, the answers people gave for them, manual cells, selections and runs, and keeps the change
@@ -115,7 +115,7 @@ Everything goes through mise; `mise tasks` lists the tasks.
 | --- | --- |
 | `mise run test` | all tests, Go and Python, quiet (about 15 s) |
 | `mise run test:fast` | the quickest loop: Go and the planner's rule tests |
-| `mise run mutations` | breaks every rule in turn and checks that a test fails (about 3 min) |
+| `mise run mutations` | breaks every rule in turn and checks that a test fails (about 7 min) |
 | `mise run app:smoke` | starts the server on a temporary database and checks the tenant isolation with curl |
 | `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium; see the script) |
 | `mise run verify` | tests, mutations and the smoke test: everything that must be green before a commit |

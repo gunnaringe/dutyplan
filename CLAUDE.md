@@ -19,7 +19,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Everything goes through mise**: `mise install` (python, uv, go), `mise run setup` (Python packages), then `mise tasks`. Never python/uv/pytest/go directly.
   Skills: `verify` (tests + mutations), `run-planner` (the planner) and `run-app` (the app). The tasks are quiet and print about 1–8 lines.
 - The usual loop: change → `mise run test:fast` (Go + Python rules, about 5 s) → `mise run test` (everything, about 15 s) → after a rule change
-  `mise run mutations -- --only <word>` (the whole set takes about 4 min) → before a commit `mise run verify` (tests + all mutations + smoke test of the app).
+  `mise run mutations -- --only <word>` (the whole set takes about 7 min) → before a commit `mise run verify` (tests + all mutations + smoke test of the app).
   For a change to the page also `mise run app:ui` (browser check in both languages, about 20 s).
 - **Do not read** `PLAN.md` in full (about 300 lines). `grep -n '^## ' PLAN.md`, read only the section you need.
   Do not read `solver/fixtures/autumn2026.json` or `solver/uv.lock` (large, generated); use `mise run plan -- --info`.

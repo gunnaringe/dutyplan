@@ -1,6 +1,6 @@
 """Mutation check: break one rule at a time (the planner in Python and the app in Go) and see that at least one test fails.
 
-    mise run mutations                 all (about 4 min); quiet on success
+    mise run mutations                 all (about 7 min); quiet on success
     mise run mutations -- --only group    only those with «group» in the name
     mise run mutations -- --list       show the names
 
