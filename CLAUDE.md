@@ -52,7 +52,7 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 
 - `check.py` er en uavhengig sjekker; hold den uavhengig av `model.py` (bare standardverdiene deles).
 - Hver regel skal ha en test som feiler når regelen brytes i modellen: `scripts/mutations.py` (`MUTATIONS`) kontrollerer det.
-- Ingen ekte navn, e-post eller telefon i repoet. Testdataene har oppdiktede navn og lages av `mise run fixture`.
+- Ingen ekte navn, e-post eller telefon i repoet, heller ikke kirkens, programmenes eller regnearkets navn, og ingen kjente navn fra regnearket (renset 2026-11-09, og historikken er skrevet om). Oppdiktede navn skal ikke være ekte fornavn fra det opprinnelige mannskapet: sjekk mot regnearket før nye navn tas i bruk. Det som gjenstår fra regnearket, er formen på testdataene (datoer, hendelsestyper, oppgavenavn, lagstørrelser). Testdataene har oppdiktede navn og lages av `mise run fixture`.
 - Nivåer på ledningen er ASCII: `ikke|darlig|noytral|godt`, `kan_ikke|upraktisk|praktisk|bor`.
 - Ikke gi et skript navn som kolliderer med standardbiblioteket (`inspect.py` ødela numpy-importen).
 - Ikke kjør `mise lock` her: `lockfile` i denne konfigurasjonen skrev en `mise.lock` i `~/code` (overordnet konfig). Versjonene er pinnet i `mise.toml`.
