@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/gunnaringe/dutyplan/internal/planner"
@@ -42,10 +43,14 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	mux.HandleFunc("GET /api/orgs", s.listOrgs)
 	mux.HandleFunc("POST /api/orgs", s.createOrg)
 	mux.HandleFunc("GET /api/orgs/{org}", s.getOrg)
+	mux.HandleFunc("PATCH /api/orgs/{org}", s.renameOrg)
+	mux.HandleFunc("DELETE /api/orgs/{org}", s.deleteOrg)
 
 	mux.HandleFunc("GET /api/orgs/{org}/plans", s.listPlans)
 	mux.HandleFunc("POST /api/orgs/{org}/plans", s.createPlan)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}", s.getPlan)
+	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}", s.renamePlan)
+	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}", s.deletePlan)
 
 	mux.HandleFunc("GET /api/orgs/{org}/people", s.listPeople)
 	mux.HandleFunc("POST /api/orgs/{org}/people", s.createPerson)
@@ -292,4 +297,53 @@ func (s *server) listLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, v)
+}
+
+// renameOrg changes the name only; the address stays.
+func (s *server) renameOrg(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	o, err := s.st.RenameOrg(r.Context(), actor(r), r.PathValue("org"), b.Name)
+	if err != nil {
+		writeErr(w, s.log, err)
+		return
+	}
+	writeJSON(w, 200, o)
+}
+
+// deleteOrg removes an organisation without plans. The caller confirms with the organisation's address name in
+// ?confirm=, so a stray DELETE cannot do it. The organisation's change log goes with it, so the deletion is written to
+// the server log instead.
+func (s *server) deleteOrg(w http.ResponseWriter, r *http.Request) {
+	o, err := s.st.DeleteOrg(r.Context(), actor(r), r.PathValue("org"), r.URL.Query().Get("confirm"))
+	if err != nil {
+		writeErr(w, s.log, err)
+		return
+	}
+	who, _ := url.PathUnescape(actor(r))
+	s.log.Warn("organisation deleted", "org", o.Slug, "name", o.Name, "by", who)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) renamePlan(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	p, err := s.st.RenamePlan(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Name)
+	if err != nil {
+		writeErr(w, s.log, err)
+		return
+	}
+	writeJSON(w, 200, p)
+}
+
+func (s *server) deletePlan(w http.ResponseWriter, r *http.Request) {
+	noContent(w, s.st.DeletePlan(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r)), s)
 }

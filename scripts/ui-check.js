@@ -66,7 +66,7 @@ const { spawn } = require('child_process');
     await page.waitForSelector('h2:has-text("People")');
     await page.fill('form.row input[placeholder="New person"]', 'Kari Test');
     await add(page);
-    await page.waitForSelector('td:has-text("Kari Test")');
+    await page.waitForSelector('input[aria-label="Name of Kari Test"]');
     await page.uncheck('input[aria-label="Can be proposed: Kari Test"]');
     await page.waitForFunction(() => document.body.innerText.includes('person.update'));
     const logText = await page.innerText('ul.log');
@@ -93,10 +93,10 @@ const { spawn } = require('child_process');
     await h1is(page, 'Setup');
     await page.fill('input[placeholder="New task"]', 'Sound');
     await add(page);
-    await page.waitForSelector('td:has-text("Sound")');
+    await page.waitForSelector('input[aria-label="Name of Sound"]');
     await page.fill('textarea[aria-label^="Several tasks"]', 'Video\nCafé\nSound');
     await page.getByRole('button', { name: 'Add all' }).click();
-    await page.waitForSelector('td:has-text("Café")');
+    await page.waitForSelector('input[aria-label="Name of Café"]');
     await page.fill('input[placeholder^="New day type"]', 'Match day');
     await page.locator('form:has(input[placeholder^="New day type"]) button').click();
     await page.waitForSelector('input[aria-label="Places for Sound on Match day"]');
@@ -157,7 +157,7 @@ const { spawn } = require('child_process');
     // a group: Ola Test is in «Team A», which the planner may propose for Café (1 of 3 places)
     await page.fill('form.row input[placeholder="New person"]', 'Ola Test');
     await add(page);
-    await page.waitForSelector('td:has-text("Ola Test")');
+    await page.waitForSelector('input[aria-label="Name of Ola Test"]');
     await page.goto(base + '/o/sports-club/setup');
     await h1is(page, 'Setup');
     await page.fill('input[placeholder^="New group"]', 'Team A');
@@ -340,6 +340,101 @@ const { spawn } = require('child_process');
     // no page may be wider than a phone screen
     await page.setViewportSize({ width: 390, height: 844 });
     await noSideways('en');
+
+    // --- rename and delete what you created ---
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(base + '/o/sports-club');
+    await page.waitForSelector('input[aria-label="Name of Kari Test"]');
+    await page.fill('input[aria-label="Name of Kari Test"]', 'Kari Renamed');
+    await page.locator('input[aria-label="Name of Kari Test"]').blur();  // leaving the field saves it
+    await page.waitForSelector('input[aria-label="Name of Kari Renamed"]');
+    await page.goto(base + kariUrl);  // the personal link still works, with the new name
+    await h1is(page, 'Kari Renamed');
+    await page.goto(base + '/o/sports-club');
+    await page.fill('input[aria-label="Name of Kari Renamed"]', 'Kari Test');
+    await page.locator('input[aria-label="Name of Kari Renamed"]').blur();  // leaving the field saves it
+    await page.waitForSelector('input[aria-label="Name of Kari Test"]');
+    await page.goto(base + '/o/sports-club/setup');
+    await page.fill('input[aria-label="Name of Video"]', 'Camera');
+    await page.locator('input[aria-label="Name of Video"]').blur();  // leaving the field saves it
+    await page.waitForSelector('input[aria-label="Name of Camera"]');
+    await page.fill('input[aria-label="Name of Camera"]', 'Sound');  // a name that is taken
+    const beforeTaken = errors.length;
+    await page.locator('input[aria-label="Name of Camera"]').blur();  // leaving the field saves it
+    await msgHas(page, 'Task “Sound” already exists');
+    errors.length = beforeTaken;  // 409 is the right answer here
+    ok((await page.inputValue('input[aria-label="Name of Camera"]')) === 'Camera', 'a refused rename puts the old name back');
+
+    await page.goto(base + '/o/sports-club');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.fill('input[aria-label="Name of the organisation"]', 'Sports Club 2');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await h1is(page, 'Sports Club 2');
+    ok(page.url().endsWith('/o/sports-club'), 'the address stays when the organisation is renamed');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.fill('input[aria-label="Name of the organisation"]', 'Sports Club');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await h1is(page, 'Sports Club');
+    await page.click('summary:has-text("Rename or delete")');
+    ok((await page.innerText('main')).includes('cannot be deleted'), 'an organisation with plans cannot be deleted: the form is not offered');
+    ok((await page.locator('button:has-text("Delete the organisation")').count()) === 0, 'no delete button while there are plans');
+
+    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await h1is(page, 'Autumn 2026');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.fill('input[aria-label="Name of the plan"]', 'Fall 2026');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await h1is(page, 'Fall 2026');
+    ok(page.url().endsWith('/p/autumn-2026'), 'the address stays when the plan is renamed');
+    await page.goto(base + kariUrl);  // the link to a person's page in this plan still works
+    await page.waitForSelector('.mine-row');
+    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.fill('input[aria-label="Name of the plan"]', 'Autumn 2026');
+    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await h1is(page, 'Autumn 2026');
+
+    // a plan to throw away, then an organisation to throw away
+    await page.goto(base + '/o/sports-club');
+    await page.fill('form.row input[placeholder^="New plan"]', 'Scratch');
+    await page.click('text=Create plan');
+    await h1is(page, 'Scratch');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.getByRole('button', { name: 'Delete the plan' }).click();  // the confirmation is accepted
+    await page.waitForURL('**/o/sports-club');
+    await h1is(page, 'Sports Club');
+    await msgHas(page, 'The plan “Scratch” was deleted');
+    ok(!(await page.innerText('main')).includes('Scratch') || (await page.locator('ul.plain a:has-text("Scratch")').count()) === 0, 'the deleted plan is not listed');
+    ok((await page.innerText('ul.log')).includes('plan.delete'), 'the deletion is in the change log');
+
+    await page.goto(base + '/?switch');
+    await page.fill('form.row input', 'Temp Org');
+    await page.click('form.row button');
+    await page.waitForURL('**/o/temp-org');
+    await page.fill('form.row input[placeholder^="New plan"]', 'Temp plan');
+    await page.click('text=Create plan');
+    await h1is(page, 'Temp plan');
+    await page.click('text=← Temp Org');
+    await h1is(page, 'Temp Org');
+    await page.click('summary:has-text("Rename or delete")');
+    ok((await page.locator('button:has-text("Delete the organisation")').count()) === 0, 'an organisation with a plan cannot be deleted');
+    await page.click('ul.plain a:has-text("Temp plan")');
+    await h1is(page, 'Temp plan');
+    await page.click('summary:has-text("Rename or delete")');
+    await page.getByRole('button', { name: 'Delete the plan' }).click();
+    await page.waitForURL('**/o/temp-org');
+    await page.click('summary:has-text("Rename or delete")');
+    const deleteOrg = page.getByRole('button', { name: 'Delete the organisation' });
+    ok(await deleteOrg.isDisabled(), 'the delete button waits for the name to be typed');
+    await page.fill('input[aria-label="Type the name of the organisation to confirm"]', 'Temp');
+    ok(await deleteOrg.isDisabled(), 'a part of the name is not enough');
+    await page.fill('input[aria-label="Type the name of the organisation to confirm"]', 'Temp Org');
+    ok(await deleteOrg.isEnabled(), 'the whole name enables it');
+    await deleteOrg.click();
+    await h1is(page, 'Choose organisation');
+    await msgHas(page, 'The organisation “Temp Org” was deleted');
+    ok(!(await page.innerText('main')).includes('Temp Org'), 'the deleted organisation is not listed');
+    await page.evaluate(() => localStorage.setItem('tp.org', 'sports-club'));
 
     // --- Norwegian: the switch, what the server writes, the errors, and the same width check ---
     await page.setViewportSize({ width: 1280, height: 900 });

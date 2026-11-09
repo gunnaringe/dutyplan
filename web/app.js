@@ -154,7 +154,8 @@ async function pageOrg(r, org, people) {
   const [plans, log] = await Promise.all([api('GET', `/orgs/${enc(r.org)}/plans`), api('GET', `/orgs/${enc(r.org)}/log?limit=30`)]);
   const refresh = () => render();
   const peopleRows = people.map((p) => h('tr', {},
-    h('td', {}, p.name),
+    h('td', {}, h('input', { type: 'text', value: p.name, maxlength: '80', 'aria-label': t('common.name_of_aria', { name: p.name }),
+      onchange: async (e) => { if (await write(() => api('PATCH', `/orgs/${enc(r.org)}/people/${p.id}`, { name: e.target.value }))) refresh(); else e.target.value = p.name; } })),
     h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('org.active_aria', { name: p.name }), checked: p.active,
       onchange: async (e) => { if (await write(() => api('PATCH', `/orgs/${enc(r.org)}/people/${p.id}`, { active: e.target.checked }))) refresh(); else e.target.checked = p.active; } })),
     h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('common.can_be_proposed_aria', { name: p.name }), checked: p.proposable,
@@ -170,7 +171,47 @@ async function pageOrg(r, org, people) {
     nameForm(t('org.new_person'), t('common.add'), async (name) => { await api('POST', `/orgs/${enc(r.org)}/people`, { name }); refresh(); }),
     h('p', { class: 'muted small' }, t('org.proposable_hint')),
     h('h2', {}, t('log.title')),
-    logTable(log));
+    logTable(log),
+    manageOrg(r, org, plans));
+}
+
+// Rename (the address stays) or delete an organisation. Deleting needs the organisation to have no plans, and the name typed in.
+function manageOrg(r, org, plans) {
+  const base = `/orgs/${enc(r.org)}`;
+  const name = h('input', { type: 'text', value: org.name, maxlength: '80', 'aria-label': t('org.rename_label') });
+  const rename = h('form', { class: 'row', onsubmit: async (e) => {
+    e.preventDefault();
+    if (await write(() => api('PATCH', base, { name: name.value }))) { await render(); say(t('org.renamed')); }
+  } }, name, h('button', { type: 'submit' }, t('common.rename')));
+  let del;
+  if (plans.length) del = h('p', { class: 'muted' }, t('org.delete_has_plans'));
+  else {
+    const typed = h('input', { type: 'text', placeholder: t('org.delete_type'), 'aria-label': t('org.delete_type'), autocomplete: 'off', maxlength: '80' });
+    const button = h('button', { type: 'submit', class: 'danger', disabled: true }, t('org.delete_button'));
+    typed.addEventListener('input', () => { button.disabled = typed.value.trim() !== org.name; });
+    del = h('form', { class: 'stack', onsubmit: async (e) => {
+      e.preventDefault();
+      if (typed.value.trim() !== org.name) return;
+      if (await write(() => api('DELETE', `${base}?confirm=${enc(r.org)}`))) { store.set('org', ''); go('/?switch'); say(t('org.deleted', { name: org.name })); }
+    } }, h('p', { class: 'muted small' }, t('org.delete_hint')), h('div', { class: 'row' }, typed, button));
+  }
+  return h('section', {}, h('details', {}, h('summary', {}, t('manage.title')), rename, h('h3', {}, t('org.delete_title')), del));
+}
+
+// The same for a plan: renaming keeps every link; deleting takes the plan's events, answers, cells and runs with it.
+function managePlan(r, plan) {
+  const base = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}`;
+  const name = h('input', { type: 'text', value: plan.name, maxlength: '80', 'aria-label': t('plan.rename_label') });
+  const rename = h('form', { class: 'row', onsubmit: async (e) => {
+    e.preventDefault();
+    if (await write(() => api('PATCH', base, { name: name.value }))) { await render(); say(t('plan.renamed')); }
+  } }, name, h('button', { type: 'submit' }, t('common.rename')));
+  const del = h('div', { class: 'stack' }, h('p', { class: 'muted small' }, t('plan.delete_hint')),
+    h('div', {}, h('button', { type: 'button', class: 'danger', onclick: async () => {
+      if (!confirm(t('plan.delete_confirm', { name: plan.name }))) return;
+      if (await write(() => api('DELETE', base))) { go(`/o/${enc(r.org)}`); say(t('plan.deleted', { name: plan.name })); }
+    } }, t('plan.delete_button'))));
+  return h('section', {}, h('details', {}, h('summary', {}, t('manage.title')), rename, h('h3', {}, t('plan.delete_title')), del));
 }
 
 const SELECT_LEVELS = ['standard', 'cannot', 'impractical', 'practical', 'preferred'];
@@ -188,7 +229,8 @@ async function pageSetup(r, org) {
   const act = (fn) => async () => { if (await write(fn)) refresh(); };
 
   const taskRows = tasks.map((tk) => h('tr', {},
-    h('td', {}, tk.name),
+    h('td', {}, h('input', { type: 'text', value: tk.name, maxlength: '80', 'aria-label': t('common.name_of_aria', { name: tk.name }),
+      onchange: async (e) => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: e.target.value }))) refresh(); else e.target.value = tk.name; } })),
     h('td', {}, h('input', { type: 'checkbox', 'aria-label': t('setup.planned_aria', { name: tk.name }), checked: tk.planned,
       onchange: async (e) => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { planned: e.target.checked }))) refresh(); else e.target.checked = tk.planned; } })),
     h('td', {}, h('button', { type: 'button', class: 'danger', onclick: act(async () => { confirmed(t('setup.delete_task_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); }) }, t('common.delete')))));
@@ -591,7 +633,8 @@ async function pagePlan(r, org) {
       dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, t('plan.no_events')),
       addForm),
     section(t('plan.bulk_title'), noTypes ? h('p', { class: 'muted' }, t('plan.needs_daytype')) : bulkForm),
-    section(t('log.title') + ': ' + plan.name, logTable(log)));
+    section(t('log.title') + ': ' + plan.name, logTable(log)),
+    managePlan(r, plan));
 }
 
 // A group of buttons where one can be chosen (aria-pressed). set(level) updates the view without redrawing the page.
