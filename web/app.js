@@ -305,7 +305,7 @@ function planPanel(r, canPlan, first) {
     if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, 'Planleggingen feilet: ' + (run.error || 'ukjent feil'))); return out; }
 
     out.push(h('p', { class: 'small muted' }, `Laget av ${run.actor} ${fmtTime(run.finished_at || run.started_at)}. ` + (run.solver_status === 'OPTIMAL' ? 'Beste mulige plan funnet.' : 'God plan funnet; kan finnes en enda bedre om den får mer tid.')));
-    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, 'Svar eller oppsett er endret siden denne planen ble laget. Trykk «Prøv igjen» for en oppdatert plan.'));
+    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, 'Svar, oppsett eller vekting er endret siden denne planen ble laget. Trykk «Prøv igjen» for en oppdatert plan.'));
     if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, 'Den uavhengige kontrollen fant brudd mot reglene:'), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
     else if (run.checked) out.push(h('p', { class: 'small muted' }, 'Kontrollert uavhengig: ingen brudd mot reglene.'));
     if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
@@ -399,6 +399,61 @@ function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
     h('details', {}, h('summary', {}, 'Nytt utvalg'), poolForm));
 }
 
+// Vekting: hva planleggeren legger vekt på, for denne planen. Tallene er poeng i planleggerens regnestykke; standardverdiene er et godt
+// utgangspunkt. Bare det som avviker fra standard lagres, så en endret standard når planer som aldri valgte noe.
+const WEIGHT_LABELS = {
+  w_fair: ['Fordeling', 'Lik total belastning', 'Poeng trukket for hvert oppdrag en person ligger over eller under sin andel av alle oppdragene. Hovedleddet for lik fordeling.'],
+  w_fair_range: ['Fordeling', 'Verste avvik, totalt', 'Poeng for den som ligger lengst fra sin andel, så ikke én person tar hele avviket.'],
+  w_task_fair: ['Fordeling', 'Lik andel av hver oppgave', 'Som første, men per oppgave. Av som standard: slås den på, får de som tar flere oppgaver mer totalt enn de som tar én.'],
+  w_task_range: ['Fordeling', 'Verste avvik, per oppgave', 'Som «verste avvik», men per oppgave.'],
+  'w_task.godt': ['Ønsker', 'Får en oppgave de har sagt «godt» til', 'Poeng for hver slik tildeling.'],
+  'w_task.darlig': ['Ønsker', 'Får en oppgave de har sagt «dårlig» til', 'Negativt tall: poeng trukket.'],
+  'w_date.godt': ['Ønsker', 'Får en hendelse som passer godt', 'Poeng for hver slik tildeling.'],
+  'w_date.darlig': ['Ønsker', 'Får en hendelse som passer dårlig', 'Negativt tall: poeng trukket.'],
+  'w_combo.bor': ['Kombinasjoner', 'To oppgaver som bør kombineres samme dag', 'Poeng for hvert slikt par.'],
+  'w_combo.praktisk': ['Kombinasjoner', 'To oppgaver som er praktiske å kombinere', 'Poeng for hvert slikt par.'],
+  'w_combo.upraktisk': ['Kombinasjoner', 'To oppgaver som er upraktiske å kombinere', 'Negativt tall: poeng trukket for hvert slikt par.'],
+  default_combination: ['Kombinasjoner', 'Oppgavepar uten innstilling regnes som', 'Gjelder par du ikke har satt under Oppsett.'],
+};
+const COMBO_OPTIONS = { kan_ikke: 'Kan ikke kombineres', upraktisk: 'Upraktisk', praktisk: 'Praktisk', bor: 'Bør kombineres' };
+
+function weightsSection(r, wr) {
+  const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/weights`;
+  const inputs = wr.specs.map((spec) => {
+    const cur = spec.key in wr.values ? wr.values[spec.key] : spec.default;
+    const input = spec.kind === 'choice'
+      ? h('select', { 'aria-label': WEIGHT_LABELS[spec.key][1] }, spec.options.map((o) => h('option', { value: o, selected: o === cur }, COMBO_OPTIONS[o] || o)))
+      : h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': WEIGHT_LABELS[spec.key][1] });
+    return { spec, input, changed: spec.key in wr.values };
+  });
+  const groups = [...new Set(wr.specs.map((x) => WEIGHT_LABELS[x.key][0]))];
+  const blocks = groups.map((g) => h('div', { class: 'weight-group' }, h('h3', {}, g),
+    inputs.filter(({ spec }) => WEIGHT_LABELS[spec.key][0] === g).map(({ spec, input, changed }) => {
+      const [, label, hint] = WEIGHT_LABELS[spec.key];
+      const def = spec.kind === 'choice' ? COMBO_OPTIONS[spec.default] : spec.default;
+      return h('div', { class: 'weight-row' + (changed ? ' changed' : '') },
+        h('label', {}, h('span', { class: 'wlabel' }, label, changed ? h('span', { class: 'tag' }, 'endret') : ''), input),
+        h('div', { class: 'small muted' }, `${hint} Standard: ${def}.`));
+    })));
+  const save = (values, text) => async () => {
+    if (await write(() => api('PUT', path, { values }))) { await render(); say(text); }
+  };
+  return section('Vekting',
+    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel godt, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
+    h('details', {}, h('summary', {}, wr.values && Object.keys(wr.values).length ? `Vis og endre vekting (${Object.keys(wr.values).length} endret)` : 'Vis og endre vekting'),
+      h('div', { class: 'stack' }, blocks,
+        h('div', { class: 'row-inline' },
+          h('button', { type: 'button', onclick: () => {
+            const values = {};
+            for (const { spec, input } of inputs) {
+              if (spec.kind === 'choice') values[spec.key] = input.value;
+              else if (input.value.trim() !== '') values[spec.key] = Number(input.value);
+            }
+            return save(values, 'Vekting lagret.')();
+          } }, 'Lagre vekting'),
+          h('button', { type: 'button', class: 'ghost', onclick: save({}, 'Vekting er satt tilbake til standard.') }, 'Tilbake til standard')))));
+}
+
 // Siste kjøring, eller null. Lista er alltid 200; å spørre rett etter «latest» uten kjøringer ville gi 404 i nettleserens konsoll.
 async function latestRun(path) {
   return (await api('GET', path)).length ? api('GET', path + '/latest') : null;
@@ -406,11 +461,11 @@ async function latestRun(path) {
 
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log, people, health, latest, tasks, groups, cells, pools] = await Promise.all([
+  const [plan, dates, dayTypes, log, people, health, latest, tasks, groups, cells, pools, weights] = await Promise.all([
     api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
     api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people'),
     api('GET', '/health'), latestRun(`${base}/plans/${enc(r.plan)}/runs`),
-    api('GET', base + '/tasks'), api('GET', base + '/groups'), api('GET', `${base}/plans/${enc(r.plan)}/cells`), api('GET', `${base}/plans/${enc(r.plan)}/pools`)]);
+    api('GET', base + '/tasks'), api('GET', base + '/groups'), api('GET', `${base}/plans/${enc(r.plan)}/cells`), api('GET', `${base}/plans/${enc(r.plan)}/pools`), api('GET', `${base}/plans/${enc(r.plan)}/weights`)]);
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
@@ -466,6 +521,7 @@ async function pagePlan(r, org) {
     fillIn,
     section('Plan', planPanel(r, !!health.planner, latest)),
     rulesSection(r, base, dates, tasks, groups, people, cells, pools),
+    weightsSection(r, weights),
     section('Hendelser',
       noTypes ? h('p', { class: 'muted' }, 'Lag minst én dagtype under ', link(`/o/${enc(r.org)}/oppsett`, 'oppsett'), ' for å legge til hendelser.') : '',
       dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, 'Ingen hendelser ennå.'),

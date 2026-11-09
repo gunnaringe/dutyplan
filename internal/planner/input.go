@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/gunnaringe/tjenesteplan/internal/store"
 )
@@ -50,7 +52,7 @@ type solverInput struct {
 	GroupTasks []solverGroupTask `json:"group_tasks,omitempty"`
 	Locked     []solverLocked    `json:"locked,omitempty"`
 	Pools      []solverPool      `json:"pools,omitempty"`
-	Params     *solverParams     `json:"params,omitempty"`
+	Params     map[string]any    `json:"params,omitempty"` // the plan's weights, and (not hashed) time limit, seed and workers
 }
 
 // solverLocked is a manual cell: a person, a group or a text; Fills only for the last two.
@@ -84,10 +86,35 @@ type solverGroupTask struct {
 	Level string `json:"level"`
 }
 
-type solverParams struct {
-	TimeLimit float64 `json:"time_limit"`
-	Seed      int     `json:"seed"`
-	Workers   int     `json:"workers"`
+// notNull makes nil slices empty ones: the solver iterates over what it is given, and JSON null is not a list.
+func notNull(slices ...any) {
+	for _, p := range slices {
+		if v := reflect.ValueOf(p).Elem(); v.IsNil() {
+			v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+		}
+	}
+}
+
+// weightParams turns the plan's weights into the planner's params. «w_task.godt» is nested: {"w_task": {"godt": ...}}.
+// No weights give no params at all, so a plan that never changed them has the same input (and hash) as before they existed.
+func weightParams(weights map[string]any) map[string]any {
+	if len(weights) == 0 {
+		return nil
+	}
+	params := map[string]any{}
+	for key, v := range weights {
+		if group, name, nested := strings.Cut(key, "."); nested {
+			sub, _ := params[group].(map[string]any)
+			if sub == nil {
+				sub = map[string]any{}
+				params[group] = sub
+			}
+			sub[name] = v
+		} else {
+			params[key] = v
+		}
+	}
+	return params
 }
 
 // Snapshot keeps the names as they were when the run started, so the result reads correctly even if something is
@@ -310,13 +337,18 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			Level string `json:"level"`
 		}{tid(c.A), tid(c.B), c.Level})
 	}
+	notNull(&in.Tasks, &in.Dates, &in.People, &in.Combinations)
+	in.Params = weightParams(d.Weights) // the weights change the plan, so they are part of the hash
 	data, err := json.Marshal(in)
 	if err != nil {
 		return nil, "", snap, err
 	}
 	sum := sha256.Sum256(data)
 	hash = hex.EncodeToString(sum[:])
-	in.Params = &solverParams{TimeLimit: float64(p.TimeLimit), Seed: p.Seed, Workers: p.Workers}
+	if in.Params == nil {
+		in.Params = map[string]any{}
+	}
+	in.Params["time_limit"], in.Params["seed"], in.Params["workers"] = float64(p.TimeLimit), p.Seed, p.Workers
 	input, err = json.Marshal(in)
 	return input, hash, snap, err
 }

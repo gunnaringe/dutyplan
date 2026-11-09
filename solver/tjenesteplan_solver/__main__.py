@@ -1,13 +1,14 @@
 """python -m tjenesteplan_solver            < inndata.json > utdata.json
 python -m tjenesteplan_solver --check      som over, men svaret får «violations»: brudd funnet av den uavhengige sjekkeren
 python -m tjenesteplan_solver check inndata.json utdata.json
+python -m tjenesteplan_solver --defaults   skriver standardparametrene (vektene m.m.) som JSON
 """
 
 import json
 import sys
 
 from .check import check
-from .model import solve
+from .model import DEFAULT_PARAMS, solve
 
 
 def main(argv: list[str]) -> int:
@@ -21,6 +22,10 @@ def main(argv: list[str]) -> int:
             print(p)
         print("OK" if not problems else f"{len(problems)} brudd")
         return 1 if problems else 0
+    if argv[1:] == ["--defaults"]:
+        json.dump(DEFAULT_PARAMS, sys.stdout, ensure_ascii=False, indent=1)
+        sys.stdout.write("\n")
+        return 0
     data = json.load(sys.stdin)
     result = solve(data)
     if len(argv) == 2 and argv[1] == "--check":

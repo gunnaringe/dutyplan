@@ -87,13 +87,13 @@ bokmål først, men tekstene skal kunne byttes ut.
 **En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
 organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
 
-*Bygget (migrering 001–007):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`, `grp`, `grp_member`, `grp_task`, `manual_cell`, `pool_member`.
+*Bygget (migrering 001–008):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`, `grp`, `grp_member`, `grp_task`, `manual_cell`, `pool_member`.
 Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
 
 | Tabell | Nivå | Innhold |
 |---|---|---|
 | `organization` | | `slug` (unik, i adressen), navn |
-| `plan` | organisasjon | `slug` (unik i organisasjonen), navn. Erstatter «periode/semester» |
+| `plan` | organisasjon | `slug` (unik i organisasjonen), navn, **`weights`** (JSON: planleggerens vekter som avviker fra standard). Erstatter «periode/semester» |
 | `person` | organisasjon | navn (unikt i organisasjonen), aktiv, **kan foreslås** (standard ja). Gjenbrukes i alle planer |
 | `group`, `group_member` | organisasjon | **bygget som `grp`, `grp_member`**: navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
 | `group_task` | organisasjon | **bygget som `grp_task`**: oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
@@ -192,6 +192,16 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
   OPTIMAL/FEASIBLE, tidsavbrudd og krasj blir en **feilet kjøring med årsak**, aldri en halv plan. Kjøringer som sto som «running» ved oppstart merkes feilet.
 - Visningen (`internal/planner/view.go`) setter navn og oppgaver fra øyeblikksbildet og gir hver tom plass en forklaring på norsk
   (`explain.go`: passer ikke, ikke valgt oppgaven, kan ikke foreslås, opptatt med noe annet). «Prøv igjen» teller frøet opp.
+
+### Vekting per plan (bygget, etter fase 4 omgang 2)
+- Planleggerens vekter er innstillinger på planen (`GET|PUT /plans/{plan}/weights`, seksjonen «Vekting» på planen). De som kan endres, står i `store.WeightSpecs`
+  med standard og grenser (fordeling samlet og per oppgave, poeng for «godt» og «dårlig» på oppgave og hendelse, poeng for kombinasjoner og hva et par uten innstilling regnes som).
+  Ikke med: pris for tom plass (må komme etter alt annet), stabilitet og historikk (appen bruker dem ikke) og nøytral (null).
+- Bare det som avviker fra standard lagres (`plan.weights`, JSON), så en endret standard når planer som aldri valgte noe. Verdier utenfor grensene og ukjente nøkler avvises;
+  fortegn følger meningen (en «dårlig» kan ikke gi pluss). Settes en plan helt tilbake, er inndataene og hashen som før vektingen fantes.
+- Vektene går til planleggeren som `params` (nøkler med punktum, som `w_task.godt`, nøstes) og er med i hashen: en annen vekting gir en annen plan, så en gammel kjøring merkes utdatert.
+  Tid, frø og tråder er det ikke. Standardene i Go er kopier av planleggerens egne, og en test mot den ekte planleggeren (`--defaults`) holder dem like.
+- Per plan, ikke per organisasjon: planen er enheten det optimaliseres innenfor. Skal nye planer arve fra forrige eller fra en organisasjonsstandard, legges det til da.
 
 ### Grupper, manuelle ruter og utvalg (bygget, fase 4 omgang 2)
 - **Grupper** (`/orgs/{org}/groups`, seksjonen «Grupper» under Oppsett): navn, medlemmer, «kan foreslås» og oppgavene planleggeren kan foreslå gruppen til

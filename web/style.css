@@ -99,3 +99,9 @@ ul.plan-events { list-style: none; padding: 0; margin: 0; }
 .picker .chips { max-height: 14rem; overflow: auto; margin: .35rem 0; }
 button.lockbtn { background: none; border: none; color: var(--accent); text-decoration: underline; padding: 0 .25rem; font-size: .8rem; }
 @media (pointer: coarse) { button.lockbtn { min-height: 2.75rem; } }
+.weight-group h3 { font-size: 1rem; margin: 1rem 0 .25rem; }
+.weight-row { padding: .4rem 0; border-bottom: 1px solid var(--line); }
+.weight-row label { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; justify-content: space-between; }
+.weight-row .wlabel { flex: 1 1 12rem; }
+.weight-row.changed .wlabel { font-weight: 700; }
+.weight-row input[type=number] { width: 6rem; }

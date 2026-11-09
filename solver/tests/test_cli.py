@@ -25,3 +25,10 @@ def test_cli_uten_check_har_ingen_brudd_liste():
     data = base(n_dates=2)
     data["params"]["time_limit"] = 5
     assert "violations" not in run_cli(data=data)
+
+
+def test_cli_defaults_gir_standardvektene():
+    r = subprocess.run([sys.executable, "-m", "tjenesteplan_solver", "--defaults"], capture_output=True, text=True, check=False)
+    assert r.returncode == 0, r.stderr
+    d = json.loads(r.stdout)
+    assert d["w_fair"] == 10 and d["w_task_fair"] == 0 and d["w_task"]["godt"] == 2 and d["default_combination"] == "upraktisk"

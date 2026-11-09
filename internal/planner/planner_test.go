@@ -506,9 +506,11 @@ func TestRunsAreInvisibleToOtherOrganisations(t *testing.T) {
 
 // ---- the real solver ---------------------------------------------------------------------------------------------
 
+func realSolverCommand() string { return os.Getenv("TJENESTEPLAN_SOLVER") }
+
 func realSolver(t *testing.T) Solver {
 	t.Helper()
-	cmd := os.Getenv("TJENESTEPLAN_SOLVER")
+	cmd := realSolverCommand()
 	if cmd == "" {
 		t.Skip("TJENESTEPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
 	}
@@ -626,6 +628,32 @@ func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 		}
 		if bilde == nil || bilde.Missing != 1 || !strings.Contains(bilde.Explanation, "Ingen kan ta denne") || !strings.Contains(bilde.Explanation, "har ikke valgt oppgaven") {
 			t.Errorf("%s: %+v", e.Date, bilde)
+		}
+	}
+}
+
+// The solver iterates over every list it is given, and JSON null is not a list: a plan with nothing set must still send [].
+func TestEmptyListsAreSentAsListsNeverAsNull(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	org, _ := st.CreateOrg(ctx, "T", "Tom", "")
+	plan, _ := st.CreatePlan(ctx, org.Slug, "T", "Plan", "")
+	d, err := st.GetPlanningData(ctx, org.Slug, plan.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, _, err := BuildInput(d, Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in map[string]any
+	json.Unmarshal(raw, &in)
+	for _, key := range []string{"tasks", "dates", "people", "combinations"} {
+		if list, ok := in[key].([]any); !ok || list == nil {
+			t.Errorf("%s must be a list, got %v", key, in[key])
 		}
 	}
 }

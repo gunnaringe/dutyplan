@@ -44,6 +44,8 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 - Hver person velger selv hvilke oppgaver hen er med på; én liste per person med svar per hendelse (*passer ikke / dårlig / godt*), valgfri egen liste per oppgave.
 - «Lik fordeling» = **lik total belastning** (brukerens svar 2026-11-09): en som bare tar Bilde skal ikke ende på halvparten av en som tar Lyd og Bilde.
   Fordeling per oppgave er av som standard (`w_task_fair`/`w_task_range` 0). Ikke gjør oppgaveleddet til hovedledd igjen uten å spørre.
+- **Vektene er konfigurasjon per plan** (2026-11-09): `store.WeightSpecs` (standard og grenser), lagret som det som avviker fra standard, og med i hashen. Standardene skal være kopier av
+  planleggerens (`--defaults`; en test sjekker det). Ny vekt = en linje i `WeightSpecs`, en tekst i `WEIGHT_LABELS` i `web/app.js`.
 
 ## Testing og data
 

@@ -242,6 +242,30 @@ const { spawn } = require('child_process');
     await page.click('button[aria-label^="Fjern ruten Lyd Gjest utenfra"]');
     await page.waitForSelector('.rule:has-text("Gjest utenfra")', { state: 'detached' });
 
+    // vekting: endres per plan, ligger igjen, gjør planen utdatert, og kan settes tilbake til standard
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await h1is('Høst 2026');
+    await page.click('summary:has-text("Vis og endre vekting")');
+    const perTask = page.locator('input[aria-label="Lik andel av hver oppgave"]');
+    ok((await perTask.inputValue()) === '0', 'standard er at fordeling per oppgave er av');
+    await perTask.fill('5');
+    await page.getByRole('button', { name: 'Lagre vekting' }).click();
+    await page.waitForFunction(() => document.getElementById('msg').textContent.includes('Vekting lagret'));
+    await page.waitForSelector('summary:has-text("1 endret")');
+    ok((await page.innerText('.plan-panel')).includes('vekting'), 'en annen vekting gjør planen utdatert');
+    await page.reload();
+    await page.click('summary:has-text("1 endret")');
+    ok((await page.locator('input[aria-label="Lik andel av hver oppgave"]').inputValue()) === '5', 'vektingen ligger igjen etter omlasting');
+    await page.locator('input[aria-label="Lik total belastning"]').fill('500');  // utenfor grensen: tjeneren avviser
+    await page.getByRole('button', { name: 'Lagre vekting' }).click();
+    const beforeBad = errors.length;
+    await page.waitForFunction(() => document.getElementById('msg').classList.contains('err'));
+    errors.length = beforeBad;  // 400 er riktig svar her, og nettleseren logger den som en feil
+    await page.getByRole('button', { name: 'Tilbake til standard' }).click();
+    await page.waitForFunction(() => document.getElementById('msg').textContent.includes('tilbake til standard'));
+    await page.click('summary:has-text("Vis og endre vekting")');
+    ok((await page.locator('input[aria-label="Lik andel av hver oppgave"]').inputValue()) === '0', 'tilbake til standard');
+
     // ingen side skal bli bredere enn en mobilskjerm
     await page.setViewportSize({ width: 390, height: 844 });
     for (const url of ['/o/menigheten', '/o/menigheten/oppsett', '/o/menigheten/p/host-2026', kariUrl]) {
