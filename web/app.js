@@ -82,6 +82,15 @@ const fmtTime = (iso) => new Date(iso).toLocaleString(locale(), { dateStyle: 'sh
 const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
+// The time of day of an event: «11:00» or «11:00–12:30», or '' when it has none. A 24-hour clock in both languages.
+const clock = (ev) => (ev.start_time ? (ev.end_time ? `${ev.start_time}–${ev.end_time}` : ev.start_time) : '');
+// What follows the date of an event: its time, day type and note.
+const evMeta = (ev) => [clock(ev), ev.day_type, ev.note].filter(Boolean).join(' · ');
+// A date with its time, as used in labels: «2026-08-09 11:00 Match day».
+const evLabel = (ev) => `${ev.date}${ev.start_time ? ' ' + ev.start_time : ''} ${ev.day_type}`;
+// A description with its line breaks kept; nothing when there is none.
+const descText = (text) => (text ? h('div', { class: 'desc small muted' }, text) : '');
+
 function go(path) {
   history.pushState({}, '', path);
   render();
@@ -387,7 +396,8 @@ function planPanel(r, canPlan, first, firstRuns) {
   // The grid: events across, tasks down. It scrolls sideways in its own box, not the page.
   function gridTable(view) {
     const head = h('tr', {}, h('th', { class: 'corner' }, ''),
-      view.events.map((ev) => h('th', { scope: 'col' }, fmtShortDate(ev.date), h('div', { class: 'small muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : '')))));
+      view.events.map((ev) => h('th', { scope: 'col' }, fmtShortDate(ev.date), h('div', { class: 'small muted' }, evMeta(ev)),
+        ev.description ? h('details', { class: 'why' }, h('summary', {}, t('plan.description')), descText(ev.description)) : '')));
     const rows = view.tasks.map((tk) => h('tr', {}, h('th', { scope: 'row' }, tk.name),
       view.events.map((ev) => { const c = ev.cells.find((x) => x.task_id === tk.id); return h('td', {}, c ? cellContent(c, tk.name, ev.id, true) : h('span', { class: 'muted' }, '–')); })));
     return h('div', { class: 'grid-scroll' }, h('table', { class: 'plan-grid' }, h('thead', {}, head), h('tbody', {}, rows)));
@@ -420,7 +430,7 @@ function planPanel(r, canPlan, first, firstRuns) {
       [['list', t('run.view_list')], ['grid', t('run.view_grid')]].map(([v, text]) => h('button', { type: 'button', class: 'ghost', 'aria-pressed': String(mode === v), onclick: () => { store.set('planview', v); show(lastView); } }, text))));
     if (mode === 'grid') out.push(gridTable(view));
     else out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
-      h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
+      h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, evMeta(ev)), descText(ev.description)),
       h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => [h('div', { class: 'task' }, names.get(c.task_id) || '?'), cellContent(c, names.get(c.task_id) || '?', ev.id, false)]))))));
     if (view.weak.length) out.push(h('details', {}, h('summary', {}, t('run.compromises', { n: view.weak.length })), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
     if (runs.length > 1) out.push(h('details', { open: historyOpen, ontoggle: (e) => { historyOpen = e.target.open; } }, h('summary', {}, t('run.history', { n: runs.length })), h('ul', { class: 'plain runs' }, runs.map((x) => h('li', { class: 'run-row' + (x.id === run.id ? ' shown' : '') },
@@ -437,14 +447,14 @@ function planPanel(r, canPlan, first, firstRuns) {
 
 // Several events at a time: an expandable list with ticks. selected() gives the ids.
 function eventPicker(dates, label) {
-  const boxes = dates.map((d) => ({ d, box: h('input', { type: 'checkbox', 'aria-label': `${d.date} ${d.day_type}` }) }));
+  const boxes = dates.map((d) => ({ d, box: h('input', { type: 'checkbox', 'aria-label': evLabel(d) }) }));
   const summary = h('summary', {}, label);
   const update = () => { const n = boxes.filter((x) => x.box.checked).length; summary.textContent = n ? t('rules.picker_selected', { label, n }) : label; };
   boxes.forEach((x) => x.box.addEventListener('change', update));
   const set = (v) => () => { boxes.forEach((x) => { x.box.checked = v; }); update(); };
   const el = h('details', { class: 'picker' }, summary,
     h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost', onclick: set(true) }, t('rules.select_all')), h('button', { type: 'button', class: 'ghost', onclick: set(false) }, t('rules.clear'))),
-    h('div', { class: 'chips' }, boxes.map(({ d, box }) => h('label', { class: 'chip' }, box, ` ${d.date} ${d.day_type}`))));
+    h('div', { class: 'chips' }, boxes.map(({ d, box }) => h('label', { class: 'chip' }, box, ' ' + evLabel(d)))));
   return { el, selected: () => boxes.filter((x) => x.box.checked).map((x) => x.d.id) };
 }
 
@@ -492,7 +502,7 @@ function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
 
   const rows = dates.map((d) => ({ d, cs: cells.filter((c) => c.event_id === d.id), ps: pools.filter((p) => p.event_id === d.id) })).filter((x) => x.cs.length || x.ps.length);
   const list = rows.length ? h('ul', { class: 'plain' }, rows.map(({ d, cs, ps }) => h('li', {},
-    h('strong', {}, fmtDate(d.date)), ' ', h('span', { class: 'muted' }, d.day_type),
+    h('strong', {}, fmtDate(d.date)), ' ', h('span', { class: 'muted' }, evMeta(d)),
     cs.map((c) => {
       const what = c.person_id ? nameOf(people, c.person_id) : c.group_id ? nameOf(groups, c.group_id) : c.label;
       return h('div', { class: 'rule' }, h('span', {}, `${nameOf(tasks, c.task_id)}: ${what}${c.fills > 1 ? ' ×' + c.fills : ''}`),
@@ -575,17 +585,26 @@ async function pagePlan(r, org) {
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
 
+  const patch = (d, body, revert) => async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, body(e.target.value)))) refresh(); else revert(e.target); };
+  const firstLine = (text) => { const l = text.split('\n')[0]; return l.length > 60 ? l.slice(0, 60) + '…' : l; };
   const rows = dates.map((d) => {
-    const label = d.date + ' ' + d.day_type;
-    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: t('plan.note'), 'aria-label': t('plan.note_aria', { label }), onchange: async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { note: e.target.value }))) refresh(); else e.target.value = d.note; } });
+    const label = evLabel(d);
+    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: t('plan.note'), 'aria-label': t('plan.note_aria', { label }), onchange: patch(d, (v) => ({ note: v }), (el) => { el.value = d.note; }) });
+    // clearing the start time clears the end time too: an end time needs a start time
+    const start = h('input', { type: 'time', value: d.start_time, 'aria-label': t('plan.start_time_aria', { label }), onchange: patch(d, (v) => (v ? { start_time: v } : { start_time: '', end_time: '' }), (el) => { el.value = d.start_time; }) });
+    const end = h('input', { type: 'time', value: d.end_time, 'aria-label': t('plan.end_time_aria', { label }), onchange: patch(d, (v) => ({ end_time: v }), (el) => { el.value = d.end_time; }) });
+    const desc = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('plan.description_placeholder'), 'aria-label': t('plan.description_aria', { label }), onchange: patch(d, (v) => ({ description: v }), (el) => { el.value = d.description; }) }, d.description);
     return h('li', { class: 'event-row' },
-      h('strong', { class: 'when' }, fmtDate(d.date)),
-      dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, t('plan.daytype_of_aria', { label })),
-      note,
-      h('button', { type: 'button', class: 'danger', 'aria-label': t('plan.delete_event_aria', { label }), onclick: async () => {
-        if (!confirm(t('plan.delete_event_confirm', { date: fmtDate(d.date), daytype: d.day_type }))) return;
-        if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
-      } }, t('common.delete')));
+      h('div', { class: 'event-line' },
+        h('strong', { class: 'when' }, fmtDate(d.date)),
+        dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, t('plan.daytype_of_aria', { label })),
+        h('div', { class: 'times' }, start, end),
+        note,
+        h('button', { type: 'button', class: 'danger', 'aria-label': t('plan.delete_event_aria', { label }), onclick: async () => {
+          if (!confirm(t('plan.delete_event_confirm', { date: fmtDate(d.date), daytype: d.day_type }))) return;
+          if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
+        } }, t('common.delete'))),
+      h('details', { class: 'event-desc' }, h('summary', {}, d.description ? t('plan.description') + ': ' + firstLine(d.description) : t('plan.add_description')), desc));
   });
 
   const active = people.filter((p) => p.active);
@@ -602,23 +621,32 @@ async function pagePlan(r, org) {
     const date = h('input', { type: 'date', required: true, 'aria-label': t('plan.date_aria') });
     const typeSel = h('select', { 'aria-label': t('plan.daytype_aria') }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
     const noteIn = h('input', { type: 'text', placeholder: t('plan.note_optional'), maxlength: '200', 'aria-label': t('plan.note') });
-    addForm = h('form', { class: 'row', onsubmit: async (e) => { e.preventDefault(); if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value }))) refresh(); } },
-      date, typeSel, noteIn, h('button', { type: 'submit' }, t('plan.add_event')));
+    const startIn = h('input', { type: 'time', 'aria-label': t('plan.start_time') });
+    const endIn = h('input', { type: 'time', 'aria-label': t('plan.end_time') });
+    const descIn = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('plan.description_placeholder'), 'aria-label': t('plan.description') });
+    addForm = h('form', { class: 'stack', onsubmit: async (e) => {
+      e.preventDefault();
+      if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value, start_time: startIn.value, end_time: endIn.value, description: descIn.value }))) refresh();
+    } },
+      h('div', { class: 'row-inline' }, date, typeSel, startIn, endIn, noteIn, h('button', { type: 'submit' }, t('plan.add_event'))),
+      h('details', {}, h('summary', {}, t('plan.description_optional')), descIn));
 
     const from = h('input', { type: 'date', required: true, 'aria-label': t('plan.from') });
     const to = h('input', { type: 'date', required: true, 'aria-label': t('plan.to') });
     const days = [1, 2, 3, 4, 5, 6, 7].map((v) => ({ n: t('week.' + v), v, box: h('input', { type: 'checkbox', checked: v === 7, 'aria-label': t('week.' + v) }) }));
     const bType = h('select', { 'aria-label': t('plan.bulk_type_aria') }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
+    const bStart = h('input', { type: 'time', 'aria-label': t('plan.bulk_start_aria') });
+    const bEnd = h('input', { type: 'time', 'aria-label': t('plan.bulk_end_aria') });
     bulkForm = h('form', { class: 'stack', onsubmit: async (e) => {
       e.preventDefault();
       let res;
-      if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10) }); })) {
+      if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10), start_time: bStart.value, end_time: bEnd.value }); })) {
         await render(); say(t('plan.bulk_done', { created: res.created.length, skipped: res.skipped.length }));
       }
     } },
       h('div', { class: 'row-inline' }, h('label', {}, t('plan.from') + ' ', from), h('label', {}, t('plan.to') + ' ', to)),
       h('div', { class: 'row-inline' }, days.map((x) => h('label', { class: 'chip' }, x.box, ' ' + x.n))),
-      h('div', { class: 'row-inline' }, bType, h('button', { type: 'submit' }, t('common.add_all'))));
+      h('div', { class: 'row-inline' }, bType, bStart, bEnd, h('button', { type: 'submit' }, t('common.add_all'))));
   }
 
   return h('div', {},
@@ -659,7 +687,7 @@ async function pageMe(r, org) {
     const rows = mine.assignments.map((a) => h('li', { class: 'mine-row' },
       h('strong', {}, fmtDate(a.date)),
       h('span', {}, a.via ? t('me.with', { task: a.task, via: a.via }) : a.task, a.locked ? h('span', { class: 'tag lock' }, t('cell.locked')) : '', a.weak ? h('span', { class: 'tag' }, t('cell.poor')) : ''),
-      h('span', { class: 'small muted' }, a.day_type + (a.note ? ' · ' + a.note : ''))));
+      h('span', { class: 'small muted' }, evMeta(a))));
     return section(t('me.assignments'),
       h('p', { class: 'small muted' }, t(mine.run.pinned ? 'me.from_pinned' : 'me.from_latest', { actor: mine.run.actor, time: fmtTime(mine.run.finished_at) })),
       mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, t('me.stale')) : '',
@@ -702,7 +730,7 @@ async function pageMe(r, org) {
     const ctl = seg(t('me.can_you', { date: fmtDate(e.date) }), EVENT_LEVELS, e.level, (v) => setLevels({ [e.event_id]: levels[e.event_id] === v ? '' : v }));
     ctls[e.event_id] = ctl;
     return h('li', { class: 'avail-row' },
-      h('div', { class: 'what' }, h('strong', { class: 'when' }, fmtDate(e.date)), h('span', { class: 'muted small' }, e.day_type + (e.note ? ' · ' + e.note : ''))), ctl.el);
+      h('div', { class: 'what' }, h('strong', { class: 'when' }, fmtDate(e.date)), h('span', { class: 'muted small' }, evMeta(e)), descText(e.description)), ctl.el);
   });
   const all = (v) => async () => {
     const changes = {};

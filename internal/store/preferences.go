@@ -25,11 +25,14 @@ type MeTask struct {
 }
 
 type MeEvent struct {
-	EventID int64  `json:"event_id"`
-	Date    string `json:"date"`
-	DayType string `json:"day_type"`
-	Note    string `json:"note"`
-	Level   string `json:"level"` // "" = neutral
+	EventID     int64  `json:"event_id"`
+	Date        string `json:"date"`
+	DayType     string `json:"day_type"`
+	Note        string `json:"note"`
+	StartTime   string `json:"start_time"`
+	EndTime     string `json:"end_time"`
+	Description string `json:"description"`
+	Level       string `json:"level"` // "" = neutral
 }
 
 // Me is everything a person's own page needs in one call.
@@ -87,10 +90,10 @@ func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID in
 		me.Tasks = append(me.Tasks, t)
 	}
 	rows.Close()
-	rows, err = s.db.QueryContext(ctx, `SELECT e.id, e.date, t.name, e.note, COALESCE(pe.level, '')
-		FROM event e JOIN day_type t ON t.id = e.day_type_id AND t.org_id = e.org_id
-		LEFT JOIN person_event pe ON pe.event_id = e.id AND pe.org_id = e.org_id AND pe.person_id = ?
-		WHERE e.org_id = ? AND e.plan_id = ? ORDER BY e.date, e.id`, personID, oid, pid)
+	rows, err = s.db.QueryContext(ctx, `SELECT d.id, d.date, t.name, d.note, d.start_time, d.end_time, d.description, COALESCE(pe.level, '')
+		FROM event d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		LEFT JOIN person_event pe ON pe.event_id = d.id AND pe.org_id = d.org_id AND pe.person_id = ?
+		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY `+eventOrder, personID, oid, pid)
 	if err != nil {
 		return me, err
 	}
@@ -98,7 +101,7 @@ func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID in
 	me.Events = []MeEvent{}
 	for rows.Next() {
 		var e MeEvent
-		if err := rows.Scan(&e.EventID, &e.Date, &e.DayType, &e.Note, &e.Level); err != nil {
+		if err := rows.Scan(&e.EventID, &e.Date, &e.DayType, &e.Note, &e.StartTime, &e.EndTime, &e.Description, &e.Level); err != nil {
 			return me, err
 		}
 		me.Events = append(me.Events, e)

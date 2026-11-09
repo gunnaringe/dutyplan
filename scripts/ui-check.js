@@ -436,6 +436,49 @@ const { spawn } = require('child_process');
     ok(!(await page.innerText('main')).includes('Temp Org'), 'the deleted organisation is not listed');
     await page.evaluate(() => localStorage.setItem('tp.org', 'sports-club'));
 
+    // --- a time of day and a description on an event ---
+    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));
+    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await h1is(page, 'Autumn 2026');
+    await page.fill('input[aria-label="Start time 2026-08-02 Match day"]', '11:00');
+    await page.locator('input[aria-label="Start time 2026-08-02 Match day"]').blur();
+    await page.waitForSelector('input[aria-label="End time 2026-08-02 11:00 Match day"]');  // the labels carry the time now
+    await page.fill('input[aria-label="End time 2026-08-02 11:00 Match day"]', '12:30');
+    await page.locator('input[aria-label="End time 2026-08-02 11:00 Match day"]').blur();
+    await page.waitForFunction(() => { const i = document.querySelector('input[aria-label="End time 2026-08-02 11:00 Match day"]'); return i && i.value === '12:30'; });
+    await page.fill('input[aria-label="End time 2026-08-02 11:00 Match day"]', '10:00');  // before the start: refused, and the old time comes back
+    const beforeEnd = errors.length;
+    await page.locator('input[aria-label="End time 2026-08-02 11:00 Match day"]').blur();
+    await msgHas(page, 'The end time must be after the start time');
+    errors.length = beforeEnd;  // 400 is the right answer here
+    ok((await page.inputValue('input[aria-label="End time 2026-08-02 11:00 Match day"]')) === '12:30', 'a refused time puts the old one back');
+    const descLabel = 'textarea[aria-label="Description 2026-08-02 11:00 Match day"]';
+    await page.click('details.event-desc:has(' + descLabel + ') summary');
+    await page.fill(descLabel, 'Doors open at 10:30.\nBring the banner.');
+    await page.locator(descLabel).blur();
+    await page.waitForSelector('summary:has-text("Description: Doors open at 10:30.")');
+    await page.reload();
+    await h1is(page, 'Autumn 2026');
+    ok((await page.inputValue('input[aria-label="Start time 2026-08-02 11:00 Match day"]')) === '11:00', 'the time stays after a reload');
+    await page.waitForSelector('.plan-event');
+    const firstEvent = await page.locator('.plan-event').nth(0).innerText();
+    ok(firstEvent.includes('11:00–12:30') && firstEvent.includes('Doors open at 10:30.') && firstEvent.includes('Bring the banner.'), 'the plan shows the time and the description: ' + firstEvent);
+    await page.evaluate(() => localStorage.setItem('tp.planview', 'grid'));
+    await page.reload();
+    await page.waitForSelector('table.plan-grid');
+    ok((await page.innerText('table.plan-grid thead')).includes('11:00–12:30'), 'the grid shows the time');
+    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));
+    await page.goto(base + kariUrl);  // a person's page: the time and the description of each event they answer for
+    await h1is(page, 'Kari Test');
+    await page.waitForSelector('.avail-row');
+    const firstRow = await page.locator('.avail-row').nth(0).innerText();
+    ok(firstRow.includes('11:00–12:30') && firstRow.includes('Bring the banner.'), 'a person\'s page shows the time and the description: ' + firstRow);
+    await page.goto(base + '/o/sports-club/p/autumn-2026');  // clearing the start time clears the end time too
+    await page.fill('input[aria-label="Start time 2026-08-02 11:00 Match day"]', '');
+    await page.locator('input[aria-label="Start time 2026-08-02 11:00 Match day"]').blur();
+    await page.waitForSelector('input[aria-label="End time 2026-08-02 Match day"]');
+    ok((await page.inputValue('input[aria-label="End time 2026-08-02 Match day"]')) === '', 'clearing the start clears the end');
+
     // --- Norwegian: the switch, what the server writes, the errors, and the same width check ---
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));  // the explanations are read from the list

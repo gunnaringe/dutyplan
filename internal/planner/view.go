@@ -109,7 +109,12 @@ type EventRow struct {
 	Date    string `json:"date"`
 	DayType string `json:"day_type"`
 	Note    string `json:"note"`
-	Cells   []Cell `json:"cells"` // in the order of RunView.Tasks; a task with nothing in this event is omitted
+	// The time of day and the description are the event's current ones while it exists (they do not change the plan, so
+	// they do not make a run out of date), else the ones from when the run was made. Events of a date are in time order.
+	StartTime   string `json:"start_time"`
+	EndTime     string `json:"end_time"`
+	Description string `json:"description"`
+	Cells       []Cell `json:"cells"` // in the order of RunView.Tasks; a task with nothing in this event is omitted
 }
 
 type LoadRow struct {
@@ -338,8 +343,17 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 	}
 	sort.Slice(v.Tasks, func(i, j int) bool { return v.Tasks[i].Name < v.Tasks[j].Name })
+	live := map[int64]store.Event{}
+	if evs, err := s.st.ListEvents(ctx, orgSlug, planSlug); err == nil {
+		for _, e := range evs {
+			live[e.ID] = e
+		}
+	}
 	for _, e := range snap.Events {
-		row := EventRow{ID: e.ID, Date: e.Date, DayType: e.DayType, Note: e.Note, Cells: []Cell{}}
+		row := EventRow{ID: e.ID, Date: e.Date, DayType: e.DayType, Note: e.Note, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
+		if cur, ok := live[e.ID]; ok {
+			row.StartTime, row.EndTime, row.Description = cur.StartTime, cur.EndTime, cur.Description
+		}
 		for _, t := range v.Tasks {
 			a := cells[key{eid(e.ID), tid(t.ID)}]
 			if a == nil {
@@ -360,6 +374,16 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		v.Events = append(v.Events, row)
 	}
+	sort.SliceStable(v.Events, func(i, j int) bool { // by date, then those with a start time in time order, the rest as they were
+		a, b := v.Events[i], v.Events[j]
+		if a.Date != b.Date {
+			return a.Date < b.Date
+		}
+		if (a.StartTime == "") != (b.StartTime == "") {
+			return a.StartTime != ""
+		}
+		return a.StartTime < b.StartTime
+	})
 	for p, l := range out.Load {
 		id, _ := parseID(p, "p")
 		v.Load = append(v.Load, LoadRow{PersonID: id, Name: personName(p), Count: l.Count, Target: float64(int(l.Target*10+0.5)) / 10})

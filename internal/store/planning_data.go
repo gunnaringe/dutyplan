@@ -59,12 +59,12 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	d.Events = []Event{}
-	if err := scanAll(ctx, tx, `SELECT e.id, e.date, e.day_type_id, t.name, e.note FROM event e
-		JOIN day_type t ON t.id = e.day_type_id AND t.org_id = e.org_id
-		WHERE e.org_id = ? AND e.plan_id = ? ORDER BY e.date, e.id`, []any{oid, pid},
+	// In the order of date and creation, not time of day: the planner's input (and so a run's hash) must not change when a time is set.
+	if err := scanAll(ctx, tx, `SELECT `+eventCols+` FROM event d
+		JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY d.date, d.id`, []any{oid, pid},
 		func(r *sql.Rows) error {
-			var e Event
-			err := r.Scan(&e.ID, &e.Date, &e.DayTypeID, &e.DayType, &e.Note)
+			e, err := scanEvent(r)
 			d.Events = append(d.Events, e)
 			return err
 		}); err != nil {

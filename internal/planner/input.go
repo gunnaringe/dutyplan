@@ -149,6 +149,10 @@ type SnapEvent struct {
 	DayTypeID int64  `json:"day_type_id"`
 	DayType   string `json:"day_type"`
 	Note      string `json:"note"`
+	// The time of day and the description as they were when the run was made; the view shows the current ones while the event exists.
+	StartTime   string `json:"start_time,omitempty"`
+	EndTime     string `json:"end_time,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 type SnapTask struct {
 	ID      int64  `json:"id"`
@@ -219,7 +223,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			ID   string `json:"id"`
 			Type string `json:"type"`
 		}{eid(e.ID), did(e.DayTypeID)})
-		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.DayTypeID, e.DayType, e.Note})
+		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.DayTypeID, e.DayType, e.Note, e.StartTime, e.EndTime, e.Description})
 	}
 	in.PersonTasks = map[string]map[string]string{}
 	in.PersonDates = map[string]map[string]string{}

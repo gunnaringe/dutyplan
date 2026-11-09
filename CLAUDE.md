@@ -40,12 +40,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Renaming changes the name only.** The slug is the address; links (also the personal ones people were sent) must keep working. Never make a rename change a slug.
 - **Deleting a plan keeps the change log** (the lines lose their plan link and get the plan's name in front) and is refused while a run is in progress. An organisation is deleted only
   when it has no plans, and the caller confirms with its slug. `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
-- **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. Availability («can I»), combinations, places
+- **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
   and group busyness apply to the event. The planner's «dates» are events (the id is arbitrary text).
 - **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; «My assignments» follows the pinned run, else the newest finished one. Pinned runs are never pruned.
   There is still no approval flow or publishing.
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
-- **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again unless publishing and times of day on events exist.
+- **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
 - **A general tool.** Tasks, people, groups, events and day types are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
 - **No special rules for single things.** A **group** is a named set of people. It can be in a manual cell or proposed by the planner
   (`group_tasks`); the members are then busy, and the shared combination setting (task × task) decides what else they can have the same day.

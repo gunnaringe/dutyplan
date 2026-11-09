@@ -17,7 +17,8 @@ It is a general tool. Tasks, people, groups, events and kinds of day are all thi
 1. An **organisation** holds everything that is shared: people, tasks, kinds of day (*day types*: which tasks an event has and
    how many places each), groups (a team or a couple that works together) and which tasks can be combined on the same day.
 2. An organisation has several **plans** (for example *Autumn 2026*). A plan is a list of **events**; two events may fall on
-   the same day.
+   the same day. An event has a day type, and can have a start time (and an end time), a short note and a longer description;
+   on a day the events with a time come first, in time order.
 3. Each person has their own page (`/o/<organisation>/p/<plan>/me/<id>`; send them the link). There they pick the tasks they
    can take part in and answer *does not suit / poor / good* for each event.
 4. On the plan page, **Plan** runs the planner. The result shows as a list or a grid, with the reasons for anything left

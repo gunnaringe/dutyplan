@@ -105,10 +105,13 @@ Migrations are forward-only and run in a transaction at startup. Migration 009 c
 **Optimisation happens within one plan only** (the user's choice 2026-11-09). Assignments in earlier plans do not count: the app never sends `history` or `previous_plan` to the planner (it can still accept them).
 Every lookup is scoped by the organisation; a plan or person from another organisation gives 404.
 
-**Events:** an event belongs to one plan and has a date and a day type (and a note). Events are **self-contained**: two can fall on the same day (for example a
+**Events:** an event belongs to one plan and has a date and a day type (and a note, a time of day and a description). Events are **self-contained**: two can fall on the same day (for example a
 service and a staff evening, or two shifts), and availability, combinations, places and group busyness apply to the event, never to the calendar day. The API uses the id (`/events/{id}`).
-"All Sundays in a period" adds one event per chosen weekday (ISO 1 = Monday … 7 = Sunday, computed in Go, not in the browser), at most 366 days at a time; an event with the same date and day type is
-skipped, so running the same thing twice does not duplicate. The order within a date is the order of creation (no times of day yet).
+"All Sundays in a period" adds one event per chosen weekday (ISO 1 = Monday … 7 = Sunday, computed in Go, not in the browser), at most 366 days at a time; an event with the same date, day type and start time is
+skipped, so running the same thing twice does not duplicate. A bulk add can give all the events a start time and an end time.
+**Time of day and description (built 2026-11-09):** `start_time` and an optional `end_time` are `HH:MM` on a 24-hour clock (local time, no time zone; the end is after the start on the same day, and an end needs a start);
+`description` is free text up to 2000 characters with line breaks, next to the short `note`. Within a date the events with a start time come first in time order, the rest in the order of creation; the page, "My page" and "My assignments" show them that way.
+The planner does not use the times: its input lists the events by date and creation, so setting a time never makes a run out of date. The plan shows the current time and description of an event while it exists (else the ones from when the run was made).
 Deleting a task that is in a day type, or a day type that has events, is refused (409); combinations follow the task.
 
 ### The same scale everywhere
@@ -239,8 +242,8 @@ The first version has no login, no personal links and no roles. The consequences
 2. **Setup (done 2026-11-08)**: tasks, day types with places, combinations, events (singly and for all chosen weekdays in a period; self-contained, several on the same day allowed).
 3. **The person page (done 2026-11-08)**: "My page" per person and plan, mobile first: choose tasks and how willingly, and answer *does not suit / poor / good* per event with one tap (tapping again removes the answer; "Set all"). Answers are saved at once. *Not built:* "its own list for this task". Narrow screens come first; a test fails if a page becomes wider than a 390 px screen.
 4. **Planning**: run, preview, lock, selections, groups, explanations. **Round 1 done (2026-11-08):** "Plan" / "Try again" on the plan, background run, grid per event with explanations, compromises and distribution, check and out-of-date marking (see *Running the planner*). **Round 2 done (2026-11-09):** groups, manual cells, selections and "Lock" (see *Groups, manual cells and selections*). Optimisation happens only within the plan; no history from other plans.
-5. **Grid (done 2026-11-09)**: the **grid** (events across, tasks down, fixed first column, sideways scrolling in its own box; the default on wide screens, with a "List / Grid" choice that is remembered) and **"My assignments"** at the top of My page. *No calendar feed* (dropped by the user 2026-11-09: it would show drafts without an approved plan, and events have no times of day).
-5b. **Bilingual page, run history and pin, rename and delete, README (done 2026-11-09)**: English and Norwegian page and server texts, English codes on the wire, earlier runs and a pinned current plan, rename/delete of organisations and plans, rename of people and tasks.
+5. **Grid (done 2026-11-09)**: the **grid** (events across, tasks down, fixed first column, sideways scrolling in its own box; the default on wide screens, with a "List / Grid" choice that is remembered) and **"My assignments"** at the top of My page. *No calendar feed* (dropped by the user 2026-11-09: it would show drafts without an approved plan, and events had no times of day then; times of day were added the same day, but the feed was not asked for again).
+5b. **Bilingual page, run history and pin, rename and delete, README, time of day and description on events (done 2026-11-09)**: English and Norwegian page and server texts, English codes on the wire, earlier runs and a pinned current plan, rename/delete of organisations and plans, rename of people and tasks, a time of day and a description on events.
 6. **Deployment on kate**: image, Flux, SQLite backup. **Postponed (the user's choice 2026-11-09)**; not started. Remember when it is taken up: Python and `ortools` must be in the image, `DUTYPLAN_SOLVER` must be set, and the database needs a backup.
 
 **Pilot**: first two or three tasks with manual cells, groups and selections, then the rest of the tasks.

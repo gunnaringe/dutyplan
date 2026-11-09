@@ -66,6 +66,12 @@ dt=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 code 404 POST /api/orgs/org-b/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"   # A's day type on B's date
 code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"
 code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"   # two events on the same day
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt,\"start_time\":\"11:00\",\"end_time\":\"12:30\",\"description\":\"Doors at 10:30\"}"
+grep -q '"start_time":"11:00"' "$tmp/body" && grep -q '"description":"Doors at 10:30"' "$tmp/body" || fail "the time and the description did not come back: $(cat "$tmp/body")"
+code 400 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt,\"start_time\":\"25:00\"}"
+grep -q '"code":"start_time_invalid"' "$tmp/body" || fail "a bad time gave the wrong answer: $(cat "$tmp/body")"
+code 200 GET /api/orgs/org-a/plans/autumn-2026/events
+[ "$(grep -o '"start_time":"[^"]*"' "$tmp/body" | head -1)" = '"start_time":"11:00"' ] || fail "the event with a time is not first on its date: $(cat "$tmp/body")"
 code 200 GET /api/orgs/org-b/plans/autumn-2026/events
 [ "$(cat "$tmp/body")" = "[]" ] || fail "B sees A's dates: $(cat "$tmp/body")"
 

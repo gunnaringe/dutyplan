@@ -14,11 +14,14 @@ type MyAssignment struct {
 	Date    string `json:"date"`
 	DayType string `json:"day_type"`
 	Note    string `json:"note"`
-	TaskID  int64  `json:"task_id"`
-	Task    string `json:"task"`
-	Via     string `json:"via,omitempty"` // the group they are in, when the place is the group's
-	Locked  bool   `json:"locked"`        // set by hand
-	Weak    bool   `json:"weak"`          // they said «poor» for the event or the task
+	// The time of day of the event, when it has one.
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	TaskID    int64  `json:"task_id"`
+	Task      string `json:"task"`
+	Via       string `json:"via,omitempty"` // the group they are in, when the place is the group's
+	Locked    bool   `json:"locked"`        // set by hand
+	Weak      bool   `json:"weak"`          // they said «poor» for the event or the task
 }
 
 // MineRun says which plan the assignments come from.
@@ -88,7 +91,7 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 			var day []MyAssignment
 			for _, c := range ev.Cells {
 				mk := func() MyAssignment {
-					return MyAssignment{EventID: ev.ID, Date: ev.Date, DayType: ev.DayType, Note: ev.Note, TaskID: c.TaskID, Task: names[c.TaskID]}
+					return MyAssignment{EventID: ev.ID, Date: ev.Date, DayType: ev.DayType, Note: ev.Note, StartTime: ev.StartTime, EndTime: ev.EndTime, TaskID: c.TaskID, Task: names[c.TaskID]}
 				}
 				for _, p := range c.People {
 					if p.ID == personID {

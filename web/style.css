@@ -41,21 +41,25 @@ input[type=number] { width: 5rem; }
 /* ---- lists that wrap neatly on narrow screens (mobile first) ---- */
 main { overflow-wrap: break-word; }
 ul.events, ul.log, ul.cards, ul.avail { list-style: none; padding: 0; margin: 0; }
-/* mobile: date and delete on the first line, then day type, then note */
-.event-row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; padding: .75rem 0; border-bottom: 1px solid var(--line); }
+/* mobile: date and delete on the first line, then day type, then the times, then note */
+.event-row { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.event-line { display: grid; grid-template-columns: 1fr auto; gap: .5rem; }
 .when { white-space: nowrap; }
-.event-row .when { align-self: center; }
-.event-row select, .event-row input { grid-column: 1 / -1; width: 100%; }
-.event-row button { grid-column: 2; grid-row: 1; }
+.event-line .when { align-self: center; }
+.event-line select, .event-line input { grid-column: 1 / -1; width: 100%; }
+.event-line button { grid-column: 2; grid-row: 1; }
+.event-line .times { grid-column: 1 / -1; display: flex; gap: .5rem; }
+.event-line .times input { flex: 1; min-width: 0; width: 100%; }
 ul.log li { display: grid; grid-template-columns: auto 1fr; gap: .1rem .75rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
 ul.log .when { color: var(--muted); font-size: .875rem; }
 ul.log .who { font-weight: 600; }
 ul.log .what { grid-column: 1 / -1; color: var(--muted); font-size: .875rem; }
 ul.log .detail { grid-column: 1 / -1; overflow-wrap: anywhere; }
 @media (min-width: 40rem) {
-  .event-row { grid-template-columns: 9.5rem 11rem 1fr auto; align-items: center; }
-  .event-row select, .event-row input { grid-column: auto; }
-  .event-row button { grid-column: auto; grid-row: auto; }
+  .event-line { grid-template-columns: 9.5rem 11rem 13rem 1fr auto; align-items: center; }
+  .event-line select, .event-line input { grid-column: auto; }
+  .event-line .times { grid-column: auto; }
+  .event-line button { grid-column: auto; grid-row: auto; }
   ul.log li { grid-template-columns: 9rem 6rem 11rem 1fr; }
   ul.log .what, ul.log .detail { grid-column: auto; }
 }
@@ -131,3 +135,9 @@ ul.mine { list-style: none; padding: 0; margin: 0; }
 
 /* A name edited in a table (people, tasks) shrinks with the cell instead of widening the page. */
 td input[type=text] { width: 100%; min-width: 7rem; box-sizing: border-box; }
+
+/* An event in the list on the plan page: one line of fields, then its description. */
+.desc { white-space: pre-wrap; margin-top: .15rem; }
+.event-desc { margin-top: .4rem; }
+.event-desc summary { color: var(--muted); font-size: .875rem; cursor: pointer; }
+.event-desc textarea { margin-top: .35rem; }

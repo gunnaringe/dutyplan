@@ -228,14 +228,18 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) addEvent(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Date      string `json:"date"`
-		DayTypeID int64  `json:"day_type_id"`
-		Note      string `json:"note"`
+		Date        string `json:"date"`
+		DayTypeID   int64  `json:"day_type_id"`
+		Note        string `json:"note"`
+		StartTime   string `json:"start_time"`
+		EndTime     string `json:"end_time"`
+		Description string `json:"description"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.AddEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Date, b.DayTypeID, b.Note)
+	d, err := s.st.AddEventFull(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r),
+		store.NewEvent{Date: b.Date, DayTypeID: b.DayTypeID, Note: b.Note, StartTime: b.StartTime, EndTime: b.EndTime, Description: b.Description})
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -249,11 +253,13 @@ func (s *server) addEventsBulk(w http.ResponseWriter, r *http.Request) {
 		To        string `json:"to"`
 		Weekdays  []int  `json:"weekdays"` // ISO: 1 = Monday ... 7 = Sunday
 		DayTypeID int64  `json:"day_type_id"`
+		StartTime string `json:"start_time"` // optional, for every event added
+		EndTime   string `json:"end_time"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	created, skipped, err := s.st.AddEventsBulk(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID)
+	created, skipped, err := s.st.AddEventsBulkTimed(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID, b.StartTime, b.EndTime)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
