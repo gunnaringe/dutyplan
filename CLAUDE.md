@@ -42,7 +42,8 @@ starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `
 - **Tatt ut etter ønske:** maks oppgaver per person per dag, og hvile mellom hendelser. Ikke legg dem tilbake uten å spørre.
 - **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
 - Hver person velger selv hvilke oppgaver hen er med på; én liste per person med svar per hendelse (*passer ikke / dårlig / godt*), valgfri egen liste per oppgave.
-- «Lik fordeling» = per oppgave (hovedleddet); samlet antall er et svakere vern. En avveining brukeren eier.
+- «Lik fordeling» = **lik total belastning** (brukerens svar 2026-11-09): en som bare tar Bilde skal ikke ende på halvparten av en som tar Lyd og Bilde.
+  Fordeling per oppgave er av som standard (`w_task_fair`/`w_task_range` 0). Ikke gjør oppgaveleddet til hovedledd igjen uten å spørre.
 
 ## Testing og data
 

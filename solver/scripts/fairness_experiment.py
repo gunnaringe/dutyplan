@@ -2,7 +2,7 @@
 
     uv run python scripts/fairness_experiment.py [tidsgrense] [frø...]
 
-Måler det brukeren ser: verste avvik fra egen andel per oppgave, og samlet.
+Måler det brukeren ser: verste avvik fra egen andel samlet (det som skal være jevnt), og per oppgave (for sammenligning).
 """
 
 import json
@@ -13,9 +13,9 @@ from tjenesteplan_solver import check, solve
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "host2026.json"
 SETS = {
-    "gammel   (samlet 10/10, oppgave 3/0)": {"w_fair": 10, "w_fair_range": 10, "w_task_fair": 3, "w_task_range": 0},
-    "oppgave  (samlet 3/3, oppgave 10/10)": {},
-    "oppgave+ (samlet 1/1, oppgave 15/15)": {"w_fair": 1, "w_fair_range": 1, "w_task_fair": 15, "w_task_range": 15},
+    "total   (samlet 10/10, oppgave 0/0)  [standard]": {},
+    "total+  (samlet 10/10, oppgave 3/0)": {"w_task_fair": 3, "w_task_range": 0},
+    "oppgave (samlet 3/3, oppgave 10/10)  [til 2026-11-09]": {"w_fair": 3, "w_fair_range": 3, "w_task_fair": 10, "w_task_range": 10},
 }
 
 

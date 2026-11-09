@@ -152,6 +152,22 @@ def test_jevn_fordeling_tar_hensyn_til_tilgjengelighet():
     assert sorted((count(res, "b"), count(res, "c"))) == [2, 3] or count(res, "a") == 0
 
 
+def test_lik_total_belastning_selv_om_noen_bare_tar_en_oppgave():
+    """«En som har bare bilde bør ikke være halvparten av en som har lyd og bilde»: a tar bare bilde, b både lyd og bilde
+    og c bare lyd. Samlet er det 12 oppdrag, så alle skal ha 4, og b tar altså ikke 3 av hver."""
+    def inst(**params):
+        i = base(n_dates=6, tasks={"bilde": 1, "lyd": 1}, params={"w_combo": {"upraktisk": 0}, **params})
+        i["person_tasks"] = {"a": {"bilde": "noytral"}, "b": {"bilde": "noytral", "lyd": "noytral"}, "c": {"lyd": "noytral"}}
+        return i
+
+    res = run(inst())
+    assert [count(res, p) for p in "abc"] == [4, 4, 4]
+    assert [res["load"][p]["count"] for p in "abc"] == [4, 4, 4]
+    # med lik andel av hver oppgave (den gamle vektingen) ble det 3, 6 og 3: a og c på halvparten av b
+    gammel = run(inst(w_fair=0, w_fair_range=0, w_task_fair=10, w_task_range=10))
+    assert [count(gammel, p) for p in "abc"] == [3, 6, 3]
+
+
 def test_historikk_gir_mindre_til_den_som_har_gjort_mest():
     uten = run(base(n_dates=6, history={"a": {"t": 3}}, params={"history_weight": 0}))
     assert count(uten, "a") == 2  # uten historikk deler de likt
@@ -163,7 +179,9 @@ def test_historikk_gir_mindre_til_den_som_har_gjort_mest():
 
 
 def test_historikk_pa_en_oppgave_pavirker_ikke_en_annen():
-    res = run(base(n_dates=6, tasks={"x": 1, "y": 1}, history={"a": {"x": 4}}, params={"history_weight": 1}))
+    # Fordeling per oppgave er av som standard (total belastning er målet); historikk per oppgave er bare med når den er på.
+    per_oppgave = {"w_task_fair": 10, "w_task_range": 10}
+    res = run(base(n_dates=6, tasks={"x": 1, "y": 1}, history={"a": {"x": 4}}, params={"history_weight": 1, **per_oppgave}))
     assert count(res, "a", "x") < count(res, "b", "x")
     assert abs(count(res, "a", "y") - count(res, "b", "y")) <= 1
 
@@ -415,6 +433,8 @@ def test_gruppearbeid_teller_ett_oppdrag_per_medlem_for_manuelle_ruter():
     med = run_with(2)  # laget (kun a) fyller t to ganger for hånd
     assert count(med, "a") == 0  # de to rutene er a sin andel: ett oppdrag hver
     assert med["load"]["a"]["count"] == 2 and med["task_load"]["t"]["a"]["count"] == 2
+    # det manuelle gruppearbeidet er med i målet per oppgave (6 oppdrag, a kan fire av seks datoer: 6 * 4/16), også når fordeling per oppgave er av
+    assert med["task_load"]["t"]["a"]["target"] == 1.5
     assert sorted(count(med, p) for p in "bc") == [2, 2]
     assert not med["unfilled"]
 

@@ -57,6 +57,9 @@ PY_MUTATIONS: list[tuple[str, str, str]] = [
     ("historikk samlet", "hist = {p: pb.history_total.get(p, 0) for p in persons}", "hist = {p: 0 for p in persons}"),
     ("historikk per oppgave", "h_t = {p: pb.history_task.get(p, {}).get(t, 0) for p in cand}", "h_t = {p: 0 for p in cand}"),
     ("jevn fordeling av", "m.add(under >= lo_t - load)", "m.add(under >= 0)"),
+    ("fordeling per oppgave er hovedleddet igjen", '"w_task_fair": 0,', '"w_task_fair": 10,'),
+    ("samlet fordeling er av som standard", '"w_fair": 10,', '"w_fair": 0,'),
+    # (verste-avvik-leddene w_fair_range og w_task_range er sekundære: å endre dem alene endrer ikke utfallet, så ingen mutasjon for dem.)
     ("manuelt gruppearbeid per oppgave", "g_t = {p: pb.gcount_task.get((p, t), 0) for p in cand}", "g_t = {p: 0 for p in cand}"),
     ("manuelt gruppearbeid samlet", "gcount = {p: pb.gcount_person.get(p, 0) for p in persons}", "gcount = {p: 0 for p in persons}"),
     ("foreslått gruppe teller ikke i fordelingen", "part[mem, t, d].append(v)  # ett oppdrag per medlem", "pass"),

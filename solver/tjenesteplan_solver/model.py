@@ -57,10 +57,12 @@ DEFAULT_PARAMS: dict[str, Any] = {
     "w_task": {"darlig": -4, "noytral": 0, "godt": 2},
     "w_date": {"darlig": -6, "noytral": 0, "godt": 3},
     "w_combo": {"upraktisk": -5, "praktisk": 2, "bor": 6},
-    "w_fair": 3,  # poeng per tildeling en person ligger utenfor sin samlede andel (vern mot overbelastning)
-    "w_fair_range": 3,  # ... og for det verste avviket
-    "w_task_fair": 10,  # som w_fair, men per oppgave: hovedleddet for «lik fordeling»
-    "w_task_range": 10,  # det verste avviket per oppgave
+    # «Lik fordeling» = lik TOTAL belastning (brukerens valg 2026-11-09): en som bare tar Bilde skal ikke ende på halvparten av en
+    # som tar Lyd og Bilde. Fordeling per oppgave er derfor av som standard; vektene finnes for å prøve den.
+    "w_fair": 10,  # poeng per tildeling en person ligger utenfor sin samlede andel: hovedleddet for «lik fordeling»
+    "w_fair_range": 10,  # ... og for det verste avviket
+    "w_task_fair": 0,  # som w_fair, men per oppgave (gir lik andel av hver oppgave, og dermed ulik total for dem med flere oppgaver)
+    "w_task_range": 0,  # det verste avviket per oppgave
     "history_weight": 0.5,  # hvor mye tidligere semestre teller («litt mindre til den som har gjort mest»)
     "w_stability": 2,  # behold forrige plans tildeling
     "w_unfilled": 1000,  # tom plass; skal komme etter alt annet
@@ -441,10 +443,11 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
             continue
         h_t = {p: pb.history_task.get(p, {}).get(t, 0) for p in cand}
         H_t = sum(h_t.values())
-        worst_t = m.new_int_var(0, top, f"worst_{t}")
-        for p in cand:
-            band(f"{p}_{t}", sum(task_terms[p, t]) + h_t[p] + g_t[p], (D_t + H_t) * cap_t[p], A_t, prm["w_task_fair"], worst_t)
-        obj.append((-round(SCALE * prm["w_task_range"]), worst_t))
+        if prm["w_task_fair"] or prm["w_task_range"]:  # av som standard: ingen variabler å bygge
+            worst_t = m.new_int_var(0, top, f"worst_{t}")
+            for p in cand:
+                band(f"{p}_{t}", sum(task_terms[p, t]) + h_t[p] + g_t[p], (D_t + H_t) * cap_t[p], A_t, prm["w_task_fair"], worst_t)
+            obj.append((-round(SCALE * prm["w_task_range"]), worst_t))
         task_info[t] = (cap_t, A_t, D_t, h_t, g_t)
 
     # --- tom plass ---------------------------------------------------------

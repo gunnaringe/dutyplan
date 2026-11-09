@@ -139,15 +139,14 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 **Mål (poeng, justeres mot testdataene)**
 - Pluss for «godt», minus for «dårlig», på hendelse og oppgave.
 - Pluss/minus for *praktisk*, *upraktisk* og *bør kombineres*.
-- **Jevn fordeling, per oppgave (hovedleddet)**: De som kan en oppgave, deler den likt. Hver persons mål er sin andel av
-  oppgavens plasser, regnet ut fra hvor mange hendelser personen kan stille. Målet er sjelden et helt tall, så det er et
-  **bånd** [nedre, øvre hele tall] som er «jevnt nok», og bare det utenfor båndet koster. I tillegg straffes det verste
-  avviket per oppgave, så ikke én person tar hele avviket.
-- **Samlet antall oppdrag (vern mot overbelastning)**: samme type bånd over alle oppgaver, med lavere vekt. Gruppearbeid
-  teller ett oppdrag per medlem. (Måltallet bygger på antall plasser; en foreslått gruppe med flere medlemmer enn plasser gir
-  flere oppdrag enn plasser, og det regnes ikke inn i målet på forhånd.) Oppgavene har
-  ulik etterspørsel (f.eks. 33 plasser på 7 personer for én oppgave, 17 på 5 for en annen), så samlet antall kan ikke bli likt uten å gjøre
-  fordelingen per oppgave skjev. Vektene bestemmer avveiningen: se *Resultater fra spiken*.
+- **Jevn fordeling = lik total belastning (hovedleddet; avgjort av brukeren 2026-11-09).** Hver persons mål er sin andel av alle oppdrag (gruppearbeid
+  teller ett oppdrag per medlem), regnet ut fra hvor mange hendelser personen kan stille. Målet er sjelden et helt tall, så det er et **bånd**
+  [nedre, øvre hele tall] som er «jevnt nok», og bare det utenfor båndet koster (`w_fair`, 10). I tillegg straffes det verste avviket (`w_fair_range`, 10), så ikke én
+  person tar hele avviket. Hvilke oppgaver oppdragene er i, spiller ingen rolle: en som bare tar Bilde skal ikke ende på halvparten av en som tar Lyd og Bilde.
+  (Måltallet bygger på antall plasser; en foreslått gruppe med flere medlemmer enn plasser gir flere oppdrag enn plasser, og det regnes ikke inn i målet på forhånd.)
+- **Fordeling per oppgave er av som standard** (`w_task_fair` og `w_task_range` er 0, og da bygges ingen variabler for den). Slås den på, får alle som kan en
+  oppgave lik andel av akkurat den, og da får de med flere oppgaver mer totalt. Prisen for total-først: samme oppgave kan fordeles ujevnt mellom
+  de som kan den (se *Resultater fra spiken*).
 - **Historikk fra tidligere planer brukes ikke** (valg 2026-11-09). Planleggeren kan ta imot `history` per oppgave (teller halvt, `history_weight`),
   men appen sender den ikke.
 - Ved ny kjøring kan planleggeren straffe endringer fra en forrige plan (`previous_plan`), men appen bruker det ikke. Det som skal bli stående, låses som manuell rute («Lås» på et forslag).
@@ -243,17 +242,20 @@ Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 20
   Anbefalt tidsgrense i appen: 30 s. Gjentas med `mise run measure:time`.
 - **Fordelingen måtte rettes to ganger.**
   1. Heltall skalert med total kapasitet og `abs` ga svak relaksasjon og dårlig konvergens. Byttet til bånd.
-  2. Med samlet antall som hovedledd ble fordelingen *per oppgave* skjev: i en kjøring tok én person 7 forbønner mens en
-     annen fikk 0. Nå er oppgaveleddet hovedleddet. Målt med `mise run measure:fair` (8 s, fire frø):
+  2. **Avgjort 2026-11-09: total belastning er hovedleddet.** Spiken hadde gjort fordelingen *per oppgave* til hovedledd, fordi «samlet først» ga skjev fordeling
+     innen én oppgave (i en kjøring tok én person 7 forbønner mens en annen fikk 0). Brukeren valgte likevel total: «en som har bare bilde bør ikke være halvparten
+     av en som har lyd og bilde». Med lik andel av hver oppgave ender en som tar to oppgaver på dobbelt så mange oppdrag som en som tar én (6, 12 og 6 i
+     stedet for 8, 8 og 8; testet). Målt med `mise run measure:fair` (8 s, tre frø, testdataene fra høsten 2026):
 
-     | | verste avvik fra egen andel per oppgave | største spredning per oppgave | verste samlet avvik |
+     | | verste avvik fra egen andel samlet | verste avvik per oppgave | største spredning per oppgave |
      |---|---|---|---|
-     | gammelt vektsett (samlet først) | 4,6–5,6 oppdrag | 8–9 | 0,9 |
-     | nåværende (oppgave først) | 1,0 | 3–4 | 4,5 |
+     | per oppgave først (til 2026-11-09) | 4,3–4,5 oppdrag | 1,0 | 4 |
+     | **total først (nå)** | **0,9** | 6,6 | 10 |
+     | total først + svak per oppgave (`w_task_fair` 3) | 0,9 | 4,6–4,8 | 8 |
 
-     **Prisen er at samlet antall oppdrag per person blir mer ulikt.** Er det feil avveining, endres det med vektene
-     `w_fair` og `w_task_fair`. Det er en beslutning for deg, ikke en teknisk detalj.
-- **Historikk måtte være per oppgave** for å virke når oppgaveleddet er hovedleddet. Støttet som `{person: {oppgave: antall}}`.
+     **Prisen er at samme oppgave kan bli ujevnt fordelt mellom de som kan den**, siden det er totalen som holdes jevn. Vil du ha litt mer jevnhet per oppgave uten å
+     tape på totalen, er `w_task_fair` 3 (med `w_task_range` 0) et alternativ: på testdataene holdt totalen like jevn.
+- **Historikk er per oppgave** (`{person: {oppgave: antall}}`), og virker bare når fordeling per oppgave er på. Appen sender ikke historikk.
 - **Vekter er ikke justert mot ekte ønsker.** De står i `DEFAULT_PARAMS` og er bare rimelige startverdier.
 - **Oppgavepar uten innstilling** regnes som *upraktisk* (`default_combination`). I én kjøring delte 9–13 personer to
   oppgaver samme dag, de fleste par uten innstilling (altså upraktiske) og noen ønskede. Admin må derfor sette opp

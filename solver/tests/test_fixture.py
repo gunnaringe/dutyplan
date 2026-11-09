@@ -40,10 +40,6 @@ def test_host2026_gir_gyldig_plan_uten_tomme_plasser():
         locked_cells = sum(1 for lk in manual if p in members[lk["group"]])
         assert load["count"] == own + via + locked_cells, p
 
-    # Lik fordeling per oppgave: ingen ligger langt fra sin andel, og de som kan like mange datoer
-    # får omtrent like mange oppdrag. Uten dette gikk én person på 7 forbønner mens en annen fikk 0.
-    for t, per in res["task_load"].items():
-        assert max(abs(v["count"] + v["history"] - v["target"] - v["history"]) for v in per.values()) <= 2.0, t
-        big = max(v["capacity"] for v in per.values())
-        counts = [v["count"] for v in per.values() if v["capacity"] >= 0.7 * big]
-        assert max(counts) - min(counts) <= 5, (t, per)
+    # Lik TOTAL belastning (brukerens valg 2026-11-09): ingen ligger langt fra sin egen andel (som følger hvor mange datoer
+    # personen kan stille og historikken), uansett hvilke oppgaver de tar. Målt: verste avvik ca. 0,9.
+    assert max(abs(v["count"] - v["target"]) for v in res["load"].values()) <= 2.0, res["load"]
