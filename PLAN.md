@@ -158,7 +158,7 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
 ## Arkitektur: ordentlig backend
 
 - **Go-binær med innebygd SQLite** (`modernc.org/sqlite`, ren Go uten cgo), nummererte migreringer innebygd og kjørt i en
-  transaksjon ved oppstart, vanilla JS-frontend innebygd. Kjører på kate (Flux, image til GHCR).
+  transaksjon ved oppstart, vanilla JS-frontend innebygd. Tenkt kjørt på kate (Flux, image til GHCR); utrulling er utsatt.
   Backend trengs for felles lagring mellom alle brukerne, planleggeren og historikk, selv uten innlogging.
 - **API: vanlig JSON over `net/http`, ikke Connect** (valgt 2026-11-07, avviker fra `scoreboard/`). Det er under ti endepunkter,
   og Connect ville krevd `buf`, to kodegeneratorer og generert kode. Skiftet senere er lite siden grensesnittet er smalt.
@@ -241,7 +241,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
 5. **Plan (gjort 2026-11-09)**: **rutenett** (hendelser bortover, oppgaver nedover, fast første kolonne, sideveis rulling i egen boks; standard på brede skjermer, med «Liste / Rutenett»-valg som huskes) og **«mine oppdrag»** øverst på Min side. *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
-6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
+6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite. **Utsatt (brukerens valg 2026-11-09)**; ikke påbegynt. Husk når den tas opp: Python og `ortools` må med i imaget, `TJENESTEPLAN_SOLVER` må settes, og databasen trenger sikkerhetskopi.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.
 

@@ -3,7 +3,7 @@
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
 Lokalt repo, ikke på GitHub. Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
 personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
-utvalg og «Lås» (fase 4 omgang 1-2). Rutenett og «mine oppdrag» (fase 5) er bygget. Neste: utrulling på kate (fase 6). Publisering er ikke bygget (siste kjøring er planen).
+utvalg og «Lås» (fase 4 omgang 1-2). Rutenett og «mine oppdrag» (fase 5) er bygget. Utrulling på kate (fase 6) er utsatt etter brukerens ønske (2026-11-09): ikke start på den uten å bli bedt om det. Publisering er ikke bygget (siste kjøring er planen).
 
 Oppbygging: `cmd/tjenesteplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
 starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
