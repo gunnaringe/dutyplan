@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 // groupsRoutes: groups are a named set of people per organisation (a team, a choir, a couple). They have no rules of

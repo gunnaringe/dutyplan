@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gunnaringe/tjenesteplan/internal/planner"
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/planner"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 type server struct {

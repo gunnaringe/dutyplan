@@ -1,4 +1,4 @@
-module github.com/gunnaringe/tjenesteplan
+module github.com/gunnaringe/dutyplan
 
 go 1.26.10
 

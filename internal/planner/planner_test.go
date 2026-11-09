@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 var ctx = context.Background()

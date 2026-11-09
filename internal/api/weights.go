@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 // weightsRoutes: the planner's weighting is a setting of one plan. The reply carries the list of settings (with their

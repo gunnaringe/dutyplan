@@ -3,7 +3,7 @@ package api
 import (
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 func TestGroupsOverHTTP(t *testing.T) {

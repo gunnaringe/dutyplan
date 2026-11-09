@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 func TestWeightsBecomeNestedParamsAndPartOfTheHash(t *testing.T) {

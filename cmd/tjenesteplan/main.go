@@ -16,10 +16,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gunnaringe/tjenesteplan/internal/api"
-	"github.com/gunnaringe/tjenesteplan/internal/planner"
-	"github.com/gunnaringe/tjenesteplan/internal/store"
-	"github.com/gunnaringe/tjenesteplan/web"
+	"github.com/gunnaringe/dutyplan/internal/api"
+	"github.com/gunnaringe/dutyplan/internal/planner"
+	"github.com/gunnaringe/dutyplan/internal/store"
+	"github.com/gunnaringe/dutyplan/web"
 )
 
 func main() {

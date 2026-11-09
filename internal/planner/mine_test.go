@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 func (w world) runWith(t *testing.T, answer []byte) *Service {
@@ -41,8 +41,8 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		return m
 	}
 	for name, want := range map[string]string{
-		"Aslaug":    `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=false][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`,
-		"Birger":   `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=true][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`, // «dårlig» is his, not the group's
+		"Aslaug":  `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=false][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`,
+		"Birger":  `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=true][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`, // «dårlig» is his, not the group's
 		"Cecilie": `[2026-08-09 Bilde via="" locked=true weak=false]`,
 		"Frode":   ``,
 	} {

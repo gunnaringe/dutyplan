@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 // cellsRoutes: manual cells (a person, a group or a text set by hand; locked) and selections (utvalg: only these can be

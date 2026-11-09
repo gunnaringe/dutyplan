@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gunnaringe/tjenesteplan/internal/planner"
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/planner"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 type fakeSolver func(ctx context.Context, input []byte) ([]byte, error)

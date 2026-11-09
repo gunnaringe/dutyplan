@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 var (

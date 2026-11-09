@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 type lockedIn struct {

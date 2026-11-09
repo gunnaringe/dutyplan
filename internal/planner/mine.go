@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 // MyAssignment is one thing a person has been given in the plan: a place of their own, or one through a group.

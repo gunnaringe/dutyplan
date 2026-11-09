@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 func (w world) group(t *testing.T, name string, members []string, tasks ...store.GroupTask) store.Group {

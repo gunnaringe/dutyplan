@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 type cellsWorld struct {

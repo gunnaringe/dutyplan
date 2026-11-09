@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/gunnaringe/tjenesteplan/internal/planner"
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/planner"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 // runsRoutes: «Planlegg». Starting a run answers at once (202) and the page polls the run until it is done or failed.

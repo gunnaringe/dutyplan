@@ -1,7 +1,7 @@
 # tjenesteplan
 
 Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
-Privat GitHub-repo: `gunnaringe/dutyplan` (mappen heter `tjenesteplan`, og Go-modulen heter fortsatt `github.com/gunnaringe/tjenesteplan`). Hold det privat, og sjekk at ingenting personlig er lagt til før du pusher (se «Testing og data»). Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
+Privat GitHub-repo: `gunnaringe/dutyplan` (mappen og Go-modulen `github.com/gunnaringe/dutyplan` heter det samme; programmet kalles fortsatt Tjenesteplan, og binæren, Python-pakken og `TJENESTEPLAN_SOLVER` beholder det navnet). Hold det privat, og sjekk at ingenting personlig er lagt til før du pusher (se «Testing og data»). Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
 personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
 utvalg og «Lås» (fase 4 omgang 1-2). Rutenett og «mine oppdrag» (fase 5) er bygget. Utrulling på kate (fase 6) er utsatt etter brukerens ønske (2026-11-09): ikke start på den uten å bli bedt om det. Publisering er ikke bygget (siste kjøring er planen).
 

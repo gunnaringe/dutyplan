@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gunnaringe/tjenesteplan/internal/store"
+	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
 func TestSetupAndDatesFlow(t *testing.T) {
