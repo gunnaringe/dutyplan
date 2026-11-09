@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -166,5 +167,63 @@ func TestPlanningWithoutASolver(t *testing.T) {
 	}
 	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+plan+"/runs", "T", map[string]any{}); r.code != 503 || r.errCode() != "unavailable" {
 		t.Errorf("no solver: %d %s", r.code, r.body)
+	}
+}
+
+// oneAssignment: a solver that gives the first person the first task on the first event.
+func oneAssignment(_ context.Context, input []byte) ([]byte, error) {
+	var in struct {
+		People []struct{ ID string } `json:"people"`
+		Dates  []struct{ ID string } `json:"dates"`
+		Tasks  []struct{ ID string } `json:"tasks"`
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"status": "OPTIMAL", "wall_time": 0.1,
+		"assignments": []map[string]any{{"date": in.Dates[0].ID, "task": in.Tasks[0].ID, "person": in.People[0].ID, "locked": false, "task_level": "noytral", "date_level": "noytral"}},
+		"unfilled":    []any{}, "load": map[string]any{}, "violations": []string{},
+	})
+}
+
+func TestMyAssignmentsOverHTTP(t *testing.T) {
+	e := newEnvWith(t, fakeSolver(oneAssignment))
+	orgA, planA := e.plannable("Org A")
+	orgB, planB := e.plannable("Org B")
+	if planA != planB {
+		t.Fatal("test needs the same plan slug in both organisations")
+	}
+	peopleA, _ := e.st.ListPeople(context.Background(), orgA)
+	peopleB, _ := e.st.ListPeople(context.Background(), orgB)
+	annaA, annaB := peopleA[0].ID, peopleB[0].ID
+	mine := func(org string, person int64) planner.Mine {
+		var m planner.Mine
+		e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+planA+"/people/"+itoa(person)+"/assignments", nil).json(&m)
+		return m
+	}
+	if m := mine(orgA, annaA); m.HasPlan || len(m.Assignments) != 0 || m.Person.Name != "Aslaug" {
+		t.Errorf("before any plan: %+v", m)
+	}
+	e.mustDo(202, "POST", "/api/orgs/"+orgA+"/plans/"+planA+"/runs", map[string]any{"time_limit": 5})
+	e.wait()
+	m := mine(orgA, annaA)
+	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Lyd" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil || m.Run.Actor != "Test" {
+		t.Errorf("Aslaug's assignment: %+v", m)
+	}
+	// B has a plan with the same slug and a person with the same name, but A's run is not B's plan
+	if mb := mine(orgB, annaB); mb.HasPlan || len(mb.Assignments) != 0 {
+		t.Errorf("B: %+v", mb)
+	}
+	for _, c := range []struct{ path, what string }{
+		{"/api/orgs/" + orgB + "/plans/" + planA + "/people/" + itoa(annaA) + "/assignments", "A's person through B"},
+		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/" + itoa(annaB) + "/assignments", "B's person through A"},
+		{"/api/orgs/" + orgA + "/plans/ingen/people/" + itoa(annaA) + "/assignments", "unknown plan"},
+		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/abc/assignments", "bad id"},
+		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/99999/assignments", "unknown person"},
+	} {
+		if r := e.do("GET", c.path, "", nil); r.code != 404 || r.errCode() != "not_found" {
+			t.Errorf("%s: %d %s", c.what, r.code, r.body)
+		}
 	}
 }

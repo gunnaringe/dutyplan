@@ -153,6 +153,8 @@ async function pageOrg(r, org, people) {
 const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const SELECT_LEVELS = [['standard', 'standard'], ['kan_ikke', 'kan ikke kombineres'], ['upraktisk', 'upraktisk'], ['praktisk', 'praktisk'], ['bor', 'bør kombineres']];
 
+const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+
 function section(title, ...kids) { return h('section', {}, h('h2', {}, title), ...kids); }
 
 async function pageSetup(r, org) {
@@ -260,6 +262,9 @@ function planPanel(r, canPlan, first) {
   const limitSel = h('select', { 'aria-label': 'Tid planleggeren får' }, limits.map(([v, t]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, t)));
   limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
   let timer = 0;
+  let lastView = first;
+  // Rutenett på brede skjermer, liste på smale, til brukeren velger selv.
+  const planView = () => store.get('planview') || (window.matchMedia('(min-width: 56rem)').matches ? 'grid' : 'list');
 
   async function start() {
     let view;
@@ -270,6 +275,7 @@ function planPanel(r, canPlan, first) {
     try { show(await api('GET', `${path}/latest`)); } catch (e) { say(e.message, 'err'); }
   }
   function show(view) {
+    lastView = view;
     clearTimeout(timer);
     box.replaceChildren(...body(view));
     if (view && view.run.status === 'running') timer = setTimeout(poll, 1000);
@@ -279,7 +285,8 @@ function planPanel(r, canPlan, first) {
     if (await write(() => api('POST', `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/cells`, { events: [evId], task: taskId, person: personId }))) render();
   }
 
-  function cell(c, taskName, evId) {
+  // Hva som står i en rute: personer, grupper og tekster, og hva som mangler. compact (rutenettet): forklaringen bak en «Hvorfor?».
+  function cellContent(c, taskName, evId, compact) {
     const tag = (text, cls) => h('span', { class: 'tag' + (cls ? ' ' + cls : '') }, text);
     const times = (n) => (n > 1 ? ` ×${n}` : '');
     const who = [
@@ -289,8 +296,19 @@ function planPanel(r, canPlan, first) {
       ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag('låst', 'lock'))),
     ];
     if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? 'Ikke fylt' : `Mangler ${c.missing}`));
-    return [h('div', { class: 'task' }, taskName),
-      h('div', {}, h('div', { class: 'who' }, who), c.missing > 0 && c.explanation ? h('div', { class: 'small muted' }, c.explanation) : '')];
+    const why = c.missing > 0 && c.explanation
+      ? (compact ? h('details', { class: 'why' }, h('summary', {}, 'Hvorfor?'), h('div', { class: 'small muted' }, c.explanation)) : h('div', { class: 'small muted' }, c.explanation))
+      : '';
+    return h('div', {}, h('div', { class: 'who' }, who), why);
+  }
+
+  // Rutenettet: hendelser bortover, oppgaver nedover. Det scroller sideveis i en egen boks, ikke siden.
+  function gridTable(view) {
+    const head = h('tr', {}, h('th', { class: 'corner' }, ''),
+      view.events.map((ev) => h('th', { scope: 'col' }, fmtShortDate(ev.date), h('div', { class: 'small muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : '')))));
+    const rows = view.tasks.map((t) => h('tr', {}, h('th', { scope: 'row' }, t.name),
+      view.events.map((ev) => { const c = ev.cells.find((x) => x.task_id === t.id); return h('td', {}, c ? cellContent(c, t.name, ev.id, true) : h('span', { class: 'muted' }, '–')); })));
+    return h('div', { class: 'grid-scroll' }, h('table', { class: 'plan-grid' }, h('thead', {}, head), h('tbody', {}, rows)));
   }
 
   function body(view) {
@@ -311,9 +329,13 @@ function planPanel(r, canPlan, first) {
     if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
 
     const names = new Map(view.tasks.map((t) => [t.id, t.name]));
-    out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
+    const mode = planView();
+    out.push(h('div', { class: 'view-toggle', role: 'group', 'aria-label': 'Visning' },
+      [['list', 'Liste'], ['grid', 'Rutenett']].map(([v, text]) => h('button', { type: 'button', class: 'ghost', 'aria-pressed': String(mode === v), onclick: () => { store.set('planview', v); show(lastView); } }, text))));
+    if (mode === 'grid') out.push(gridTable(view));
+    else out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
       h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
-      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => cell(c, names.get(c.task_id) || '?', ev.id)))))));
+      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => [h('div', { class: 'task' }, names.get(c.task_id) || '?'), cellContent(c, names.get(c.task_id) || '?', ev.id, false)]))))));
     if (view.weak.length) out.push(h('details', {}, h('summary', {}, `Kompromisser (${view.weak.length})`), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
     if (view.load.length) out.push(h('details', {}, h('summary', {}, 'Fordeling'), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, `${l.name}: ${l.count} (jevn andel ${l.target.toLocaleString('nb-NO')})`)))));
     return out;
@@ -544,11 +566,25 @@ function seg(label, options, current, onpick) {
 // «Min side»: hva jeg kan være med på (per organisasjon) og når jeg kan (per hendelse i planen). Svarene lagres med en gang.
 async function pageMe(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, me] = await Promise.all([api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/me`)]);
+  const [plan, me, mine] = await Promise.all([api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/me`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/assignments`)]);
   const taskPath = (id) => `${base}/people/${me.person.id}/tasks/${id}`;
   const availPath = `${base}/plans/${enc(r.plan)}/people/${me.person.id}/availability`;
   const refresh = () => render();
   const list = (cls, items) => h('ul', { class: cls }, items);
+
+
+  // --- mine oppdrag: fra siste ferdige plan
+  const mineSection = (() => {
+    if (!mine.has_plan) return section('Mine oppdrag', h('p', { class: 'muted' }, 'Ingen plan er laget ennå.'));
+    const rows = mine.assignments.map((a) => h('li', { class: 'mine-row' },
+      h('strong', {}, fmtDate(a.date)),
+      h('span', {}, a.task + (a.via ? ` (med ${a.via})` : ''), a.locked ? h('span', { class: 'tag lock' }, 'låst') : '', a.weak ? h('span', { class: 'tag' }, 'dårlig') : ''),
+      h('span', { class: 'small muted' }, a.day_type + (a.note ? ' · ' + a.note : ''))));
+    return section('Mine oppdrag',
+      h('p', { class: 'small muted' }, `Fra planen laget av ${mine.run.actor} ${fmtTime(mine.run.finished_at)}.`),
+      mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, 'Planen er laget før de siste endringene, så den kan endre seg.') : '',
+      rows.length ? [h('p', { class: 'small' }, `${rows.length} oppdrag`), h('ul', { class: 'mine' }, rows)] : h('p', { class: 'muted' }, 'Du har ingen oppdrag i denne planen.'));
+  })();
 
   // --- oppgaver
   const chosen = me.tasks.filter((t) => t.level);
@@ -606,6 +642,7 @@ async function pageMe(r, org) {
     h('h1', {}, me.person.name),
     h('p', { class: 'muted' }, 'Svarene lagres med en gang. Hendelsen gjelder, ikke dagen: har du to hendelser samme dag, svarer du på hver for seg.'),
     me.person.active ? '' : h('p', { class: 'err' }, 'Denne personen er markert som inaktiv.'),
+    mineSection,
     taskSection,
     section('Når kan du? ' + plan.name,
       me.events.length ? [h('p', { class: 'muted small' }, 'Trykk på et valg. Trykk på det samme igjen for å fjerne svaret (da regnes det som nøytralt).'), bulk, summary, list('avail', rows)] : h('p', { class: 'muted' }, 'Det er ikke lagt inn noen hendelser i denne planen ennå.')));

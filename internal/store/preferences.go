@@ -49,6 +49,15 @@ func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 	return p, err
 }
 
+// GetPerson returns one person of the organisation (anyone else's is not found).
+func (s *Store) GetPerson(ctx context.Context, orgSlug string, id int64) (Person, error) {
+	oid, err := orgID(ctx, s.db, orgSlug)
+	if err != nil {
+		return Person{}, err
+	}
+	return getPerson(ctx, s.db, oid, id)
+}
+
 func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID int64) (Me, error) {
 	var me Me
 	oid, err := orgID(ctx, s.db, orgSlug)

@@ -105,3 +105,19 @@ button.lockbtn { background: none; border: none; color: var(--accent); text-deco
 .weight-row .wlabel { flex: 1 1 12rem; }
 .weight-row.changed .wlabel { font-weight: 700; }
 .weight-row input[type=number] { width: 6rem; }
+
+/* ---- rutenett og mine oppdrag ---- */
+.view-toggle { display: flex; gap: .35rem; margin: .5rem 0; }
+.view-toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (prefers-color-scheme: dark) { .view-toggle button[aria-pressed="true"] { color: #0b1a12; } }
+.grid-scroll { overflow-x: auto; margin: .5rem 0; border: 1px solid var(--line); border-radius: .4rem; }
+table.plan-grid { width: auto; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+.plan-grid th, .plan-grid td { vertical-align: top; text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 9rem; }
+.plan-grid thead th { position: sticky; top: 0; background: var(--bg); font-size: .85rem; color: var(--fg); }
+.plan-grid th[scope=row] { position: sticky; left: 0; background: var(--bg); min-width: 5rem; color: var(--muted); font-weight: 600; z-index: 1; }
+.plan-grid th.corner { position: sticky; left: 0; z-index: 2; min-width: 5rem; }
+.plan-grid .who { flex-direction: column; gap: .15rem; }
+.plan-grid details.why summary { min-height: 0; font-size: .8rem; font-weight: 400; }
+ul.mine { list-style: none; padding: 0; margin: 0; }
+.mine-row { display: grid; grid-template-columns: 1fr; gap: .1rem; padding: .5rem 0; border-bottom: 1px solid var(--line); }
+@media (min-width: 40rem) { .mine-row { grid-template-columns: 12rem 1fr 12rem; gap: .75rem; } }

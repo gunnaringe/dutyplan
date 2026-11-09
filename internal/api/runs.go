@@ -14,6 +14,21 @@ func (s *server) runsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/runs", s.startRun)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/runs", s.listRuns)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/runs/{id}", s.getRun)
+	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/people/{id}/assignments", s.myAssignments)
+}
+
+// myAssignments: «mine oppdrag», from the plan's newest finished run. A person of another organisation is not found.
+func (s *server) myAssignments(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.idParam(w, r)
+	if !ok {
+		return
+	}
+	v, err := s.planner.Mine(r.Context(), r.PathValue("org"), r.PathValue("plan"), id)
+	if err != nil {
+		s.writeRunErr(w, err)
+		return
+	}
+	writeJSON(w, 200, v)
 }
 
 func (s *server) writeRunErr(w http.ResponseWriter, err error) {

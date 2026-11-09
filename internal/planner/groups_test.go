@@ -262,6 +262,17 @@ func TestTheRealSolverProposesAGroupAndKeepsItsMembersOccupied(t *testing.T) {
 			}
 		}
 	}
+	// «mine oppdrag» agrees with the planner's own count for everyone: places of their own plus the group's, one each
+	loads := map[string]int{}
+	for _, l := range v.Load {
+		loads[l.Name] = l.Count
+	}
+	for name, person := range w.people {
+		m, err := s.Mine(ctx, w.org.Slug, w.plan.Slug, person.ID)
+		if err != nil || len(m.Assignments) != loads[name] {
+			t.Errorf("%s: %d assignments in «mine oppdrag», %d in the load (%v)", name, len(m.Assignments), loads[name], err)
+		}
+	}
 	// group work counts as one assignment per member
 	counts := map[string]int{}
 	for _, l := range v.Load {

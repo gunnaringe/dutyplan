@@ -34,6 +34,7 @@ const { spawn } = require('child_process');
 
     await page.goto(base + '/');
     await page.waitForSelector('h1');
+    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));  // rutenett er standard på brede skjermer; de fleste kontrollene under leter etter listen
     ok((await page.textContent('h1')) === 'Velg organisasjon', 'forsiden viser organisasjonsvalg');
 
     // uten navn: skriving avvises med en forklaring
@@ -266,6 +267,30 @@ const { spawn } = require('child_process');
     await page.click('summary:has-text("Vis og endre vekting")');
     ok((await page.locator('input[aria-label="Lik andel av hver oppgave"]').inputValue()) === '0', 'tilbake til standard');
 
+    // rutenett (hendelser bortover, oppgaver nedover) og «mine oppdrag»
+    await page.goto(base + '/o/menigheten/p/host-2026');
+    await h1is('Høst 2026');
+    await page.waitForSelector('.plan-event');
+    await page.getByRole('button', { name: 'Rutenett', exact: true }).click();
+    await page.waitForSelector('table.plan-grid');
+    ok((await page.locator('table.plan-grid thead th[scope=col]').count()) === 5, 'en kolonne per hendelse');
+    ok((await page.locator('table.plan-grid tbody tr').count()) >= 2, 'en rad per oppgave');
+    ok((await page.innerText('table.plan-grid')).includes('Koret (Ola Test)'), 'gruppen står i rutenettet');
+    ok((await page.locator('table.plan-grid button[aria-label^="Lås"]').count()) >= 1, 'forslag kan låses i rutenettet også');
+    await page.reload();
+    await page.waitForSelector('table.plan-grid');  // valget ligger igjen
+    await page.getByRole('button', { name: 'Liste', exact: true }).click();
+    await page.waitForSelector('.plan-event');
+    await page.selectOption('select[aria-label="Velg navnet ditt"]', { label: 'Ola Test' });
+    await page.click('text=Åpne min side');
+    await h1is('Ola Test');
+    await page.waitForSelector('.mine-row');
+    ok((await page.innerText('.mine')).includes('Kafé (med Koret)'), 'oppdrag via en gruppe nevner gruppen: ' + (await page.innerText('main')));
+    await page.goto(base + kariUrl);
+    await h1is('Kari Test');
+    await page.waitForSelector('.mine-row');
+    ok((await page.innerText('.mine')).includes('Lyd'), 'Kari har Lyd i «mine oppdrag»');
+    await page.evaluate(() => localStorage.setItem('tp.planview', 'grid'));  // bredden på rutenettet sjekkes under
     // ingen side skal bli bredere enn en mobilskjerm
     await page.setViewportSize({ width: 390, height: 844 });
     for (const url of ['/o/menigheten', '/o/menigheten/oppsett', '/o/menigheten/p/host-2026', kariUrl]) {

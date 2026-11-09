@@ -203,6 +203,12 @@ Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombina
   Tid, frø og tråder er det ikke. Standardene i Go er kopier av planleggerens egne, og en test mot den ekte planleggeren (`--defaults`) holder dem like.
 - Per plan, ikke per organisasjon: planen er enheten det optimaliseres innenfor. Skal nye planer arve fra forrige eller fra en organisasjonsstandard, legges det til da.
 
+### Rutenett og «mine oppdrag» (bygget, fase 5)
+- `GET /plans/{plan}/people/{id}/assignments`: personens oppdrag i planens **nyeste ferdige kjøring** (en kjøring som pågår eller feilet er ikke en plan; da gjelder den før).
+  Både egne plasser og plasser via en gruppe («Lovsang (med Kirkekoret)»), i hendelsesrekkefølge, med «låst» og «dårlig» (for gruppeplasser: bare hvis det er personens egen «dårlig»).
+  Tallene stemmer med fordelingen (testet mot den ekte planleggeren). Planen merkes når den er laget før de siste endringene. En person i en annen organisasjon gir 404.
+- Rutenettet bruker samme visning som listen (`/runs/{id}`); forklaringen for en tom plass ligger bak «Hvorfor?».
+
 ### Grupper, manuelle ruter og utvalg (bygget, fase 4 omgang 2)
 - **Grupper** (`/orgs/{org}/groups`, seksjonen «Grupper» under Oppsett): navn, medlemmer, «kan foreslås» og oppgavene planleggeren kan foreslå gruppen til
   (plasser og nivå; bare oppgaver planleggeren fordeler). Slettes ikke mens en rute eller et utvalg nevner den (409).
@@ -234,7 +240,7 @@ Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. K
 2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
 3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
 4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
-5. **Plan**: rutenett (hendelser bortover, oppgaver nedover) og «mine oppdrag». *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
+5. **Plan (gjort 2026-11-09)**: **rutenett** (hendelser bortover, oppgaver nedover, fast første kolonne, sideveis rulling i egen boks; standard på brede skjermer, med «Liste / Rutenett»-valg som huskes) og **«mine oppdrag»** øverst på Min side. *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
 6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite.
 
 **Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.

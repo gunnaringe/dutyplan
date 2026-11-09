@@ -189,6 +189,17 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("vekter sendes ikke til planleggeren", "internal/planner/input.go", "in.Params = weightParams(d.Weights) // the weights", "in.Params = nil // the weights"),
     ("vekter med punktum flates ikke ut", "internal/planner/input.go", 'if group, name, nested := strings.Cut(key, "."); nested {', 'if group, name, nested := strings.Cut(key, "."); nested && false {'),
     ("tomme lister sendes som null", "internal/planner/input.go", "if v := reflect.ValueOf(p).Elem(); v.IsNil() {", "if v := reflect.ValueOf(p).Elem(); false {"),
+    # mine oppdrag og rutenett (fase 5)
+    ("mine oppdrag: andres plasser vises", "internal/planner/mine.go", "if p.ID == personID {", "if p.ID != 0 {"),
+    ("mine oppdrag: gruppeoppdrag mangler", "internal/planner/mine.go", "if has(g.MemberIDs) {", "if false {"),
+    ("mine oppdrag: andres grupper vises", "internal/planner/mine.go", "if has(g.MemberIDs) {", "if len(g.MemberIDs) > 0 {"),
+    ("mine oppdrag: kompromiss for hele gruppen", "internal/planner/mine.go", "a.Via, a.Locked, a.Weak = g.Name, g.Locked, has(g.WeakIDs)", "a.Via, a.Locked, a.Weak = g.Name, g.Locked, g.Weak"),
+    ("mine oppdrag: mislykket kjøring regnes som plan", "internal/planner/mine.go", 'if r.Status != "done" {', "if false {"),
+    ("mine oppdrag: eldste kjøring brukes", "internal/planner/mine.go", "for _, r := range runs { // newest first", "for i := len(runs) - 1; i >= 0; i-- { r := runs[i] // oldest first"),
+    ("mine oppdrag: utdatert vises ikke", "internal/planner/mine.go", "Stale: v.Run.Stale}", "Stale: false}"),
+    ("mine oppdrag: gruppemedlemmer uten id (foreslått)", "internal/planner/view.go", "ids = append(ids, who)", "ids = append(ids, who*0)"),
+    ("mine oppdrag: gruppemedlemmer uten id (manuell)", "internal/planner/view.go", "ids = append(ids, mem)", "ids = append(ids, 0)"),
+    ("mine oppdrag: kompromiss uten medlem", "internal/planner/view.go", "weakMembers[k] = append(weakMembers[k], who)", "weakMembers[k] = append(weakMembers[k], who*0)"),
     # personens svar (fase 3)
     ("tenant: person hentes uten org", "internal/store/preferences.go", "FROM person WHERE id = ? AND org_id = ?`, id, oid).", "FROM person WHERE id = ? AND ? > 0`, id, oid)."),
     ("tenant: oppgave hentes uten org ved valg", "internal/store/preferences.go", "WHERE id = ? AND org_id = ? AND planned = 1`, taskID, oid)", "WHERE id = ? AND ? > 0 AND planned = 1`, taskID, oid)"),
