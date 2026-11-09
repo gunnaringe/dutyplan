@@ -1,58 +1,83 @@
-# tjenesteplan
+# dutyplan
 
-Fordeler oppgaver på hendelser med harde krav, preferanser og lik fordeling. Generelt verktøy (ikke bare kirke).
-Privat GitHub-repo: `gunnaringe/dutyplan` (mappen og Go-modulen `github.com/gunnaringe/dutyplan` heter det samme; programmet kalles fortsatt Tjenesteplan, og binæren, Python-pakken og `DUTYPLAN_SOLVER` beholder det navnet). Hold det privat, og sjekk at ingenting personlig er lagt til før du pusher (se «Testing og data»). Status: planleggeren (`solver/`, Python) er koblet til appen (Go + SQLite + vanilla JS): organisasjoner, planer,
-personer, endringslogg, oppsett (oppgaver, dagtyper med plasser, kombinasjoner, hendelser, grupper), «Min side», «Planlegg» på planen, manuelle ruter,
-utvalg og «Lås» (fase 4 omgang 1-2). Rutenett og «mine oppdrag» (fase 5) er bygget. Utrulling på kate (fase 6) er utsatt etter brukerens ønske (2026-11-09): ikke start på den uten å bli bedt om det. Publisering er ikke bygget (siste kjøring er planen).
+Shares out duties among events with hard requirements, preferences and an even distribution. A general tool (not only for churches).
+Private GitHub repo: `gunnaringe/dutyplan` (the folder and the Go module `github.com/gunnaringe/dutyplan` have the same name; the Norwegian page calls the
+program *Tjenesteplan*, and the binary, the Python package and `DUTYPLAN_SOLVER` keep the `dutyplan` name). Keep it private, and check that nothing personal has been added before you push (see
+«Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, the no-login warning); keep it true when behaviour changes.
 
-Oppbygging: `cmd/dutyplan` (main), `internal/store` (SQLite, migreringer, all tilgang), `internal/planner` (bygger inndata fra databasen,
-starter Python-planleggeren, gjør svaret om til en visning med forklaringer), `internal/api` (JSON-API + serverer frontenden),
-`web/` (index.html, app.js, style.css, innebygd i binæren), `solver/` (Python/CP-SAT), `scripts/` (røyktest, nettlesersjekk).
+Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, change log, setup (tasks, day types with places,
+combinations, events, groups), «My page», «Plan» on the plan, manual cells, selections and «Lock» (phase 4), grid and «My assignments» (phase 5), run history with a pinned current plan,
+rename and delete of organisations and plans, rename of people and tasks, and a page in English and Norwegian. Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not
+start on it unless asked.
 
-## Kjør billig (les dette først)
+Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the input from the database,
+starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
+`web/` (index.html, i18n.js, app.js, style.css, embedded in the binary), `solver/` (Python/CP-SAT), `scripts/` (smoke test, browser check).
 
-- **Alt går via mise**: `mise install` (python, uv, go), `mise run setup` (Python-pakker), så `mise tasks`. Aldri python/uv/pytest/go direkte.
-  Skills: `verify` (tester + mutasjoner), `run-planner` (planleggeren) og `run-app` (appen). Oppgavene er stille og gir ca. 1-8 linjer.
-- Vanlig løkke: endre → `mise run test:fast` (Go + Python-regler, ca. 5 s) → `mise run test` (alt, ca. 15 s) → ved regelendring
-  `mise run mutations -- --only <ord>` (hele settet ca. 3 min) → før commit `mise run verify` (tester + alle mutasjoner + røyktest av appen).
-- **Ikke les** `PLAN.md` i sin helhet (ca. 200 linjer). `grep -n '^## ' PLAN.md`, les bare seksjonen du trenger.
-  Ikke les `solver/fixtures/host2026.json` eller `solver/uv.lock` (store, genererte); bruk `mise run plan -- --info`.
-- Ikke be om `--full`, `measure:*` eller `app:ui` uten grunn; de er dyre eller trenger sibling-avhengigheter.
-- Appen finner planleggeren via `DUTYPLAN_SOLVER` (satt i `mise.toml`, krever `mise run setup`); uten den hoppes de to testene mot den ekte
-  løseren over og «Planlegg» er avslått. Mutasjonene kjører Go-testene uten den, så regler må fanges av testene med falsk løser.
-- Filstier til `plan`, `solve` og `check` er relative til repoets rot. Nye Python-pakker: `mise run add -- pakke` (og `mise run lock`);
-  `UV_LOCKED=1` sperrer ellers endring av `uv.lock`.
+## Run cheaply (read this first)
 
-## Designregler fra brukeren (ikke bryt uten å spørre)
+- **Everything goes through mise**: `mise install` (python, uv, go), `mise run setup` (Python packages), then `mise tasks`. Never python/uv/pytest/go directly.
+  Skills: `verify` (tests + mutations), `run-planner` (the planner) and `run-app` (the app). The tasks are quiet and print about 1–8 lines.
+- The usual loop: change → `mise run test:fast` (Go + Python rules, about 5 s) → `mise run test` (everything, about 15 s) → after a rule change
+  `mise run mutations -- --only <word>` (the whole set takes about 4 min) → before a commit `mise run verify` (tests + all mutations + smoke test of the app).
+  For a change to the page also `mise run app:ui` (browser check in both languages, about 20 s).
+- **Do not read** `PLAN.md` in full (about 300 lines). `grep -n '^## ' PLAN.md`, read only the section you need.
+  Do not read `solver/fixtures/autumn2026.json` or `solver/uv.lock` (large, generated); use `mise run plan -- --info`.
+- Do not run `--full`, `measure:*` or `app:ui` without a reason; they are expensive or need sibling dependencies.
+- Never put test output through `| tail` inside an `&&` chain: the pipe hides a failing exit code.
+- The app finds the planner through `DUTYPLAN_SOLVER` (set in `mise.toml`, needs `mise run setup`); without it the two tests against the real
+  solver are skipped and «Plan» is switched off. The mutations run the Go tests without it, so rules must be caught by the tests with a fake solver.
+- File paths for `plan`, `solve` and `check` are relative to the repo root. New Python packages: `mise run add -- package` (and `mise run lock`);
+  `UV_LOCKED=1` otherwise blocks changes to `uv.lock`.
 
-- **Organisasjon → planer.** Alt tilhører en organisasjon; en organisasjon har flere planer (f.eks. «Høst 2026»). Organisasjonen ligger i adressen
-  (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), tjeneren har ingen «gjeldende organisasjon». Hvert oppslag avgrenses av organisasjonen, og
-  en plan/person fra en annen organisasjon gir 404 (isolasjonstestene og `tenant:`-mutasjonene vokter dette). Ingen innlogging.
-- **Alle skrivinger går gjennom `store.write`** (krever aktør i `X-Actor`, logger i samme transaksjon). Ikke skriv til databasen utenom den.
-- **Hendelsen er enheten, ikke datoen.** Hendelser er selvstendige: to kan ligge på samme dag. Tilgjengelighet («kan jeg»), kombinasjoner, plasser
-  og gruppe-opptatthet gjelder hendelsen. Planleggerens «dates» er hendelser (id er vilkårlig tekst).
-- **Ingen regnearkstøtte** (verken import eller eksport). Brukeren vil ikke ha det; ikke foreslå det på nytt.
-- **Ingen kalenderfeed** (`.ics`, abonnement eller nedlasting; droppet 2026-11-09). Ikke foreslå det på nytt uten at publisering og klokkeslett på hendelser finnes.
-- **Generelt verktøy.** Oppgaver, personer, grupper, hendelser og dagtyper er data admin lager. Ingen kirkebegreper i kode, datamodell eller regler.
-- **Ingen særregler for enkeltting.** En **gruppe** er et navngitt sett personer. Den kan stå i en manuell rute eller foreslås av planleggeren
-  (`group_tasks`); medlemmene er da opptatt, og den felles kombinasjonsinnstillingen (oppgave × oppgave) avgjør hva de kan ha samme dag.
-  Et **utvalg** (bare disse personene/gruppene kan velges) dekker «egen lydtekniker» og liknende. Ingen kompetanser eller betingede krav.
-- **Kan foreslås** er en innstilling per person og per gruppe (standard ja). Nei = planleggeren velger dem aldri; manuelle ruter går an.
-- **Gruppearbeid = ett oppdrag per medlem** i fordelingen (samlet og per oppgave).
-- **Optimaliser kun innenfor én plan** (2026-11-09). Ingen historikk fra tidligere planer: appen sender aldri `history` eller `previous_plan` til planleggeren.
-- **Tatt ut etter ønske:** maks oppgaver per person per dag, og hvile mellom hendelser. Ikke legg dem tilbake uten å spørre.
-- **Ingen innlogging i første versjon.** Ingen lenker med hemmelighet, ingen roller. Endringslogg i stedet.
-- Hver person velger selv hvilke oppgaver hen er med på; én liste per person med svar per hendelse (*passer ikke / dårlig / godt*), valgfri egen liste per oppgave.
-- «Lik fordeling» = **lik total belastning** (brukerens svar 2026-11-09): en som bare tar Bilde skal ikke ende på halvparten av en som tar Lyd og Bilde.
-  Fordeling per oppgave er av som standard (`w_task_fair`/`w_task_range` 0). Ikke gjør oppgaveleddet til hovedledd igjen uten å spørre.
-- **Vektene er konfigurasjon per plan** (2026-11-09): `store.WeightSpecs` (standard og grenser), lagret som det som avviker fra standard, og med i hashen. Standardene skal være kopier av
-  planleggerens (`--defaults`; en test sjekker det). Ny vekt = en linje i `WeightSpecs`, en tekst i `WEIGHT_LABELS` i `web/app.js`.
+## Design rules from the user (do not break without asking)
 
-## Testing og data
+- **Organisation → plans.** Everything belongs to an organisation; an organisation has several plans (for example «Autumn 2026»). The organisation is in the address
+  (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), the server has no «current organisation». Every lookup is scoped by the organisation, and
+  a plan/person from another organisation gives 404 (the isolation tests and the `tenant:` mutations guard this). No login.
+- **All writes go through `store.write`** (needs an actor in `X-Actor`, logs in the same transaction). Do not write to the database any other way.
+  **The one exception is `DeleteOrg`**: an organisation's change log goes with it, so the deletion is written to the server log (slog) by the API handler instead.
+- **Renaming changes the name only.** The slug is the address; links (also the personal ones people were sent) must keep working. Never make a rename change a slug.
+- **Deleting a plan keeps the change log** (the lines lose their plan link and get the plan's name in front) and is refused while a run is in progress. An organisation is deleted only
+  when it has no plans, and the caller confirms with its slug. `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
+- **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. Availability («can I»), combinations, places
+  and group busyness apply to the event. The planner's «dates» are events (the id is arbitrary text).
+- **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; «My assignments» follows the pinned run, else the newest finished one. Pinned runs are never pruned.
+  There is still no approval flow or publishing.
+- **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
+- **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again unless publishing and times of day on events exist.
+- **A general tool.** Tasks, people, groups, events and day types are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
+- **No special rules for single things.** A **group** is a named set of people. It can be in a manual cell or proposed by the planner
+  (`group_tasks`); the members are then busy, and the shared combination setting (task × task) decides what else they can have the same day.
+  A **selection** (only these people/groups can be picked) covers «their own sound engineer» and the like. No skills or conditional requirements.
+- **Can be proposed** is a setting per person and per group (default yes). No = the planner never picks them; manual cells are fine.
+- **Group work = one assignment per member** in the distribution (overall and per task).
+- **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
+- **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
+- **No login in the first version.** No links with a secret, no roles. A change log instead.
+- Each person chooses which tasks they take part in; one list per person with answers per event (*does not suit / poor / good*), an optional own list per task (not built).
+- «Even distribution» = **equal total load** (the user's answer 2026-11-09): someone who only takes Video should not end up with half of someone who takes Sound and Video.
+  Distribution per task is off by default (`w_task_fair`/`w_task_range` 0). Do not make the per-task term the main term again without asking.
+- **The weights are configuration per plan** (2026-11-09): `store.WeightSpecs` (default and limits), stored as what differs from the default, and part of the hash. The defaults must be copies of
+  the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/app.js`.
 
-- `check.py` er en uavhengig sjekker; hold den uavhengig av `model.py` (bare standardverdiene deles).
-- Hver regel skal ha en test som feiler når regelen brytes i modellen: `scripts/mutations.py` (`MUTATIONS`) kontrollerer det.
-- Ingen ekte navn, e-post eller telefon i repoet, heller ikke kirkens, programmenes eller regnearkets navn, og ingen kjente navn fra regnearket (renset 2026-11-09, og historikken er skrevet om). Oppdiktede navn skal ikke være ekte fornavn fra det opprinnelige mannskapet: sjekk mot regnearket før nye navn tas i bruk. Datoer og hendelsestyper i testdataene er oppdiktet (2026-11-09). Det eneste som gjenstår av formen fra regnearket, er oppgavenavnene (vanlige roller som Lyd og Bilde) og omtrent hvor store lagene er. Testdataene har oppdiktede navn og lages av `mise run fixture`.
-- Nivåer på ledningen er ASCII: `ikke|darlig|noytral|godt`, `kan_ikke|upraktisk|praktisk|bor`.
-- Ikke gi et skript navn som kolliderer med standardbiblioteket (`inspect.py` ødela numpy-importen).
-- Ikke kjør `mise lock` her: `lockfile` i denne konfigurasjonen skrev en `mise.lock` i `~/code` (overordnet konfig). Versjonene er pinnet i `mise.toml`.
+## Languages and texts
+
+- The repo, its docs, code, comments and tests are in **English**. The page is in English and Norwegian (bokmål); the browser's language is the default and the header has a switch.
+- **On the wire everything is English and ASCII**: levels `never|poor|neutral|good`, combinations `cannot|impractical|practical|preferred`, error kinds and codes. Texts for people are made at the edge.
+- **The page** (`web/i18n.js`): `MESSAGES = {en: {...}, nb: {...}}`, one `'key': 'text',` per line, `{placeholders}`, `.one`/`.other` for anything that counts (`tn`). Use `’` (not `'`) inside texts.
+  `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key `app.js` names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
+- **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
+  (a test checks parity).
+- **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the body is `{error, code, params, message}`. A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
+- Page addresses are English: `/o/<org>`, `/o/<org>/setup`, `/o/<org>/p/<plan>`, `/o/<org>/p/<plan>/me/<id>`.
+- Old change-log lines written before 2026-11-09 may be Norwegian; the log shows what was stored.
+
+## Testing and data
+
+- `check.py` is an independent checker; keep it independent of `model.py` (only the default values are shared).
+- Every rule must have a test that fails when the rule is broken in the model: `solver/scripts/mutations.py` (`PY_MUTATIONS`, `GO_MUTATIONS`) checks it. An outdated pattern (`OUTDATED`) is fixed, never deleted; the number of mutations must not drop.
+- No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
+- The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
+- Do not give a script a name that collides with the standard library (`inspect.py` broke the numpy import).
+- Do not run `mise lock` here: `lockfile` in this configuration wrote a `mise.lock` in `~/code` (the parent configuration). The versions are pinned in `mise.toml`.

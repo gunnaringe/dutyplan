@@ -28,13 +28,13 @@ func (e *env) plannable(name string) (org, plan string) {
 	}
 	o, err := e.st.CreateOrg(ctx, "T", name, "")
 	must(err)
-	task, err := e.st.CreateTask(ctx, o.Slug, "T", "Lyd", true)
+	task, err := e.st.CreateTask(ctx, o.Slug, "T", "Sound", true)
 	must(err)
-	dt, err := e.st.CreateDayType(ctx, o.Slug, "T", "Gudstjeneste")
+	dt, err := e.st.CreateDayType(ctx, o.Slug, "T", "Service")
 	must(err)
 	_, err = e.st.SetDayTypeTasks(ctx, o.Slug, "T", dt.ID, []store.DayTypeTask{{TaskID: task.ID, Slots: 1}})
 	must(err)
-	p, err := e.st.CreatePlan(ctx, o.Slug, "T", "Høst 2026", "")
+	p, err := e.st.CreatePlan(ctx, o.Slug, "T", "Autumn 2026", "")
 	must(err)
 	_, err = e.st.AddEvent(ctx, o.Slug, p.Slug, "T", "2026-08-09", dt.ID, "")
 	must(err)
@@ -95,8 +95,8 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 	for _, path := range []string{
 		"/api/orgs/" + b + "/plans/" + planB + "/runs/" + itoa(started.ID),
 		"/api/orgs/" + b + "/plans/" + planB + "/runs/latest",
-		"/api/orgs/ingen/plans/" + planA + "/runs/" + itoa(started.ID),
-		"/api/orgs/" + a + "/plans/ingen/runs/" + itoa(started.ID),
+		"/api/orgs/nope/plans/" + planA + "/runs/" + itoa(started.ID),
+		"/api/orgs/" + a + "/plans/nope/runs/" + itoa(started.ID),
 		"/api/orgs/" + a + "/plans/" + planA + "/runs/abc",
 		"/api/orgs/" + a + "/plans/" + planA + "/runs/99999",
 	} {
@@ -109,7 +109,7 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 	if len(listB) != 0 {
 		t.Errorf("B must not see A's runs: %v", listB)
 	}
-	if r := e.do("POST", "/api/orgs/ingen/plans/"+planA+"/runs", "T", map[string]any{}); r.code != 404 {
+	if r := e.do("POST", "/api/orgs/nope/plans/"+planA+"/runs", "T", map[string]any{}); r.code != 404 {
 		t.Errorf("planning in an unknown organisation: %d", r.code)
 	}
 }
@@ -208,7 +208,7 @@ func TestMyAssignmentsOverHTTP(t *testing.T) {
 	e.mustDo(202, "POST", "/api/orgs/"+orgA+"/plans/"+planA+"/runs", map[string]any{"time_limit": 5})
 	e.wait()
 	m := mine(orgA, annaA)
-	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Lyd" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil || m.Run.Actor != "Test" {
+	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Sound" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil || m.Run.Actor != "Test" {
 		t.Errorf("Aslaug's assignment: %+v", m)
 	}
 	// B has a plan with the same slug and a person with the same name, but A's run is not B's plan
@@ -218,7 +218,7 @@ func TestMyAssignmentsOverHTTP(t *testing.T) {
 	for _, c := range []struct{ path, what string }{
 		{"/api/orgs/" + orgB + "/plans/" + planA + "/people/" + itoa(annaA) + "/assignments", "A's person through B"},
 		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/" + itoa(annaB) + "/assignments", "B's person through A"},
-		{"/api/orgs/" + orgA + "/plans/ingen/people/" + itoa(annaA) + "/assignments", "unknown plan"},
+		{"/api/orgs/" + orgA + "/plans/nope/people/" + itoa(annaA) + "/assignments", "unknown plan"},
 		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/abc/assignments", "bad id"},
 		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/99999/assignments", "unknown person"},
 	} {

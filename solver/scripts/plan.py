@@ -1,9 +1,9 @@
-"""Kjør planleggeren og skriv en KORT oppsummering (standard ca. 8 linjer, billig å lese for en AI).
+"""Run the planner and print a SHORT summary (by default about 8 lines, cheap to read for an AI).
 
-    mise run plan                       testdataene, 20 s
+    mise run plan                       the test data, 20 s
     mise run plan -- --time 8 --seed 2
-    mise run plan -- --info             bare hva inndataene inneholder (i stedet for å lese JSON-filen)
-    mise run plan -- --full             alt: utvalg, manuelle ruter, tall per oppgave og person
+    mise run plan -- --info             only what the input contains (instead of reading the JSON file)
+    mise run plan -- --full             everything: selections, manual cells, figures per task and person
     mise run plan -- --input fil.json
 """
 
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from dutyplan_solver import check, solve
 
-FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "host2026.json"
+FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "autumn2026.json"
 
 
 def info(data: dict) -> str:
@@ -26,18 +26,18 @@ def info(data: dict) -> str:
     slots = sum(n for d in data["dates"] for n in data["day_type_tasks"].get(d["type"], {}).values())
     return "\n".join(
         [
-            f"{len(data['people'])} personer, {len(data['tasks'])} oppgaver, {len(data['dates'])} datoer "
-            f"({', '.join(f'{n} {t}' for t, n in sorted(types.items()))}), ca. {slots} plasser",
-            f"{len(data.get('groups', []))} grupper, {len(data.get('group_tasks', []))} gruppe-oppgaver, "
-            f"{len(data.get('pools', []))} utvalg, {len(data.get('locked', []))} manuelle ruter, "
-            f"{len(data.get('combinations', []))} kombinasjoner",
-            f"ikke foreslåbare: {[p['id'] for p in data['people'] if not p.get('proposable', True)] or 'ingen'}",
+            f"{len(data['people'])} people, {len(data['tasks'])} tasks, {len(data['dates'])} dates "
+            f"({', '.join(f'{n} {t}' for t, n in sorted(types.items()))}), about {slots} places",
+            f"{len(data.get('groups', []))} groups, {len(data.get('group_tasks', []))} group tasks, "
+            f"{len(data.get('pools', []))} selections, {len(data.get('locked', []))} manual cells, "
+            f"{len(data.get('combinations', []))} combinations",
+            f"not proposable: {[p['id'] for p in data['people'] if not p.get('proposable', True)] or 'none'}",
         ]
     )
 
 
 def deviations(res: dict) -> tuple[str, str, str]:
-    """Verste avvik per oppgave, største spredning per oppgave, verste samlede avvik."""
+    """Worst deviation per task, largest spread per task, worst overall deviation."""
     worst_t, spread_t = (0.0, "-"), (0, "-")
     for t, per in res["task_load"].items():
         for p, v in per.items():
@@ -50,8 +50,8 @@ def deviations(res: dict) -> tuple[str, str, str]:
             spread_t = (max(counts) - min(counts), t)
     worst_all = max(((abs(v["count"] - v["target"]), p) for p, v in res["load"].items()), default=(0.0, "-"))
     return (
-        f"verste avvik per oppgave {worst_t[0]:.1f} ({worst_t[1]}), største spredning {spread_t[0]} ({spread_t[1]})",
-        f"samlet: verste avvik {worst_all[0]:.1f} ({worst_all[1]})",
+        f"worst deviation per task {worst_t[0]:.1f} ({worst_t[1]}), largest spread {spread_t[0]} ({spread_t[1]})",
+        f"overall: worst deviation {worst_all[0]:.1f} ({worst_all[1]})",
         "",
     )
 
@@ -66,19 +66,19 @@ def brief(data: dict, res: dict, problems: list[str]) -> str:
     two = sum(1 for ts in by.values() if len(ts) > 1)
     per_task, overall, _ = deviations(res)
     lines = [
-        f"{res['status']} {data['params']['time_limit']:g} s (frø {data['params']['seed']}) | mål {res['objective']:.1f}, "
-        f"grense {res['bound']:.1f} | brudd: {problems or 'ingen'}",
-        f"plasser: {len(res['assignments'])} personer + {len(res['group_assignments'])} grupper + {len(res['manual'])} manuelle"
-        f" | tomme: {sum(u['missing'] for u in res['unfilled'])} | «dårlig»: {len(res['concessions'])}"
-        f" | advarsler: {len(res['warnings'])}",
+        f"{res['status']} {data['params']['time_limit']:g} s (seed {data['params']['seed']}) | objective {res['objective']:.1f}, "
+        f"bound {res['bound']:.1f} | violations: {problems or 'none'}",
+        f"places: {len(res['assignments'])} people + {len(res['group_assignments'])} groups + {len(res['manual'])} manual"
+        f" | empty: {sum(u['missing'] for u in res['unfilled'])} | «poor»: {len(res['concessions'])}"
+        f" | warnings: {len(res['warnings'])}",
         per_task,
         overall,
-        f"foreslåtte grupper (datoer): {dict(sorted(teams.items())) or 'ingen'}",
-        f"personer med to oppgaver samme dag: {two}",
+        f"proposed groups (dates): {dict(sorted(teams.items())) or 'none'}",
+        f"people with two tasks the same day: {two}",
     ]
     for u in res["unfilled"][:5]:
-        lines.append(f"TOM {u['date']} {u['task']} (mangler {u['missing']}): {json.dumps(u['why'], ensure_ascii=False)}")
-    lines.extend(f"ADVARSEL {w}" for w in res["warnings"][:5])
+        lines.append(f"EMPTY {u['date']} {u['task']} (missing {u['missing']}): {json.dumps(u['why'], ensure_ascii=False)}")
+    lines.extend(f"WARNING {w}" for w in res["warnings"][:5])
     return "\n".join(lines)
 
 
@@ -86,11 +86,11 @@ def full(data: dict, res: dict) -> str:
     out = []
     for pool in data.get("pools", []):
         got = [a["person"] for a in res["assignments"] if a["date"] == pool["date"] and a["task"] == pool["task"]]
-        out.append(f"utvalg {pool['date']} {pool['task']}: {pool.get('people', [])} {pool.get('groups', [])} -> {got}")
-    out.append(f"manuelle ruter: {res['manual']}")
-    out.append(f"låste personer: {[a for a in res['assignments'] if a['locked']]}")
+        out.append(f"selection {pool['date']} {pool['task']}: {pool.get('people', [])} {pool.get('groups', [])} -> {got}")
+    out.append(f"manual cells: {res['manual']}")
+    out.append(f"locked people: {[a for a in res['assignments'] if a['locked']]}")
     for g in res["group_assignments"]:
-        out.append(f"gruppe {g['date']} {g['task']}: {g['group']} {g['members']}")
+        out.append(f"group {g['date']} {g['task']}: {g['group']} {g['members']}")
     for t, per in res["task_load"].items():
         out.append(f"{t:10} " + "  ".join(f"{p} {v['count']}/{v['target']}" for p, v in sorted(per.items())))
     return "\n".join(out)
@@ -112,7 +112,7 @@ def main() -> None:
     data["params"].update(time_limit=args.time, seed=args.seed)
     res = solve(data)
     if res["status"] not in ("OPTIMAL", "FEASIBLE"):
-        print(res["status"], "- ingen plan")
+        print(res["status"], "- no plan")
         return
     print(brief(data, res, check(data, res)))
     if args.full:

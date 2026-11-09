@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-var ErrTimeout = errors.New("planleggeren brukte for lang tid og ble stoppet")
+var ErrTimeout = errors.New("the planner took too long and was stopped")
 
 // Solver runs the planner: JSON in, JSON out.
 type Solver interface {
@@ -31,14 +31,14 @@ type limitedBuffer struct {
 
 func (l *limitedBuffer) Write(p []byte) (int, error) {
 	if l.buf.Len()+len(p) > l.limit {
-		return 0, errors.New("planleggeren svarte med for mye data")
+		return 0, errors.New("the planner answered with too much data")
 	}
 	return l.buf.Write(p)
 }
 
 func (e ExecSolver) Solve(ctx context.Context, input []byte) ([]byte, error) {
 	if len(e.Argv) == 0 {
-		return nil, errors.New("ingen planlegger er satt opp")
+		return nil, errors.New("no planner is set up")
 	}
 	cmd := exec.CommandContext(ctx, e.Argv[0], append(append([]string{}, e.Argv[1:]...), "--check")...)
 	cmd.Stdin = bytes.NewReader(input)
@@ -56,7 +56,7 @@ func (e ExecSolver) Solve(ctx context.Context, input []byte) ([]byte, error) {
 		if i := strings.LastIndex(tail, "\n"); i >= 0 {
 			tail = tail[i+1:] // the last line of a Python traceback is the error itself
 		}
-		return nil, fmt.Errorf("planleggeren avsluttet med feil (%v): %s", err, tail)
+		return nil, fmt.Errorf("the planner ended with an error (%v): %s", err, tail)
 	}
 	return out.buf.Bytes(), nil
 }

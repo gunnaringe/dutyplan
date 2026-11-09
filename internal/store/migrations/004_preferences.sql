@@ -1,7 +1,7 @@
--- Personens egne svar. person_task er på organisasjonsnivå (hvilke oppgaver jeg er med på, og hvor gjerne);
--- person_event er per plan (kan jeg på denne hendelsen). Ingen rad = ikke med på oppgaven / nøytral på hendelsen.
--- Sammensatte fremmednøkler hindrer at et svar peker på en person, oppgave eller hendelse i en annen organisasjon,
--- og (org_id, plan_id, id) at hendelsen faktisk hører til planen.
+-- A person's own answers. person_task is at organisation level (which tasks I take part in, and how willingly);
+-- person_event is per plan (can I make this event). No row = not taking part in the task / neutral on the event.
+-- Composite foreign keys stop an answer from pointing at a person, task or event in another organisation,
+-- and (org_id, plan_id, id) makes sure the event really belongs to the plan.
 CREATE UNIQUE INDEX person_org_id ON person (org_id, id);
 CREATE UNIQUE INDEX event_org_plan_id ON event (org_id, plan_id, id);
 

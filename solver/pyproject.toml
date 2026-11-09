@@ -1,7 +1,7 @@
 [project]
 name = "dutyplan-solver"
 version = "0.0.1"
-description = "CP-SAT-planlegger for Tjenesteplan (spike)"
+description = "CP-SAT planner for Dutyplan"
 requires-python = ">=3.12"
 dependencies = ["ortools>=9.12"]
 
@@ -17,5 +17,5 @@ packages = ["dutyplan_solver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Stille som standard (billig for AI): én linje ved suksess, én linje per feil, ingen tredjeparts-advarsler.
+# Quiet by default (cheap for an AI): one line on success, one line per failure, no third-party warnings.
 addopts = "-q --tb=line -p no:cacheprovider --no-header -W ignore::DeprecationWarning"

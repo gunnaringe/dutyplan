@@ -8,14 +8,14 @@ import (
 
 func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	a := newPrefEnv(t)
-	a.s.SetPersonTask(ctx, a.org.Slug, "Kari", a.person.ID, a.lyd.ID, "good")
+	a.s.SetPersonTask(ctx, a.org.Slug, "Kari", a.person.ID, a.sound.ID, "good")
 	a.s.SetAvailability(ctx, a.org.Slug, a.plan.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "never"})
-	a.s.SetCombination(ctx, a.org.Slug, "Ola", a.lyd.ID, a.bilde.ID, "impractical")
+	a.s.SetCombination(ctx, a.org.Slug, "Ola", a.sound.ID, a.camera.ID, "impractical")
 
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "") // same slug as A's plan
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "") // same slug as A's plan
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva", "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Eva", "Kafé", true)
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Eva", "Coffee", true)
 	a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, taskB.ID, "neutral")
 
 	d, err := a.s.GetPlanningData(ctx, a.org.Slug, a.plan.Slug)
@@ -25,7 +25,7 @@ func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	if len(d.Tasks) != 3 || len(d.Events) != 3 || len(d.People) != 1 || len(d.Combinations) != 1 || len(d.DayTypes) != 1 {
 		t.Fatalf("A's data: %d tasks %d events %d people %d combos %d day types", len(d.Tasks), len(d.Events), len(d.People), len(d.Combinations), len(d.DayTypes))
 	}
-	if d.PersonTasks[a.person.ID][a.lyd.ID] != "good" || d.PersonEvents[a.person.ID][a.ev[0].ID] != "never" {
+	if d.PersonTasks[a.person.ID][a.sound.ID] != "good" || d.PersonEvents[a.person.ID][a.ev[0].ID] != "never" {
 		t.Errorf("answers missing: %v %v", d.PersonTasks, d.PersonEvents)
 	}
 	db, err := a.s.GetPlanningData(ctx, b.Slug, planB.Slug)
@@ -38,7 +38,7 @@ func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	if _, ok := db.PersonTasks[a.person.ID]; ok {
 		t.Error("A's person answers leaked into B's data")
 	}
-	if _, err := a.s.GetPlanningData(ctx, a.org.Slug, "ingen"); !errors.Is(err, ErrNotFound) {
+	if _, err := a.s.GetPlanningData(ctx, a.org.Slug, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
 }
@@ -89,7 +89,7 @@ func TestRunLifecycle(t *testing.T) {
 	for _, l := range log[:4] {
 		actions = append(actions, l.Action+"/"+l.Actor)
 	}
-	if got := strings.Join(actions, " "); got != "plan.run.failed/Planleggeren plan.run/Kari plan.run.done/Planleggeren plan.run/Kari" {
+	if got := strings.Join(actions, " "); got != "plan.run.failed/The planner plan.run/Kari plan.run.done/The planner plan.run/Kari" {
 		t.Errorf("log: %s", got)
 	}
 }
@@ -121,9 +121,9 @@ func TestRunsArePrunedToTheNewestTwenty(t *testing.T) {
 func TestRunsBelongToTheirPlanAndOrganisation(t *testing.T) {
 	a := newPrefEnv(t)
 	idA, _ := a.s.CreateRun(ctx, a.org.Slug, a.plan.Slug, "Kari", 1, 5, "h", []byte("{}"), []byte("{}"))
-	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Vår 2027", "")
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Spring 2027", "")
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "")
 
 	if _, err := a.s.GetRun(ctx, a.org.Slug, other.Slug, idA); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a run through another plan: %v", err)
@@ -162,7 +162,7 @@ func TestInterruptedRunsAreFailedAtStartup(t *testing.T) {
 		t.Fatalf("failed %d, %v", n, err)
 	}
 	r, _ := e.s.GetRun(ctx, e.org.Slug, e.plan.Slug, running)
-	if r.Status != "failed" || !strings.Contains(r.Error, "stoppet") {
+	if r.Status != "failed" || !strings.Contains(r.Error, "was stopped") {
 		t.Errorf("%+v", r)
 	}
 	if r, _ := e.s.GetRun(ctx, e.org.Slug, e.plan.Slug, done); r.Status != "done" {

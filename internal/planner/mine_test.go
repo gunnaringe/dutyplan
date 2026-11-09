@@ -27,12 +27,12 @@ func describe(m Mine) string {
 	return out
 }
 
-// groupAnswer: Koret (Aslaug, Birger) is on Lyd on event 0 (Birger said «dårlig»), set by hand on Lovsang on event 1;
-// Cecilie is locked on Bilde on event 0; a guest has Lovsang on event 0.
+// groupAnswer: Choir (Aslaug, Birger) is on Sound on event 0 (Birger said «poor»), set by hand on Singing on event 1;
+// Cecilie is locked on Camera on event 0; a guest has Singing on event 0.
 func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
-	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
-	s := w.runWith(t, groupAnswer(w, koret))
+	w := newWorld(t, "Club")
+	choir := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.sound.ID, Fills: 1, Level: "neutral"})
+	s := w.runWith(t, groupAnswer(w, choir))
 	mine := func(name string) Mine {
 		m, err := s.Mine(ctx, w.org.Slug, w.plan.Slug, w.people[name].ID)
 		if err != nil {
@@ -41,9 +41,9 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		return m
 	}
 	for name, want := range map[string]string{
-		"Aslaug":  `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=false][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`,
-		"Birger":  `[2026-08-09 Lyd via="Kirkekoret" locked=false weak=true][2026-08-16 Lovsang via="Kirkekoret" locked=true weak=false]`, // «dårlig» is his, not the group's
-		"Cecilie": `[2026-08-09 Bilde via="" locked=true weak=false]`,
+		"Aslaug":  `[2026-08-09 Sound via="Choir" locked=false weak=false][2026-08-16 Singing via="Choir" locked=true weak=false]`,
+		"Birger":  `[2026-08-09 Sound via="Choir" locked=false weak=true][2026-08-16 Singing via="Choir" locked=true weak=false]`, // «poor» is his, not the group's
+		"Cecilie": `[2026-08-09 Camera via="" locked=true weak=false]`,
 		"Frode":   ``,
 	} {
 		if got := describe(mine(name)); got != want {
@@ -51,7 +51,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		}
 	}
 	m := mine("Aslaug")
-	if !m.HasPlan || m.Run == nil || m.Run.Actor != "Kari" || m.Run.Stale || m.Person.Name != "Aslaug" || m.Assignments[0].DayType != "Gudstjeneste" {
+	if !m.HasPlan || m.Run == nil || m.Run.Actor != "Kari" || m.Run.Stale || m.Person.Name != "Aslaug" || m.Assignments[0].DayType != "Service" {
 		t.Errorf("%+v", m)
 	}
 	// «a text» is nobody's assignment, and a person with nothing gets a list, not null
@@ -66,8 +66,8 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 }
 
 func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
-	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
+	w := newWorld(t, "Club")
+	choir := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.sound.ID, Fills: 1, Level: "neutral"})
 	anna := w.people["Aslaug"].ID
 	none := newService(w, nil)
 	if m, err := none.Mine(ctx, w.org.Slug, w.plan.Slug, anna); err != nil || m.HasPlan || m.Run != nil || m.Assignments == nil || len(m.Assignments) != 0 {
@@ -79,7 +79,7 @@ func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 	if m, _ := failing.Mine(ctx, w.org.Slug, w.plan.Slug, anna); m.HasPlan {
 		t.Errorf("a failed run is not a plan: %+v", m)
 	}
-	good := w.runWith(t, groupAnswer(w, koret))
+	good := w.runWith(t, groupAnswer(w, choir))
 	failing2 := newService(w, func(context.Context, []byte) ([]byte, error) { return nil, errors.New("boom") })
 	failing2.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5})
 	waitDone(t, failing2)
@@ -103,15 +103,15 @@ func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 func TestMineIsScopedToThePersonsOrganisationAndPlan(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	koret := a.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: a.lyd.ID, Fills: 1, Level: "neutral"})
-	s := a.runWith(t, groupAnswer(a, koret))
+	choir := a.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: a.sound.ID, Fills: 1, Level: "neutral"})
+	s := a.runWith(t, groupAnswer(a, choir))
 	if _, err := s.Mine(ctx, a.org.Slug, a.plan.Slug, b.people["Aslaug"].ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("another organisation's person through A: %v", err)
 	}
 	if _, err := s.Mine(ctx, b.org.Slug, b.plan.Slug, a.people["Aslaug"].ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("A's person through B: %v", err)
 	}
-	if _, err := s.Mine(ctx, a.org.Slug, "ingen", a.people["Aslaug"].ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Mine(ctx, a.org.Slug, "nope", a.people["Aslaug"].ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
 	if _, err := s.Mine(ctx, a.org.Slug, a.plan.Slug, 99999); !errors.Is(err, store.ErrNotFound) {
@@ -125,9 +125,9 @@ func TestMineIsScopedToThePersonsOrganisationAndPlan(t *testing.T) {
 
 func TestMineUsesThePinnedRunInsteadOfTheNewestOne(t *testing.T) {
 	w := newWorld(t, "Club")
-	koret := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
+	choir := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.sound.ID, Fills: 1, Level: "neutral"})
 	anna := w.people["Aslaug"].ID
-	w.runWith(t, groupAnswer(w, koret)) // Aslaug has two assignments here
+	w.runWith(t, groupAnswer(w, choir)) // Aslaug has two assignments here
 	empty := []byte(`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`)
 	newer := newService(w, func(context.Context, []byte) ([]byte, error) { return empty, nil })
 	newer.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})

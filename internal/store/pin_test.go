@@ -111,7 +111,7 @@ func TestPinningStaysInsideThePlanAndOrganisation(t *testing.T) {
 	idA := finishedRun(t, a, 1)
 	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Spring 2027", "")
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "")
 
 	for name, call := range map[string]func() error{
 		"through another plan": func() error { return a.s.PinRun(ctx, a.org.Slug, other.Slug, "Ola", idA, true) },

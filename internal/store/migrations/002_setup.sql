@@ -1,13 +1,13 @@
--- Oppsett: oppgaver, dagtyper og kombinasjoner hører til organisasjonen; datoer hører til en plan.
--- Alle barnetabeller har org_id og sammensatte fremmednøkler mot (org_id, id): databasen selv hindrer at en rad
--- peker på noe i en annen organisasjon, i tillegg til kontrollene i koden.
+-- Setup: tasks, day types and combinations belong to the organisation; dates belong to a plan.
+-- Every child table has org_id and composite foreign keys to (org_id, id): the database itself stops a row
+-- from pointing at something in another organisation, in addition to the checks in the code.
 CREATE UNIQUE INDEX plan_org_id ON plan (org_id, id);
 
 CREATE TABLE task (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL REFERENCES organization(id),
     name       TEXT NOT NULL,
-    planned    INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),  -- 0: bare for manuelle ruter og kombinasjoner
+    planned    INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),  -- 0: only for manual cells and combinations
     created_at TEXT NOT NULL,
     UNIQUE (org_id, name),
     UNIQUE (org_id, id)
@@ -22,7 +22,7 @@ CREATE TABLE day_type (
     UNIQUE (org_id, id)
 );
 
--- Hvilke oppgaver en dagtype har, og hvor mange plasser. Sletting av en oppgave som er i bruk her nektes.
+-- Which tasks a day type has, and how many places. Deleting a task that is in use here is refused.
 CREATE TABLE day_type_task (
     org_id      INTEGER NOT NULL,
     day_type_id INTEGER NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE day_type_task (
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id)
 );
 
--- Felles innstilling: hva som kan kombineres samme dag. Ett par lagres én gang (task_a < task_b); «standard» er ingen rad.
+-- The shared setting: what can be combined on the same day. A pair is stored once (task_a < task_b); «standard» is no row.
 CREATE TABLE task_combination (
     org_id INTEGER NOT NULL,
     task_a INTEGER NOT NULL,
@@ -45,8 +45,8 @@ CREATE TABLE task_combination (
     FOREIGN KEY (org_id, task_b) REFERENCES task (org_id, id) ON DELETE CASCADE
 );
 
--- En dato i en plan, med dagtype. UNIQUE (plan_id, date) er en bevisst begrensning for nå (to hendelser samme dag er ikke
--- støttet); API-et bruker id, så det kan løsnes senere uten å endre grensesnittet.
+-- A date in a plan, with a day type. UNIQUE (plan_id, date) is a deliberate limit for now (two events on the same day are not
+-- supported); the API uses the id, so it can be loosened later without changing the interface.
 CREATE TABLE slot_date (
     id          INTEGER PRIMARY KEY,
     org_id      INTEGER NOT NULL,

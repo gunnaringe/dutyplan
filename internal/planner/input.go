@@ -65,7 +65,7 @@ type solverLocked struct {
 	Fills  int    `json:"fills,omitempty"`
 }
 
-// solverPool is a selection (utvalg): the only people and groups that can be chosen. The lists are never null.
+// solverPool is a selection: the only people and groups that can be chosen. The lists are never null.
 type solverPool struct {
 	Date   string   `json:"date"`
 	Task   string   `json:"task"`

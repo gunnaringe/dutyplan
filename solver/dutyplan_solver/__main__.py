@@ -1,7 +1,7 @@
-"""python -m dutyplan_solver            < inndata.json > utdata.json
-python -m dutyplan_solver --check      som over, men svaret får «violations»: brudd funnet av den uavhengige sjekkeren
-python -m dutyplan_solver check inndata.json utdata.json
-python -m dutyplan_solver --defaults   skriver standardparametrene (vektene m.m.) som JSON
+"""python -m dutyplan_solver            < input.json > output.json
+python -m dutyplan_solver --check      as above, but the answer gets «violations»: violations found by the independent checker
+python -m dutyplan_solver check input.json output.json
+python -m dutyplan_solver --defaults   prints the default parameters (the weights and so on) as JSON
 """
 
 import json

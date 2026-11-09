@@ -68,7 +68,7 @@ func (s *Store) CreateRun(ctx context.Context, orgSlug, planSlug, actor string, 
 
 // FinishRun stores the solver's answer (output) or the reason it failed (errMsg), once. The system is the actor.
 func (s *Store) FinishRun(ctx context.Context, runID int64, output []byte, errMsg string) error {
-	return s.write(ctx, "Planleggeren", func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, "The planner", func(tx *sql.Tx) (logEntry, error) {
 		var oid, pid int64
 		var status string
 		if err := tx.QueryRowContext(ctx, `SELECT org_id, plan_id, status FROM plan_run WHERE id = ?`, runID).Scan(&oid, &pid, &status); errors.Is(err, sql.ErrNoRows) {
@@ -110,7 +110,7 @@ func (s *Store) FailRunningRuns(ctx context.Context) (int, error) {
 	}
 	rows.Close()
 	for _, id := range ids {
-		if err := s.FinishRun(ctx, id, nil, "avbrutt fordi appen ble stoppet"); err != nil {
+		if err := s.FinishRun(ctx, id, nil, "interrupted because the app was stopped"); err != nil {
 			return 0, err
 		}
 	}

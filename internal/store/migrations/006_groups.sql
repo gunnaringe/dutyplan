@@ -1,6 +1,6 @@
--- Grupper: et navngitt sett personer (team, kor, par). Ingen egne regler: en gruppe er bare en kandidat eller en rute
--- som gjør alle medlemmene opptatt. «Kan foreslås» (standard ja) styrer om planleggeren selv kan velge gruppen.
--- grp i stedet for group fordi group er et ord i SQL. Sammensatte fremmednøkler som ellers: ingen kryss mellom organisasjoner.
+-- Groups: a named set of people (team, choir, couple). No rules of their own: a group is just a candidate or a cell
+-- that makes all the members busy. «Can be proposed» (default yes) governs whether the planner itself may pick the group.
+-- grp instead of group because group is a word in SQL. Composite foreign keys as elsewhere: no crossing between organisations.
 CREATE TABLE grp (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL REFERENCES organization(id),
@@ -20,8 +20,8 @@ CREATE TABLE grp_member (
     FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id)
 );
 
--- Oppgavene planleggeren kan foreslå gruppen til: plasser gruppen fyller, og hvor gjerne («ikke» er det samme som ingen rad).
--- Sletting av en oppgave som er i bruk her nektes.
+-- The tasks the planner may propose the group for: places the group fills, and how willingly («never» is the same as no row).
+-- Deleting a task that is in use here is refused.
 CREATE TABLE grp_task (
     org_id   INTEGER NOT NULL,
     group_id INTEGER NOT NULL,

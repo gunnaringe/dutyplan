@@ -13,7 +13,7 @@ import (
 )
 
 func TestWeightsBecomeNestedParamsAndPartOfTheHash(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	paramsOf := func(p Params) (map[string]any, string) {
 		raw, hash, _, err := BuildInput(w.data(t), p)
 		if err != nil {
@@ -66,7 +66,7 @@ func solverArgv(t *testing.T) []string {
 	t.Helper()
 	argv := strings.Fields(realSolverCommand())
 	if len(argv) == 0 {
-		t.Skip("DUTYPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
+		t.Skip("DUTYPLAN_SOLVER is not set (run via mise run test:app)")
 	}
 	return argv
 }
@@ -98,7 +98,7 @@ func TestWeightDefaultsAreThePlannersOwn(t *testing.T) {
 	}
 }
 
-// The user's own example, through the plan's configuration: a takes only Bilde, b both and c only Lyd. With total load
+// The user's own example, through the plan's configuration: a takes only Camera, b both and c only Sound. With total load
 // as the goal each gets 4 of 12; with an equal share of each task (set as weights on the plan) it is 3, 6 and 3.
 func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 	solver := realSolver(t)
@@ -113,23 +113,23 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	org, err := st.CreateOrg(ctx, "T", "Menighet", "")
+	org, err := st.CreateOrg(ctx, "T", "Club", "")
 	must(err)
-	bilde, err := st.CreateTask(ctx, org.Slug, "T", "Bilde", true)
+	camera, err := st.CreateTask(ctx, org.Slug, "T", "Camera", true)
 	must(err)
-	lyd, err := st.CreateTask(ctx, org.Slug, "T", "Lyd", true)
+	sound, err := st.CreateTask(ctx, org.Slug, "T", "Sound", true)
 	must(err)
-	dt, err := st.CreateDayType(ctx, org.Slug, "T", "Gudstjeneste")
+	dt, err := st.CreateDayType(ctx, org.Slug, "T", "Service")
 	must(err)
-	_, err = st.SetDayTypeTasks(ctx, org.Slug, "T", dt.ID, []store.DayTypeTask{{TaskID: bilde.ID, Slots: 1}, {TaskID: lyd.ID, Slots: 1}})
+	_, err = st.SetDayTypeTasks(ctx, org.Slug, "T", dt.ID, []store.DayTypeTask{{TaskID: camera.ID, Slots: 1}, {TaskID: sound.ID, Slots: 1}})
 	must(err)
-	plan, err := st.CreatePlan(ctx, org.Slug, "T", "Høst 2026", "")
+	plan, err := st.CreatePlan(ctx, org.Slug, "T", "Autumn 2026", "")
 	must(err)
 	for _, d := range []string{"2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"} {
 		_, err = st.AddEvent(ctx, org.Slug, plan.Slug, "T", d, dt.ID, "")
 		must(err)
 	}
-	for name, tasks := range map[string][]store.Task{"a": {bilde}, "b": {bilde, lyd}, "c": {lyd}} {
+	for name, tasks := range map[string][]store.Task{"a": {camera}, "b": {camera, sound}, "c": {sound}} {
 		p, err := st.CreatePerson(ctx, org.Slug, "T", name)
 		must(err)
 		for _, tk := range tasks {

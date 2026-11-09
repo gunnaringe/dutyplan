@@ -1,18 +1,18 @@
 ---
 name: run-planner
-description: Kjør planleggeren på testdataene eller en inndatafil og se resultatet billig. Bruk når noen vil se en plan, sjekke atferd, måle kvalitet/tid eller teste vekter.
+description: Run the planner on the test data or an input file and see the result cheaply. Use when someone wants to see a plan, check behaviour, measure quality/time or try weights.
 ---
 
-Alt via mise. Standardutdata er ca. 6 linjer; be bare om mer når du trenger det.
+Everything through mise. The default output is about 6 lines; ask for more only when you need it.
 
-- `mise run plan` : kjør testdataene (20 s) og skriv en kort oppsummering (status, brudd, tomme plasser, avvik, grupper).
-- `mise run plan -- --info` : hva inndataene inneholder, uten å lese JSON-filen.
-- `mise run plan -- --time 8 --seed 2` : raskere eller annet frø. `-- --full` : utvalg, manuelle ruter og tall per person.
-- `mise run plan -- --input fil.json` : egen inndata (sti fra repoets rot). Format: toppen av `solver/dutyplan_solver/model.py`.
-- `mise run solve < inn.json > ut.json` og `mise run check -- inn.json ut.json` : planleggeren som filter, og den uavhengige sjekkeren.
-- `mise run fixture` : lag testdataene på nytt etter å ha endret `solver/fixtures/make_host2026.py`.
+- `mise run plan` : run the test data (20 s) and print a short summary (status, violations, empty places, deviations, groups).
+- `mise run plan -- --info` : what the input contains, without reading the JSON file.
+- `mise run plan -- --time 8 --seed 2` : faster or another seed. `-- --full` : selections, manual cells and figures per person.
+- `mise run plan -- --input file.json` : your own input (a path from the repo root). Format: the top of `solver/dutyplan_solver/model.py`.
+- `mise run solve < in.json > out.json` and `mise run check -- in.json out.json` : the planner as a filter, and the independent checker.
+- `mise run fixture` : make the test data again after changing `solver/fixtures/make_autumn2026.py`.
 
-Dyre målinger (80-100 s hver, bare etter at modell eller vekter er endret, og oppdater tallene i PLAN.md → «Resultater fra spiken»):
-`mise run measure:time` og `mise run measure:fair`.
+Expensive measurements (80-100 s each, only after the model or weights have changed, and update the figures in PLAN.md → «Results from the spike»):
+`mise run measure:time` and `mise run measure:fair`.
 
-Resultatet er et forslag innenfor tidsgrensen (FEASIBLE), ikke bevist best. Ulike frø gir litt ulike planer.
+The result is a proposal within the time limit (FEASIBLE), not proven best. Different seeds give slightly different plans.

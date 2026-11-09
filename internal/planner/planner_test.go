@@ -21,16 +21,16 @@ import (
 var ctx = context.Background()
 
 type world struct {
-	st                  *store.Store
-	org                 store.Org
-	plan                store.Plan
-	lovsang, lyd, bilde store.Task
-	dt                  store.DayType
-	events              []store.Event
-	people              map[string]store.Person
+	st                     *store.Store
+	org                    store.Org
+	plan                   store.Plan
+	singing, sound, camera store.Task
+	dt                     store.DayType
+	events                 []store.Event
+	people                 map[string]store.Person
 }
 
-// newWorld: one organisation, three tasks (Lovsang is manual-only), a day type with one place each, a plan with
+// newWorld: one organisation, three tasks (Singing is manual-only), a day type with one place each, a plan with
 // four Sundays and six people who have chosen tasks and marked a few dates.
 func newWorld(t *testing.T, orgName string) world {
 	t.Helper()
@@ -54,18 +54,18 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 	}
 	w.org, err = st.CreateOrg(ctx, "T", orgName, "")
 	must(err)
-	w.lovsang, err = st.CreateTask(ctx, w.org.Slug, "T", "Lovsang", false)
+	w.singing, err = st.CreateTask(ctx, w.org.Slug, "T", "Singing", false)
 	must(err)
-	w.lyd, err = st.CreateTask(ctx, w.org.Slug, "T", "Lyd", true)
+	w.sound, err = st.CreateTask(ctx, w.org.Slug, "T", "Sound", true)
 	must(err)
-	w.bilde, err = st.CreateTask(ctx, w.org.Slug, "T", "Bilde", true)
+	w.camera, err = st.CreateTask(ctx, w.org.Slug, "T", "Camera", true)
 	must(err)
-	must(st.SetCombination(ctx, w.org.Slug, "T", w.lyd.ID, w.bilde.ID, "cannot"))
-	w.dt, err = st.CreateDayType(ctx, w.org.Slug, "T", "Gudstjeneste")
+	must(st.SetCombination(ctx, w.org.Slug, "T", w.sound.ID, w.camera.ID, "cannot"))
+	w.dt, err = st.CreateDayType(ctx, w.org.Slug, "T", "Service")
 	must(err)
-	_, err = st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.lyd.ID, Slots: 1}, {TaskID: w.bilde.ID, Slots: 1}, {TaskID: w.lovsang.ID, Slots: 1}})
+	_, err = st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.sound.ID, Slots: 1}, {TaskID: w.camera.ID, Slots: 1}, {TaskID: w.singing.ID, Slots: 1}})
 	must(err)
-	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "T", "Høst 2026", "")
+	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "T", "Autumn 2026", "")
 	must(err)
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
 		ev, err := st.AddEvent(ctx, w.org.Slug, w.plan.Slug, "T", d, w.dt.ID, "")
@@ -81,12 +81,12 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 		must(st.SetPersonTask(ctx, w.org.Slug, person, w.people[person].ID, task.ID, level))
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
-		choose(n, w.lyd, "neutral")
+		choose(n, w.sound, "neutral")
 	}
 	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
-		choose(n, w.bilde, "neutral")
+		choose(n, w.camera, "neutral")
 	}
-	choose("Frode", w.lyd, "never") // takes part but never wants it
+	choose("Frode", w.sound, "never") // takes part but never wants it
 	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Aslaug", w.people["Aslaug"].ID, map[int64]string{w.events[0].ID: "never"}))
 	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Dina", w.people["Dina"].ID, map[int64]string{w.events[1].ID: "never", w.events[2].ID: "good"}))
 	return w
@@ -102,7 +102,7 @@ func (w world) data(t *testing.T) store.PlanningData {
 }
 
 func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	off := false
 	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
 	gone := false
@@ -134,7 +134,7 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 		t.Error("an inactive person's answers must not be sent")
 	}
 	pt := in["person_tasks"].(map[string]any)[pid(w.people["Cecilie"].ID)].(map[string]any)
-	if pt[tid(w.lyd.ID)] != "neutral" || pt[tid(w.bilde.ID)] != "neutral" {
+	if pt[tid(w.sound.ID)] != "neutral" || pt[tid(w.camera.ID)] != "neutral" {
 		t.Errorf("Cecilie's tasks: %v", pt)
 	}
 	pd := in["person_dates"].(map[string]any)[pid(w.people["Dina"].ID)].(map[string]any)
@@ -150,14 +150,14 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 		m := x.(map[string]any)
 		tasks[m["id"].(string)] = m["planned"].(bool)
 	}
-	if tasks[tid(w.lovsang.ID)] || !tasks[tid(w.lyd.ID)] {
+	if tasks[tid(w.singing.ID)] || !tasks[tid(w.sound.ID)] {
 		t.Errorf("planned flags: %v", tasks)
 	}
 	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[did(w.dt.ID)].(map[string]any)) != 3 {
 		t.Errorf("events and day type: %v %v", in["dates"], in["day_type_tasks"])
 	}
 	// the snapshot names every task (with its planned flag) and the active people
-	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.lovsang.ID] != 0 || snap.Slots[w.dt.ID][w.lyd.ID] != 1 {
+	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.singing.ID] != 0 || snap.Slots[w.dt.ID][w.sound.ID] != 1 {
 		t.Errorf("snapshot: %+v", snap)
 	}
 	// deterministic, and the hash ignores seed and time limit but not the data
@@ -226,8 +226,8 @@ func testNames() Namer {
 	}
 	return Namer{
 		Person: look(map[string]string{"p1": "Aslaug", "p2": "Birger", "p3": "Cecilie"}),
-		Task:   look(map[string]string{"t1": "Lyd", "t2": "Lovsang"}),
-		Group:  look(map[string]string{"g1": "Kirkekoret", "g2": "Bandet"}),
+		Task:   look(map[string]string{"t1": "Sound", "t2": "Singing"}),
+		Group:  look(map[string]string{"g1": "Choir", "g2": "Band"}),
 		Event:  look(map[string]string{"e5": "2026-08-09"}),
 	}
 }
@@ -248,26 +248,26 @@ func TestExplain(t *testing.T) {
 		{map[string]any{"candidates": 0.0, "task_never": []any{"p3"}, "not_proposable": []any{"p1"}},
 			both{"Nobody can take this: said «never» to the task: Cecilie; cannot be proposed: Aslaug.", "Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."}},
 		{map[string]any{"candidates": 2.0, "busy": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
-			both{"2 could have taken it, but are needed elsewhere or cannot be combined with something they already have: busy with something else at the event: Aslaug (Lyd, Lovsang), Birger (Lyd).",
-				"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."}},
+			both{"2 could have taken it, but are needed elsewhere or cannot be combined with something they already have: busy with something else at the event: Aslaug (Sound, Singing), Birger (Sound).",
+				"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Sound, Singing), Birger (Sound)."}},
 		// a group's task is named with the group
 		{map[string]any{"candidates": 1.0, "busy": map[string]any{"p1": []any{"t2 (g1)"}}},
-			both{someEN + ": busy with something else at the event: Aslaug (Lovsang (Kirkekoret)).", someNB + ": opptatt med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."}},
+			both{someEN + ": busy with something else at the event: Aslaug (Singing (Choir)).", someNB + ": opptatt med noe annet på hendelsen: Aslaug (Singing (Choir))."}},
 		// the selection and who is outside it
 		{map[string]any{"candidates": 0.0, "selection": []any{"p1", "p2"}, "selection_groups": []any{"g1"}, "outside_selection": 4.0},
-			both{"Nobody can take this: the selection is Aslaug, Birger, Kirkekoret (4 others are outside it).", "Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."}},
+			both{"Nobody can take this: the selection is Aslaug, Birger, Choir (4 others are outside it).", "Ingen kan ta denne: utvalget er Aslaug, Birger, Choir (4 andre står utenfor)."}},
 		{map[string]any{"candidates": 0.0, "selection": []any{"p1"}}, both{"Nobody can take this: the selection is Aslaug.", "Ingen kan ta denne: utvalget er Aslaug."}},
 		{map[string]any{"candidates": 0.0, "outside_selection": 3.0},
 			both{"Nobody can take this: the selection is empty (3 others are outside it).", "Ingen kan ta denne: utvalget er tomt (3 andre står utenfor)."}},
 		// why a group could not be proposed; a group that could have been is not mentioned
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "event_never:p2", "g2": "candidate"}},
-			both{"Nobody can take this: Kirkekoret: Birger cannot attend.", "Ingen kan ta denne: Kirkekoret: Birger passer ikke."}},
+			both{"Nobody can take this: Choir: Birger cannot attend.", "Ingen kan ta denne: Choir: Birger passer ikke."}},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable", "g2": "too_many_places"}},
-			both{"Nobody can take this: Bandet needs more places than are left; Kirkekoret cannot be proposed.", "Ingen kan ta denne: Bandet trenger flere plasser enn det er igjen; Kirkekoret kan ikke foreslås."}},
+			both{"Nobody can take this: Band needs more places than are left; Choir cannot be proposed.", "Ingen kan ta denne: Band trenger flere plasser enn det er igjen; Choir kan ikke foreslås."}},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable:p3", "g2": "outside_selection"}},
-			both{"Nobody can take this: Bandet is outside the selection; Kirkekoret cannot be proposed because Cecilie cannot be proposed.", "Ingen kan ta denne: Bandet står utenfor utvalget; Kirkekoret kan ikke foreslås fordi Cecilie ikke kan foreslås."}},
+			both{"Nobody can take this: Band is outside the selection; Choir cannot be proposed because Cecilie cannot be proposed.", "Ingen kan ta denne: Band står utenfor utvalget; Choir kan ikke foreslås fordi Cecilie ikke kan foreslås."}},
 		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "task_never:p1", "g2": "busy:p2"}},
-			both{"Nobody can take this: Bandet: Birger is busy with something else; Kirkekoret: Aslaug said «never» to the task.", "Ingen kan ta denne: Bandet: Birger er opptatt med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."}},
+			both{"Nobody can take this: Band: Birger is busy with something else; Choir: Aslaug said «never» to the task.", "Ingen kan ta denne: Band: Birger er opptatt med noe annet; Choir: Aslaug har sagt «ikke» til oppgaven."}},
 	}
 	for _, c := range cases {
 		for l, want := range map[i18n.Lang]string{i18n.EN: c.want.en, i18n.NB: c.want.nb} {
@@ -282,13 +282,13 @@ func TestExplain(t *testing.T) {
 
 func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 	cases := map[string]both{
-		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          {"Aslaug was set on Lyd 2026-08-09 by hand, even though it does not suit them.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer."},
-		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          {"Aslaug was set on Lyd 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
-		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           {"Aslaug was set on Lyd 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
-		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    {"Aslaug was set on Lyd 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
-		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         {"Aslaug was set on Lyd 2026-08-09 by hand, even though they are busy with Lovsang (Kirkekoret).", "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret)."},
-		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": {"Kirkekoret was set on Lovsang 2026-08-09 by hand, but Cecilie has said it does not suit.", "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer."},
-		"p2 is locked on t1 e5 while group g1 is on t2":                          {"Birger was set on Lyd 2026-08-09 by hand while Kirkekoret is on Lovsang; the two cannot be combined.", "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres."},
+		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          {"Aslaug was set on Sound 2026-08-09 by hand, even though it does not suit them.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om det ikke passer."},
+		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          {"Aslaug was set on Sound 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
+		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           {"Aslaug was set on Sound 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
+		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    {"Aslaug was set on Sound 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
+		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         {"Aslaug was set on Sound 2026-08-09 by hand, even though they are busy with Singing (Choir).", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen er opptatt med Singing (Choir)."},
+		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": {"Choir was set on Singing 2026-08-09 by hand, but Cecilie has said it does not suit.", "Choir er satt på Singing 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer."},
+		"p2 is locked on t1 e5 while group g1 is on t2":                          {"Birger was set on Sound 2026-08-09 by hand while Choir is on Singing; the two cannot be combined.", "Birger er satt på Sound 2026-08-09 for hånd samtidig som Choir står på Singing; de to kan ikke kombineres."},
 		"something else from the solver":                                         {"something else from the solver", "something else from the solver"},
 	}
 	for in, want := range cases {
@@ -324,17 +324,17 @@ func newService(w world, f func(ctx context.Context, input []byte) ([]byte, erro
 	return New(w.st, fakeSolver{f}, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-// cannedAnswer: Aslaug takes Lyd on event 1 (weak: «dårlig»), Cecilie takes Bilde on event 1; Lyd on event 2 is empty.
+// cannedAnswer: Aslaug takes Sound on event 1 (weak: «poor»), Cecilie takes Camera on event 1; Sound on event 2 is empty.
 func cannedAnswer(w world) []byte {
 	out := map[string]any{
 		"status": "FEASIBLE", "wall_time": 1.5,
 		"assignments": []map[string]any{
-			{"date": eid(w.events[0].ID), "task": tid(w.lyd.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "neutral", "date_level": "poor"},
-			{"date": eid(w.events[0].ID), "task": tid(w.bilde.ID), "person": pid(w.people["Cecilie"].ID), "task_level": "neutral", "date_level": "neutral"},
+			{"date": eid(w.events[0].ID), "task": tid(w.sound.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "neutral", "date_level": "poor"},
+			{"date": eid(w.events[0].ID), "task": tid(w.camera.ID), "person": pid(w.people["Cecilie"].ID), "task_level": "neutral", "date_level": "neutral"},
 		},
-		"unfilled": []map[string]any{{"date": eid(w.events[1].ID), "task": tid(w.lyd.ID), "missing": 1,
+		"unfilled": []map[string]any{{"date": eid(w.events[1].ID), "task": tid(w.sound.ID), "missing": 1,
 			"why": map[string]any{"candidates": 0, "event_never": []string{pid(w.people["Aslaug"].ID)}}}},
-		"concessions": []map[string]any{{"date": eid(w.events[0].ID), "task": tid(w.lyd.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "neutral", "date_level": "poor"}},
+		"concessions": []map[string]any{{"date": eid(w.events[0].ID), "task": tid(w.sound.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "neutral", "date_level": "poor"}},
 		"load":        map[string]any{pid(w.people["Aslaug"].ID): map[string]any{"count": 1, "target": 1.26, "capacity": 4, "history": 0}},
 		"violations":  []string{},
 	}
@@ -354,7 +354,7 @@ func waitDone(t *testing.T, s *Service) {
 }
 
 func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	var sent []byte
 	s := newService(w, func(_ context.Context, input []byte) ([]byte, error) { sent = input; return cannedAnswer(w), nil })
 	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
@@ -380,7 +380,7 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 	if v.Run.Status != "done" || v.Run.SolverStatus != "FEASIBLE" || !v.Run.Checked || len(v.Run.Violations) != 0 || v.Run.Stale {
 		t.Errorf("run: %+v", v.Run)
 	}
-	if len(v.Tasks) != 2 || v.Tasks[0].Name != "Bilde" || v.Tasks[1].Name != "Lyd" {
+	if len(v.Tasks) != 2 || v.Tasks[0].Name != "Camera" || v.Tasks[1].Name != "Sound" {
 		t.Errorf("columns are the planner's tasks in name order: %+v", v.Tasks)
 	}
 	if len(v.Events) != 4 || len(v.Events[0].Cells) != 2 {
@@ -388,13 +388,13 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 	}
 	lyd0 := v.Events[0].Cells[1]
 	if lyd0.Slots != 1 || len(lyd0.People) != 1 || lyd0.People[0].Name != "Aslaug" || !lyd0.People[0].Weak || lyd0.Missing != 0 {
-		t.Errorf("first Lyd cell: %+v", lyd0)
+		t.Errorf("first Sound cell: %+v", lyd0)
 	}
 	lyd1 := v.Events[1].Cells[1]
 	if lyd1.Missing != 1 || len(lyd1.People) != 0 || !strings.Contains(lyd1.Explanation, "cannot attend: Aslaug") {
 		t.Errorf("empty cell with its reason: %+v", lyd1)
 	}
-	if len(v.Weak) != 1 || !strings.Contains(v.Weak[0], "Aslaug got Lyd 2026-08-09") || !strings.Contains(v.Weak[0], "the event") {
+	if len(v.Weak) != 1 || !strings.Contains(v.Weak[0], "Aslaug got Sound 2026-08-09") || !strings.Contains(v.Weak[0], "the event") {
 		t.Errorf("compromises: %v", v.Weak)
 	}
 	if len(v.Load) != 1 || v.Load[0].Name != "Aslaug" || v.Load[0].Target != 1.3 {
@@ -418,13 +418,13 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 }
 
 func TestTheIndependentCheckIsReportedWhetherItFoundBreachesOrNeverRan(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	for name, c := range map[string]struct {
 		answer     string
 		checked    bool
 		violations []string
 	}{
-		"breaches":  {`{"status":"FEASIBLE","assignments":[],"unfilled":[],"load":{},"violations":["Aslaug har to oppgaver"]}`, true, []string{"Aslaug har to oppgaver"}},
+		"breaches":  {`{"status":"FEASIBLE","assignments":[],"unfilled":[],"load":{},"violations":["Aslaug has two tasks"]}`, true, []string{"Aslaug has two tasks"}},
 		"clean":     {`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`, true, nil},
 		"unchecked": {`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{}}`, false, nil},
 	} {
@@ -445,16 +445,16 @@ func TestTheIndependentCheckIsReportedWhetherItFoundBreachesOrNeverRan(t *testin
 }
 
 func TestRunFailuresAreStoredWithAReason(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	for name, c := range map[string]struct {
 		reply func(context.Context, []byte) ([]byte, error)
 		want  string
 	}{
 		"crash":    {func(context.Context, []byte) ([]byte, error) { return nil, errors.New("exit status 1: boom") }, "boom"},
-		"not json": {func(context.Context, []byte) ([]byte, error) { return []byte("hei"), nil }, "ikke kunne leses"},
+		"not json": {func(context.Context, []byte) ([]byte, error) { return []byte("hei"), nil }, "could not be read"},
 		"no plan":  {func(context.Context, []byte) ([]byte, error) { return []byte(`{"status":"INFEASIBLE"}`), nil }, "INFEASIBLE"},
-		"panic":    {func(context.Context, []byte) ([]byte, error) { panic("uff") }, "intern feil"},
-		"timeout":  {func(c context.Context, _ []byte) ([]byte, error) { <-c.Done(); return nil, ErrTimeout }, "for lang tid"},
+		"panic":    {func(context.Context, []byte) ([]byte, error) { panic("uff") }, "internal error"},
+		"timeout":  {func(c context.Context, _ []byte) ([]byte, error) { <-c.Done(); return nil, ErrTimeout }, "took too long"},
 	} {
 		s := newService(w, c.reply)
 		s.timeoutOverride = 100 * time.Millisecond
@@ -471,7 +471,7 @@ func TestRunFailuresAreStoredWithAReason(t *testing.T) {
 }
 
 func TestOnlyOneRunAtATimeAndSensibleRefusals(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	release := make(chan struct{})
 	s := newService(w, func(_ context.Context, _ []byte) ([]byte, error) { <-release; return cannedAnswer(w), nil })
 	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5}); err != nil {
@@ -495,7 +495,7 @@ func TestOnlyOneRunAtATimeAndSensibleRefusals(t *testing.T) {
 	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "", Params{TimeLimit: 5}); !errors.Is(err, store.ErrActor) {
 		t.Errorf("without an actor: %v", err)
 	}
-	if _, err := s.Start(ctx, w.org.Slug, "ingen", "Ola", Params{TimeLimit: 5}); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Start(ctx, w.org.Slug, "nope", "Ola", Params{TimeLimit: 5}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
 	if _, err := New(w.st, nil, 1, nil).Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{}); !errors.Is(err, ErrUnavailable) {
@@ -529,14 +529,14 @@ func realSolver(t *testing.T) Solver {
 	t.Helper()
 	cmd := realSolverCommand()
 	if cmd == "" {
-		t.Skip("DUTYPLAN_SOLVER er ikke satt (kjør via mise run test:app)")
+		t.Skip("DUTYPLAN_SOLVER is not set (run via mise run test:app)")
 	}
 	return ExecSolver{Argv: strings.Fields(cmd)}
 }
 
 func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 	solver := realSolver(t)
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	off := false
 	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off}) // Embla may not be proposed
 	inactive := false
@@ -579,21 +579,21 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 			who[e.Date][name] = names
 		}
 	}
-	// Lyd can be Aslaug or Cecilie (Birger inactive, Frode said «ikke»); Aslaug cannot on 9 Aug. Bilde: Cecilie or Dina (Embla may not be proposed).
+	// Sound can be Aslaug or Cecilie (Birger inactive, Frode said «never»); Aslaug cannot on 9 Aug. Camera: Cecilie or Dina (Embla may not be proposed).
 	for date, tasks := range who {
-		for _, n := range tasks["Lyd"] {
+		for _, n := range tasks["Sound"] {
 			if n != "Aslaug" && n != "Cecilie" || (date == "2026-08-09" && n == "Aslaug") {
-				t.Errorf("%s Lyd: %s is not allowed", date, n)
+				t.Errorf("%s Sound: %s is not allowed", date, n)
 			}
 		}
-		for _, n := range tasks["Bilde"] {
+		for _, n := range tasks["Camera"] {
 			if n != "Cecilie" && n != "Dina" || (date == "2026-08-16" && n == "Dina") {
-				t.Errorf("%s Bilde: %s is not allowed", date, n)
+				t.Errorf("%s Camera: %s is not allowed", date, n)
 			}
 		}
-		// Lyd and Bilde cannot be combined, so Cecilie never has both on one event
-		if len(tasks["Lyd"]) == 1 && len(tasks["Bilde"]) == 1 && tasks["Lyd"][0] == tasks["Bilde"][0] {
-			t.Errorf("%s: %s has both Lyd and Bilde", date, tasks["Lyd"][0])
+		// Sound and Camera cannot be combined, so Cecilie never has both on one event
+		if len(tasks["Sound"]) == 1 && len(tasks["Camera"]) == 1 && tasks["Sound"][0] == tasks["Camera"][0] {
+			t.Errorf("%s: %s has both Sound and Camera", date, tasks["Sound"][0])
 		}
 	}
 	for _, e := range v.Events {
@@ -624,10 +624,10 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 
 func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 	solver := realSolver(t)
-	w := newWorld(t, "Menighet")
-	// nobody wants Bilde any more: remove the three who chose it
+	w := newWorld(t, "Club")
+	// nobody wants Camera any more: remove the three who chose it
 	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
-		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.bilde.ID)
+		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.camera.ID)
 	}
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
@@ -637,14 +637,14 @@ func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 		t.Fatalf("%+v", v.Run)
 	}
 	for _, e := range v.Events {
-		var bilde *Cell
+		var camera *Cell
 		for i := range e.Cells {
-			if e.Cells[i].TaskID == w.bilde.ID {
-				bilde = &e.Cells[i]
+			if e.Cells[i].TaskID == w.camera.ID {
+				camera = &e.Cells[i]
 			}
 		}
-		if bilde == nil || bilde.Missing != 1 || !strings.Contains(bilde.Explanation, "Nobody can take this") || !strings.Contains(bilde.Explanation, "have not chosen the task") {
-			t.Errorf("%s: %+v", e.Date, bilde)
+		if camera == nil || camera.Missing != 1 || !strings.Contains(camera.Explanation, "Nobody can take this") || !strings.Contains(camera.Explanation, "have not chosen the task") {
+			t.Errorf("%s: %+v", e.Date, camera)
 		}
 	}
 }
@@ -689,9 +689,9 @@ func (sn Snapshot) rendered(l i18n.Lang) []string {
 }
 
 func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
-	w := newWorld(t, "Menighet")
+	w := newWorld(t, "Club")
 	// a manual cell for someone who is then deactivated: the run notes that it left the cell out
-	w.cell(t, w.events[2], w.lyd, store.NewCell{PersonID: w.people["Cecilie"].ID})
+	w.cell(t, w.events[2], w.sound, store.NewCell{PersonID: w.people["Cecilie"].ID})
 	inactive := false
 	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Cecilie"].ID, store.PersonPatch{Active: &inactive})
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return cannedAnswer(w), nil })
@@ -714,13 +714,13 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 			t.Errorf("%s must differ between the languages: %q / %q", name, c.en, c.nb)
 		}
 	}
-	if !strings.Contains(nb.Weak[0], "Aslaug fikk Lyd 2026-08-09") || !strings.Contains(nb.Weak[0], "hendelsen") {
+	if !strings.Contains(nb.Weak[0], "Aslaug fikk Sound 2026-08-09") || !strings.Contains(nb.Weak[0], "hendelsen") {
 		t.Errorf("compromise in Norwegian: %v", nb.Weak)
 	}
 	if !strings.Contains(nb.Events[1].Cells[1].Explanation, "passer ikke: Aslaug") || !strings.HasPrefix(nb.Events[1].Cells[1].Explanation, "Ingen kan ta denne") {
 		t.Errorf("explanation in Norwegian: %q", nb.Events[1].Cells[1].Explanation)
 	}
-	if !strings.Contains(nb.Warnings[0], "Ruten for Cecilie på Lyd 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for Cecilie on Lyd 2026-08-23") {
+	if !strings.Contains(nb.Warnings[0], "Ruten for Cecilie på Sound 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for Cecilie on Sound 2026-08-23") {
 		t.Errorf("notes: %q / %q", nb.Warnings, en.Warnings)
 	}
 	// the stored run does not depend on the language: asking for Norwegian does not change what English shows afterwards

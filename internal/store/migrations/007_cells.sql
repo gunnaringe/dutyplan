@@ -1,9 +1,9 @@
--- Manuelle ruter og utvalg, per plan.
---   manual_cell: admin legger inn en person, en gruppe eller en tekst (f.eks. «Gjest utenfra») for en oppgave på en hendelse.
---                Ruten er låst: planleggeren flytter den aldri, og den teller som en fylt plass (fills for gruppe og tekst).
---   pool_member: utvalg, «bare disse kan velges» for en oppgave på en hendelse. Finnes det rader, er det et utvalg.
--- Sammensatte fremmednøkler: hendelsen hører til planen (org_id, plan_id, id), resten til organisasjonen. Slettes
--- hendelsen, følger rutene og utvalget med. En gruppe, oppgave eller person i bruk her kan ikke slettes.
+-- Manual cells and selections, per plan.
+--   manual_cell: the admin enters a person, a group or a text (for example «Outside guest») for a task on an event.
+--                The cell is locked: the planner never moves it, and it counts as a filled place (fills for a group and a text).
+--   pool_member: a selection, «only these can be picked» for a task on an event. If there are rows, there is a selection.
+-- Composite foreign keys: the event belongs to the plan (org_id, plan_id, id), the rest to the organisation. If
+-- the event is deleted, the cells and the selection go with it. A group, task or person in use here cannot be deleted.
 CREATE TABLE manual_cell (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL,

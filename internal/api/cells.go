@@ -6,7 +6,7 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// cellsRoutes: manual cells (a person, a group or a text set by hand; locked) and selections (utvalg: only these can be
+// cellsRoutes: manual cells (a person, a group or a text set by hand; locked) and selections (only these can be
 // chosen) of one plan. Both write for several events at once, all or nothing.
 func (s *server) cellsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/cells", s.listCells)

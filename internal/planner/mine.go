@@ -18,7 +18,7 @@ type MyAssignment struct {
 	Task    string `json:"task"`
 	Via     string `json:"via,omitempty"` // the group they are in, when the place is the group's
 	Locked  bool   `json:"locked"`        // set by hand
-	Weak    bool   `json:"weak"`          // they said «dårlig» for the event or the task
+	Weak    bool   `json:"weak"`          // they said «poor» for the event or the task
 }
 
 // MineRun says which plan the assignments come from.

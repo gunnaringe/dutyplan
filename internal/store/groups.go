@@ -293,7 +293,7 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 	return g, err
 }
 
-// DeleteGroup refuses (ErrConflict) while a manual cell or a selection (utvalg) still names the group.
+// DeleteGroup refuses (ErrConflict) while a manual cell or a selection still names the group.
 func (s *Store) DeleteGroup(ctx context.Context, orgSlug, actor string, id int64) error {
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		oid, err := orgID(ctx, tx, orgSlug)

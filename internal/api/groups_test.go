@@ -13,16 +13,16 @@ func TestGroupsOverHTTP(t *testing.T) {
 	var anna, annaB store.Person
 	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Aslaug"}).json(&anna)
 	e.mustDo(201, "POST", "/api/orgs/org-b/people", map[string]string{"name": "Aslaug"}).json(&annaB)
-	var lyd, lydB, sang store.Task
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Lyd"}).json(&lyd)
-	e.mustDo(201, "POST", "/api/orgs/org-b/tasks", map[string]any{"name": "Lyd"}).json(&lydB)
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Lovsang", "planned": false}).json(&sang)
+	var sound, lydB, sang store.Task
+	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&sound)
+	e.mustDo(201, "POST", "/api/orgs/org-b/tasks", map[string]any{"name": "Sound"}).json(&lydB)
+	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Singing", "planned": false}).json(&sang)
 
 	var g store.Group
-	e.mustDo(201, "POST", "/api/orgs/org-a/groups", map[string]string{"name": "Kirkekoret"}).json(&g)
+	e.mustDo(201, "POST", "/api/orgs/org-a/groups", map[string]string{"name": "Choir"}).json(&g)
 	base := "/api/orgs/org-a/groups/" + itoa(g.ID)
 	e.mustDo(200, "PUT", base+"/members", map[string]any{"people": []int64{anna.ID}}).json(&g)
-	e.mustDo(200, "PUT", base+"/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: lyd.ID, Fills: 2, Level: "good"}}}).json(&g)
+	e.mustDo(200, "PUT", base+"/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: sound.ID, Fills: 2, Level: "good"}}}).json(&g)
 	e.mustDo(200, "PATCH", base, map[string]any{"proposable": false}).json(&g)
 	if g.Proposable || len(g.Members) != 1 || g.Tasks[0].Fills != 2 {
 		t.Fatalf("group: %+v", g)
@@ -45,16 +45,16 @@ func TestGroupsOverHTTP(t *testing.T) {
 		{404, "PUT", base + "/members", map[string]any{"people": []int64{annaB.ID}}, "B's person in A's group"},
 		{404, "PUT", base + "/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: lydB.ID, Fills: 1, Level: "good"}}}, "B's task for A's group"},
 		{400, "PUT", base + "/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: sang.ID, Fills: 1, Level: "good"}}}, "a task the planner does not distribute"},
-		{400, "PUT", base + "/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: lyd.ID, Fills: 0, Level: "good"}}}, "fills 0"},
+		{400, "PUT", base + "/tasks", map[string]any{"tasks": []store.GroupTask{{TaskID: sound.ID, Fills: 0, Level: "good"}}}, "fills 0"},
 		{400, "POST", "/api/orgs/org-a/groups", map[string]any{"name": "Ny", "members": 3}, "unknown field"},
-		{409, "POST", "/api/orgs/org-a/groups", map[string]any{"name": "Kirkekoret"}, "duplicate name"},
+		{409, "POST", "/api/orgs/org-a/groups", map[string]any{"name": "Choir"}, "duplicate name"},
 		{404, "PATCH", "/api/orgs/org-a/groups/abc", map[string]any{"proposable": true}, "bad id"},
 	} {
 		if r := e.do(c.method, c.path, "T", c.body); r.code != c.code {
 			t.Errorf("%s: %s %s = %d %s, want %d", c.what, c.method, c.path, r.code, r.body, c.code)
 		}
 	}
-	if r := e.do("POST", "/api/orgs/org-a/groups", "", map[string]string{"name": "Uten aktør"}); r.code != 400 || r.errCode() != "actor_required" {
+	if r := e.do("POST", "/api/orgs/org-a/groups", "", map[string]string{"name": "No actor"}); r.code != 400 || r.errCode() != "actor_required" {
 		t.Errorf("no actor: %d %s", r.code, r.body)
 	}
 	e.mustDo(204, "DELETE", base, nil)

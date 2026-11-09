@@ -71,7 +71,7 @@ type RunInfo struct {
 type CellPerson struct {
 	ID     int64  `json:"id"`
 	Name   string `json:"name"`
-	Weak   bool   `json:"weak"`   // the person said «dårlig» for the event or the task
+	Weak   bool   `json:"weak"`   // the person said «poor» for the event or the task
 	Locked bool   `json:"locked"` // set by hand: the planner keeps it
 }
 
@@ -81,9 +81,9 @@ type CellGroup struct {
 	Name    string   `json:"name"`
 	Members []string `json:"members"`
 	Fills   int      `json:"fills"`
-	Weak    bool     `json:"weak"` // a member said «dårlig» for the event or the task
+	Weak    bool     `json:"weak"` // a member said «poor» for the event or the task
 	Locked  bool     `json:"locked"`
-	// The members by id (Members has their names), and those of them who said «dårlig»: «mine oppdrag» needs them per person.
+	// The members by id (Members has their names), and those of them who said «poor»: «mine oppdrag» needs them per person.
 	MemberIDs []int64 `json:"member_ids"`
 	WeakIDs   []int64 `json:"weak_member_ids"`
 }
@@ -251,7 +251,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return cells[k]
 	}
-	weakMembers := map[[3]string][]int64{} // (event, task, group): the members who have a «dårlig»
+	weakMembers := map[[3]string][]int64{} // (event, task, group): the members who have a «poor»
 	for _, c := range out.Concessions {
 		if c.Group != "" {
 			who, _ := parseID(c.Person, "p")

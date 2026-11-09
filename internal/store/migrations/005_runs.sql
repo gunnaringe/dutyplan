@@ -1,6 +1,6 @@
--- En planleggingskjøring: hva som ble sendt til planleggeren, hva den svarte, og et øyeblikksbilde av navnene så
--- resultatet kan vises riktig også etter at noe er endret. input_hash er hash av dataene (ikke frø og tidsgrense):
--- endres dataene etterpå, er kjøringen «utdatert». Sammensatt fremmednøkkel hindrer en kjøring på feil organisasjon.
+-- A planning run: what was sent to the planner, what it answered, and a snapshot of the names so that
+-- the result can be shown correctly even after something has changed. input_hash is the hash of the data (not seed and time limit):
+-- if the data changes afterwards, the run is «out of date». A composite foreign key stops a run on the wrong organisation.
 CREATE TABLE plan_run (
     id            INTEGER PRIMARY KEY,
     org_id        INTEGER NOT NULL,

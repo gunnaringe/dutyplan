@@ -14,7 +14,7 @@ type rich struct {
 	org           Org
 	plan, other   Plan
 	people        []Person
-	lyd, bilde    Task
+	sound, camera Task
 	dayType       DayType
 	group         Group
 	pinned, dying int64 // runs of plan: a finished pinned run, and one that failed
@@ -36,22 +36,22 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		r.people = append(r.people, p)
 	}
 	var err error
-	r.lyd, err = s.CreateTask(ctx, slug, "Ola", "Sound", true)
+	r.sound, err = s.CreateTask(ctx, slug, "Ola", "Sound", true)
 	must(err)
-	r.bilde, err = s.CreateTask(ctx, slug, "Ola", "Video", true)
+	r.camera, err = s.CreateTask(ctx, slug, "Ola", "Camera", true)
 	must(err)
 	r.dayType, err = s.CreateDayType(ctx, slug, "Ola", "Match day")
 	must(err)
-	_, err = s.SetDayTypeTasks(ctx, slug, "Ola", r.dayType.ID, []DayTypeTask{{TaskID: r.lyd.ID, Slots: 1}, {TaskID: r.bilde.ID, Slots: 1}})
+	_, err = s.SetDayTypeTasks(ctx, slug, "Ola", r.dayType.ID, []DayTypeTask{{TaskID: r.sound.ID, Slots: 1}, {TaskID: r.camera.ID, Slots: 1}})
 	must(err)
-	must(s.SetCombination(ctx, slug, "Ola", r.lyd.ID, r.bilde.ID, "cannot"))
+	must(s.SetCombination(ctx, slug, "Ola", r.sound.ID, r.camera.ID, "cannot"))
 	r.group, err = s.CreateGroup(ctx, slug, "Ola", "Choir")
 	must(err)
 	_, err = s.SetGroupMembers(ctx, slug, "Ola", r.group.ID, []int64{r.people[0].ID, r.people[1].ID})
 	must(err)
-	_, err = s.SetGroupTasks(ctx, slug, "Ola", r.group.ID, []GroupTask{{TaskID: r.bilde.ID, Fills: 1, Level: "neutral"}})
+	_, err = s.SetGroupTasks(ctx, slug, "Ola", r.group.ID, []GroupTask{{TaskID: r.camera.ID, Fills: 1, Level: "neutral"}})
 	must(err)
-	must(s.SetPersonTask(ctx, slug, "Ola", r.people[0].ID, r.lyd.ID, "good"))
+	must(s.SetPersonTask(ctx, slug, "Ola", r.people[0].ID, r.sound.ID, "good"))
 
 	r.plan, err = s.CreatePlan(ctx, slug, "Ola", planName, "")
 	must(err)
@@ -65,13 +65,13 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 			evs = append(evs, ev)
 		}
 		must(s.SetAvailability(ctx, slug, p.Slug, "Ola", r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[0].ID}, TaskID: r.lyd.ID, PersonID: r.people[1].ID})
+		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[0].ID}, TaskID: r.sound.ID, PersonID: r.people[1].ID})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.bilde.ID, Label: "Guest", Fills: 1})
+		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.lyd.ID, GroupID: r.group.ID, Fills: 1})
+		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
 		must(err)
-		must(s.SetPool(ctx, slug, p.Slug, "Ola", []int64{evs[0].ID}, r.bilde.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
+		must(s.SetPool(ctx, slug, p.Slug, "Ola", []int64{evs[0].ID}, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
 		_, err = s.SetWeights(ctx, slug, p.Slug, "Ola", map[string]any{"w_fair": 12.0})
 		must(err)
 		done, err := s.CreateRun(ctx, slug, p.Slug, "Kari", 1, 5, "h", []byte("{}"), []byte("{}"))

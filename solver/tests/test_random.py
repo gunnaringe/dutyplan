@@ -1,4 +1,4 @@
-"""Tilfeldige små instanser: planen skal aldri bryte et hardt krav, uansett hva som legges inn."""
+"""Random small instances: the plan must never break a hard requirement, whatever is entered."""
 
 import random
 
@@ -71,5 +71,5 @@ def random_instance(seed: int):
 
 
 @pytest.mark.parametrize("seed", range(30))
-def test_tilfeldig_instans_bryter_ingen_harde_krav(seed):
+def test_random_instance_breaks_no_hard_requirement(seed):
     run(random_instance(seed))

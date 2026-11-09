@@ -8,12 +8,12 @@ import (
 
 func TestTasksCrud(t *testing.T) {
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	a, err := s.CreateTask(ctx, o.Slug, "Ola", "Lyd", true)
+	o := mustOrg(t, s, "Club")
+	a, err := s.CreateTask(ctx, o.Slug, "Ola", "Sound", true)
 	if err != nil || !a.Planned {
 		t.Fatalf("create: %+v %v", a, err)
 	}
-	if _, err := s.CreateTask(ctx, o.Slug, "Ola", "Lyd", true); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreateTask(ctx, o.Slug, "Ola", "Sound", true); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate: %v", err)
 	}
 	if _, err := s.CreateTask(ctx, o.Slug, "Ola", "  ", true); !errors.Is(err, ErrInvalid) {
@@ -27,8 +27,8 @@ func TestTasksCrud(t *testing.T) {
 	if _, err := s.UpdateTask(ctx, o.Slug, "Ola", a.ID, TaskPatch{Planned: &off}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op update: %v", err)
 	}
-	created, skipped, err := s.CreateTasks(ctx, o.Slug, "Ola", "Lyd\n\n Bilde \nKafé\nbilde\n", true)
-	if err != nil || len(created) != 2 || len(skipped) != 1 || skipped[0] != "Lyd" {
+	created, skipped, err := s.CreateTasks(ctx, o.Slug, "Ola", "Sound\n\n Camera \nCoffee\ncamera\n", true)
+	if err != nil || len(created) != 2 || len(skipped) != 1 || skipped[0] != "Sound" {
 		t.Errorf("bulk: created %v skipped %v err %v", created, skipped, err)
 	}
 	if _, _, err := s.CreateTasks(ctx, o.Slug, "Ola", " \n \n", true); !errors.Is(err, ErrInvalid) {
@@ -44,18 +44,18 @@ func TestTasksCrud(t *testing.T) {
 
 func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	lyd, _ := s.CreateTask(ctx, o.Slug, "Ola", "Lyd", true)
-	kafe, _ := s.CreateTask(ctx, o.Slug, "Ola", "Kafé", true)
-	dt, err := s.CreateDayType(ctx, o.Slug, "Ola", "Gudstjeneste")
+	o := mustOrg(t, s, "Club")
+	sound, _ := s.CreateTask(ctx, o.Slug, "Ola", "Sound", true)
+	coffee, _ := s.CreateTask(ctx, o.Slug, "Ola", "Coffee", true)
+	dt, err := s.CreateDayType(ctx, o.Slug, "Ola", "Service")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateDayType(ctx, o.Slug, "Ola", "Gudstjeneste"); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreateDayType(ctx, o.Slug, "Ola", "Service"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate day type: %v", err)
 	}
 	for name, tasks := range map[string][]DayTypeTask{
-		"zero slots": {{lyd.ID, 0}}, "too many": {{lyd.ID, 51}}, "twice": {{lyd.ID, 1}, {lyd.ID, 2}},
+		"zero slots": {{sound.ID, 0}}, "too many": {{sound.ID, 51}}, "twice": {{sound.ID, 1}, {sound.ID, 2}},
 	} {
 		if _, err := s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, tasks); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)
@@ -64,20 +64,20 @@ func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
 	if _, err := s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, []DayTypeTask{{999, 1}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown task: %v", err)
 	}
-	got, err := s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, []DayTypeTask{{lyd.ID, 1}, {kafe.ID, 3}})
+	got, err := s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, []DayTypeTask{{sound.ID, 1}, {coffee.ID, 3}})
 	if err != nil || len(got.Tasks) != 2 {
 		t.Fatalf("set: %+v %v", got, err)
 	}
 	// replacing the list replaces, not appends
-	if got, _ = s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, []DayTypeTask{{kafe.ID, 2}}); len(got.Tasks) != 1 || got.Tasks[0].Slots != 2 {
+	if got, _ = s.SetDayTypeTasks(ctx, o.Slug, "Ola", dt.ID, []DayTypeTask{{coffee.ID, 2}}); len(got.Tasks) != 1 || got.Tasks[0].Slots != 2 {
 		t.Errorf("replace: %+v", got)
 	}
 
 	before := len(mustLog(t, s, o.Slug, ""))
-	if err := s.DeleteTask(ctx, o.Slug, "Ola", kafe.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, o.Slug, "Ola", coffee.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("task used by a day type must not be deleted, got %v", err)
 	}
-	plan, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Høst 2026", "")
+	plan, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Autumn 2026", "")
 	if _, err := s.AddEvent(ctx, o.Slug, plan.Slug, "Ola", "2026-08-09", dt.ID, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -97,16 +97,16 @@ func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
 	if err := s.DeleteDayType(ctx, o.Slug, "Ola", dt.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTask(ctx, o.Slug, "Ola", kafe.ID); err != nil {
+	if err := s.DeleteTask(ctx, o.Slug, "Ola", coffee.ID); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestCombinations(t *testing.T) {
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	a, _ := s.CreateTask(ctx, o.Slug, "Ola", "Lyd", true)
-	b, _ := s.CreateTask(ctx, o.Slug, "Ola", "Bilde", true)
+	o := mustOrg(t, s, "Club")
+	a, _ := s.CreateTask(ctx, o.Slug, "Ola", "Sound", true)
+	b, _ := s.CreateTask(ctx, o.Slug, "Ola", "Camera", true)
 	if err := s.SetCombination(ctx, o.Slug, "Ola", b.ID, a.ID, "cannot"); err != nil { // either order
 		t.Fatal(err)
 	}
@@ -145,11 +145,11 @@ func TestCombinations(t *testing.T) {
 func TestCrossOrganisationReferences(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
-	taskA, _ := s.CreateTask(ctx, a.Slug, "Ola", "Lyd A", true)
-	taskB, _ := s.CreateTask(ctx, b.Slug, "Eva", "Lyd B", true)
+	taskA, _ := s.CreateTask(ctx, a.Slug, "Ola", "Sound A", true)
+	taskB, _ := s.CreateTask(ctx, b.Slug, "Eva", "Sound B", true)
 	dtA, _ := s.CreateDayType(ctx, a.Slug, "Ola", "Type A")
 	dtB, _ := s.CreateDayType(ctx, b.Slug, "Eva", "Type B")
-	planB, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	planB, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "")
 
 	if _, err := s.AddEvent(ctx, b.Slug, planB.Slug, "Eva", "2026-08-09", dtA.ID, ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's day type on B's date: want ErrNotFound, got %v", err)
@@ -187,7 +187,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	// Each organisation's day types carry only its own tasks, and its combinations are its own.
 	s.SetDayTypeTasks(ctx, a.Slug, "Ola", dtA.ID, []DayTypeTask{{taskA.ID, 2}})
 	s.SetDayTypeTasks(ctx, b.Slug, "Eva", dtB.ID, []DayTypeTask{{taskB.ID, 3}})
-	otherA, _ := s.CreateTask(ctx, a.Slug, "Ola", "Bilde A", true)
+	otherA, _ := s.CreateTask(ctx, a.Slug, "Ola", "Camera A", true)
 	s.SetCombination(ctx, a.Slug, "Ola", taskA.ID, otherA.ID, "cannot")
 	if dts, _ := s.ListDayTypes(ctx, b.Slug); len(dts) != 1 || len(dts[0].Tasks) != 1 || dts[0].Tasks[0].TaskID != taskB.ID || dts[0].Tasks[0].Slots != 3 {
 		t.Errorf("B's day type must hold only B's task: %+v", dts)

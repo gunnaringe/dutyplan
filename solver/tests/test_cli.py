@@ -1,4 +1,4 @@
-"""Kommandolinjen slik appen bruker den: JSON inn på stdin, JSON ut på stdout."""
+"""The command line the way the app uses it: JSON in on stdin, JSON out on stdout."""
 
 import json
 import subprocess
@@ -13,7 +13,7 @@ def run_cli(*args, data):
     return json.loads(r.stdout)
 
 
-def test_cli_med_check_legger_til_brudd_listen():
+def test_cli_with_check_adds_the_violations_list():
     data = base(n_dates=3)
     data["params"]["time_limit"] = 5
     res = run_cli("--check", data=data)
@@ -21,13 +21,13 @@ def test_cli_med_check_legger_til_brudd_listen():
     assert len(res["assignments"]) == 3
 
 
-def test_cli_uten_check_har_ingen_brudd_liste():
+def test_cli_without_check_has_no_violations_list():
     data = base(n_dates=2)
     data["params"]["time_limit"] = 5
     assert "violations" not in run_cli(data=data)
 
 
-def test_cli_defaults_gir_standardvektene():
+def test_cli_defaults_gives_the_default_weights():
     r = subprocess.run([sys.executable, "-m", "dutyplan_solver", "--defaults"], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr
     d = json.loads(r.stdout)

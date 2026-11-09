@@ -25,7 +25,7 @@ type PlanningData struct {
 	Combinations []Combination
 	Groups       []Group
 	Cells        []ManualCell   // manual cells of the plan
-	Pools        []Pool         // selections (utvalg) of the plan
+	Pools        []Pool         // selections of the plan
 	Weights      map[string]any // what the plan changed in the planner's weighting (the rest is the default)
 }
 

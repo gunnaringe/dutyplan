@@ -88,9 +88,9 @@ func TestFlowAndSwitchingOrganisation(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Høst 2026"})
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Vår 2027"})
-	e.mustDo(201, "POST", "/api/orgs/org-b/plans", map[string]string{"name": "Høst 2026"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Spring 2027"})
+	e.mustDo(201, "POST", "/api/orgs/org-b/plans", map[string]string{"name": "Autumn 2026"})
 
 	var orgs []store.Org
 	e.mustDo(200, "GET", "/api/orgs", nil).json(&orgs)
@@ -104,8 +104,8 @@ func TestFlowAndSwitchingOrganisation(t *testing.T) {
 		t.Fatalf("each organisation has its own plans: %v / %v", plansA, plansB)
 	}
 	var p store.Plan
-	e.mustDo(200, "GET", "/api/orgs/org-a/plans/host-2026", nil).json(&p)
-	if p.Name != "Høst 2026" {
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/autumn-2026", nil).json(&p)
+	if p.Name != "Autumn 2026" {
 		t.Fatalf("plan = %+v", p)
 	}
 }
@@ -123,7 +123,7 @@ func TestWritesNeedActorJSONAndKnownFields(t *testing.T) {
 	if w.Code != 415 {
 		t.Errorf("form post must be refused (cross-site writes), got %d", w.Code)
 	}
-	if r := e.do("POST", "/api/orgs", "T", map[string]string{"name": "X Org", "navn": "oops"}); r.code != 400 || r.errCode() != "invalid" {
+	if r := e.do("POST", "/api/orgs", "T", map[string]string{"name": "X Org", "title": "oops"}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("unknown field next to a valid one must be refused: %d %s", r.code, r.body)
 	}
 	// A valid body padded past the size limit: only the limit can reject it (the content itself is fine).
@@ -155,19 +155,19 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Høst 2026"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	var person store.Person
 	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Kari Test"}).json(&person)
 
 	for _, c := range []struct{ method, path string }{
-		{"GET", "/api/orgs/org-b/plans/host-2026"},
+		{"GET", "/api/orgs/org-b/plans/autumn-2026"},
 		{"PATCH", "/api/orgs/org-b/people/" + itoa(person.ID)},
-		{"GET", "/api/orgs/ingen/plans"},
-		{"POST", "/api/orgs/ingen/people"},
-		{"GET", "/api/orgs/ingen/log"},
+		{"GET", "/api/orgs/nope/plans"},
+		{"POST", "/api/orgs/nope/people"},
+		{"GET", "/api/orgs/nope/log"},
 		{"PATCH", "/api/orgs/org-a/people/abc"},
 		{"PATCH", "/api/orgs/org-a/people/99999"},
-		{"GET", "/api/ingen/ting"},
+		{"GET", "/api/nope/nothing"},
 	} {
 		var body any
 		if c.method != "GET" {
@@ -210,7 +210,7 @@ func TestPersonPatch(t *testing.T) {
 
 func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 	e := newEnv(t)
-	for _, path := range []string{"/", "/o/org-a", "/o/org-a/p/host-2026"} {
+	for _, path := range []string{"/", "/o/org-a", "/o/org-a/p/autumn-2026"} {
 		r := e.do("GET", path, "", nil)
 		if r.code != 200 || !strings.Contains(string(r.body), "INDEX") {
 			t.Errorf("%s = %d %q", path, r.code, r.body)

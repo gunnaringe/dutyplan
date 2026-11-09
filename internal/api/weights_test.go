@@ -40,7 +40,7 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 	if got = read("GET", "/api/orgs/"+b.org+"/plans/"+b.plan+"/weights", nil); len(got.Values) != 0 {
 		t.Errorf("B's plan took A's weights: %v", got.Values)
 	}
-	if got = read("GET", "/api/orgs/"+a.org+"/plans/var-2027/weights", nil); len(got.Values) != 0 {
+	if got = read("GET", "/api/orgs/"+a.org+"/plans/spring-2027/weights", nil); len(got.Values) != 0 {
 		t.Errorf("A's other plan: %v", got.Values)
 	}
 
@@ -59,7 +59,7 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 		{400, "PUT", path, map[string]any{"verdier": map[string]any{}}, "unknown field"},
 		{404, "PUT", "/api/orgs/" + b.org + "/plans/kun-a/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "A's other plan through B"},
 		{404, "GET", "/api/orgs/" + b.org + "/plans/kun-a/weights", nil, "A's other plan through B (read)"},
-		{404, "PUT", "/api/orgs/ingen/plans/" + a.plan + "/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "unknown organisation"},
+		{404, "PUT", "/api/orgs/nope/plans/" + a.plan + "/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "unknown organisation"},
 	} {
 		if r := e.do(c.method, c.path, "T", c.body); r.code != c.code {
 			t.Errorf("%s: %s %s = %d %s, want %d", c.what, c.method, c.path, r.code, r.body, c.code)

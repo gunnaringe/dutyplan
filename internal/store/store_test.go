@@ -70,10 +70,10 @@ func TestActorIsRequiredAndValidated(t *testing.T) {
 
 func TestActorIsPercentDecodedAndLogged(t *testing.T) {
 	s := open(t)
-	if _, err := s.CreateOrg(ctx, "%C3%85se%20%C3%98deg%C3%A5rd", "Menighet", ""); err != nil {
+	if _, err := s.CreateOrg(ctx, "%C3%85se%20%C3%98deg%C3%A5rd", "Club", ""); err != nil {
 		t.Fatal(err)
 	}
-	log, err := s.ListLog(ctx, "menighet", "", 10)
+	log, err := s.ListLog(ctx, "club", "", 10)
 	if err != nil || len(log) != 1 || log[0].Actor != "Åse Ødegård" || log[0].Action != "org.create" {
 		t.Fatalf("log = %+v, err %v", log, err)
 	}
@@ -81,11 +81,11 @@ func TestActorIsPercentDecodedAndLogged(t *testing.T) {
 
 func TestFailedWriteLeavesNoLogLine(t *testing.T) {
 	s := open(t)
-	mustOrg(t, s, "Menighet")
-	if _, err := s.CreateOrg(ctx, "Test", "Menighet", ""); !errors.Is(err, ErrConflict) {
+	mustOrg(t, s, "Club")
+	if _, err := s.CreateOrg(ctx, "Test", "Club", ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("want ErrConflict, got %v", err)
 	}
-	log, _ := s.ListLog(ctx, "menighet", "", 10)
+	log, _ := s.ListLog(ctx, "club", "", 10)
 	if len(log) != 1 {
 		t.Fatalf("one successful write, one log line; got %d", len(log))
 	}
@@ -93,7 +93,7 @@ func TestFailedWriteLeavesNoLogLine(t *testing.T) {
 
 func TestSlugify(t *testing.T) {
 	for in, want := range map[string]string{
-		"Høst 2026": "host-2026", "  Vår  2027!! ": "var-2027", "Åse & Ødegård": "ase-odegard", "---": "", "A": "a",
+		"Autumn 2026": "autumn-2026", "  Vår  2027!! ": "var-2027", "Åse & Ødegård": "ase-odegard", "---": "", "A": "a",
 	} {
 		if got := Slugify(in); got != want {
 			t.Errorf("Slugify(%q) = %q, want %q", in, got, want)
@@ -113,7 +113,7 @@ func TestTenantIsolation(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
 
-	planA, err := s.CreatePlan(ctx, a.Slug, "Ola", "Høst 2026", "")
+	planA, err := s.CreatePlan(ctx, a.Slug, "Ola", "Autumn 2026", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestTenantIsolation(t *testing.T) {
 	}
 
 	// The same plan slug and person name may exist in both, as separate things.
-	planB, err := s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	planB, err := s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "")
 	if err != nil || planB.Slug != planA.Slug {
 		t.Fatalf("same plan name in B: %+v, %v", planB, err)
 	}
@@ -161,7 +161,7 @@ func TestTenantIsolation(t *testing.T) {
 		t.Fatalf("same person name in B: %v", err)
 	}
 	// ... but not twice in one organisation.
-	if _, err := s.CreatePlan(ctx, a.Slug, "Ola", "Høst 2026", ""); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreatePlan(ctx, a.Slug, "Ola", "Autumn 2026", ""); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate plan in A: want ErrConflict, got %v", err)
 	}
 	if _, err := s.CreatePerson(ctx, a.Slug, "Ola", "Kari Test"); !errors.Is(err, ErrConflict) {
@@ -180,26 +180,26 @@ func mustLog(t *testing.T, s *Store, org, plan string) []LogEntry {
 
 func TestUnknownOrganisationIsNotFoundEverywhere(t *testing.T) {
 	s := open(t)
-	if _, err := s.GetOrg(ctx, "ingen"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetOrg(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Error("GetOrg")
 	}
-	if _, err := s.ListPlans(ctx, "ingen"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListPlans(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Error("ListPlans")
 	}
-	if _, err := s.CreatePlan(ctx, "ingen", "T", "Plan", ""); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreatePlan(ctx, "nope", "T", "Plan", ""); !errors.Is(err, ErrNotFound) {
 		t.Error("CreatePlan")
 	}
-	if _, err := s.CreatePerson(ctx, "ingen", "T", "Kari"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreatePerson(ctx, "nope", "T", "Kari"); !errors.Is(err, ErrNotFound) {
 		t.Error("CreatePerson")
 	}
-	if _, err := s.ListLog(ctx, "ingen", "", 10); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListLog(ctx, "nope", "", 10); !errors.Is(err, ErrNotFound) {
 		t.Error("ListLog")
 	}
 }
 
 func TestUpdatePersonTogglesAndLogs(t *testing.T) {
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
+	o := mustOrg(t, s, "Club")
 	p, _ := s.CreatePerson(ctx, o.Slug, "Ola", "Kari Test")
 	off := false
 	got, err := s.UpdatePerson(ctx, o.Slug, "Ola", p.ID, PersonPatch{Proposable: &off})
@@ -217,9 +217,9 @@ func TestUpdatePersonTogglesAndLogs(t *testing.T) {
 
 func TestLogFilterByPlanAndLimit(t *testing.T) {
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	p1, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Høst 2026", "")
-	s.CreatePlan(ctx, o.Slug, "Ola", "Vår 2027", "")
+	o := mustOrg(t, s, "Club")
+	p1, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Autumn 2026", "")
+	s.CreatePlan(ctx, o.Slug, "Ola", "Spring 2027", "")
 	if got := mustLog(t, s, o.Slug, p1.Slug); len(got) != 1 || got[0].Plan != p1.Slug {
 		t.Errorf("plan filter: %+v", got)
 	}

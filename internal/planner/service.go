@@ -115,7 +115,7 @@ func (s *Service) execute(id int64, input []byte, timeLimit int) {
 	defer func() {
 		if v := recover(); v != nil {
 			s.log.Error("planner panic", "run", id, "value", v, "stack", string(debug.Stack()))
-			finish(nil, "intern feil i planleggingen")
+			finish(nil, "internal error while planning")
 		}
 	}()
 	limit := time.Duration(timeLimit)*time.Second + grace
@@ -134,11 +134,11 @@ func (s *Service) execute(id int64, input []byte, timeLimit int) {
 		Status string `json:"status"`
 	}
 	if json.Unmarshal(out, &head) != nil || head.Status == "" {
-		finish(nil, "planleggeren ga et svar som ikke kunne leses")
+		finish(nil, "the planner gave an answer that could not be read")
 		return
 	}
 	if head.Status != "OPTIMAL" && head.Status != "FEASIBLE" {
-		finish(nil, "planleggeren fant ingen plan ("+head.Status+")")
+		finish(nil, "the planner found no plan ("+head.Status+")")
 		return
 	}
 	finish(out, "")

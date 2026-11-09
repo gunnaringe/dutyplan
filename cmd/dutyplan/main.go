@@ -48,7 +48,7 @@ func main() {
 	if argv := strings.Fields(*solverCmd); len(argv) > 0 {
 		solver = planner.ExecSolver{Argv: argv}
 	} else {
-		log.Warn("no planner configured (--solver / DUTYPLAN_SOLVER): everything but «Planlegg» works")
+		log.Warn("no planner configured (--solver / DUTYPLAN_SOLVER): everything but «Plan» works")
 	}
 
 	ln, err := net.Listen("tcp", *addr)

@@ -1,6 +1,6 @@
--- En hendelse (event) er den selvstendige enheten i en plan, ikke datoen. To hendelser kan ligge på samme dag, og alt
--- som gjelder «kan jeg», kombinasjoner og opptatthet gjelder hendelsen. Tabellen byttes ut fordi SQLite ikke kan fjerne
--- UNIQUE (plan_id, date) fra en eksisterende tabell. Ingenting refererer til slot_date ennå.
+-- An event is the self-contained unit in a plan, not the date. Two events can fall on the same day, and everything
+-- about «can I», combinations and busyness applies to the event. The table is replaced because SQLite cannot remove
+-- UNIQUE (plan_id, date) from an existing table. Nothing refers to slot_date yet.
 CREATE TABLE event (
     id          INTEGER PRIMARY KEY,
     org_id      INTEGER NOT NULL,

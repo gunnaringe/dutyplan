@@ -13,7 +13,7 @@ def dates(n: int) -> list[str]:
 
 
 def base(people=("a", "b", "c"), n_dates=4, tasks=None, **extra):
-    """Små inndata: alle er med på alle oppgaver, ingen preferanser."""
+    """Small inputs: everyone takes part in every task, no preferences."""
     tasks = tasks or {"t": 1}
     inst = {
         "tasks": [{"id": t} for t in tasks],
@@ -21,8 +21,8 @@ def base(people=("a", "b", "c"), n_dates=4, tasks=None, **extra):
         "day_type_tasks": {"g": dict(tasks)},
         "people": [{"id": p} for p in people],
         "person_tasks": {p: {t: "neutral" for t in tasks} for p in people},
-        # workers: 1 gir samme svar hver gang. Flere tråder velger ulikt blant likeverdige løsninger, og da kunne en mutasjon
-        # (f.eks. «jevn fordeling av») av og til overleve under CPU-last, fordi uavgjort tilfeldigvis ga riktig utfall.
+        # workers: 1 gives the same answer every time. More threads choose differently among equivalent solutions, and then a mutation
+        # (for example «even distribution off») could occasionally survive under CPU load, because a tie happened to give the right outcome.
         "params": {"time_limit": 10, "workers": 1},
     }
     params = extra.pop("params", {})
@@ -32,7 +32,7 @@ def base(people=("a", "b", "c"), n_dates=4, tasks=None, **extra):
 
 
 def run(inst):
-    """Løs og sjekk at planen ikke bryter noe hardt krav."""
+    """Solve and check that the plan breaks no hard requirement."""
     res = solve(inst)
     assert res["status"] in ("OPTIMAL", "FEASIBLE"), res["status"]
     problems = check(inst, res)

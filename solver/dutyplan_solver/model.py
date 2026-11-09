@@ -183,7 +183,7 @@ class Problem:
                 if g not in self.group_members:
                     raise ValueError(f"unknown group in selection: {g}")
 
-        # kombinasjoner (symmetriske)
+        # combinations (symmetric)
         self.combo: dict[frozenset[str], str] = {}
         for c in data.get("combinations", []):
             if c["level"] not in COMBO_LEVELS:
@@ -321,7 +321,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
         m.add(both >= a + b - 1)
         obj.append((SCALE * prm["w_combo"][level] * times, both))
 
-    # --- kombinasjoner: samme person, samme dag ----------------------------
+    # --- combinations: the same person, the same day ----------------------------
     for (p, d), ts in by_pd.items():
         for t1, t2 in _pairs(sorted(ts), 2):
             if t1 in locked_pd[p, d] and t2 in locked_pd[p, d]:

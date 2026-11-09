@@ -51,7 +51,7 @@ func databaseAtVersion8(t *testing.T, path string) {
 	for i, n := range []string{"Ann", "Bo"} {
 		exec(`INSERT INTO person (id, org_id, name, created_at) VALUES (?, 1, ?, 'x')`, i+1, n)
 	}
-	for i, n := range []string{"Sound", "Video", "Coffee"} {
+	for i, n := range []string{"Sound", "Camera", "Coffee"} {
 		exec(`INSERT INTO task (id, org_id, name, created_at) VALUES (?, 1, ?, 'x')`, i+1, n)
 	}
 	exec(`INSERT INTO day_type (id, org_id, name, created_at) VALUES (1, 1, 'Service', 'x')`)

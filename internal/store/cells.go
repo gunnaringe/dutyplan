@@ -33,7 +33,7 @@ type NewCell struct {
 	Fills    int     `json:"fills"` // places a group or a text fills (default 1); a person always fills one
 }
 
-// Pool is a selection (utvalg): only these people and groups can be chosen for the task on the event.
+// Pool is a selection: only these people and groups can be chosen for the task on the event.
 type Pool struct {
 	EventID int64   `json:"event_id"`
 	TaskID  int64   `json:"task_id"`

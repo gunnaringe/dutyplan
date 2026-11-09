@@ -20,12 +20,12 @@ func TestIsoWeekday(t *testing.T) {
 func setup(t *testing.T) (*Store, Org, Plan, DayType) {
 	t.Helper()
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	p, err := s.CreatePlan(ctx, o.Slug, "Ola", "Høst 2026", "")
+	o := mustOrg(t, s, "Club")
+	p, err := s.CreatePlan(ctx, o.Slug, "Ola", "Autumn 2026", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	dt, err := s.CreateDayType(ctx, o.Slug, "Ola", "Gudstjeneste")
+	dt, err := s.CreateDayType(ctx, o.Slug, "Ola", "Service")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 		t.Errorf("long note: %v", err)
 	}
 	d, err := s.AddEvent(ctx, o.Slug, p.Slug, "Ola", "2026-08-09", dt.ID, "Med kveldsmat")
-	if err != nil || d.DayType != "Gudstjeneste" || d.Note != "Med kveldsmat" {
+	if err != nil || d.DayType != "Service" || d.Note != "Med kveldsmat" {
 		t.Fatalf("add: %+v %v", d, err)
 	}
 	other, _ := s.CreateDayType(ctx, o.Slug, "Ola", "Alpha")
@@ -71,7 +71,7 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 	}
 
 	// The event belongs to its plan: through another plan's slug it does not exist.
-	p2, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Vår 2027", "")
+	p2, _ := s.CreatePlan(ctx, o.Slug, "Ola", "Spring 2027", "")
 	if _, err := s.UpdateEvent(ctx, o.Slug, p2.Slug, "Ola", d.ID, EventPatch{Note: ptr("x")}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("event through the wrong plan: %v", err)
 	}
@@ -142,8 +142,8 @@ func TestBulkAddByWeekday(t *testing.T) {
 func TestSamePlanSlugInTwoOrganisations(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
-	pa, _ := s.CreatePlan(ctx, a.Slug, "Ola", "Høst 2026", "")
-	pb, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "")
+	pa, _ := s.CreatePlan(ctx, a.Slug, "Ola", "Autumn 2026", "")
+	pb, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "")
 	if pa.Slug != pb.Slug {
 		t.Fatal("test needs equal slugs")
 	}

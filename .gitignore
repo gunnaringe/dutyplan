@@ -32,7 +32,7 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Tjenesteplan
+# Dutyplan
 bin/
 *.db
 *.db-wal

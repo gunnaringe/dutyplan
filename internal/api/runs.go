@@ -48,7 +48,7 @@ func (s *server) writeRunErr(w http.ResponseWriter, err error) {
 func (s *server) startRun(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		TimeLimit int `json:"time_limit"` // seconds; 0 = the default
-		Seed      int `json:"seed"`       // 0 = the next one, so «prøv igjen» gives another plan
+		Seed      int `json:"seed"`       // 0 = the next one, so «try again» gives another plan
 	}
 	if !decode(w, r, &b) {
 		return

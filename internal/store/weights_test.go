@@ -37,12 +37,12 @@ func TestWeightSpecsAreConsistent(t *testing.T) {
 func weightsWorld(t *testing.T) (*Store, Org, Plan, Plan) {
 	t.Helper()
 	s := open(t)
-	o := mustOrg(t, s, "Menighet")
-	p1, err := s.CreatePlan(ctx, o.Slug, "Ola", "Høst 2026", "")
+	o := mustOrg(t, s, "Club")
+	p1, err := s.CreatePlan(ctx, o.Slug, "Ola", "Autumn 2026", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p2, err := s.CreatePlan(ctx, o.Slug, "Ola", "Vår 2027", "")
+	p2, err := s.CreatePlan(ctx, o.Slug, "Ola", "Spring 2027", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,9 +94,9 @@ func TestWeightRefusals(t *testing.T) {
 	s, o, p1, _ := weightsWorld(t)
 	for name, v := range map[string]map[string]any{
 		"unknown key":                          {"w_unfilled": 5.0},
-		"another unknown key":                  {"navn": 1.0},
+		"another unknown key":                  {"title": 1.0},
 		"an unknown key beside a valid change": {"w_fair": 12.0, "w_unfilled": 0.0}, // alone it would also be refused, as «nothing to change»; only the key check refuses this
-		"an unknown key given as text":         {"w_fair": 12.0, "navn": "ti"},
+		"an unknown key given as text":         {"w_fair": 12.0, "title": "ten"},
 		"above the range":                      {"w_fair": 101.0},
 		"below the range":                      {"w_fair": -1.0},
 		"a bad preference positive":            {"w_task.poor": 4.0},
@@ -116,7 +116,7 @@ func TestWeightRefusals(t *testing.T) {
 	if w, _ := s.GetWeights(ctx, o.Slug, p1.Slug); len(w) != 0 {
 		t.Errorf("a refused change leaves nothing behind: %v", w)
 	}
-	if _, err := s.SetWeights(ctx, o.Slug, "ingen", "Ola", map[string]any{"w_fair": 12.0}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetWeights(ctx, o.Slug, "nope", "Ola", map[string]any{"w_fair": 12.0}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
 	// the edges of the range are fine
@@ -128,7 +128,7 @@ func TestWeightRefusals(t *testing.T) {
 func TestWeightsBelongToTheirPlanAndOrganisation(t *testing.T) {
 	s, a, pa, _ := weightsWorld(t)
 	b := mustOrg(t, s, "Annen")
-	pb, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "") // the same plan slug in another organisation
+	pb, _ := s.CreatePlan(ctx, b.Slug, "Eva", "Autumn 2026", "") // the same plan slug in another organisation
 	if pa.Slug != pb.Slug {
 		t.Fatal("test needs equal slugs")
 	}
@@ -138,10 +138,10 @@ func TestWeightsBelongToTheirPlanAndOrganisation(t *testing.T) {
 	if w, _ := s.GetWeights(ctx, b.Slug, pb.Slug); len(w) != 0 {
 		t.Errorf("B's plan took A's weights: %v", w)
 	}
-	if _, err := s.GetWeights(ctx, b.Slug, "var-2027"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetWeights(ctx, b.Slug, "spring-2027"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's other plan through B: %v", err)
 	}
-	if _, err := s.SetWeights(ctx, b.Slug, "var-2027", "Eva", map[string]any{"w_fair": 12.0}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetWeights(ctx, b.Slug, "spring-2027", "Eva", map[string]any{"w_fair": 12.0}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("writing to A's other plan through B: %v", err)
 	}
 	da, _ := s.GetPlanningData(ctx, a.Slug, pa.Slug)

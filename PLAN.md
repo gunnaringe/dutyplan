@@ -1,303 +1,305 @@
-# Tjenesteplan: plan
+# Dutyplan: plan
 
-Arbeidstittel. Status 2026-11-09: **planleggeren (`solver/`) er koblet til appen; fase 1–5 er bygget (se *Faser*). Utrulling er utsatt. Privat GitHub-repo `gunnaringe/dutyplan`.**
-Første bruksområde og testdata: en kirkes tjenesteplan for høsten 2026 (oppdiktede navn i repoet). Verktøyet er generelt; se *Generelt*.
+Working title (*Tjenesteplan* in Norwegian). Status 2026-11-09: **the planner (`solver/`) is connected to the app; phases 1–5 are built (see *Phases*), plus run history with a
+pinned current plan, renaming and deleting, and an English/Norwegian page. Deployment is postponed. Private GitHub repo `gunnaringe/dutyplan`.**
+First use and test data: a church's rota for autumn 2026 (invented names in the repo). The tool is general; see *General*.
 
-## Mål
+## Goal
 
-Fordele oppgaver (lyd, bilde, møteleder, vakter, … hva som helst) på hendelser i en periode slik at
+Share duties (sound, video, chairing, stewards, … anything) among the events in a period so that
 
-1. **harde krav aldri brytes** (passer ikke, kan ikke kombineres, manuelt utvalg),
-2. **preferanser følges så godt det går**, og
-3. **fordelingen blir mest mulig lik**, også på tvers av semestre.
+1. **hard requirements are never broken** (does not suit, cannot be combined, manual selection),
+2. **preferences are followed as well as possible**, and
+3. **the load is as equal as possible**.
 
-Folk legger selv inn når det passer. Planleggeren gir et *forslag*; det som er
-lagt inn for hånd (f.eks. at et kor synger på en bestemt hendelse) er *låst* og flyttes aldri.
+People say themselves when it suits them. The planner makes a *proposal*; whatever is entered by hand (for example that a
+choir sings at a particular event) is *locked* and never moved.
 
-## Generelt
+## General
 
-Bruksområdet er generelt. **Alt er data som admin lager selv**: oppgaver, personer, grupper (team), hendelser og dagtyper,
-og innstillingene mellom dem. Ingenting i planleggeren, datamodellen eller språket i appen er bundet til kirke.
-Navn som Lyd, Kirkekoret, Gudstjeneste og Alpha finnes bare i testdataene og som eksempler her. Appen får norsk
-bokmål først, men tekstene skal kunne byttes ut.
+The tool is general. **Everything is data that the admin creates**: tasks, people, groups (teams), events and day types, and the
+settings between them. Nothing in the planner, the data model or the wording of the app is tied to a church. Names such as Sound,
+Choir, Service and Alpha exist only in the test data and as examples here. The page is in English and Norwegian (bokmål); the
+texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalogue each.
 
-## Avgrensning i første versjon
+## Scope of the first version
 
-- **Ingen innlogging, ingen lenker med hemmelighet, ingen roller.** Se *Tilgang uten innlogging*.
-- **Grupper er generelle.** En gruppe er et navngitt sett personer (et team, et kor, et par, et lag). Ingen gruppe har
-  særregler. Admin kan sette en gruppe inn i en manuell rute, og **planleggeren kan også foreslå grupper** som kandidater
-  for oppgaver admin har satt opp for gruppen (`group_task`: hvilken oppgave, hvor mange plasser den fyller, og et nivå).
-  I begge tilfeller er medlemmene opptatt med oppgaven, og den felles kombinasjonsinnstillingen avgjør hva de kan ha samme
-  dag (se *Manuelle ruter, grupper og utvalg*).
-- **Gruppearbeid teller som ett oppdrag per medlem** i fordelingen (samlet og per oppgave), både for
-  manuelle og foreslåtte grupper.
-- **Ingen regnearkstøtte**: verken import fra eller eksport til regneark (bestemt 2026-11-08). Alt legges inn i appen.
-- Ingen kompetanser og ingen betingede krav («når X, så Y»). Utvalg dekker det.
-- Ingen øvre grense for antall oppgaver per person per dag, og ingen hvilekrav mellom hendelser. Det er kombinasjonsinnstillingen
-  som styrer hva som kan, bør og ikke bør samme dag. (Begge ble prøvd og tatt ut etter ønske 2026-11-04.)
+- **No login, no links with a secret, no roles.** See *Access without a login*.
+- **Groups are general.** A group is a named set of people (a team, a choir, a couple, a crew). No group has special rules. The admin can put a
+  group in a manual cell, and **the planner can also propose groups** as candidates for the tasks the admin has set up for the group
+  (`group_task`: which task, how many places it fills, and a level). In both cases the members are busy with the task, and the shared
+  combination setting decides what else they can have the same day (see *Manual cells, groups and selections*).
+- **Group work counts as one assignment per member** in the distribution (overall and per task), for manual and proposed groups alike.
+- **No spreadsheet support**: neither import from nor export to spreadsheets (decided 2026-11-08). Everything is entered in the app.
+- No skills and no conditional requirements ("when X, then Y"). Selections cover that.
+- No upper limit on the number of tasks per person per day, and no rest requirement between events. The combination setting alone
+  governs what can, should and should not happen on the same day. (Both were tried and removed at the user's request, 2026-11-04.)
 
-## Hvordan det brukes
+## How it is used
 
-**Hvem som helst med adressen**
-- Åpner siden og velger navnet sitt.
-- **Velger selv hvilke oppgaver hen er med på.** Alle oppgaver er skjult til å begynne med; «vis alle» lar
-  personen krysse av for flere. Det som ikke er avkrysset, vises ikke og blir aldri tildelt personlig (unntatt via en gruppe admin
-  har satt opp for oppgaven, se *Manuelle ruter, grupper og utvalg*).
-- Velger preferanse per oppgave: *ikke / dårlig / nøytral / godt*. Folk er ulike, og det er opp til dem.
-- Velger for hver **hendelse**: *passer ikke / dårlig / godt* (ikke markert = nøytral). **Én liste gjelder
-  alle oppgavene personen er med på.** Lyd og Bilde har samme preferanse, så det er ett valg per hendelse.
-  Det er hendelsen som gjelder, ikke kalenderdagen: to hendelser samme dag har hvert sitt svar.
-- Har en oppgave et annet mønster, slår personen på **«egen liste for denne oppgaven»** (av som standard).
-  Da får oppgaven sin egen liste, som starter som en kopi av den felles.
-- Ser planen og egne oppdrag.
+**Anyone with the address**
+- Opens the page and picks their own name.
+- **Chooses which tasks to take part in.** All tasks are hidden at first; "choose tasks" lets the person tick more. What is not ticked is not shown and is
+  never assigned personally (except through a group the admin has set up for the task, see *Manual cells, groups and selections*).
+- Chooses a preference per task: *never / poor / neutral / good*. People differ, and it is up to them.
+- Chooses for each **event**: *does not suit / poor / good* (not marked = neutral). **One list covers all the tasks the person takes part in.**
+  Sound and Video share the preference, so there is one choice per event. The event counts, not the calendar day: two events on the same day
+  have an answer each.
+- A task with a different pattern can get **its own list** (off by default; not built yet). It starts as a copy of the shared one.
+- Sees the plan and their own assignments.
 
-**Oppsett og planlegging** (en del av samme app, ikke et eget område)
-- Oppgaver, personer, grupper, hendelser og dagtyper, **felles innstilling for hvilke oppgaver som kan kombineres**,
-  manuelle ruter og utvalg. Kjøre planleggeren, se forklaringer, låse forslag.
+**Setup and planning** (part of the same app, not a separate area)
+- Tasks, people, groups, events and day types, **a shared setting for which tasks can be combined**, manual cells and selections. Running the
+  planner, reading the explanations, locking proposals, looking at earlier runs and pinning one as the current plan.
 
-**Manuelle ruter, grupper og utvalg** (to generelle verktøy som dekker «kor synger», «egen lydtekniker» og alt liknende)
-- Admin kan legge inn en **manuell rute** for en oppgave og hendelse: en person, en **gruppe** eller en tekst
-  (f.eks. «Gjest utenfra»). Den er låst og teller som en fylt plass. En gruppe eller tekst kan fylle flere plasser (`fills`).
-- En **gruppe** i en manuell rute gjør medlemmene opptatt med den oppgaven den dagen. Hva de kan ha i tillegg, styres av den
-  felles kombinasjonsinnstillingen, uten særregel. Eksempel: gruppen «Kirkekoret» står på oppgaven «Lovsang» 20.9, og
-  *Lovsang × Lyd* og *Lovsang × Bilde* er satt til «kan ikke kombineres». Da er medlemmene ute av Lyd og Bilde den dagen.
-  Står paret på «upraktisk» eller «praktisk» i stedet, blir det en straff eller en bonus, ikke et forbud.
-- Admin kan sette et **utvalg** for en oppgave og hendelse: bare disse kan velges. Planleggeren velger blant dem.
-  «Egen lydtekniker når koret synger» er et utvalg for Lyd på to personer som er med på oppgaven og ikke synger.
-  Er antallet i utvalget like stort som antall plasser, er det i praksis en manuell tildeling.
-- Utvalget er et vanlig hardt krav. Står noen i utvalget som har «passer ikke» den dagen eller ikke er med på
-  oppgaven, kommer det som forklaring (og en tom plass hvis ingen i utvalget går).
-- Står et gruppemedlem på «passer ikke» på hendelsen en manuell gruppe er satt opp for, beholdes det manuelle valget, med en advarsel.
-- **Foreslåtte grupper, det admin må sette opp:** for hver gruppe hvilke oppgaver den kan foreslås til, hvor mange plasser den
-  fyller og et nivå. Én som har «passer ikke» på en hendelse, utelukker hele gruppen fra den hendelsen; et par er altså ikke brukbart på en hendelse
-  noen av dem ikke kan.
-- **Kan foreslås, per person og per gruppe** (standard ja). Står den på nei, velger planleggeren aldri personen eller gruppen selv
-  (heller ikke gjennom et utvalg), men admin kan fortsatt legge dem inn for hånd. En gruppe foreslås heller ikke hvis et medlem
-  ikke kan foreslås. Gruppen foreslås til de oppgavene admin har satt opp for den, uavhengig av om medlemmene selv har krysset av
-  for oppgaven; det er denne innstillingen som styrer det.
-- **Foreslåtte grupper:** admin setter opp hvilke oppgaver en gruppe kan foreslås til (`group_task`). Gruppen er en kandidat
-  på lik linje med en person og fyller `fills` plasser. Den er utelukket fra en hendelse hvis ett medlem har «passer ikke» (eller har
-  sagt «ikke» til oppgaven), hvis gruppen står utenfor et utvalg, eller hvis medlemmene er opptatt via en annen gruppe.
-  Poengene for hendelsen er snittet av medlemmenes ønsker; oppgavenivået settes på gruppen. Medlemmenes egen deltakelse i oppgaven
-  trengs ikke. Et utvalg kan nevne både personer og grupper.
-- To grupper med felles medlem kan ikke begge velges samme dag hvis det er samme oppgave eller «kan ikke kombineres».
+**Manual cells, groups and selections** (two general tools that cover "the choir sings", "their own sound engineer" and everything like it)
+- The admin can enter a **manual cell** for a task and an event: a person, a **group** or a text (for example "Outside guest"). It is locked and counts as a
+  filled place. A group or a text can fill several places (`fills`).
+- A **group** in a manual cell makes the members busy with that task that day. What they can have in addition is governed by the shared combination
+  setting, with no special rule. Example: the group "Choir" is on the task "Singing" on 20 Sept, and *Singing × Sound* and *Singing × Video* are set to
+  "cannot be combined". Then the members are out of Sound and Video that day. If the pair is "impractical" or "practical" instead, it becomes a penalty or a bonus, not a ban.
+- The admin can set a **selection** for a task and an event: only these can be picked. The planner chooses among them. "Their own sound engineer when the choir sings" is a
+  selection for Sound of two people who take part in the task and do not sing. If the selection is as large as the number of places, it is in effect a manual assignment.
+- A selection is an ordinary hard requirement. If someone in the selection has "does not suit" that day or does not take part in the task, that comes out as an
+  explanation (and an empty place if nobody in the selection can).
+- If a group member has "does not suit" on the event a manual group is set for, the manual choice is kept, with a warning.
+- **Proposed groups, what the admin has to set up:** for each group which tasks it may be proposed for, how many places it fills, and a level. One
+  member with "does not suit" on an event rules the whole group out for that event; a couple is not usable on an event one of them cannot make.
+- **Can be proposed, per person and per group** (default yes). When it is no, the planner never picks the person or group itself (not through a selection
+  either), but the admin can still enter them by hand. A group is not proposed either if a member cannot be proposed. The group is proposed for the tasks the admin has
+  set up for it, whether or not the members ticked the task themselves; this setting governs it.
+- **Proposed groups:** the admin sets up which tasks a group can be proposed for (`group_task`). The group is a candidate on a par with a person and fills `fills`
+  places. It is ruled out of an event if one member has "does not suit" (or has said "never" to the task), if the group is outside a selection, or if the
+  members are busy through another group. The points for the event are the average of the members' wishes; the task level is set on the group. The members' own
+  participation in the task is not needed. A selection can name both people and groups.
+- Two groups with a member in common cannot both be picked on the same day if it is the same task or "cannot be combined".
 
-## Datamodell (SQLite)
+## Data model (SQLite)
 
-**En organisasjon har flere planer.** `organization` → `plan` (f.eks. «Høst 2026», «Vår 2027»). Det som er felles for en
-organisasjon, deles av alle planene; det som hører til en periode, ligger under planen.
+**An organisation has several plans.** `organization` → `plan` (for example "Autumn 2026", "Spring 2027"). What is shared by an organisation is shared by
+all its plans; what belongs to a period lies under the plan.
 
-*Bygget (migrering 001–008):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`, `grp`, `grp_member`, `grp_task`, `manual_cell`, `pool_member`.
-Alle barnetabeller har `org_id` og sammensatte fremmednøkler mot `(org_id, id)`, så databasen selv nekter referanser på tvers av organisasjoner.
+*Built (migrations 001–010):* `organization`, `plan`, `person`, `change_log`, `task`, `day_type`, `day_type_task`, `task_combination`, `event`, `person_task`, `person_event`, `plan_run`, `grp`, `grp_member`, `grp_task`, `manual_cell`, `pool_member`.
+Every child table has `org_id` and composite foreign keys to `(org_id, id)`, so the database itself refuses references across organisations.
+Migrations are forward-only and run in a transaction at startup. Migration 009 changed the level codes in the data to English (and turned old finished runs into failed ones).
 
-| Tabell | Nivå | Innhold |
+| Table | Level | Contents |
 |---|---|---|
-| `organization` | | `slug` (unik, i adressen), navn |
-| `plan` | organisasjon | `slug` (unik i organisasjonen), navn, **`weights`** (JSON: planleggerens vekter som avviker fra standard). Erstatter «periode/semester» |
-| `person` | organisasjon | navn (unikt i organisasjonen), aktiv, **kan foreslås** (standard ja). Gjenbrukes i alle planer |
-| `group`, `group_member` | organisasjon | **bygget som `grp`, `grp_member`**: navngitt sett personer (team, kor, par). Ingen egne regler. **Kan foreslås** (standard ja) |
-| `group_task` | organisasjon | **bygget som `grp_task`**: oppgaver planleggeren kan foreslå gruppen til: plasser den fyller (`fills`) og nivå |
-| `task` | organisasjon | navn, antall plasser, om planleggeren fordeler den (ellers bare for manuelle ruter og kombinasjoner) |
-| `day_type`, `day_type_task` | organisasjon | dagtyper admin lager, hvilke oppgaver som gjelder for dem, og antall plasser |
-| `task_combination` | organisasjon | **felles**: oppgave A × oppgave B: *kan ikke kombineres / upraktisk / praktisk / bør kombineres* |
-| `person_task` | organisasjon | **bygget**: personen er med på oppgaven (eget valg; ingen rad = ikke med) og nivå (ikke / dårlig / nøytral / godt). Bare oppgaver planleggeren fordeler kan velges |
-| `event` | plan | **hendelse**: dato, dagtype, merknad. Selvstendig enhet; flere på samme dag er lov |
-| `person_event` | plan | **bygget**: nivå per hendelse (passer ikke / dårlig / godt; ingen rad = nøytral), felles for personens oppgaver. Sammensatt fremmednøkkel (org, plan, hendelse) |
-| `person_task_event` | plan | *ikke bygget ennå*: settes på når en oppgave har «egen liste»; da brukes den i stedet for den felles |
-| `pool_member` | plan | **bygget**: **utvalg** for én oppgave på én hendelse: de eneste personer og grupper som kan velges (finnes det rader, er det et utvalg). Sammensatt fremmednøkkel mot (org, plan, hendelse) |
-| `manual_cell` | plan | **bygget**: manuell rute for en oppgave på en hendelse: én person, én gruppe eller en tekst (+ `fills` plasser for gruppe og tekst). Alltid låst. Forslag fra planleggeren lagres ikke her, men i `plan_run` |
-| `plan_run` | plan | status (running/done/failed), frø, tidsgrense, hvem startet, hash av inndata, inndata, øyeblikksbilde av navn og plasser, svar fra planleggeren, feilmelding. De 20 nyeste per plan beholdes. Siste kjøring er planen (publisering er ikke bygget) |
-| `change_log` | organisasjon (+ valgfri plan) | hvem (oppgitt navn), hva, når. Skrives i samme transaksjon som endringen |
+| `organization` | | `slug` (unique, in the address), name |
+| `plan` | organisation | `slug` (unique in the organisation), name, **`weights`** (JSON: the planner weights that differ from the default). Replaces "period/semester" |
+| `person` | organisation | name (unique in the organisation), active, **can be proposed** (default yes). Reused in all plans |
+| `group`, `group_member` | organisation | **built as `grp`, `grp_member`**: a named set of people (team, choir, couple). No rules of its own. **Can be proposed** (default yes) |
+| `group_task` | organisation | **built as `grp_task`**: the tasks the planner may propose the group for: places it fills (`fills`) and a level |
+| `task` | organisation | name, whether the planner distributes it (otherwise only for manual cells and combinations) |
+| `day_type`, `day_type_task` | organisation | day types the admin creates, which tasks apply to them, and the number of places |
+| `task_combination` | organisation | **shared**: task A × task B: *cannot be combined / impractical / practical / should be combined* |
+| `person_task` | organisation | **built**: the person takes part in the task (their own choice; no row = not taking part) and a level (never / poor / neutral / good). Only tasks the planner distributes can be chosen |
+| `event` | plan | **event**: date, day type, note. A self-contained unit; several on the same day are allowed |
+| `person_event` | plan | **built**: level per event (does not suit / poor / good; no row = neutral), shared by the person's tasks. Composite foreign key (org, plan, event) |
+| `person_task_event` | plan | *not built yet*: added when a task has "its own list"; it is then used instead of the shared one |
+| `pool_member` | plan | **built**: the **selection** for one task on one event: the only people and groups that can be picked (if there are rows, there is a selection). Composite foreign key to (org, plan, event) |
+| `manual_cell` | plan | **built**: a manual cell for a task on an event: one person, one group or a text (+ `fills` places for a group and a text). Always locked. Proposals from the planner are not stored here but in `plan_run` |
+| `plan_run` | plan | status (running/done/failed), seed, time limit, who started it, hash of the input, the input, a snapshot of names and places, the planner's answer, error message, **`pinned`** (one per plan, partial unique index). The 20 newest per plan are kept, and the pinned one always |
+| `change_log` | organisation (+ optional plan) | who (declared name), what, when. Written in the same transaction as the change |
 
-**Optimalisering skjer bare innenfor én plan** (brukerens valg 2026-11-09). Tildelinger i tidligere planer teller ikke med: appen sender aldri `history` eller `previous_plan` til planleggeren (den kan fortsatt ta imot dem).
-Alle oppslag er avgrenset av organisasjonen; en plan eller person fra en annen organisasjon gir 404.
+**Optimisation happens within one plan only** (the user's choice 2026-11-09). Assignments in earlier plans do not count: the app never sends `history` or `previous_plan` to the planner (it can still accept them).
+Every lookup is scoped by the organisation; a plan or person from another organisation gives 404.
 
-**Hendelser:** en hendelse hører til én plan og har en dato og en dagtype (og en merknad). Hendelser er **selvstendige**: to kan ligge på
-samme dag (f.eks. en gudstjeneste og en medarbeiderkveld, eller to vakter), og tilgjengelighet, kombinasjoner, plasser og gruppe-opptatthet gjelder
-hendelsen, aldri kalenderdagen. API-et bruker id (`/events/{id}`). «Alle søndager i et tidsrom» legger til en hendelse per valgt ukedag
-(ISO 1 = mandag … 7 = søndag, regnet ut i Go, ikke i nettleseren), høyst 366 dager om gangen; en hendelse med samme dato og dagtype hoppes over,
-så samme kjøring to ganger ikke dupliserer. Rekkefølgen innen en dato er opprettelsesrekkefølgen (ingen klokkeslett ennå).
-Sletting av en oppgave som er i en dagtype, eller en dagtype som har hendelser, nektes (409); kombinasjoner følger oppgaven.
+**Events:** an event belongs to one plan and has a date and a day type (and a note). Events are **self-contained**: two can fall on the same day (for example a
+service and a staff evening, or two shifts), and availability, combinations, places and group busyness apply to the event, never to the calendar day. The API uses the id (`/events/{id}`).
+"All Sundays in a period" adds one event per chosen weekday (ISO 1 = Monday … 7 = Sunday, computed in Go, not in the browser), at most 366 days at a time; an event with the same date and day type is
+skipped, so running the same thing twice does not duplicate. The order within a date is the order of creation (no times of day yet).
+Deleting a task that is in a day type, or a day type that has events, is refused (409); combinations follow the task.
 
-### Samme skala overalt
-Hendelse og oppgave bruker begge **ikke / dårlig / (nøytral) / godt**. Kombinasjoner bruker
-**kan ikke / upraktisk / praktisk / bør**.
+### The same scale everywhere
+Event and task both use **never / poor / (neutral) / good**. Combinations use **cannot / impractical / practical / preferred**. These are also the codes on the wire.
 
-## Planleggeren (CP-SAT)
+## The planner (CP-SAT)
 
-Én ja/nei-variabel per (person, oppgave, hendelse) som er mulig etter filtrering. Typisk 1–2 tusen variabler.
+One yes/no variable per (person, task, event) that is possible after filtering. Typically 1–2 thousand variables.
 
-**Harde krav**
-- «ikke» på hendelse eller oppgave fjerner variabelen. Det samme gjør «ikke med på oppgaven».
-- Utvalg (`pool_member`): alle utenfor utvalget fjernes for den oppgaven og hendelsen.
-- Antall plasser per oppgave og hendelse (låste ruter regnes med).
-- Oppgavepar som *kan ikke kombineres*: høyst én av dem per person per dag.
-- Gruppe i en manuell rute eller foreslått av planleggeren: hvert medlem er opptatt med gruppens oppgave. Paret (gruppens oppgave,
-  medlemmets andre oppgave) følger kombinasjonsinnstillingen (forbud, straff eller bonus), og medlemmet kan ikke ta en ekstra
-  plass på samme oppgave.
+**Hard requirements**
+- "never" on an event or a task removes the variable. So does "not taking part in the task".
+- Selections (`pool_member`): everyone outside the selection is removed for that task and event.
+- The number of places per task and event (locked cells count).
+- Task pairs that *cannot be combined*: at most one of them per person per day.
+- A group in a manual cell or proposed by the planner: each member is busy with the group's task. The pair (the group's task,
+  the member's other task) follows the combination setting (ban, penalty or bonus), and the member cannot take an extra
+  place on the same task.
 
-**Mål (poeng, justeres mot testdataene)**
-- Pluss for «godt», minus for «dårlig», på hendelse og oppgave.
-- Pluss/minus for *praktisk*, *upraktisk* og *bør kombineres*.
-- **Jevn fordeling = lik total belastning (hovedleddet; avgjort av brukeren 2026-11-09).** Hver persons mål er sin andel av alle oppdrag (gruppearbeid
-  teller ett oppdrag per medlem), regnet ut fra hvor mange hendelser personen kan stille. Målet er sjelden et helt tall, så det er et **bånd**
-  [nedre, øvre hele tall] som er «jevnt nok», og bare det utenfor båndet koster (`w_fair`, 10). I tillegg straffes det verste avviket (`w_fair_range`, 10), så ikke én
-  person tar hele avviket. Hvilke oppgaver oppdragene er i, spiller ingen rolle: en som bare tar Bilde skal ikke ende på halvparten av en som tar Lyd og Bilde.
-  (Måltallet bygger på antall plasser; en foreslått gruppe med flere medlemmer enn plasser gir flere oppdrag enn plasser, og det regnes ikke inn i målet på forhånd.)
-- **Fordeling per oppgave er av som standard** (`w_task_fair` og `w_task_range` er 0, og da bygges ingen variabler for den). Slås den på, får alle som kan en
-  oppgave lik andel av akkurat den, og da får de med flere oppgaver mer totalt. Prisen for total-først: samme oppgave kan fordeles ujevnt mellom
-  de som kan den (se *Resultater fra spiken*).
-- **Historikk fra tidligere planer brukes ikke** (valg 2026-11-09). Planleggeren kan ta imot `history` per oppgave (teller halvt, `history_weight`),
-  men appen sender den ikke.
-- Ved ny kjøring kan planleggeren straffe endringer fra en forrige plan (`previous_plan`), men appen bruker det ikke. Det som skal bli stående, låses som manuell rute («Lås» på et forslag).
-- Tom plass er tillatt, men koster så mye at planleggeren bare gjør det når det ikke går ellers.
+**Objective (points, tuned against the test data)**
+- Plus for "good", minus for "poor", on event and task.
+- Plus/minus for *practical*, *impractical* and *should be combined*.
+- **Even distribution = equal total load (the main term; decided by the user 2026-11-09).** Each person's target is their share of all assignments (group work
+  counts one assignment per member), computed from how many events the person can make. The target is rarely a whole number, so a **band**
+  [lower, upper whole number] is "even enough", and only what falls outside the band costs (`w_fair`, 10). The worst deviation is penalised as well (`w_fair_range`, 10), so that one
+  person does not take all the deviation. Which tasks the assignments are in does not matter: someone who only takes Video should not end up with half of what someone who takes Sound and Video gets.
+  (The target is based on the number of places; a proposed group with more members than places gives more assignments than places, and that is not counted into the target beforehand.)
+- **Distribution per task is off by default** (`w_task_fair` and `w_task_range` are 0, and then no variables are built for it). When it is on, everyone who can do a
+  task gets an equal share of exactly that task, and people with more tasks then get more in total. The price of total-first: the same task can be shared unevenly among
+  those who can do it (see *Results from the spike*).
+- **History from earlier plans is not used** (decision 2026-11-09). The planner can accept `history` per task (counts half, `history_weight`),
+  but the app does not send it.
+- On a new run the planner can penalise changes from a previous plan (`previous_plan`), but the app does not use it. What should stay is locked as a manual cell ("Lock" on a proposal).
+- An empty place is allowed, but costs so much that the planner only does it when it cannot be avoided.
 
-**Forklaringer**: for hver tom plass eller brutt «dårlig» lages en kort tekst, f.eks. «Oppgave X 15.11: 4 aktuelle,
-2 har *passer ikke*, 3 står utenfor utvalget, 1 er opptatt via en gruppe». Dette er et eget enkelt filter over inndata, ikke en uløselighetsanalyse.
+**Explanations**: for every empty place or broken "poor" a short text is made, for example "Task X 15 Nov: 4 candidates,
+2 have *does not suit*, 3 are outside the selection, 1 is busy through a group". This is a separate simple filter over the input, not an infeasibility analysis. The server writes
+the texts in the page's language (`?lang=`) from codes and arguments kept in the run, so one run can be read in both languages.
 
-## Arkitektur: ordentlig backend
+## Architecture: a proper backend
 
-- **Go-binær med innebygd SQLite** (`modernc.org/sqlite`, ren Go uten cgo), nummererte migreringer innebygd og kjørt i en
-  transaksjon ved oppstart, vanilla JS-frontend innebygd. Tenkt kjørt på kate (Flux, image til GHCR); utrulling er utsatt.
-  Backend trengs for felles lagring mellom alle brukerne, planleggeren og historikk, selv uten innlogging.
-- **API: vanlig JSON over `net/http`, ikke Connect** (valgt 2026-11-07, avviker fra `scoreboard/`). Det er under ti endepunkter,
-  og Connect ville krevd `buf`, to kodegeneratorer og generert kode. Skiftet senere er lite siden grensesnittet er smalt.
-  Feil er `{"error": kode, "message": tekst}` med riktig statuskode.
-- **Organisasjonen ligger i adressen**, både i siden (`/o/<org>/p/<plan>`) og API-et (`/api/orgs/{org}/...`). Tjeneren har ingen
-  «gjeldende organisasjon», så å bytte er bare å gå til en annen adresse. Organisasjonslisten kan leses av alle som når adressen.
-- **Fremmednøkler** er av som standard i SQLite på hver tilkobling og slås på i DSN-en; en test sjekker at de håndheves.
-- **Solveren er et Python-program med `ortools`** som Go starter som underprosess: JSON inn på stdin, JSON ut på stdout,
-  tidsgrense. Samme container-image. Kontrakten er liten og kan testes uten resten av appen. **Python beholdes** (brukerens svar
-  2026-11-08: «hvis Python er bedre egnet kan det beholdes»). Grunnen er at det er samme CP-SAT-løser, pip-pakken `ortools` er ferdigbygd
-  med de native bibliotekene, og modellen har egne tester og mutasjoner for hver regel.
-- **Go-alternativer, undersøkt 2026-11-08:**
-  - *Offisielt Go-API for CP-SAT* (`github.com/google/or-tools/ortools/sat/go/cpmodel`): finnes, men er et cgo-skall rundt OR-Tools sitt
-    C-API. Det har ingen versjonsmerking (pseudoversjon fra oktober 2026), ingen kjente brukere, og bygges med Bazel mot det native
-    biblioteket, ikke som en vanlig Go-avhengighet. Appen ville mistet «én statisk binær» og fått en tung bygg-kjede, og modellen og alle
-    testene måtte portes. Brukbart senere hvis Python blir et problem.
-  - *Uoffisielt cgo-skall* (`irfansharif/solver`): bundet til OR-Tools 9.1, sist endret april 2023. Ikke aktuelt.
-  - *Rene Go-biblioteker for begrensninger* (f.eks. `centipede`, `go-constraint-solver`): løser tilfredsstillbarhet med tilbakesporing, ikke
-    optimering med jevn fordeling. Ikke likeverdige.
-  - *MIP-løsere via cgo* (f.eks. HiGHS): krever også et native bibliotek, og er svakere enn CP-SAT på denne typen problem.
-  - Jeg fant ingen ren Go-løser som kan det CP-SAT gjør her.
+- **A Go binary with embedded SQLite** (`modernc.org/sqlite`, pure Go, no cgo), numbered migrations embedded and run in a
+  transaction at startup, and a vanilla JS frontend embedded. Meant to run on kate (Flux, image on GHCR); deployment is postponed.
+  A backend is needed for shared storage between all users, for the planner and for the history, even without a login.
+- **API: plain JSON over `net/http`, not Connect** (chosen 2026-11-07, differs from `scoreboard/`). There are well under ten kinds of endpoint, and
+  Connect would have needed `buf`, two code generators and generated code. Switching later is cheap because the interface is narrow.
+  Errors are `{"error": kind, "code": code, "params": {...}, "message": english text}` with the right status; the page writes its own text from the code and the parameters.
+- **The organisation is in the address**, in the page (`/o/<org>/p/<plan>`, `/o/<org>/setup`, `/o/<org>/p/<plan>/me/<id>`) and the API (`/api/orgs/{org}/...`). The server has no
+  "current organisation", so switching is just going to another address. The list of organisations can be read by anyone who reaches the address.
+- **Renaming changes the name only**; the address stays, so links keep working.
+- **Foreign keys** are off by default in SQLite on every connection and are switched on in the DSN; a test checks that they are enforced.
+- **The solver is a Python program with `ortools`** that Go starts as a subprocess: JSON in on stdin, JSON out on stdout, with a time
+  limit. The same container image. The contract is small and can be tested without the rest of the app. **Python is kept** (the user's answer
+  2026-11-08: "if Python is better suited it can be kept"). The reason is that it is the same CP-SAT solver, the `ortools` pip package ships prebuilt
+  with the native libraries, and the model has its own tests and mutations for every rule.
+- **Go alternatives, investigated 2026-11-08:**
+  - *The official Go API for CP-SAT* (`github.com/google/or-tools/ortools/sat/go/cpmodel`): exists, but is a cgo shell around OR-Tools' C API. It has no version
+    tags (a pseudo-version from October 2026), no known users, and is built with Bazel against the native library, not as an ordinary Go dependency. The app would
+    lose "one static binary" and get a heavy build chain, and the model and all the tests would have to be ported. Usable later if Python becomes a problem.
+  - *Unofficial cgo shell* (`irfansharif/solver`): bound to OR-Tools 9.1, last changed April 2023. Not an option.
+  - *Pure Go constraint libraries* (for example `centipede`, `go-constraint-solver`): solve satisfiability by backtracking, not optimisation with even distribution. Not equivalent.
+  - *MIP solvers through cgo* (for example HiGHS): also need a native library, and are weaker than CP-SAT on this kind of problem.
+  - I found no pure Go solver that can do what CP-SAT does here.
 
-### Kjøring av planleggeren (bygget, fase 4 omgang 1)
-- `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit, seed}`, begge valgfrie) svarer 202 med id med en gang; kjøringen går i bakgrunnen og siden
-  spør `GET .../runs/{id|latest}` hvert sekund. Bare **én kjøring om gangen** i hele tjeneren (409 `busy`), tidsgrense 5–120 s (standard 20).
-  Uten planlegger konfigurert (`--solver` / `$DUTYPLAN_SOLVER`) svarer API-et 503 og `/api/health` har `"planner": false`; resten av appen virker.
-- Go bygger inndata fra databasen (`internal/planner/input.go`): bare aktive personer, id-ene `t<id>/e<id>/d<id>/p<id>`, «kan foreslås»,
-  oppgavevalg, tilgjengelighet per hendelse og kombinasjoner. Hashen av inndata (uten frø og tid) lagres, så en gammel plan kan merkes **utdatert**
-  når svar eller oppsett er endret siden.
-- Planleggeren startes med `--check`: den uavhengige sjekkeren går over svaret og `violations` lagres og vises. Svar som ikke er gyldig JSON med status
-  OPTIMAL/FEASIBLE, tidsavbrudd og krasj blir en **feilet kjøring med årsak**, aldri en halv plan. Kjøringer som sto som «running» ved oppstart merkes feilet.
-- Visningen (`internal/planner/view.go`) setter navn og oppgaver fra øyeblikksbildet og gir hver tom plass en forklaring på norsk
-  (`explain.go`: passer ikke, ikke valgt oppgaven, kan ikke foreslås, opptatt med noe annet). «Prøv igjen» teller frøet opp.
+### Running the planner (built, phase 4 round 1)
+- `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit, seed}`, both optional) answers 202 with an id at once; the run goes on in the background and the page
+  asks `GET .../runs/{id|latest}` every second. Only **one run at a time** in the whole server (409 `busy`), time limit 5–120 s (default 20).
+  With no planner configured (`--solver` / `$DUTYPLAN_SOLVER`) the API answers 503 and `/api/health` has `"planner": false`; the rest of the app works.
+- Go builds the input from the database (`internal/planner/input.go`): active people only, the ids `t<id>/e<id>/d<id>/p<id>`, "can be proposed",
+  task choices, availability per event and combinations. The hash of the input (without seed and time) is stored, so an old plan can be marked **out of date**
+  when answers or setup have changed since.
+- The planner is started with `--check`: the independent checker goes over the answer and `violations` are stored and shown. An answer that is not valid JSON with status
+  OPTIMAL/FEASIBLE, a timeout and a crash become a **failed run with a reason**, never half a plan. Runs that were "running" at startup are marked failed.
+- The view (`internal/planner/view.go`) puts names and tasks from the snapshot and gives every empty place an explanation in the page's language
+  (`explain.go`: does not suit, has not chosen the task, cannot be proposed, busy with something else). "Try again" counts the seed up.
+- **Earlier runs and the pinned plan:** `GET .../runs` lists the newest runs and the pinned one; `PUT|DELETE .../runs/{id}/pin` pins or unpins a finished run (only one per plan; pinned runs
+  are never pruned). The page shows any run and pins the one on show. This is the light form of "publishing": a person does not have to approve each proposal, but the admin can say which run people see.
 
-### Vekting per plan (bygget, etter fase 4 omgang 2)
-- Planleggerens vekter er innstillinger på planen (`GET|PUT /plans/{plan}/weights`, seksjonen «Vekting» på planen). De som kan endres, står i `store.WeightSpecs`
-  med standard og grenser (fordeling samlet og per oppgave, poeng for «godt» og «dårlig» på oppgave og hendelse, poeng for kombinasjoner og hva et par uten innstilling regnes som).
-  Ikke med: pris for tom plass (må komme etter alt annet), stabilitet og historikk (appen bruker dem ikke) og nøytral (null).
-- Bare det som avviker fra standard lagres (`plan.weights`, JSON), så en endret standard når planer som aldri valgte noe. Verdier utenfor grensene og ukjente nøkler avvises;
-  fortegn følger meningen (en «dårlig» kan ikke gi pluss). Settes en plan helt tilbake, er inndataene og hashen som før vektingen fantes.
-- Vektene går til planleggeren som `params` (nøkler med punktum, som `w_task.godt`, nøstes) og er med i hashen: en annen vekting gir en annen plan, så en gammel kjøring merkes utdatert.
-  Tid, frø og tråder er det ikke. Standardene i Go er kopier av planleggerens egne, og en test mot den ekte planleggeren (`--defaults`) holder dem like.
-- Per plan, ikke per organisasjon: planen er enheten det optimaliseres innenfor. Skal nye planer arve fra forrige eller fra en organisasjonsstandard, legges det til da.
+### Weighting per plan (built, after phase 4 round 2)
+- The planner's weights are settings on the plan (`GET|PUT /plans/{plan}/weights`, the "Weighting" section of the plan). The ones that can be changed are in `store.WeightSpecs`
+  with default and limits (distribution overall and per task, points for "good" and "poor" on task and event, points for combinations and what a pair with no setting counts as).
+  Not included: the price of an empty place (must come after everything else), stability and history (the app does not use them) and neutral (zero).
+- Only what differs from the default is stored (`plan.weights`, JSON), so a changed default reaches plans that never chose anything. Values outside the limits and unknown keys are refused;
+  the sign follows the meaning (a "poor" cannot give plus). A plan set fully back has the same input and hash as before weighting existed.
+- The weights go to the planner as `params` (keys with a dot, such as `w_task.good`, are nested) and are part of the hash: a different weighting gives a different plan, so an old run is marked out of date.
+  Time, seed and threads are not. The defaults in Go are copies of the planner's own, and a test against the real planner (`--defaults`) keeps them equal.
+- Per plan, not per organisation: the plan is the unit that is optimised within. If new plans should inherit from the previous one or from an organisation default, that is added then.
 
-### Rutenett og «mine oppdrag» (bygget, fase 5)
-- `GET /plans/{plan}/people/{id}/assignments`: personens oppdrag i planens **nyeste ferdige kjøring** (en kjøring som pågår eller feilet er ikke en plan; da gjelder den før).
-  Både egne plasser og plasser via en gruppe («Lovsang (med Kirkekoret)»), i hendelsesrekkefølge, med «låst» og «dårlig» (for gruppeplasser: bare hvis det er personens egen «dårlig»).
-  Tallene stemmer med fordelingen (testet mot den ekte planleggeren). Planen merkes når den er laget før de siste endringene. En person i en annen organisasjon gir 404.
-- Rutenettet bruker samme visning som listen (`/runs/{id}`); forklaringen for en tom plass ligger bak «Hvorfor?».
+### Grid and "My assignments" (built, phase 5)
+- `GET /plans/{plan}/people/{id}/assignments`: the person's assignments in the plan's **pinned run, or else its newest finished run** (a run in progress or failed is not a plan; the one before it applies).
+  Both their own places and places through a group ("Singing (with the Choir)"), in event order, with "locked" and "poor" (for group places: only if it is the person's own "poor").
+  The numbers agree with the distribution (tested against the real planner). The plan is marked when it was made before the latest changes. A person in another organisation gives 404.
+- The grid uses the same view as the list (`/runs/{id}`); the explanation for an empty place is behind "Why?".
 
-### Grupper, manuelle ruter og utvalg (bygget, fase 4 omgang 2)
-- **Grupper** (`/orgs/{org}/groups`, seksjonen «Grupper» under Oppsett): navn, medlemmer, «kan foreslås» og oppgavene planleggeren kan foreslå gruppen til
-  (plasser og nivå; bare oppgaver planleggeren fordeler). Slettes ikke mens en rute eller et utvalg nevner den (409).
-- **Manuelle ruter** (`/plans/{plan}/cells`) og **utvalg** (`/plans/{plan}/pools`): settes for flere hendelser om gangen, alt eller ingenting, bare hendelser i planen.
-  Ruter for personer må være aktive. En rute kan stå på en oppgave planleggeren ikke fordeler (f.eks. «Lovsang» for koret): kolonnen vises bare der det finnes ruter, og
-  oppgavens plasser i dagtypen gir ingen tomme ruter. «Lås» på et forslag i planen lager en manuell rute for personen.
-- **Aktive bare:** inaktive personer og grupper uten aktive medlemmer sendes aldri til planleggeren (den ville talt plassen uten å vite hvem). Det som nevner dem,
-  utelates, og kjøringen sier fra («Ruten for Aslaug på Lyd … er ikke med fordi personen ikke er aktiv»). Et utvalg som blir tomt, beholdes (ingen kan velges) med advarsel.
-- Planleggerens advarsler leses med navn; en rute for en person som «kan ikke foreslås» gir ingen advarsel (det er slik innstillingen er ment å brukes).
-- **Publisering er ikke bygget.** Brukerens svar 2026-11-09 («Ja … optimaliser kun innenfor en plan») ble lest som at siste kjøring er planen. Skal et forslag
-  kunne godtas eksplisitt (f.eks. for «mine oppdrag» i fase 5), legges det til da.
+### Groups, manual cells and selections (built, phase 4 round 2)
+- **Groups** (`/orgs/{org}/groups`, the "Groups" section under Setup): name, members, "can be proposed" and the tasks the planner may propose the group for
+  (places and level; only tasks the planner distributes). Not deleted while a cell or selection names it (409).
+- **Manual cells** (`/plans/{plan}/cells`) and **selections** (`/plans/{plan}/pools`): set for several events at a time, all or nothing, only events in the plan.
+  Cells for people must be active. A cell can be on a task the planner does not distribute (for example "Singing" for the choir): the column is shown only where there are cells, and
+  the task's places in the day type give no empty cells. "Lock" on a proposal in the plan makes a manual cell for the person.
+- **Active only:** inactive people and groups without active members are never sent to the planner (it would count the place without knowing who). What names them is left out,
+  and the run says so ("The cell for Aslaug on Sound … is left out because the person is not active"). A selection that becomes empty is kept (nobody can be picked) with a warning.
+- The planner's warnings are read with names; a cell for a person who "cannot be proposed" gives no warning (that is how the setting is meant to be used).
 
-### Tilgang uten innlogging
-Første versjon har ingen innlogging, ingen personlige lenker og ingen roller. Konsekvensene:
-- **Alle med adressen kan se og endre alt**, også andres tilgjengelighet og planen. Preferansene er bare
-  nivåer per hendelse og oppgave, uten fritekst, så det er lite å lekke, men de er ikke private.
-- Det som gjør det forsvarlig: appen legges på en adresse som ikke er lenket noe sted og bes holdes utenfor
-  søkemotorer (`noindex`), **`change_log`** viser hvem (oppgitt navn) som endret hva og når,
-  og SQLite tas sikkerhetskopi av.
-- Alle endringer sendes med hvem som handler, i `X-Actor` (prosentkodet UTF-8). Skrivinger må være `application/json`, og
-  den egendefinerte headeren gjør at nettlesere nekter skriving fra andre nettsteder (ingen CORS). Mangler navnet, svarer API-et 400.
-  Alle skrivinger går gjennom én hjelper som logger i samme transaksjon.
-- Legger vi til lenker eller innlogging senere, er det et tillegg og krever ingen ny datamodell.
+### Renaming and deleting (built)
+- Organisations and plans can be renamed (`PATCH`), people and tasks too (they already could be); the address (slug) never changes.
+- **A plan is deleted** (`DELETE`) with its events, answers, manual cells, selections and runs (a pinned one too). Refused while a run is in progress (409 `plan_busy`). The change log
+  is kept: the old lines lose the link to the plan and get its name in front of the text, and the deletion is a line without a plan.
+- **An organisation is deleted** (`DELETE ...?confirm=<slug>`) only when it has no plans (409 `org_has_plans`), with its people, tasks, day types, groups, combinations and change log. Its log goes
+  with it, so this one change does not go through `store.write`; the API writes it to the server log instead.
+- A test lists the tables with `org_id` and `plan_id`, so a new table cannot be forgotten by the deletions; another checks that nothing is left after a deletion.
 
-## Faser
+### Access without a login
+The first version has no login, no personal links and no roles. The consequences:
+- **Anyone with the address can see and change everything**, other people's availability and the plan too. The preferences are only
+  levels per event and task, with no free text, so there is little to leak, but they are not private.
+- What makes it defensible: the app goes on an address that is not linked anywhere and is asked to stay out of
+  search engines (`noindex`), **`change_log`** shows who (declared name) changed what and when,
+  and SQLite is backed up. Put it on a trusted network or behind a proxy that authenticates (see the README).
+- All changes carry who is acting, in `X-Actor` (percent-encoded UTF-8). Writes must be `application/json`, and
+  the custom header makes browsers refuse writes from other sites (no CORS). If the name is missing, the API answers 400.
+  All writes go through one helper that logs in the same transaction (the one exception is deleting an organisation, above).
+- Adding links or a login later is an addition and needs no new data model.
 
-0. **Spike (gjort 2026-11-03, oppdatert 11-04)**: `solver/`, se resultatene under. Ingen app ennå.
-1. **Backend-skjelett (gjort 2026-11-07)**: Go, SQLite, migreringer, organisasjoner og planer, personer, navnevelger, endringslogg, nb-frontend.
-2. **Oppsett (gjort 2026-11-08)**: oppgaver, dagtyper med plasser, kombinasjoner, hendelser (enkeltvis og for alle valgte ukedager i et tidsrom; selvstendige, flere samme dag er lov).
-3. **Personsiden (gjort 2026-11-08)**: «Min side» per person og plan, mobil først: velg oppgaver og hvor gjerne, og svar *passer ikke / dårlig / godt* per hendelse med ett trykk (trykk igjen fjerner svaret; «Sett alle»). Svarene lagres med en gang. *Ikke bygget:* «egen liste for denne oppgaven». Smale skjermer er førstevalget; en test feiler om en side blir bredere enn en 390 px skjerm.
-4. **Planlegging**: kjør, forhåndsvis, lås, utvalg, grupper, forklaringer. **Omgang 1 gjort (2026-11-08):** «Planlegg» / «Prøv igjen» på planen, kjøring i bakgrunnen, rutenett per hendelse med forklaringer, kompromisser og fordeling, kontroll og utdatert-merking (se «Kjøring av planleggeren»). **Omgang 2 gjort (2026-11-09):** grupper, manuelle ruter, utvalg og «Lås» (se «Grupper, manuelle ruter og utvalg»). Optimalisering skjer bare innenfor planen; ingen publisering og ingen historikk fra andre planer.
-5. **Plan (gjort 2026-11-09)**: **rutenett** (hendelser bortover, oppgaver nedover, fast første kolonne, sideveis rulling i egen boks; standard på brede skjermer, med «Liste / Rutenett»-valg som huskes) og **«mine oppdrag»** øverst på Min side. *Ingen kalenderfeed* (droppet av brukeren 2026-11-09: den ville vist utkast uten en godkjent plan, og hendelser har ikke klokkeslett).
-6. **Utrulling på kate**: image, Flux, sikkerhetskopi av SQLite. **Utsatt (brukerens valg 2026-11-09)**; ikke påbegynt. Husk når den tas opp: Python og `ortools` må med i imaget, `DUTYPLAN_SOLVER` må settes, og databasen trenger sikkerhetskopi.
+## Phases
 
-**Pilot**: først to-tre oppgaver med manuelle ruter, grupper og utvalg, så resten av oppgavene.
+0. **Spike (done 2026-11-03, updated 11-04)**: `solver/`, see the results below. No app yet.
+1. **Backend skeleton (done 2026-11-07)**: Go, SQLite, migrations, organisations and plans, people, name picker, change log, frontend.
+2. **Setup (done 2026-11-08)**: tasks, day types with places, combinations, events (singly and for all chosen weekdays in a period; self-contained, several on the same day allowed).
+3. **The person page (done 2026-11-08)**: "My page" per person and plan, mobile first: choose tasks and how willingly, and answer *does not suit / poor / good* per event with one tap (tapping again removes the answer; "Set all"). Answers are saved at once. *Not built:* "its own list for this task". Narrow screens come first; a test fails if a page becomes wider than a 390 px screen.
+4. **Planning**: run, preview, lock, selections, groups, explanations. **Round 1 done (2026-11-08):** "Plan" / "Try again" on the plan, background run, grid per event with explanations, compromises and distribution, check and out-of-date marking (see *Running the planner*). **Round 2 done (2026-11-09):** groups, manual cells, selections and "Lock" (see *Groups, manual cells and selections*). Optimisation happens only within the plan; no history from other plans.
+5. **Grid (done 2026-11-09)**: the **grid** (events across, tasks down, fixed first column, sideways scrolling in its own box; the default on wide screens, with a "List / Grid" choice that is remembered) and **"My assignments"** at the top of My page. *No calendar feed* (dropped by the user 2026-11-09: it would show drafts without an approved plan, and events have no times of day).
+5b. **Bilingual page, run history and pin, rename and delete, README (done 2026-11-09)**: English and Norwegian page and server texts, English codes on the wire, earlier runs and a pinned current plan, rename/delete of organisations and plans, rename of people and tasks.
+6. **Deployment on kate**: image, Flux, SQLite backup. **Postponed (the user's choice 2026-11-09)**; not started. Remember when it is taken up: Python and `ortools` must be in the image, `DUTYPLAN_SOLVER` must be set, and the database needs a backup.
 
-## Resultater fra spiken (fase 0)
+**Pilot**: first two or three tasks with manual cells, groups and selections, then the rest of the tasks.
 
-Solveren alene, `solver/`: 78 tester (47 regeltester, testdataene fra høsten 2026, 30 tilfeldige instanser), alle grønne.
+## Results from the spike (phase 0)
 
-- **Reglene holder.** Hver regel har en test som feiler hvis regelen fjernes (prøvd ved å bryte modellen én regel av
-  gangen). En uavhengig sjekker kontrollerer harde krav på alle planer. Utvalg, grupper i manuelle ruter (med kombinasjonsinnstillingen), foreslåtte team og par, den låste
-  personen og tekstrutene virker på testdataene (18 personer, 17 hendelser, 7 oppgaver, 4 team/par, ca. 120 tildelinger).
-- **Størrelse og tid.** Etter at hvile og dagstak ble tatt ut, kommer en gyldig og brukbar plan etter ca. 2 sekunder, og
-  kvaliteten bedres til ca. 20 s. Solveren **beviser ikke** at planen er best mulig (øvre grense tettner ikke), så resultatet
-  er et *forslag* innenfor tidsgrensen. Ulike frø gir litt ulike planer; «prøv en gang til» er derfor en nyttig knapp.
-  Anbefalt tidsgrense i appen: 30 s. Gjentas med `mise run measure:time`.
-- **Fordelingen måtte rettes to ganger.**
-  1. Heltall skalert med total kapasitet og `abs` ga svak relaksasjon og dårlig konvergens. Byttet til bånd.
-  2. **Avgjort 2026-11-09: total belastning er hovedleddet.** Spiken hadde gjort fordelingen *per oppgave* til hovedledd, fordi «samlet først» ga skjev fordeling
-     innen én oppgave (i en kjøring tok én person 7 forbønner mens en annen fikk 0). Brukeren valgte likevel total: «en som har bare bilde bør ikke være halvparten
-     av en som har lyd og bilde». Med lik andel av hver oppgave ender en som tar to oppgaver på dobbelt så mange oppdrag som en som tar én (6, 12 og 6 i
-     stedet for 8, 8 og 8; testet). Målt med `mise run measure:fair` (8 s, tre frø, testdataene fra høsten 2026):
+The solver alone, `solver/`: tests for every rule, the autumn 2026 test data, and random instances, all green.
 
-     | | verste avvik fra egen andel samlet | verste avvik per oppgave | største spredning per oppgave |
+- **The rules hold.** Every rule has a test that fails if the rule is removed (tried by breaking the model one rule at a
+  time). An independent checker verifies the hard requirements on all plans. Selections, groups in manual cells (with the combination setting), proposed teams and couples, the locked
+  person and the text cells work on the test data (18 people, 17 events, 7 tasks, 4 teams/couples, about 120 assignments).
+- **Size and time.** After rest and the daily cap were removed, a valid and usable plan comes after about 2 seconds, and the
+  quality improves up to about 20 s. The solver **does not prove** the plan is the best possible (the upper bound does not tighten), so the result
+  is a *proposal* within the time limit. Different seeds give slightly different plans; "try once more" is therefore a useful button.
+  Recommended time limit in the app: 30 s. Repeat with `mise run measure:time`.
+- **The distribution had to be fixed twice.**
+  1. Integers scaled by total capacity and `abs` gave a weak relaxation and poor convergence. Changed to a band.
+  2. **Decided 2026-11-09: total load is the main term.** The spike had made the distribution *per task* the main term, because "overall first" gave a skewed distribution
+     within one task (in one run one person took 7 intercessions while another got 0). The user chose total anyway: "someone who only has video should not be half
+     of someone who has sound and video". With an equal share of each task, someone who takes two tasks ends up with twice as many assignments as someone who takes one (6, 12 and 6 instead of
+     8, 8 and 8; tested). Measured with `mise run measure:fair` (8 s, three seeds, the autumn 2026 test data):
+
+     | | worst deviation from own share, overall | worst deviation per task | largest spread per task |
      |---|---|---|---|
-     | per oppgave først (til 2026-11-09) | 4,3–4,5 oppdrag | 1,0 | 4 |
-     | **total først (nå)** | **0,9** | 6,6 | 10 |
-     | total først + svak per oppgave (`w_task_fair` 3) | 0,9 | 4,6–4,8 | 8 |
+     | per task first (until 2026-11-09) | 4.3–4.5 assignments | 1.0 | 4 |
+     | **total first (now)** | **0.9** | 6.6 | 10 |
+     | total first + weak per task (`w_task_fair` 3) | 0.9 | 4.6–4.8 | 8 |
 
-     **Prisen er at samme oppgave kan bli ujevnt fordelt mellom de som kan den**, siden det er totalen som holdes jevn. Vil du ha litt mer jevnhet per oppgave uten å
-     tape på totalen, er `w_task_fair` 3 (med `w_task_range` 0) et alternativ: på testdataene holdt totalen like jevn.
-- **Historikk er per oppgave** (`{person: {oppgave: antall}}`), og virker bare når fordeling per oppgave er på. Appen sender ikke historikk.
-- **Vekter er ikke justert mot ekte ønsker.** De står i `DEFAULT_PARAMS` og er bare rimelige startverdier.
-- **Oppgavepar uten innstilling** regnes som *upraktisk* (`default_combination`). I én kjøring delte 9–13 personer to
-  oppgaver samme dag, de fleste par uten innstilling (altså upraktiske) og noen ønskede. Admin må derfor sette opp
-  kombinasjonene med omhu.
+     **The price is that the same task can be shared unevenly among those who can do it**, since it is the total that is kept even. For a little more evenness per task without
+     losing on the total, `w_task_fair` 3 (with `w_task_range` 0) is an option: on the test data the total stayed just as even.
+- **History is per task** (`{person: {task: count}}`), and only works when distribution per task is on. The app does not send history.
+- **The weights are not tuned against real wishes.** They are in `DEFAULT_PARAMS` and are only reasonable starting values.
+- **Task pairs with no setting** count as *impractical* (`default_combination`). In one run 9–13 people shared two
+  tasks on the same day, most pairs with no setting (so impractical) and some wanted. The admin should therefore set up the
+  combinations with care.
 
 ## Testing
 
-- Ett lite eksempel per regel (hvert krav har en test som feiler hvis det ikke holdes). `mise run mutations` bryter 95 regler i
-  planleggeren (Python) og appen (Go, særlig organisasjonsavgrensningen) én om gangen og krever at en test feiler; stille når alt er fanget.
-- Alt kjøres via mise (`mise.toml`: python og uv i eksakte versjoner, stille oppgaver); se `CLAUDE.md`.
-- **Uavhengig sjekker** som kontrollerer at en ferdig plan ikke bryter noe hardt krav. Tilfeldige instanser
-  kjøres gjennom solver + sjekker.
-- Fast testplan basert på en kirkes høst 2026 med oppdiktede navn. Ekte navn og telefon- og e-postlister hører ikke inn i repoet.
+- One small example per rule (every requirement has a test that fails if it is not met). `mise run mutations` breaks the rules in
+  the planner (Python) and the app (Go, especially the organisation scoping, pinning, renaming and deleting) one at a time and requires a test to fail; quiet when everything is caught.
+- Everything runs through mise (`mise.toml`: python and uv in exact versions, quiet tasks); see `CLAUDE.md`.
+- An **independent checker** verifies that a finished plan breaks no hard requirement. Random instances
+  are run through solver + checker.
+- Texts: the Go tests keep the two language catalogues in step (same keys, same placeholders), check every key the page uses, and require a text for every error code the server can send.
+  The browser check (`mise run app:ui`) runs the page in English and then in Norwegian, including the 390 px width check.
+- A fixed test plan based on a church's autumn 2026 with invented names. Real names and phone and e-mail lists do not belong in the repo.
 
-## Valg jeg tar som standard hvis du ikke sier noe annet
+## Choices I make by default unless told otherwise
 
-1. Navn: «Tjenesteplan» (arbeidstittel). Adresse bestemmes ved utrulling.
-2. Ingen innlogging i første versjon. Uoffentlig adresse, `noindex`, endringslogg.
-3. Solver som Python-underprosess i samme image som Go-backenden.
-4. Én plan per periode (f.eks. semester). Optimalisering skjer bare innenfor planen; ingen historikk fra tidligere planer.
-5. Ingen regnearkstøtte (hverken import eller eksport).
+1. Name: "Dutyplan" / "Tjenesteplan" (working title). The address is decided at deployment.
+2. No login in the first version. Unpublished address, `noindex`, change log.
+3. The solver as a Python subprocess in the same image as the Go backend.
+4. One plan per period (for example a semester). Optimisation happens only within the plan; no history from earlier plans.
+5. No spreadsheet support (neither import nor export).
 
-## Risiko
+## Risk
 
-- Vektene for poeng og jevn fordeling må finjusteres med ekte ønsker, ellers føles forslagene rare.
-- Folk må faktisk fylle ut. Derfor bare én liste per person og skjult det som er uvedkommende.
-- Uten innlogging kan en feilklikk eller en uvitende bruker endre andres svar. Endringsloggen og sikkerhetskopien er
-  det som fanger det.
-- Python i Go-imaget gjør bygget og imaget større. Besluttet: Python beholdes (se *Arkitektur*). Fase 4 må pakke Python og `ortools` inn i imaget.
+- The weights for points and even distribution must be tuned with real wishes, or the proposals will feel odd.
+- People have to actually fill in their answers. Hence only one list per person and what is irrelevant hidden.
+- Without a login a misclick or an unaware user can change other people's answers. The change log and the backup are
+  what catch it.
+- Python in the Go image makes the build and the image larger. Decided: Python is kept (see *Architecture*). Phase 6 must package Python and `ortools` into the image.

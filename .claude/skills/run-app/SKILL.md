@@ -1,20 +1,21 @@
 ---
 name: run-app
-description: Start og prøv Tjenesteplan-appen (Go-tjener med innebygd frontend) lokalt, eller se at den fungerer uten å lese kode. Bruk når noen vil se appen, kalle API-et, eller sjekke organisasjoner og planer.
+description: Start and try the Dutyplan app (a Go server with an embedded frontend) locally, or see that it works without reading code. Use when someone wants to see the app, call the API, or check organisations and plans.
 ---
 
-Alt via mise. Ingen innlogging; organisasjonen ligger i adressen.
+Everything through mise. No login; the organisation is in the address.
 
-- **Se at alt virker uten å åpne noe:** `mise run app:smoke` (ca. 2 s; starter binæren på en midlertidig database, to organisasjoner,
-  isolasjon, aktørkrav, en ekte planlegging, omstart; stopper den igjen; én linje) og `mise run app:ui` (headless nettleser, ca. 10 s).
-- **Kjøre den selv:** `mise run app:run -- --addr 127.0.0.1:8080 --db /tmp/tp.db` i bakgrunnen (skriver `dutyplan: http://...`). Stopp den
-  på PID-en du startet, ikke med `pkill`. Standarddatabasen `dutyplan.db` ligger i arbeidsmappen; bruk `--db /tmp/...` til prøving.
-- **Testdata:** `mise run app:seed -- <adresse>` legger organisasjonen «Test» (`/o/test`) med oppgavene Lovsang, Lyd og Bilde inn i en kjørende app, med Lyd+Bilde upraktisk og begge «kan ikke» med Lovsang, dagtypen Gudstjeneste, åtte personer som har valgt oppgaver, og planen Høst 2026 med 21 søndager; etterpå gir «Planlegg» en plan. Trygt å kjøre flere ganger.
-  Standarddatabasen `dutyplan.db` (i repoets rot, ikke i git) har dem allerede.
-- **API (JSON):** `GET /api/orgs`, `POST /api/orgs {"name"}`, `GET|POST /api/orgs/{org}/plans`, `/people`, `PATCH /people/{id}`,
-  `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, og per plan `/plans/{plan}/events` (+ `/bulk`, `PATCH|DELETE /{id}`),
-  Grupper: `GET|POST /groups`, `PATCH|DELETE /groups/{id}`, `PUT /groups/{id}/members` (`{people:[id]}`) og `/tasks` (`{tasks:[{task_id,fills,level}]}`). «Mine oppdrag»: `GET /plans/{plan}/people/{id}/assignments`. Vekting per plan: `GET|PUT /plans/{plan}/weights` (`{values:{w_fair: 12, "w_task.godt": 3, default_combination: "praktisk"}}`; erstatter alt, `{}` er standard; svaret lister alle innstillinger med standard og grenser). Per plan: manuelle ruter `GET|POST /plans/{plan}/cells` (`{events:[id], task, person|group|label, fills}`), `DELETE /cells/{id}`, utvalg `GET|PUT /plans/{plan}/pools` (`{events:[id], task, people:[id], groups:[id]}`; tomt fjerner det).
-  `GET /api/orgs/{org}/log?plan=&limit=`. Personens svar: `GET /plans/{plan}/people/{id}/me`, `PUT|DELETE /people/{id}/tasks/{task}` (`{level}`), `PUT /plans/{plan}/people/{id}/availability` (`{levels: {eventId: ikke|darlig|godt|""}}`). Skrivinger trenger `Content-Type: application/json` og `X-Actor: <prosentkodet navn>`.
-  Eksempel: `curl -s -H 'Content-Type: application/json' -H 'X-Actor: Ola' -d '{"name":"Menigheten"}' $URL/api/orgs`.
-- **Planlegge:** `mise run app:run` har planleggeren via `$DUTYPLAN_SOLVER`; uten den svarer `POST /api/orgs/{org}/plans/{plan}/runs` 503. Start: `POST` (`{"time_limit":10}`, valgfritt) gir `{id}` med en gang; hent `GET .../runs/{id|latest}` til `run.status` er `done` eller `failed` (liste: `GET .../runs`). `run.violations` skal være tom; `run.stale` betyr at svar eller oppsett er endret siden.
-- Bruk bare oppdiktede navn i data du legger inn og committer.
+- **See that everything works without opening anything:** `mise run app:smoke` (about 2 s; starts the binary on a temporary database, two organisations,
+  isolation, the actor requirement, a real planning run, a restart; stops it again; one line) and `mise run app:ui` (headless browser, about 20 s, English and then Norwegian).
+- **Run it yourself:** `mise run app:run -- --addr 127.0.0.1:8080 --db /tmp/dp.db` in the background (prints `dutyplan: http://...`). Stop it
+  on the PID you started, not with `pkill`. The default database `dutyplan.db` is in the working directory; use `--db /tmp/...` for trying things.
+- **Test data:** `mise run app:seed -- <address>` puts the organisation «Test» (`/o/test`) with the tasks Singing, Sound and Video into a running app, with Sound+Video impractical and both «cannot» with Singing, the day type Service, eight people who have chosen tasks, and the plan Autumn 2026 with 21 Sundays; afterwards «Plan» gives a plan. Safe to run several times.
+  The default database `dutyplan.db` (in the repo root, not in git) already has them.
+- **API (JSON):** `GET /api/orgs`, `POST /api/orgs {"name"}`, `PATCH|DELETE /api/orgs/{org}` (rename; delete needs `?confirm=<slug>` and no plans), `GET|POST /api/orgs/{org}/plans`, `PATCH|DELETE /plans/{plan}`, `/people`, `PATCH /people/{id}`,
+  `/tasks`, `/day-types` (+ `PUT /{id}/tasks`), `/combinations`, and per plan `/plans/{plan}/events` (+ `/bulk`, `PATCH|DELETE /{id}`).
+  Groups: `GET|POST /groups`, `PATCH|DELETE /groups/{id}`, `PUT /groups/{id}/members` (`{people:[id]}`) and `/tasks` (`{tasks:[{task_id,fills,level}]}`). «My assignments»: `GET /plans/{plan}/people/{id}/assignments`. Weighting per plan: `GET|PUT /plans/{plan}/weights` (`{values:{w_fair: 12, "w_task.good": 3, default_combination: "practical"}}`; replaces everything, `{}` is the default; the answer lists all settings with default and limits). Per plan: manual cells `GET|POST /plans/{plan}/cells` (`{events:[id], task, person|group|label, fills}`), `DELETE /cells/{id}`, selections `GET|PUT /plans/{plan}/pools` (`{events:[id], task, people:[id], groups:[id]}`; empty removes it).
+  `GET /api/orgs/{org}/log?plan=&limit=`. A person's answers: `GET /plans/{plan}/people/{id}/me`, `PUT|DELETE /people/{id}/tasks/{task}` (`{level}`), `PUT /plans/{plan}/people/{id}/availability` (`{levels: {eventId: never|poor|good|""}}`). Writes need `Content-Type: application/json` and `X-Actor: <percent-encoded name>`.
+  Texts that explain a run are written in `?lang=en|nb` (English by default). Errors are `{error, code, params, message}`.
+  Example: `curl -s -H 'Content-Type: application/json' -H 'X-Actor: Ola' -d '{"name":"Sports Club"}' $URL/api/orgs`.
+- **Planning:** `mise run app:run` has the planner through `$DUTYPLAN_SOLVER`; without it `POST /api/orgs/{org}/plans/{plan}/runs` answers 503. Start: `POST` (`{"time_limit":10}`, optional) gives `{id}` at once; fetch `GET .../runs/{id|latest}` until `run.status` is `done` or `failed` (list: `GET .../runs`). `run.violations` should be empty; `run.stale` means answers or setup have changed since. Pin a finished run as the current plan with `PUT .../runs/{id}/pin` (`DELETE` unpins); «My assignments» follows the pinned run, else the newest finished one.
+- Use only invented names in the data you enter and commit.

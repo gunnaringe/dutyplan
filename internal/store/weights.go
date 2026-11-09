@@ -37,7 +37,7 @@ var WeightSpecs = []WeightSpec{
 	num("w_task.poor", -4, -100, 0), // ... or «poor»
 	num("w_date.good", 3, 0, 100),   // the same for an event
 	num("w_date.poor", -6, -100, 0),
-	num("w_combo.preferred", 6, 0, 100), // two tasks the same day that «bør kombineres»
+	num("w_combo.preferred", 6, 0, 100), // two tasks the same day that «should be combined»
 	num("w_combo.practical", 2, 0, 100),
 	num("w_combo.impractical", -5, -100, 0),
 	{Key: "default_combination", Kind: "choice", Default: "impractical", Options: []string{"cannot", "impractical", "practical", "preferred"}},

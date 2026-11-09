@@ -1,18 +1,18 @@
-# dutyplan-solver (spike)
+# dutyplan-solver
 
-CP-SAT-planleggeren alene: JSON inn, JSON ut. Ingen app, ingen database. Se `../PLAN.md` for hvorfor,
-og toppen av `dutyplan_solver/model.py` for inndataformatet. Alt kjøres via mise fra repoets rot:
+The CP-SAT planner on its own: JSON in, JSON out. No app, no database. See `../PLAN.md` for why, and the top of
+`dutyplan_solver/model.py` for the input format. Everything runs through mise from the repo root:
 
-    mise install && mise run setup      # python + uv + pakkene (første gang)
-    mise tasks                          # alle oppgaver
-    mise run test                       # alle tester, stille
-    mise run plan                       # planlegg testdataene, kort oppsummering
-    mise run solve < inn.json > ut.json
-    mise run check -- inn.json ut.json  # uavhengig sjekk av harde krav
-    mise run verify                     # tester + mutasjonssjekk
-    mise run add -- pakke               # ny Python-pakke (oppdaterer uv.lock); stier over er relative til repoets rot
+    mise install && mise run setup      # python + uv + the packages (first time)
+    mise tasks                          # all tasks
+    mise run test                       # all tests, quiet
+    mise run plan                       # plan the test data, short summary
+    mise run solve < in.json > out.json
+    mise run check -- in.json out.json  # independent check of the hard requirements
+    mise run verify                     # tests + mutation check
+    mise run add -- package             # a new Python package (updates uv.lock); paths above are relative to the repo root
 
-- `check.py` er en **uavhengig** sjekker av harde krav; den deler ikke regelkode med `model.py`.
-- `scripts/mutations.py` bryter hver regel i modellen og krever at en test feiler.
-- `fixtures/make_host2026.py` lager testdataene (oppdiktede navn; ikke legg ekte navn i repoet).
-- `params.solver` sender rå CP-SAT-parametre videre (f.eks. `{"linearization_level": 2}`).
+- `check.py` is an **independent** checker of the hard requirements; it shares no rule code with `model.py`.
+- `scripts/mutations.py` breaks every rule in the model and requires a test to fail.
+- `fixtures/make_autumn2026.py` makes the test data (invented names; do not put real names in the repo).
+- `params.solver` passes raw CP-SAT parameters on (for example `{"linearization_level": 2}`).
