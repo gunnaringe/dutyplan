@@ -1,4 +1,4 @@
-"""HØST 2026-formen (oppdiktede navn): hele reglene sammen på en realistisk størrelse."""
+"""Høstplanen (oppdiktede navn og datoer): hele reglene sammen på en realistisk størrelse."""
 
 import json
 from pathlib import Path
@@ -25,8 +25,10 @@ def test_host2026_gir_gyldig_plan_uten_tomme_plasser():
     for pool in data["pools"]:
         got = [a["person"] for a in res["assignments"] if a["date"] == pool["date"] and a["task"] == pool["task"]]
         assert got and set(got) <= set(pool["people"])
-    assert {"date": "2026-09-13", "task": "taler", "label": "Gjest utenfra", "fills": 1} in res["manual"]
-    assert any(a["person"] == "Ingrid" and a["date"] == "2026-12-24" and a["locked"] for a in res["assignments"])
+    guest = next(lk for lk in data["locked"] if lk.get("label") == "Gjest utenfra")
+    assert {**guest, "fills": 1} in res["manual"]
+    fixed = next(lk for lk in data["locked"] if lk.get("person") == "Ingrid")
+    assert any(a["person"] == "Ingrid" and a["date"] == fixed["date"] and a["task"] == fixed["task"] and a["locked"] for a in res["assignments"])
     # ingen får mange flere «dårlig» enn nødvendig i denne fixturen
     assert len(res["concessions"]) <= 25
 

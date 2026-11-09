@@ -1,4 +1,4 @@
-"""Kvalitet mot tidsgrense på HØST 2026-formen.  uv run python scripts/timing.py"""
+"""Kvalitet mot tidsgrense på testplanen for høsten (host2026.json).  uv run python scripts/timing.py"""
 
 import json
 from pathlib import Path

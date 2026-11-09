@@ -1,4 +1,4 @@
-"""Sammenlign vektsett for jevn fordeling på HØST 2026-formen.
+"""Sammenlign vektsett for jevn fordeling på testplanen for høsten (host2026.json).
 
     uv run python scripts/fairness_experiment.py [tidsgrense] [frø...]
 

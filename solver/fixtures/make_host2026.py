@@ -1,10 +1,12 @@
-"""Lager host2026.json: formen på HØST 2026-fanen, med oppdiktede navn og tilfeldige (men faste) ønsker.
+"""Lager host2026.json: en realistisk høstplan (17 hendelser, 7 oppgaver, 18 personer, 4 team og par) med oppdiktede navn,
+oppdiktede datoer og hendelsestyper, og tilfeldige (men faste) ønsker.
 
-Datoer og dagtyper følger arket. Antakelser: Alpha-gudstjenestene trenger Lyd, Bilde og Møteleder
-(arket har dem tomme), og Barnekirken, Lovsang og Nattverd er ikke med i spikeren.
+Datoene er søndagene fra 2. august, med hendelsestypene fordelt tilfeldig (eget frø), og én hendelse på en ukedag.
+Ingenting her er hentet fra en ekte plan. Lovsang er ikke med i spikeren (den settes for hånd).
     python fixtures/make_host2026.py > fixtures/host2026.json
 """
 
+import datetime
 import json
 import random
 import sys
@@ -15,19 +17,20 @@ PEOPLE = ["Alma", "Bjarne", "Cecilie", "Dagfinn", "Elin", "Frida", "Gro", "Henri
           "Joakim", "Kjersti", "Lasse", "Mona", "Njål", "Oda", "Pål", "Randi", "Sindre"]
 CHOIR = ["Alma", "Dagfinn", "Ingrid", "Kjersti", "Lasse", "Mona"]  # en vanlig gruppe
 
-DATES = [
-    ("2026-08-09", "gudstjeneste"), ("2026-08-23", "gudstjeneste"), ("2026-08-25", "medarbeiderkveld"),
-    ("2026-09-06", "gudstjeneste"), ("2026-09-13", "storsamling"), ("2026-09-20", "gudstjeneste"),
-    ("2026-10-04", "gudstjeneste"), ("2026-10-11", "alpha"), ("2026-10-18", "gudstjeneste"),
-    ("2026-10-25", "alpha"), ("2026-11-01", "gudstjeneste"), ("2026-11-08", "alpha"),
-    ("2026-11-15", "gudstjeneste"), ("2026-11-22", "alpha"), ("2026-11-29", "gudstjeneste"),
-    ("2026-12-13", "gudstjeneste"), ("2026-12-24", "juleaften"),
-]
+# Hendelsene: 17 søndager fra 2. august, typene fordelt tilfeldig. «medarbeiderkveld» er en ukedag (to dager senere).
+# Eget frø, så en annen fordeling ikke flytter ønskene lenger ned.
+_schedule = random.Random(7)
+_TYPES = ["gudstjeneste"] * 10 + ["kurskveld"] * 4 + ["fellessamling", "høytid", "medarbeiderkveld"]
+_schedule.shuffle(_TYPES)
+DATES = sorted(
+    ((datetime.date(2026, 8, 2) + datetime.timedelta(weeks=i, days=2 if ty == "medarbeiderkveld" else 0)).isoformat(), ty)
+    for i, ty in enumerate(_TYPES)
+)
 DAY_TYPE_TASKS = {
     "gudstjeneste": {"lyd": 1, "bilde": 1, "moteleder": 1, "taler": 1, "motevert": 1, "kafe": 3, "forbonn": 2},
-    "alpha": {"lyd": 1, "bilde": 1, "moteleder": 1},
-    "storsamling": {"lyd": 1, "bilde": 1, "moteleder": 1, "taler": 1},
-    "juleaften": {"lyd": 1, "bilde": 1, "moteleder": 1, "taler": 1},
+    "kurskveld": {"lyd": 1, "bilde": 1, "moteleder": 1},
+    "fellessamling": {"lyd": 1, "bilde": 1, "moteleder": 1, "taler": 1},
+    "høytid": {"lyd": 1, "bilde": 1, "moteleder": 1, "taler": 1},
     "medarbeiderkveld": {},
 }
 INVOLVED = {
@@ -59,7 +62,10 @@ for t, ps in INVOLVED.items():
     for p in ps:
         person_tasks[p][t] = pick(["darlig", "noytral", "godt"], [2, 5, 3])
 
-choir_dates = ["2026-09-20", "2026-11-15"]
+_worship = [d for d, ty in DATES if ty == "gudstjeneste"]
+choir_dates = [_worship[2], _worship[7]]  # koret synger to ganger
+guest_date = next(d for d, ty in DATES if ty == "fellessamling")  # en gjest holder talen
+leader_date = next(d for d, ty in DATES if ty == "høytid")  # en fast møteleder for hånd
 person_dates = {}
 dates_with_tasks = [d for d, ty in DATES if DAY_TYPE_TASKS[ty]]
 for p in PEOPLE:
@@ -104,8 +110,8 @@ data = {
     "pools": [{"date": d, "task": "lyd", "people": lyd_non_choir[:2]} for d in choir_dates],
     "locked": [
         *[{"date": d, "task": "lovsang", "group": "kirkekoret"} for d in choir_dates],
-        {"date": "2026-09-13", "task": "taler", "label": "Gjest utenfra"},
-        {"date": "2026-12-24", "task": "moteleder", "person": "Ingrid"},
+        {"date": guest_date, "task": "taler", "label": "Gjest utenfra"},
+        {"date": leader_date, "task": "moteleder", "person": "Ingrid"},
     ],
     "history": {p: {t: rng.randint(0, 3) for t in TASKS if p in INVOLVED[t]} for p in PEOPLE},
     "params": {"time_limit": 30, "workers": 4},
