@@ -94,12 +94,12 @@ const { spawn } = require('child_process');
     await page.fill('input[aria-label="Plasser for Lyd på Gudstjeneste"]', '1');
     await page.fill('input[aria-label="Plasser for Kafé på Gudstjeneste"]', '3');
     await page.locator('.card:has(input[aria-label="Navn på dagtype"]) button:has-text("Lagre oppgaver")').click();
-    await page.selectOption('select[aria-label="Bilde og Lyd"]', 'kan_ikke');
+    await page.selectOption('select[aria-label="Bilde og Lyd"]', 'cannot');
     await page.reload();
     await h1is('Oppsett');
     await page.waitForSelector('input[aria-label="Plasser for Kafé på Gudstjeneste"]');
     ok((await page.inputValue('input[aria-label="Plasser for Kafé på Gudstjeneste"]')) === '3', 'plasser ligger igjen etter omlasting');
-    ok((await page.inputValue('select[aria-label="Bilde og Lyd"]')) === 'kan_ikke', 'kombinasjonen ligger igjen');
+    ok((await page.inputValue('select[aria-label="Bilde og Lyd"]')) === 'cannot', 'kombinasjonen ligger igjen');
 
     await page.goto(base + '/o/menigheten/p/host-2026');
     await h1is('Høst 2026');
@@ -124,18 +124,18 @@ const { spawn } = require('child_process');
     await h1is('Kari Test');
     await page.click('button[aria-label="Legg til Lyd"]');
     await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"]');
-    await page.click('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"]');
-    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"][aria-pressed="true"]');
-    await page.click('.avail-row:first-child button[data-level="ikke"]');
-    await page.waitForSelector('.avail-row:first-child button[data-level="ikke"][aria-pressed="true"]');
+    await page.click('[aria-label="Hvor gjerne: Lyd"] button[data-level="good"]');
+    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="good"][aria-pressed="true"]');
+    await page.click('.avail-row:first-child button[data-level="never"]');
+    await page.waitForSelector('.avail-row:first-child button[data-level="never"][aria-pressed="true"]');
     ok((await page.innerText('main')).includes('1 passer ikke'), 'oppsummeringen teller svaret');
     await page.reload();
     await h1is('Kari Test');
-    await page.waitForSelector('.avail-row:first-child button[data-level="ikke"][aria-pressed="true"]');
-    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="godt"][aria-pressed="true"]');
-    await page.click('.row-inline button:has-text("Godt")');  // alle på godt; ett svar overskrives, bekreftelsen godtas
-    await page.waitForFunction(() => document.querySelectorAll('.avail-row button[data-level="godt"][aria-pressed="true"]').length === document.querySelectorAll('.avail-row').length);
-    await page.click('.avail-row:first-child button[data-level="godt"]');  // trykk på valgt svar igjen fjerner det
+    await page.waitForSelector('.avail-row:first-child button[data-level="never"][aria-pressed="true"]');
+    await page.waitForSelector('[aria-label="Hvor gjerne: Lyd"] button[data-level="good"][aria-pressed="true"]');
+    await page.click('.row-inline button:has-text("Godt")');  // alle på good; ett svar overskrives, bekreftelsen godtas
+    await page.waitForFunction(() => document.querySelectorAll('.avail-row button[data-level="good"][aria-pressed="true"]').length === document.querySelectorAll('.avail-row').length);
+    await page.click('.avail-row:first-child button[data-level="good"]');  // trykk på valgt svar igjen fjerner det
     await page.waitForSelector('.avail-row:first-child button[aria-pressed="true"]', { state: 'detached' });
 
     // --- fase 4: planlegg ---
@@ -209,8 +209,8 @@ const { spawn } = require('child_process');
     // planen blir utdatert når et svar endres
     await page.goto(base + kariUrl);
     await h1is('Kari Test');
-    await page.click('.avail-row:nth-child(2) button[data-level="darlig"]');
-    await page.waitForSelector('.avail-row:nth-child(2) button[data-level="darlig"][aria-pressed="true"]');
+    await page.click('.avail-row:nth-child(2) button[data-level="poor"]');
+    await page.waitForSelector('.avail-row:nth-child(2) button[data-level="poor"][aria-pressed="true"]');
     await page.goto(base + '/o/menigheten/p/host-2026');
     await page.waitForSelector('.plan-panel .warn');
     ok((await page.innerText('.plan-panel')).includes('endret siden denne planen ble laget'), 'utdatert plan merkes');

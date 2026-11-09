@@ -245,7 +245,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	}
 	for _, a := range out.Assignments {
 		id, _ := parseID(a.Person, "p")
-		weak := a.TaskLevel == "darlig" || a.DateLevel == "darlig"
+		weak := a.TaskLevel == "poor" || a.DateLevel == "poor"
 		c := cell(a.Date, a.Task)
 		c.people = append(c.people, CellPerson{ID: id, Name: personName(a.Person), Weak: weak, Locked: a.Locked})
 	}
@@ -290,9 +290,9 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	for _, c := range out.Concessions {
 		what := "hendelsen"
 		switch {
-		case c.TaskLevel == "darlig" && c.DateLevel == "darlig":
+		case c.TaskLevel == "poor" && c.DateLevel == "poor":
 			what = "hendelsen og oppgaven"
-		case c.TaskLevel == "darlig":
+		case c.TaskLevel == "poor":
 			what = "oppgaven"
 		}
 		who := personName(c.Person)

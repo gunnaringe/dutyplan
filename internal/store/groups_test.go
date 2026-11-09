@@ -92,16 +92,16 @@ func TestGroupLifecycle(t *testing.T) {
 		t.Errorf("the log names who joined: %+v", log)
 	}
 
-	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.lyd.ID, 2, "godt"}, {e.bilde.ID, 1, "noytral"}}); err != nil || len(g.Tasks) != 2 {
+	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.lyd.ID, 2, "good"}, {e.bilde.ID, 1, "neutral"}}); err != nil || len(g.Tasks) != 2 {
 		t.Fatalf("tasks: %+v %v", g, err)
 	}
 	for name, ts := range map[string][]GroupTask{
-		"fills 0":                                {{e.lyd.ID, 0, "godt"}},
-		"fills 51":                               {{e.lyd.ID, 51, "godt"}},
-		"level ikke":                             {{e.lyd.ID, 1, "ikke"}},
+		"fills 0":                                {{e.lyd.ID, 0, "good"}},
+		"fills 51":                               {{e.lyd.ID, 51, "good"}},
+		"level ikke":                             {{e.lyd.ID, 1, "never"}},
 		"level unknown":                          {{e.lyd.ID, 1, "kjempegodt"}},
-		"the same task twice":                    {{e.lyd.ID, 1, "godt"}, {e.lyd.ID, 2, "godt"}},
-		"a task the planner does not distribute": {{e.sang.ID, 1, "godt"}},
+		"the same task twice":                    {{e.lyd.ID, 1, "good"}, {e.lyd.ID, 2, "good"}},
+		"a task the planner does not distribute": {{e.sang.ID, 1, "good"}},
 	} {
 		if _, err := e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, ts); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)
@@ -152,7 +152,7 @@ func TestGroupsNeverCrossOrganisations(t *testing.T) {
 	if _, err := s.SetGroupMembers(ctx, a.org.Slug, "Ola", ga.ID, []int64{b.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another organisation's person as a member: %v", err)
 	}
-	if _, err := s.SetGroupTasks(ctx, a.org.Slug, "Ola", ga.ID, []GroupTask{{b.lyd.ID, 1, "godt"}}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetGroupTasks(ctx, a.org.Slug, "Ola", ga.ID, []GroupTask{{b.lyd.ID, 1, "good"}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another organisation's task: %v", err)
 	}
 	if la, _ := s.ListGroups(ctx, a.org.Slug); len(la) != 1 || la[0].Name != "Koret" || len(la[0].Members) != 0 {
@@ -170,7 +170,7 @@ func TestGroupsNeverCrossOrganisations(t *testing.T) {
 		args []any
 	}{
 		"member from another organisation":            {`INSERT INTO grp_member (org_id, group_id, person_id) VALUES (?, ?, ?)`, []any{orgA, ga.ID, b.people["Aslaug"].ID}},
-		"group task with another organisation's task": {`INSERT INTO grp_task (org_id, group_id, task_id, fills, level) VALUES (?, ?, ?, 1, 'godt')`, []any{orgA, ga.ID, b.lyd.ID}},
+		"group task with another organisation's task": {`INSERT INTO grp_task (org_id, group_id, task_id, fills, level) VALUES (?, ?, ?, 1, 'good')`, []any{orgA, ga.ID, b.lyd.ID}},
 		"member of another organisation's group":      {`INSERT INTO grp_member (org_id, group_id, person_id) VALUES (?, ?, ?)`, []any{orgA, gb.ID, a.people["Aslaug"].ID}},
 	} {
 		if _, err := s.DB().Exec(c.stmt, c.args...); !isForeignKey(err) {
@@ -185,7 +185,7 @@ func TestPlanningDataCarriesTheGroups(t *testing.T) {
 	plan, _ := s.CreatePlan(ctx, e.org.Slug, "Ola", "Høst 2026", "")
 	g, _ := s.CreateGroup(ctx, e.org.Slug, "Ola", "Koret")
 	s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{e.people["Aslaug"].ID})
-	s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.lyd.ID, 2, "godt"}})
+	s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.lyd.ID, 2, "good"}})
 	d, err := s.GetPlanningData(ctx, e.org.Slug, plan.Slug)
 	if err != nil || len(d.Groups) != 1 || fmt.Sprint(d.Groups[0].Members) != fmt.Sprint([]int64{e.people["Aslaug"].ID}) || d.Groups[0].Tasks[0].Fills != 2 {
 		t.Fatalf("%+v %v", d.Groups, err)

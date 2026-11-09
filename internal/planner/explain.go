@@ -22,26 +22,26 @@ func (n Namer) busy(s string) string {
 	return n.Task(s)
 }
 
-// groupWhy says in words why the planner could not propose a group for a place. Reasons come as «dato_ikke:p3» etc.
+// groupWhy says in words why the planner could not propose a group for a place. Reasons come as «event_never:p3» etc.
 func (n Namer) groupWhy(g, reason string) string {
 	kind, who, _ := strings.Cut(reason, ":")
 	name := n.Group(g)
 	switch kind {
-	case "ikke_foreslaas":
+	case "not_proposable":
 		if who != "" {
 			return fmt.Sprintf("%s kan ikke foreslås fordi %s ikke kan foreslås", name, n.Person(who))
 		}
 		return name + " kan ikke foreslås"
-	case "for_mange_plasser":
+	case "too_many_places":
 		return name + " trenger flere plasser enn det er igjen"
-	case "utenfor_utvalg":
+	case "outside_selection":
 		return name + " står utenfor utvalget"
-	case "oppgave_ikke":
+	case "task_never":
 		return fmt.Sprintf("%s: %s har sagt «ikke» til oppgaven", name, n.Person(who))
-	case "dato_ikke":
+	case "event_never":
 		return fmt.Sprintf("%s: %s passer ikke", name, n.Person(who))
-	case "opptatt":
-		return fmt.Sprintf("%s: %s er opptatt med noe annet", name, n.Person(who))
+	case "busy":
+		return fmt.Sprintf("%s: %s er busy med noe annet", name, n.Person(who))
 	}
 	return ""
 }
@@ -59,11 +59,11 @@ func Explain(why map[string]any, n Namer) string {
 		return out
 	}
 	var parts []string
-	if _, has := why["utenfor_utvalg"]; has || why["utvalg"] != nil || why["utvalg_grupper"] != nil {
-		v := list(why["utvalg"])
+	if _, has := why["outside_selection"]; has || why["selection"] != nil || why["selection_groups"] != nil {
+		v := list(why["selection"])
 		var names []string
 		names = append(names, v...)
-		if arr, _ := why["utvalg_grupper"].([]any); len(arr) > 0 {
+		if arr, _ := why["selection_groups"].([]any); len(arr) > 0 {
 			for _, g := range arr {
 				if s, ok := g.(string); ok {
 					names = append(names, n.Group(s))
@@ -74,21 +74,21 @@ func Explain(why map[string]any, n Namer) string {
 		if len(names) > 0 {
 			s = "utvalget er " + strings.Join(names, ", ")
 		}
-		if c, _ := why["utenfor_utvalg"].(float64); c > 0 {
+		if c, _ := why["outside_selection"].(float64); c > 0 {
 			s += fmt.Sprintf(" (%d andre står utenfor)", int(c))
 		}
 		parts = append(parts, s)
 	}
-	if v := list(why["dato_ikke"]); len(v) > 0 {
+	if v := list(why["event_never"]); len(v) > 0 {
 		parts = append(parts, "passer ikke: "+strings.Join(v, ", "))
 	}
-	if v := list(why["oppgave_ikke"]); len(v) > 0 {
+	if v := list(why["task_never"]); len(v) > 0 {
 		parts = append(parts, "har sagt «ikke» til oppgaven: "+strings.Join(v, ", "))
 	}
-	if v := list(why["ikke_foreslaas"]); len(v) > 0 {
+	if v := list(why["not_proposable"]); len(v) > 0 {
 		parts = append(parts, "kan ikke foreslås: "+strings.Join(v, ", "))
 	}
-	if busy, _ := why["opptatt"].(map[string]any); len(busy) > 0 {
+	if busy, _ := why["busy"].(map[string]any); len(busy) > 0 {
 		keys := make([]string, 0, len(busy))
 		for k := range busy {
 			keys = append(keys, k)
@@ -109,19 +109,19 @@ func Explain(why map[string]any, n Namer) string {
 			}
 			items = append(items, fmt.Sprintf("%s (%s)", n.Person(k), strings.Join(ts, ", ")))
 		}
-		parts = append(parts, "opptatt med noe annet på hendelsen: "+strings.Join(items, ", "))
+		parts = append(parts, "busy med noe annet på hendelsen: "+strings.Join(items, ", "))
 	}
-	if c, _ := why["ikke_med"].(float64); c > 0 {
+	if c, _ := why["not_in_task"].(float64); c > 0 {
 		parts = append(parts, fmt.Sprintf("%d har ikke valgt oppgaven", int(c)))
 	}
-	if groups, _ := why["grupper"].(map[string]any); len(groups) > 0 {
+	if groups, _ := why["groups"].(map[string]any); len(groups) > 0 {
 		keys := make([]string, 0, len(groups))
 		for g := range groups {
 			keys = append(keys, g)
 		}
 		sort.Slice(keys, func(i, j int) bool { return n.Group(keys[i]) < n.Group(keys[j]) })
 		for _, g := range keys {
-			if r, _ := groups[g].(string); r != "" && r != "kandidat" {
+			if r, _ := groups[g].(string); r != "" && r != "candidate" {
 				if s := n.groupWhy(g, r); s != "" {
 					parts = append(parts, s)
 				}
@@ -129,7 +129,7 @@ func Explain(why map[string]any, n Namer) string {
 		}
 	}
 	head := "Ingen kan ta denne"
-	if c, _ := why["kandidater"].(float64); c > 0 {
+	if c, _ := why["candidates"].(float64); c > 0 {
 		head = fmt.Sprintf("%d kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har", int(c))
 	}
 	if len(parts) == 0 {
@@ -151,18 +151,18 @@ func TranslateWarning(w string, n Namer) string {
 		person, task, ev := n.Person(m[1]), n.Task(m[2]), n.Event(m[3])
 		kind, rest, _ := strings.Cut(m[4], ":")
 		switch kind {
-		case "ikke_foreslaas":
+		case "not_proposable":
 			return ""
-		case "ikke_med":
+		case "not_in_task":
 			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen ikke har valgt oppgaven.", person, task, ev)
-		case "oppgave_ikke":
+		case "task_never":
 			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen har sagt «ikke» til oppgaven.", person, task, ev)
-		case "dato_ikke":
+		case "event_never":
 			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om det ikke passer.", person, task, ev)
-		case "utenfor_utvalg":
+		case "outside_selection":
 			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen står utenfor utvalget.", person, task, ev)
-		case "opptatt":
-			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen er opptatt med %s.", person, task, ev, n.busy(rest))
+		case "busy":
+			return fmt.Sprintf("%s er satt på %s %s for hånd, selv om hen er busy med %s.", person, task, ev, n.busy(rest))
 		}
 		return fmt.Sprintf("%s er satt på %s %s for hånd, selv om «%s».", person, task, ev, m[4])
 	}

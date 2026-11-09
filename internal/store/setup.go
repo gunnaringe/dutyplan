@@ -414,7 +414,7 @@ func (s *Store) DeleteDayType(ctx context.Context, orgSlug, actor string, id int
 // ---- task combinations ---------------------------------------------------------------------------------------
 
 // Combination levels, as the planner knows them. "standard" (no row) means: use the planner's default.
-var combinationLevels = map[string]bool{"kan_ikke": true, "upraktisk": true, "praktisk": true, "bor": true}
+var combinationLevels = map[string]bool{"cannot": true, "impractical": true, "practical": true, "preferred": true}
 
 type Combination struct {
 	A     int64  `json:"a"` // always the smaller task id
@@ -449,7 +449,7 @@ func (s *Store) SetCombination(ctx context.Context, orgSlug, actor string, a, b 
 		return fmt.Errorf("%w: a task cannot be combined with itself", ErrInvalid)
 	}
 	if level != "standard" && !combinationLevels[level] {
-		return fmt.Errorf("%w: level must be kan_ikke, upraktisk, praktisk, bor or standard", ErrInvalid)
+		return fmt.Errorf("%w: level must be cannot, impractical, practical, bor or standard", ErrInvalid)
 	}
 	if a > b {
 		a, b = b, a

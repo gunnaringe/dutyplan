@@ -151,7 +151,7 @@ async function pageOrg(r, org, people) {
 }
 
 const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const SELECT_LEVELS = [['standard', 'standard'], ['kan_ikke', 'kan ikke kombineres'], ['upraktisk', 'upraktisk'], ['praktisk', 'praktisk'], ['bor', 'bør kombineres']];
+const SELECT_LEVELS = [['standard', 'standard'], ['cannot', 'kan ikke kombineres'], ['impractical', 'impractical'], ['practical', 'practical'], ['preferred', 'bør kombineres']];
 
 const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 
@@ -189,7 +189,7 @@ async function pageSetup(r, org) {
   });
 
   // Grupper: et navngitt sett personer (team, kor, par). Ingen egne regler; planleggeren kan foreslå dem til oppgavene som settes opp her,
-  // og en manuell rute kan nevne dem. Medlemmene regnes som opptatt med oppgaven, og kombinasjonene over avgjør hva de kan ha i tillegg.
+  // og en manuell rute kan nevne dem. Medlemmene regnes som busy med oppgaven, og kombinasjonene over avgjør hva de kan ha i tillegg.
   const plannedTasks = tasks.filter((t) => t.planned);
   const groupBlocks = groups.map((g) => {
     const gname = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': 'Navn på gruppen' });
@@ -198,7 +198,7 @@ async function pageSetup(r, org) {
       const cur = g.tasks.find((x) => x.task_id === t.id);
       return { t,
         fills: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.fills) : '0', 'aria-label': `Plasser ${g.name} fyller på ${t.name}` }),
-        level: h('select', { 'aria-label': `Hvor gjerne ${g.name} tar ${t.name}` }, GROUP_LEVELS.map(([v, label]) => h('option', { value: v, selected: v === (cur ? cur.level : 'noytral') }, label))) };
+        level: h('select', { 'aria-label': `Hvor gjerne ${g.name} tar ${t.name}` }, GROUP_LEVELS.map(([v, label]) => h('option', { value: v, selected: v === (cur ? cur.level : 'neutral') }, label))) };
     });
     return h('div', { class: 'card' },
       h('div', { class: 'row-inline' }, gname,
@@ -241,11 +241,11 @@ async function pageSetup(r, org) {
       dayTypes.length ? dayTypeBlocks : h('p', { class: 'muted' }, 'Ingen dagtyper ennå.'),
       nameForm('Ny dagtype, f.eks. Gudstjeneste', 'Opprett', async (name) => { await api('POST', base + '/day-types', { name }); refresh(); })),
     section('Grupper',
-      h('p', { class: 'muted small' }, 'En gruppe er et navngitt sett personer (et team, et kor, et par). Medlemmene er opptatt sammen når gruppen står på en oppgave, og kombinasjonene under avgjør hva de kan ha i tillegg. Settes «Kan foreslås» av, velger planleggeren aldri gruppen selv, men du kan sette den inn for hånd.'),
+      h('p', { class: 'muted small' }, 'En gruppe er et navngitt sett personer (et team, et kor, et par). Medlemmene er busy sammen når gruppen står på en oppgave, og kombinasjonene under avgjør hva de kan ha i tillegg. Settes «Kan foreslås» av, velger planleggeren aldri gruppen selv, men du kan sette den inn for hånd.'),
       groups.length ? groupBlocks : h('p', { class: 'muted' }, 'Ingen grupper ennå.'),
       nameForm('Ny gruppe, f.eks. Kirkekoret', 'Opprett', async (name) => { await api('POST', base + '/groups', { name }); refresh(); })),
     section('Hva kan kombineres samme dag?',
-      h('p', { class: 'muted small' }, '«Standard» regnes som upraktisk. Innstillingen er felles for alle i organisasjonen.'),
+      h('p', { class: 'muted small' }, '«Standard» regnes som impractical. Innstillingen er felles for alle i organisasjonen.'),
       pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : h('p', { class: 'muted' }, 'Lag minst to oppgaver først.')));
 }
 
@@ -421,23 +421,23 @@ function rulesSection(r, base, dates, tasks, groups, people, cells, pools) {
     h('details', {}, h('summary', {}, 'Nytt utvalg'), poolForm));
 }
 
-// Vekting: hva planleggeren legger vekt på, for denne planen. Tallene er poeng i planleggerens regnestykke; standardverdiene er et godt
+// Vekting: hva planleggeren legger vekt på, for denne planen. Tallene er poeng i planleggerens regnestykke; standardverdiene er et good
 // utgangspunkt. Bare det som avviker fra standard lagres, så en endret standard når planer som aldri valgte noe.
 const WEIGHT_LABELS = {
   w_fair: ['Fordeling', 'Lik total belastning', 'Poeng trukket for hvert oppdrag en person ligger over eller under sin andel av alle oppdragene. Hovedleddet for lik fordeling.'],
   w_fair_range: ['Fordeling', 'Verste avvik, totalt', 'Poeng for den som ligger lengst fra sin andel, så ikke én person tar hele avviket.'],
   w_task_fair: ['Fordeling', 'Lik andel av hver oppgave', 'Som første, men per oppgave. Av som standard: slås den på, får de som tar flere oppgaver mer totalt enn de som tar én.'],
   w_task_range: ['Fordeling', 'Verste avvik, per oppgave', 'Som «verste avvik», men per oppgave.'],
-  'w_task.godt': ['Ønsker', 'Får en oppgave de har sagt «godt» til', 'Poeng for hver slik tildeling.'],
-  'w_task.darlig': ['Ønsker', 'Får en oppgave de har sagt «dårlig» til', 'Negativt tall: poeng trukket.'],
-  'w_date.godt': ['Ønsker', 'Får en hendelse som passer godt', 'Poeng for hver slik tildeling.'],
-  'w_date.darlig': ['Ønsker', 'Får en hendelse som passer dårlig', 'Negativt tall: poeng trukket.'],
-  'w_combo.bor': ['Kombinasjoner', 'To oppgaver som bør kombineres samme dag', 'Poeng for hvert slikt par.'],
-  'w_combo.praktisk': ['Kombinasjoner', 'To oppgaver som er praktiske å kombinere', 'Poeng for hvert slikt par.'],
-  'w_combo.upraktisk': ['Kombinasjoner', 'To oppgaver som er upraktiske å kombinere', 'Negativt tall: poeng trukket for hvert slikt par.'],
+  'w_task.good': ['Ønsker', 'Får en oppgave de har sagt «good» til', 'Poeng for hver slik tildeling.'],
+  'w_task.poor': ['Ønsker', 'Får en oppgave de har sagt «dårlig» til', 'Negativt tall: poeng trukket.'],
+  'w_date.good': ['Ønsker', 'Får en hendelse som passer good', 'Poeng for hver slik tildeling.'],
+  'w_date.poor': ['Ønsker', 'Får en hendelse som passer dårlig', 'Negativt tall: poeng trukket.'],
+  'w_combo.preferred': ['Kombinasjoner', 'To oppgaver som bør kombineres samme dag', 'Poeng for hvert slikt par.'],
+  'w_combo.practical': ['Kombinasjoner', 'To oppgaver som er praktiske å kombinere', 'Poeng for hvert slikt par.'],
+  'w_combo.impractical': ['Kombinasjoner', 'To oppgaver som er upraktiske å kombinere', 'Negativt tall: poeng trukket for hvert slikt par.'],
   default_combination: ['Kombinasjoner', 'Oppgavepar uten innstilling regnes som', 'Gjelder par du ikke har satt under Oppsett.'],
 };
-const COMBO_OPTIONS = { kan_ikke: 'Kan ikke kombineres', upraktisk: 'Upraktisk', praktisk: 'Praktisk', bor: 'Bør kombineres' };
+const COMBO_OPTIONS = { cannot: 'Kan ikke kombineres', impractical: 'Upraktisk', practical: 'Praktisk', preferred: 'Bør kombineres' };
 
 function weightsSection(r, wr) {
   const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/weights`;
@@ -461,7 +461,7 @@ function weightsSection(r, wr) {
     if (await write(() => api('PUT', path, { values }))) { await render(); say(text); }
   };
   return section('Vekting',
-    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel godt, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
+    h('p', { class: 'muted small' }, 'Hva planleggeren legger vekt på. Standardverdiene fungerer som regel good, og endringer gjelder bare denne planen. Etter en endring er planen utdatert: trykk «Prøv igjen».'),
     h('details', {}, h('summary', {}, wr.values && Object.keys(wr.values).length ? `Vis og endre vekting (${Object.keys(wr.values).length} endret)` : 'Vis og endre vekting'),
       h('div', { class: 'stack' }, blocks,
         h('div', { class: 'row-inline' },
@@ -552,9 +552,9 @@ async function pagePlan(r, org) {
     section('Endringslogg for planen', logTable(log)));
 }
 
-const GROUP_LEVELS = [['darlig', 'Dårlig'], ['noytral', 'Nøytral'], ['godt', 'Godt']];
-const TASK_LEVELS = [['ikke', 'Ikke'], ['darlig', 'Dårlig'], ['noytral', 'Nøytral'], ['godt', 'Godt']];
-const EVENT_LEVELS = [['ikke', 'Passer ikke'], ['darlig', 'Dårlig'], ['godt', 'Godt']];
+const GROUP_LEVELS = [['poor', 'Dårlig'], ['neutral', 'Nøytral'], ['good', 'Godt']];
+const TASK_LEVELS = [['never', 'Ikke'], ['poor', 'Dårlig'], ['neutral', 'Nøytral'], ['good', 'Godt']];
+const EVENT_LEVELS = [['never', 'Passer ikke'], ['poor', 'Dårlig'], ['good', 'Godt']];
 
 // Gruppe av knapper der én kan være valgt (aria-pressed). set(level) oppdaterer visningen uten å tegne siden på nytt.
 function seg(label, options, current, onpick) {
@@ -596,21 +596,21 @@ async function pageMe(r, org) {
       ctl.el);
   });
   const addRows = rest.map((t) => h('li', { class: 'card-row row-head' }, h('strong', {}, t.name),
-    h('button', { type: 'button', 'aria-label': 'Legg til ' + t.name, onclick: async () => { if (await write(() => api('PUT', taskPath(t.task_id), { level: 'noytral' }))) refresh(); } }, 'Legg til')));
+    h('button', { type: 'button', 'aria-label': 'Legg til ' + t.name, onclick: async () => { if (await write(() => api('PUT', taskPath(t.task_id), { level: 'neutral' }))) refresh(); } }, 'Legg til')));
   const taskSection = section('Hva kan du være med på?',
     !me.tasks.length ? h('p', { class: 'muted' }, 'Ingen oppgaver er satt opp ennå. ', link(`/o/${enc(r.org)}/oppsett`, 'Oppsett')) : '',
     chosen.length ? list('cards', taskRows) : (me.tasks.length ? h('p', { class: 'muted' }, 'Du har ikke valgt noen oppgaver ennå. Velg de du kan tenke deg.') : ''),
     me.tasks.length ? h('details', { open: !chosen.length }, h('summary', {}, chosen.length ? 'Velg flere oppgaver' : 'Velg oppgaver'), rest.length ? list('cards', addRows) : h('p', { class: 'muted' }, 'Du har valgt alle oppgavene.')) : '');
 
-  // --- når kan du? Ett svar per hendelse: passer ikke / dårlig / godt, ikke markert er nøytralt.
+  // --- når kan du? Ett svar per hendelse: passer ikke / dårlig / good, ikke markert er nøytralt.
   const levels = {};
   me.events.forEach((e) => { levels[e.event_id] = e.level; });
   const ctls = {};
   const summary = h('p', { class: 'muted small', 'aria-live': 'polite' });
   const updateSummary = () => {
-    const c = { ikke: 0, darlig: 0, godt: 0 };
+    const c = { never: 0, poor: 0, good: 0 };
     Object.values(levels).forEach((l) => { if (l) c[l]++; });
-    summary.textContent = `${c.ikke} passer ikke · ${c.darlig} dårlig · ${c.godt} godt · ${me.events.length - c.ikke - c.darlig - c.godt} nøytrale`;
+    summary.textContent = `${c.ikke} passer ikke · ${c.poor} dårlig · ${c.good} good · ${me.events.length - c.ikke - c.poor - c.good} nøytrale`;
   };
   async function setLevels(changes) {
     if (!(await write(() => api('PUT', availPath, { levels: changes })))) return false;
@@ -634,8 +634,8 @@ async function pageMe(r, org) {
   };
   updateSummary();
   const bulk = me.events.length ? h('div', { class: 'row-inline' }, h('span', { class: 'muted small' }, 'Sett alle:'),
-    h('button', { type: 'button', class: 'ghost', onclick: all('ikke') }, 'Passer ikke'), h('button', { type: 'button', class: 'ghost', onclick: all('darlig') }, 'Dårlig'),
-    h('button', { type: 'button', class: 'ghost', onclick: all('godt') }, 'Godt'), h('button', { type: 'button', class: 'ghost', onclick: all('') }, 'Fjern alle')) : '';
+    h('button', { type: 'button', class: 'ghost', onclick: all('never') }, 'Passer ikke'), h('button', { type: 'button', class: 'ghost', onclick: all('poor') }, 'Dårlig'),
+    h('button', { type: 'button', class: 'ghost', onclick: all('good') }, 'Godt'), h('button', { type: 'button', class: 'ghost', onclick: all('') }, 'Fjern alle')) : '';
 
   const root = h('div', {},
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}/p/${enc(r.plan)}`, '← ' + plan.name)),

@@ -62,8 +62,8 @@ func (w world) input(t *testing.T) (inputView, Snapshot, string) {
 
 func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Koret", []string{"Aslaug", "Birger", "Dina"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 2, Level: "godt"})
-	w.group(t, "Tomt", nil, store.GroupTask{TaskID: w.bilde.ID, Fills: 1, Level: "noytral"}) // meant to be used, has nobody
+	koret := w.group(t, "Koret", []string{"Aslaug", "Birger", "Dina"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 2, Level: "good"})
+	w.group(t, "Tomt", nil, store.GroupTask{TaskID: w.bilde.ID, Fills: 1, Level: "neutral"}) // meant to be used, has nobody
 	w.group(t, "Rolig", nil)                                                                 // an empty group nobody asked for
 	inactive := false
 	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Dina"].ID, store.PersonPatch{Active: &inactive})
@@ -80,7 +80,7 @@ func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 		Task  string `json:"task"`
 		Fills int    `json:"fills"`
 		Level string `json:"level"`
-	}{gid(koret.ID), tid(w.lyd.ID), 2, "godt"}) {
+	}{gid(koret.ID), tid(w.lyd.ID), 2, "good"}) {
 		t.Errorf("group tasks: %+v", in.GroupTasks)
 	}
 	if len(snap.Groups) != 1 || snap.Groups[0].Name != "Koret" || len(snap.Groups[0].Members) != 2 {
@@ -108,8 +108,8 @@ func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 func TestBuildInputNeverSendsAnotherOrganisationsGroups(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	ga := a.group(t, "Koret", []string{"Aslaug"}, store.GroupTask{TaskID: a.lyd.ID, Fills: 1, Level: "noytral"})
-	gb := b.group(t, "Koret", []string{"Aslaug"}, store.GroupTask{TaskID: b.lyd.ID, Fills: 1, Level: "noytral"})
+	ga := a.group(t, "Koret", []string{"Aslaug"}, store.GroupTask{TaskID: a.lyd.ID, Fills: 1, Level: "neutral"})
+	gb := b.group(t, "Koret", []string{"Aslaug"}, store.GroupTask{TaskID: b.lyd.ID, Fills: 1, Level: "neutral"})
 	inA, _, _ := a.input(t)
 	inB, _, _ := b.input(t)
 	if len(inA.Groups) != 1 || inA.Groups[0].ID != gid(ga.ID) || len(inB.Groups) != 1 || inB.Groups[0].ID != gid(gb.ID) {
@@ -125,7 +125,7 @@ func groupAnswer(w world, koret store.Group) []byte {
 	out := map[string]any{
 		"status": "OPTIMAL", "wall_time": 0.2,
 		"assignments": []map[string]any{
-			{"date": e0, "task": tid(w.bilde.ID), "person": pid(w.people["Cecilie"].ID), "locked": true, "task_level": "noytral", "date_level": "noytral"},
+			{"date": e0, "task": tid(w.bilde.ID), "person": pid(w.people["Cecilie"].ID), "locked": true, "task_level": "neutral", "date_level": "neutral"},
 		},
 		"group_assignments": []map[string]any{
 			{"date": e0, "task": tid(w.lyd.ID), "group": g, "members": []string{pid(w.people["Birger"].ID), pid(w.people["Aslaug"].ID)}, "fills": 1, "locked": false},
@@ -135,15 +135,15 @@ func groupAnswer(w world, koret store.Group) []byte {
 			{"date": e0, "task": tid(w.lovsang.ID), "label": "Gjest utenfra", "fills": 2},
 		},
 		"concessions": []map[string]any{
-			{"date": e0, "task": tid(w.lyd.ID), "person": pid(w.people["Birger"].ID), "group": g, "task_level": "noytral", "date_level": "darlig"},
+			{"date": e0, "task": tid(w.lyd.ID), "person": pid(w.people["Birger"].ID), "group": g, "task_level": "neutral", "date_level": "poor"},
 		},
 		"unfilled": []map[string]any{
 			{"date": e1, "task": tid(w.lyd.ID), "missing": 1, "why": map[string]any{
-				"kandidater": 0, "grupper": map[string]any{g: "dato_ikke:" + pid(w.people["Aslaug"].ID)}}},
+				"candidates": 0, "groups": map[string]any{g: "event_never:" + pid(w.people["Aslaug"].ID)}}},
 		},
 		"warnings": []string{
-			"låst: " + pid(w.people["Cecilie"].ID) + " på " + tid(w.bilde.ID) + " " + e0 + " bryter «ikke_foreslaas» (manuelt valg beholdt)",
-			"låst: " + pid(w.people["Frode"].ID) + " på " + tid(w.lyd.ID) + " " + e1 + " bryter «ikke_med» (manuelt valg beholdt)",
+			"låst: " + pid(w.people["Cecilie"].ID) + " på " + tid(w.bilde.ID) + " " + e0 + " bryter «not_proposable» (manuelt valg beholdt)",
+			"låst: " + pid(w.people["Frode"].ID) + " på " + tid(w.lyd.ID) + " " + e1 + " bryter «not_in_task» (manuelt valg beholdt)",
 		},
 		"load": map[string]any{}, "violations": []string{},
 	}
@@ -153,7 +153,7 @@ func groupAnswer(w world, koret store.Group) []byte {
 
 func TestTheViewShowsGroupsManualCellsAndLockedPeopleWithNames(t *testing.T) {
 	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "noytral"})
+	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return groupAnswer(w, koret), nil })
 	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
 	if err != nil {
@@ -222,7 +222,7 @@ func TestTheRealSolverProposesAGroupAndKeepsItsMembersOccupied(t *testing.T) {
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
 		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.lyd.ID)
 	}
-	koret := w.group(t, "Koret", []string{"Dina", "Embla"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "godt"})
+	koret := w.group(t, "Koret", []string{"Dina", "Embla"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "good"})
 	s := New(w.st, solver, 1, nopLogger())
 	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
 	if err != nil {

@@ -12,8 +12,8 @@ import (
 
 // Levels a person can give a task (not marked at all = not involved) and an event (not marked = neutral).
 var (
-	taskLevels  = map[string]bool{"ikke": true, "darlig": true, "noytral": true, "godt": true}
-	eventLevels = map[string]bool{"ikke": true, "darlig": true, "godt": true}
+	taskLevels  = map[string]bool{"never": true, "poor": true, "neutral": true, "good": true}
+	eventLevels = map[string]bool{"never": true, "poor": true, "good": true}
 )
 
 const maxAvailabilityPerCall = 400
@@ -109,7 +109,7 @@ func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID in
 // SetPersonTask makes the person take part in a task (or changes how much they want it).
 func (s *Store) SetPersonTask(ctx context.Context, orgSlug, actor string, personID, taskID int64, level string) error {
 	if !taskLevels[level] {
-		return fmt.Errorf("%w: level must be ikke, darlig, noytral or godt", ErrInvalid)
+		return fmt.Errorf("%w: level must be ikke, poor, neutral or good", ErrInvalid)
 	}
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
 		oid, err := orgID(ctx, tx, orgSlug)
@@ -181,7 +181,7 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 	}
 	for _, l := range levels {
 		if l != "" && !eventLevels[l] {
-			return fmt.Errorf("%w: level must be ikke, darlig, godt or empty", ErrInvalid)
+			return fmt.Errorf("%w: level must be ikke, poor, good or empty", ErrInvalid)
 		}
 	}
 	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
@@ -236,9 +236,9 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 			return logEntry{}, fmt.Errorf("%w: nothing to change", ErrInvalid)
 		}
 		var parts []string
-		for _, l := range []string{"ikke", "darlig", "godt", "–"} {
+		for _, l := range []string{"never", "poor", "good", "–"} {
 			if counts[l] > 0 {
-				name := map[string]string{"ikke": "passer ikke", "darlig": "dårlig", "godt": "godt", "–": "fjernet"}[l]
+				name := map[string]string{"never": "passer ikke", "poor": "dårlig", "good": "good", "–": "fjernet"}[l]
 				parts = append(parts, strconv.Itoa(counts[l])+" "+name)
 			}
 		}

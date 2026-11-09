@@ -2,8 +2,8 @@
 
 Inndata og utdata er vanlige dict-er (JSON). Nivåer er ASCII i ledningsformatet:
 
-  oppgave og dato:  ikke | darlig | noytral | godt      (ikke markert = noytral)
-  kombinasjon:      kan_ikke | upraktisk | praktisk | bor
+  oppgave og dato:  ikke | poor | neutral | good      (ikke markert = neutral)
+  kombinasjon:      cannot | impractical | practical | bor
 
 Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
 
@@ -19,9 +19,9 @@ Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
   groups:              [{"id", "members": [person...], "proposable": true}]   navngitt sett personer; ingen egne regler.
                        proposable=false: planleggeren foreslår aldri gruppen. Den foreslås heller ikke hvis et medlem
                        har proposable=false. Manuelle ruter går an.
-  group_tasks:         [{"group", "task", "fills": 1, "level": "noytral"}]
+  group_tasks:         [{"group", "task", "fills": 1, "level": "neutral"}]
                        oppgaver planleggeren kan foreslå gruppen til; gruppen fyller "fills" plasser.
-                       Dato-ønsker kommer fra medlemmene (snitt); "ikke" hos ett medlem utelukker gruppen.
+                       Dato-ønsker kommer fra medlemmene (snitt); "never" hos ett medlem utelukker gruppen.
   pools:               [{"date", "task", "people": [...], "groups": [...]}]
                        «utvalg»: bare disse kan velges den dagen (personer og/eller grupper)
   locked:              manuelle ruter: {"date", "task", "person"} | {"date", "task", "label"}
@@ -30,7 +30,7 @@ Inndata (alt unntatt tasks, dates, day_type_tasks og people er valgfritt):
   previous_plan:       [{"date", "task", "person"} | {"date", "task", "group"}]
   params:              se DEFAULT_PARAMS
 
-En gruppe i en rute (manuell eller foreslått) gjør medlemmene opptatt med oppgaven den dagen. Den felles
+En gruppe i en rute (manuell eller foreslått) gjør medlemmene busy med oppgaven den dagen. Den felles
 kombinasjonsinnstillingen avgjør hva de kan ha i tillegg (ingen særregel). Gruppearbeid teller som ett oppdrag
 per medlem i fordelingen.
 
@@ -45,18 +45,18 @@ from typing import Any
 
 from ortools.sat.python import cp_model
 
-TASK_LEVELS = ("ikke", "darlig", "noytral", "godt")
-COMBO_LEVELS = ("kan_ikke", "upraktisk", "praktisk", "bor")
+TASK_LEVELS = ("never", "poor", "neutral", "good")
+COMBO_LEVELS = ("cannot", "impractical", "practical", "preferred")
 SCALE = 1000  # poeng -> heltall
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "time_limit": 20.0,
     "workers": 8,
     "seed": 1,
-    "default_combination": "upraktisk",  # for oppgavepar som ikke er satt
-    "w_task": {"darlig": -4, "noytral": 0, "godt": 2},
-    "w_date": {"darlig": -6, "noytral": 0, "godt": 3},
-    "w_combo": {"upraktisk": -5, "praktisk": 2, "bor": 6},
+    "default_combination": "impractical",  # for oppgavepar som ikke er satt
+    "w_task": {"poor": -4, "neutral": 0, "good": 2},
+    "w_date": {"poor": -6, "neutral": 0, "good": 3},
+    "w_combo": {"impractical": -5, "practical": 2, "preferred": 6},
     # «Lik fordeling» = lik TOTAL belastning (brukerens valg 2026-11-09): en som bare tar Bilde skal ikke ende på halvparten av en
     # som tar Lyd og Bilde. Fordeling per oppgave er derfor av som standard; vektene finnes for å prøve den.
     "w_fair": 10,  # poeng per tildeling en person ligger utenfor sin samlede andel: hovedleddet for «lik fordeling»
@@ -138,14 +138,14 @@ class Problem:
                 raise ValueError("fills må være minst 1")
             self.group_tasks[gt["group"], gt["task"]] = {
                 "fills": fills,
-                "level": self._level(gt.get("level", "noytral")),
+                "level": self._level(gt.get("level", "neutral")),
             }
 
         # manuelle ruter
         self.locked_person: dict[tuple[str, str], list[str]] = defaultdict(list)
         self.locked_other: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)  # tekst/gruppe
         self.fixed_fill: dict[tuple[str, str], int] = defaultdict(int)  # plasser fylt uten en person
-        # (person, dato) -> [(oppgave, gruppe)]: medlemmer som er opptatt via en gruppe i en manuell rute
+        # (person, dato) -> [(oppgave, gruppe)]: medlemmer som er busy via en gruppe i en manuell rute
         self.occupied: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
         # gruppearbeid teller som ett oppdrag per medlem og rute
         self.gcount_person: dict[str, int] = defaultdict(int)
@@ -213,8 +213,8 @@ class Problem:
     def date_level(self, p: str, t: str, d: str) -> str:
         cal = self.task_cal.get(p, {}).get(t)
         if cal is not None:
-            return cal.get(d, "noytral")
-        return self.person_dates.get(p, {}).get(d, "noytral")
+            return cal.get(d, "neutral")
+        return self.person_dates.get(p, {}).get(d, "neutral")
 
     def combo_level(self, t1: str, t2: str) -> str:
         return self.combo.get(frozenset((t1, t2)), self.params["default_combination"])
@@ -222,47 +222,47 @@ class Problem:
     def occupied_block(self, p: str, t: str, d: str) -> tuple[str, str] | None:
         """(oppgave, gruppe) hvis en gruppe i en manuell rute forbyr p å ta t på d (samme oppgave eller «kan ikke»)."""
         for gt, g in self.occupied.get((p, d), ()):
-            if gt == t or self.combo_level(gt, t) == "kan_ikke":
+            if gt == t or self.combo_level(gt, t) == "cannot":
                 return gt, g
         return None
 
     def reason(self, p: str, t: str, d: str) -> str | None:
         """Hvorfor p ikke kan ta t på d, eller None hvis det går."""
         if not self.person_proposable[p]:
-            return "ikke_foreslaas"
+            return "not_proposable"
         if t not in self.task_level.get(p, {}):
-            return "ikke_med"
-        if self.task_level[p][t] == "ikke":
-            return "oppgave_ikke"
-        if self.date_level(p, t, d) == "ikke":
-            return "dato_ikke"
+            return "not_in_task"
+        if self.task_level[p][t] == "never":
+            return "task_never"
+        if self.date_level(p, t, d) == "never":
+            return "event_never"
         pool = self.pool.get((d, t))
         if pool is not None and p not in pool:
-            return "utenfor_utvalg"
+            return "outside_selection"
         occ = self.occupied_block(p, t, d)
         if occ is not None:
-            return f"opptatt:{occ[0]} ({occ[1]})"
+            return f"busy:{occ[0]} ({occ[1]})"
         return None
 
     def group_reason(self, g: str, t: str, d: str) -> str | None:
         """Hvorfor gruppen g ikke kan foreslås for t på d, eller None. Medlemmenes egne «ikke» utelukker gruppen."""
         cfg = self.group_tasks[g, t]
         if not self.group_proposable[g]:
-            return "ikke_foreslaas"
+            return "not_proposable"
         free = self.slots.get((d, t), 0) - self.fixed_fill.get((d, t), 0) - len(self.locked_person.get((d, t), ()))
         if cfg["fills"] > free:
-            return "for_mange_plasser"
+            return "too_many_places"
         if (d, t) in self.pool and g not in self.pool_groups[d, t]:
-            return "utenfor_utvalg"
+            return "outside_selection"
         for mem in self.group_members[g]:
             if not self.person_proposable[mem]:
-                return f"ikke_foreslaas:{mem}"
-            if self.task_level.get(mem, {}).get(t) == "ikke":
-                return f"oppgave_ikke:{mem}"
-            if self.date_level(mem, t, d) == "ikke":
-                return f"dato_ikke:{mem}"
+                return f"not_proposable:{mem}"
+            if self.task_level.get(mem, {}).get(t) == "never":
+                return f"task_never:{mem}"
+            if self.date_level(mem, t, d) == "never":
+                return f"event_never:{mem}"
             if self.occupied_block(mem, t, d) is not None:
-                return f"opptatt:{mem}"
+                return f"busy:{mem}"
         return None
 
 
@@ -285,7 +285,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
 
     y: dict[tuple[str, str, str], cp_model.IntVar] = {}  # (gruppe, oppgave, dato): planleggeren foreslår gruppen
     for (g, t), cfg in pb.group_tasks.items():
-        if cfg["level"] == "ikke":
+        if cfg["level"] == "never":
             continue
         for d in pb.dates:
             if (d, t) in pb.slots and pb.group_reason(g, t, d) is None:
@@ -312,7 +312,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
 
     def pair_penalty(name: str, a: Any, b: Any, level: str, times: int = 1) -> None:
         """Hardt forbud eller myk straff/bonus for at a og b er sanne samtidig."""
-        if level == "kan_ikke":
+        if level == "cannot":
             m.add(a + b <= 1)
             return
         both = m.new_bool_var(name)
@@ -328,11 +328,11 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
                 continue  # begge låst for hånd: ikke vårt valg
             pair_penalty(f"both_{p}_{t1}_{t2}_{d}", x[p, t1, d], x[p, t2, d], pb.combo_level(t1, t2))
 
-    # --- foreslått gruppe: medlemmene er opptatt med gruppens oppgave ----------
+    # --- foreslått gruppe: medlemmene er busy med gruppens oppgave ----------
     for (g, t, d), v in y.items():
         for mem in pb.group_members[g]:
             for t2 in by_pd.get((mem, d), []):
-                lvl = "kan_ikke" if t2 == t else pb.combo_level(t, t2)  # samme oppgave to ganger gir ingen mening
+                lvl = "cannot" if t2 == t else pb.combo_level(t, t2)  # samme oppgave to ganger gir ingen mening
                 pair_penalty(f"gp_{g}_{t}_{mem}_{t2}_{d}", v, x[mem, t2, d], lvl)
     y_by_date: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for (g, t, d) in y:
@@ -341,24 +341,24 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
         for (g1, t1), (g2, t2) in _pairs(sorted(cells), 2):
             shared = len(set(pb.group_members[g1]) & set(pb.group_members[g2]))
             if shared:
-                lvl = "kan_ikke" if t1 == t2 else pb.combo_level(t1, t2)
+                lvl = "cannot" if t1 == t2 else pb.combo_level(t1, t2)
                 pair_penalty(f"gg_{g1}_{t1}_{g2}_{t2}_{d}", y[g1, t1, d], y[g2, t2, d], lvl, times=shared)
 
-    # --- gruppe i en manuell rute: medlemmene er opptatt med oppgaven -------------
+    # --- gruppe i en manuell rute: medlemmene er busy med oppgaven -------------
     # Forbudte kombinasjoner finnes ikke som variabler (se Problem.reason). Her er det de myke.
     pre_warnings: list[str] = []
     for (mem, d), occ in pb.occupied.items():
         for t, g in occ:
-            if pb.date_level(mem, t, d) == "ikke":
+            if pb.date_level(mem, t, d) == "never":
                 pre_warnings.append(
                     f"gruppe {g} står på {t} {d}, men {mem} har «ikke» den dagen (manuelt valg beholdt)"
                 )
             for t2 in by_pd.get((mem, d), []):
-                lvl = "kan_ikke" if t2 == t else pb.combo_level(t, t2)
+                lvl = "cannot" if t2 == t else pb.combo_level(t, t2)
                 if mem in pb.locked_person.get((d, t2), ()):
-                    if lvl == "kan_ikke":
+                    if lvl == "cannot":
                         pre_warnings.append(f"{mem} er låst på {t2} {d} samtidig som gruppe {g} står på {t}")
-                elif lvl != "kan_ikke":
+                elif lvl != "cannot":
                     obj.append((SCALE * prm["w_combo"][lvl], x[mem, t2, d]))
 
     # --- preferanser og stabilitet -----------------------------------------
@@ -487,7 +487,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
     for (p, t, d), v in sorted(x.items(), key=lambda kv: (kv[0][2], kv[0][1], kv[0][0])):
         if solver.value(v):
             locked = p in pb.locked_person.get((d, t), ())
-            tl = pb.task_level.get(p, {}).get(t, "noytral")
+            tl = pb.task_level.get(p, {}).get(t, "neutral")
             dl = pb.date_level(p, t, d)
             result["assignments"].append(
                 {"date": d, "task": t, "person": p, "locked": locked, "task_level": tl, "date_level": dl}
@@ -497,7 +497,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
                 result["warnings"].append(
                     f"låst: {p} på {t} {d} bryter «{pb.reason(p, t, d)}» (manuelt valg beholdt)"
                 )
-            if "darlig" in (tl, dl):
+            if "poor" in (tl, dl):
                 result["concessions"].append(
                     {"date": d, "task": t, "person": p, "task_level": tl, "date_level": dl}
                 )
@@ -511,7 +511,7 @@ def solve(data: dict[str, Any]) -> dict[str, Any]:
             for mem in pb.group_members[g]:
                 assigned[mem, d].append(t)
                 dl = pb.date_level(mem, t, d)
-                if "darlig" in (gl, dl):
+                if "poor" in (gl, dl):
                     result["concessions"].append(
                         {"date": d, "task": t, "person": mem, "group": g, "task_level": gl, "date_level": dl}
                     )
@@ -562,35 +562,35 @@ def _explain(
     pb: Problem, assigned: dict[tuple[str, str], list[str]], d: str, t: str
 ) -> dict[str, Any]:
     """Hvorfor en plass ble stående tom: hvem som er ute og av hvilken grunn."""
-    why: dict[str, Any] = {"ikke_foreslaas": [], "ikke_med": 0, "oppgave_ikke": [], "dato_ikke": [], "opptatt": {}}
+    why: dict[str, Any] = {"not_proposable": [], "not_in_task": 0, "task_never": [], "event_never": [], "busy": {}}
     outside_pool: list[str] = []
     candidates = 0
     for p in pb.people:
         r = pb.reason(p, t, d)
-        if r == "ikke_foreslaas":
-            why["ikke_foreslaas"].append(p)
-        elif r == "ikke_med":
-            why["ikke_med"] += 1
-        elif r == "oppgave_ikke":
-            why["oppgave_ikke"].append(p)
-        elif r == "dato_ikke":
-            why["dato_ikke"].append(p)
-        elif r == "utenfor_utvalg":
+        if r == "not_proposable":
+            why["not_proposable"].append(p)
+        elif r == "not_in_task":
+            why["not_in_task"] += 1
+        elif r == "task_never":
+            why["task_never"].append(p)
+        elif r == "event_never":
+            why["event_never"].append(p)
+        elif r == "outside_selection":
             outside_pool.append(p)
-        elif r is not None and r.startswith("opptatt:"):
-            why["opptatt"][p] = [r.split(":", 1)[1]]
+        elif r is not None and r.startswith("busy:"):
+            why["busy"][p] = [r.split(":", 1)[1]]
         else:
             candidates += 1
             others = [o for o in assigned.get((p, d), []) if o != t]
             if others:
-                why["opptatt"][p] = others
+                why["busy"][p] = others
     if (d, t) in pb.pool:
-        why["utvalg"] = sorted(pb.pool[d, t])
+        why["selection"] = sorted(pb.pool[d, t])
         if pb.pool_groups[d, t]:
-            why["utvalg_grupper"] = sorted(pb.pool_groups[d, t])
-        why["utenfor_utvalg"] = len(outside_pool)
-    groups = {g: (pb.group_reason(g, t, d) or "kandidat") for (g, tt) in pb.group_tasks if tt == t}
+            why["selection_groups"] = sorted(pb.pool_groups[d, t])
+        why["outside_selection"] = len(outside_pool)
+    groups = {g: (pb.group_reason(g, t, d) or "candidate") for (g, tt) in pb.group_tasks if tt == t}
     if groups:
-        why["grupper"] = groups
-    why["kandidater"] = candidates
-    return {k: v for k, v in why.items() if v or k == "kandidater"}
+        why["groups"] = groups
+    why["candidates"] = candidates
+    return {k: v for k, v in why.items() if v or k == "candidates"}

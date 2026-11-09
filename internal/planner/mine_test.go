@@ -31,7 +31,7 @@ func describe(m Mine) string {
 // Cecilie is locked on Bilde on event 0; a guest has Lovsang on event 0.
 func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "noytral"})
+	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
 	s := w.runWith(t, groupAnswer(w, koret))
 	mine := func(name string) Mine {
 		m, err := s.Mine(ctx, w.org.Slug, w.plan.Slug, w.people[name].ID)
@@ -59,7 +59,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		t.Errorf("nothing for Frode: %+v", f)
 	}
 	// the plan is out of date once the data has changed
-	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people["Dina"].ID, map[int64]string{w.events[3].ID: "ikke"})
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people["Dina"].ID, map[int64]string{w.events[3].ID: "never"})
 	if !mine("Aslaug").Run.Stale {
 		t.Error("a change after the run makes it stale")
 	}
@@ -67,7 +67,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 
 func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 	w := newWorld(t, "Menighet")
-	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "noytral"})
+	koret := w.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
 	anna := w.people["Aslaug"].ID
 	none := newService(w, nil)
 	if m, err := none.Mine(ctx, w.org.Slug, w.plan.Slug, anna); err != nil || m.HasPlan || m.Run != nil || m.Assignments == nil || len(m.Assignments) != 0 {
@@ -103,7 +103,7 @@ func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 func TestMineIsScopedToThePersonsOrganisationAndPlan(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	koret := a.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: a.lyd.ID, Fills: 1, Level: "noytral"})
+	koret := a.group(t, "Kirkekoret", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: a.lyd.ID, Fills: 1, Level: "neutral"})
 	s := a.runWith(t, groupAnswer(a, koret))
 	if _, err := s.Mine(ctx, a.org.Slug, a.plan.Slug, b.people["Aslaug"].ID); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("another organisation's person through A: %v", err)

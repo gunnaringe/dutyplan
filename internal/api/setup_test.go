@@ -37,7 +37,7 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	}
 	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/day-types/%d", dt.ID), map[string]string{"name": "Gudstjeneste kl. 11"}).json(&dt)
 
-	e.mustDo(204, "PUT", "/api/orgs/org-a/combinations", map[string]any{"a": bulk.Created[0].ID, "b": lyd.ID, "level": "kan_ikke"})
+	e.mustDo(204, "PUT", "/api/orgs/org-a/combinations", map[string]any{"a": bulk.Created[0].ID, "b": lyd.ID, "level": "cannot"})
 	var combos []store.Combination
 	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
 	if len(combos) != 1 || combos[0].A > combos[0].B {
@@ -109,7 +109,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/day-types/%d", dtA.ID), nil)
-	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "bor"})
+	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "preferred"})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/events/%d", dateA.ID), map[string]any{"note": "x"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/events/%d", dateA.ID), nil)
 	notFound("GET", "/api/orgs/org-a/plans/ingen/events", nil)
@@ -141,7 +141,7 @@ func TestSetupWritesNeedAnActorAndValidInput(t *testing.T) {
 	}{
 		{"DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", task.ID), nil},
 		{"POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Kafé"}},
-		{"PUT", "/api/orgs/org-a/combinations", map[string]any{"a": 1, "b": 2, "level": "bor"}},
+		{"PUT", "/api/orgs/org-a/combinations", map[string]any{"a": 1, "b": 2, "level": "preferred"}},
 		{"POST", "/api/orgs/org-a/plans/host-2026/events/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": 1}},
 	} {
 		if r := e.do(c.method, c.path, "", c.body); r.code != 400 || r.errCode() != "actor_required" {

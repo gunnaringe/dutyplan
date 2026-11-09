@@ -13,7 +13,7 @@ import (
 type GroupTask struct {
 	TaskID int64  `json:"task_id"`
 	Fills  int    `json:"fills"`
-	Level  string `json:"level"` // darlig | noytral | godt
+	Level  string `json:"level"` // poor | neutral | good
 }
 
 // Group is a named set of people (a team, a choir, a couple). It has no rules of its own.
@@ -25,7 +25,7 @@ type Group struct {
 	Tasks      []GroupTask `json:"tasks"`
 }
 
-var groupTaskLevels = map[string]bool{"darlig": true, "noytral": true, "godt": true}
+var groupTaskLevels = map[string]bool{"poor": true, "neutral": true, "good": true}
 
 // listGroups reads all groups of the organisation with their members and tasks, ordered by name.
 func listGroups(ctx context.Context, q dbq, oid int64) ([]Group, error) {
@@ -248,7 +248,7 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 			return Group{}, fmt.Errorf("%w: fills must be 1-50", ErrInvalid)
 		}
 		if !groupTaskLevels[t.Level] {
-			return Group{}, fmt.Errorf("%w: level must be darlig, noytral or godt", ErrInvalid)
+			return Group{}, fmt.Errorf("%w: level must be poor, neutral or good", ErrInvalid)
 		}
 		if seen[t.TaskID] {
 			return Group{}, fmt.Errorf("%w: a task can be listed once", ErrInvalid)

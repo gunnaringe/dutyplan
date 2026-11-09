@@ -5,8 +5,8 @@ import random
 import pytest
 from helpers import dates, run
 
-LEVELS = ["ikke", "darlig", "noytral", "godt"]
-COMBOS = ["kan_ikke", "upraktisk", "praktisk", "bor"]
+LEVELS = ["never", "poor", "neutral", "good"]
+COMBOS = ["cannot", "impractical", "practical", "preferred"]
 
 
 def random_instance(seed: int):

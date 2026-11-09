@@ -54,15 +54,15 @@ func TestWeightsAreStoredAsWhatDiffersFromTheDefault(t *testing.T) {
 	if w, err := s.GetWeights(ctx, o.Slug, p1.Slug); err != nil || len(w) != 0 {
 		t.Fatalf("a new plan uses the defaults: %v %v", w, err)
 	}
-	got, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "w_task_fair": 5, "default_combination": "praktisk", "w_task.godt": 2.0 /* the default */})
-	if err != nil || fmt.Sprint(got) != "map[default_combination:praktisk w_fair:12 w_task_fair:5]" {
+	got, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "w_task_fair": 5, "default_combination": "practical", "w_task.good": 2.0 /* the default */})
+	if err != nil || fmt.Sprint(got) != "map[default_combination:practical w_fair:12 w_task_fair:5]" {
 		t.Fatalf("a value equal to the default is not stored: %v %v", got, err)
 	}
 	if stored, _ := s.GetWeights(ctx, o.Slug, p1.Slug); fmt.Sprint(stored) != fmt.Sprint(got) {
 		t.Errorf("stored %v, returned %v", stored, got)
 	}
 	log, _ := s.ListLog(ctx, o.Slug, p1.Slug, 1)
-	if len(log) == 0 || log[0].Action != "plan.weights" || log[0].Detail != "default_combination upraktisk -> praktisk; w_fair 10 -> 12; w_task_fair 0 -> 5" {
+	if len(log) == 0 || log[0].Action != "plan.weights" || log[0].Detail != "default_combination impractical -> practical; w_fair 10 -> 12; w_task_fair 0 -> 5" {
 		t.Errorf("the log says what changed: %+v", log)
 	}
 	// the other plan of the organisation is untouched
@@ -70,12 +70,12 @@ func TestWeightsAreStoredAsWhatDiffersFromTheDefault(t *testing.T) {
 		t.Errorf("another plan: %v", w)
 	}
 	// the same weights again, and a change that only restates the defaults, change nothing
-	if _, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "w_task_fair": 5.0, "default_combination": "praktisk"}); !errors.Is(err, ErrInvalid) {
+	if _, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "w_task_fair": 5.0, "default_combination": "practical"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no change: %v", err)
 	}
 	// replaced, not merged: leaving a key out sends it back to the default
 	// (a choice equal to its default is dropped too, like a number)
-	if got, err = s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "default_combination": "upraktisk"}); err != nil || fmt.Sprint(got) != "map[w_fair:12]" {
+	if got, err = s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 12.0, "default_combination": "impractical"}); err != nil || fmt.Sprint(got) != "map[w_fair:12]" {
 		t.Fatalf("replaced: %v %v", got, err)
 	}
 	if got, err = s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{}); err != nil || len(got) != 0 {
@@ -99,8 +99,8 @@ func TestWeightRefusals(t *testing.T) {
 		"an unknown key given as text":         {"w_fair": 12.0, "navn": "ti"},
 		"above the range":                      {"w_fair": 101.0},
 		"below the range":                      {"w_fair": -1.0},
-		"a bad preference positive":            {"w_task.darlig": 4.0},
-		"a good preference negative":           {"w_date.godt": -3.0},
+		"a bad preference positive":            {"w_task.poor": 4.0},
+		"a good preference negative":           {"w_date.good": -3.0},
 		"a number given as text":               {"w_fair": "ti"},
 		"a choice not in the list":             {"default_combination": "kanskje"},
 		"a choice given as number":             {"default_combination": 3.0},
@@ -120,7 +120,7 @@ func TestWeightRefusals(t *testing.T) {
 		t.Errorf("unknown plan: %v", err)
 	}
 	// the edges of the range are fine
-	if _, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 100.0, "w_task.darlig": -100.0, "w_fair_range": 0.0}); err != nil {
+	if _, err := s.SetWeights(ctx, o.Slug, p1.Slug, "Ola", map[string]any{"w_fair": 100.0, "w_task.poor": -100.0, "w_fair_range": 0.0}); err != nil {
 		t.Errorf("the edges: %v", err)
 	}
 }

@@ -12,7 +12,7 @@ import (
 )
 
 // WeightSpec describes one setting of the planner's weighting: its default (the planner's own, checked against the
-// planner by a test), and the range it may be set within. Keys with a dot («w_task.godt») are nested in the planner's input.
+// planner by a test), and the range it may be set within. Keys with a dot («w_task.good») are nested in the planner's input.
 type WeightSpec struct {
 	Key     string   `json:"key"`
 	Kind    string   `json:"kind"` // number | choice
@@ -29,18 +29,18 @@ func num(key string, def, min, max float64) WeightSpec {
 // WeightSpecs is every weight a plan may change, in the order they are shown. Not here on purpose: what an empty place
 // costs (it must come after everything else), stability and history (the app does not use them), and the neutral levels (zero).
 var WeightSpecs = []WeightSpec{
-	num("w_fair", 10, 0, 100),         // points per assignment a person is outside their share of all assignments
-	num("w_fair_range", 10, 0, 100),   // ... and for the worst deviation
-	num("w_task_fair", 0, 0, 100),     // the same per task (equal share of each task, so unequal totals)
-	num("w_task_range", 0, 0, 100),    // the worst deviation per task
-	num("w_task.godt", 2, 0, 100),     // someone gets a task they said «godt» to
-	num("w_task.darlig", -4, -100, 0), // ... or «dårlig»
-	num("w_date.godt", 3, 0, 100),     // the same for an event
-	num("w_date.darlig", -6, -100, 0),
-	num("w_combo.bor", 6, 0, 100), // two tasks the same day that «bør kombineres»
-	num("w_combo.praktisk", 2, 0, 100),
-	num("w_combo.upraktisk", -5, -100, 0),
-	{Key: "default_combination", Kind: "choice", Default: "upraktisk", Options: []string{"kan_ikke", "upraktisk", "praktisk", "bor"}},
+	num("w_fair", 10, 0, 100),       // points per assignment a person is outside their share of all assignments
+	num("w_fair_range", 10, 0, 100), // ... and for the worst deviation
+	num("w_task_fair", 0, 0, 100),   // the same per task (equal share of each task, so unequal totals)
+	num("w_task_range", 0, 0, 100),  // the worst deviation per task
+	num("w_task.good", 2, 0, 100),   // someone gets a task they said «good» to
+	num("w_task.poor", -4, -100, 0), // ... or «dårlig»
+	num("w_date.good", 3, 0, 100),   // the same for an event
+	num("w_date.poor", -6, -100, 0),
+	num("w_combo.preferred", 6, 0, 100), // two tasks the same day that «bør kombineres»
+	num("w_combo.practical", 2, 0, 100),
+	num("w_combo.impractical", -5, -100, 0),
+	{Key: "default_combination", Kind: "choice", Default: "impractical", Options: []string{"cannot", "impractical", "practical", "preferred"}},
 }
 
 func weightSpec(key string) (WeightSpec, bool) {

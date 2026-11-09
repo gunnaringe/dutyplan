@@ -107,20 +107,20 @@ func TestCombinations(t *testing.T) {
 	o := mustOrg(t, s, "Menighet")
 	a, _ := s.CreateTask(ctx, o.Slug, "Ola", "Lyd", true)
 	b, _ := s.CreateTask(ctx, o.Slug, "Ola", "Bilde", true)
-	if err := s.SetCombination(ctx, o.Slug, "Ola", b.ID, a.ID, "kan_ikke"); err != nil { // either order
+	if err := s.SetCombination(ctx, o.Slug, "Ola", b.ID, a.ID, "cannot"); err != nil { // either order
 		t.Fatal(err)
 	}
 	list, _ := s.ListCombinations(ctx, o.Slug)
-	if len(list) != 1 || list[0].A != a.ID || list[0].B != b.ID || list[0].Level != "kan_ikke" {
+	if len(list) != 1 || list[0].A != a.ID || list[0].B != b.ID || list[0].Level != "cannot" {
 		t.Fatalf("stored with the smaller id first: %+v", list)
 	}
-	if err := s.SetCombination(ctx, o.Slug, "Ola", a.ID, b.ID, "bor"); err != nil { // overwrite, not a second row
+	if err := s.SetCombination(ctx, o.Slug, "Ola", a.ID, b.ID, "preferred"); err != nil { // overwrite, not a second row
 		t.Fatal(err)
 	}
-	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 1 || list[0].Level != "bor" {
+	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 1 || list[0].Level != "preferred" {
 		t.Errorf("overwrite: %+v", list)
 	}
-	if err := s.SetCombination(ctx, o.Slug, "Ola", a.ID, a.ID, "bor"); !errors.Is(err, ErrInvalid) {
+	if err := s.SetCombination(ctx, o.Slug, "Ola", a.ID, a.ID, "preferred"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a task with itself: %v", err)
 	}
 	if err := s.SetCombination(ctx, o.Slug, "Ola", a.ID, b.ID, "kanskje"); !errors.Is(err, ErrInvalid) {
@@ -132,7 +132,7 @@ func TestCombinations(t *testing.T) {
 	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 0 {
 		t.Errorf("standard removes the setting: %+v", list)
 	}
-	s.SetCombination(ctx, o.Slug, "Ola", a.ID, b.ID, "upraktisk")
+	s.SetCombination(ctx, o.Slug, "Ola", a.ID, b.ID, "impractical")
 	if err := s.DeleteTask(ctx, o.Slug, "Ola", a.ID); err != nil { // combinations go with their task
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	if _, err := s.SetDayTypeTasks(ctx, b.Slug, "Eva", dtA.ID, []DayTypeTask{{taskB.ID, 1}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B setting tasks on A's day type: %v", err)
 	}
-	if err := s.SetCombination(ctx, b.Slug, "Eva", taskA.ID, taskB.ID, "kan_ikke"); !errors.Is(err, ErrNotFound) {
+	if err := s.SetCombination(ctx, b.Slug, "Eva", taskA.ID, taskB.ID, "cannot"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a combination spanning organisations: %v", err)
 	}
 	if _, err := s.UpdateTask(ctx, b.Slug, "Eva", taskA.ID, TaskPatch{Name: ptr("Kapret")}); !errors.Is(err, ErrNotFound) {
@@ -188,7 +188,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	s.SetDayTypeTasks(ctx, a.Slug, "Ola", dtA.ID, []DayTypeTask{{taskA.ID, 2}})
 	s.SetDayTypeTasks(ctx, b.Slug, "Eva", dtB.ID, []DayTypeTask{{taskB.ID, 3}})
 	otherA, _ := s.CreateTask(ctx, a.Slug, "Ola", "Bilde A", true)
-	s.SetCombination(ctx, a.Slug, "Ola", taskA.ID, otherA.ID, "kan_ikke")
+	s.SetCombination(ctx, a.Slug, "Ola", taskA.ID, otherA.ID, "cannot")
 	if dts, _ := s.ListDayTypes(ctx, b.Slug); len(dts) != 1 || len(dts[0].Tasks) != 1 || dts[0].Tasks[0].TaskID != taskB.ID || dts[0].Tasks[0].Slots != 3 {
 		t.Errorf("B's day type must hold only B's task: %+v", dts)
 	}
@@ -211,7 +211,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	}{
 		{"date with A's day type", `INSERT INTO event (org_id, plan_id, date, day_type_id, created_at) VALUES (?, ?, '2026-08-09', ?, 'x')`, []any{orgB, planBID, dtA.ID}},
 		{"B's day type holding A's task", `INSERT INTO day_type_task (org_id, day_type_id, task_id, slots) VALUES (?, ?, ?, 1)`, []any{orgB, dtB.ID, taskA.ID}},
-		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'bor')`, []any{orgB, taskA.ID, taskB.ID}},
+		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'preferred')`, []any{orgB, taskA.ID, taskB.ID}},
 	} {
 		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
 			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)

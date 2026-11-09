@@ -67,10 +67,10 @@ ul.log .detail { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .seg { display: flex; gap: .35rem; }
 .seg button { flex: 1; min-height: 2.75rem; background: transparent; color: var(--fg); border: 1px solid var(--line); padding: .4rem .25rem; font-size: .9rem; line-height: 1.15; }
 .seg button[aria-pressed="true"] { color: #fff; border-color: transparent; font-weight: 600; }
-.seg button[aria-pressed="true"][data-level="ikke"] { background: var(--err); }
-.seg button[aria-pressed="true"][data-level="darlig"] { background: var(--warn); }
-.seg button[aria-pressed="true"][data-level="noytral"] { background: var(--muted); }
-.seg button[aria-pressed="true"][data-level="godt"] { background: var(--accent); }
+.seg button[aria-pressed="true"][data-level="never"] { background: var(--err); }
+.seg button[aria-pressed="true"][data-level="poor"] { background: var(--warn); }
+.seg button[aria-pressed="true"][data-level="neutral"] { background: var(--muted); }
+.seg button[aria-pressed="true"][data-level="good"] { background: var(--accent); }
 @media (prefers-color-scheme: dark) { .seg button[aria-pressed="true"] { color: #0b1a12; } }
 button.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
 button.link-button { background: none; border: none; color: var(--err); text-decoration: underline; padding: .25rem .5rem; }

@@ -70,7 +70,7 @@ func (s *server) setAvailability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Levels map[string]string `json:"levels"` // event id -> ikke | darlig | godt | "" (neutral)
+		Levels map[string]string `json:"levels"` // event id -> ikke | poor | good | "" (neutral)
 	}
 	if !decode(w, r, &b) {
 		return

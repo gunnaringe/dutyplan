@@ -183,220 +183,220 @@
  ],
  "person_tasks": {
   "Alma": {
-   "lyd": "darlig"
+   "lyd": "poor"
   },
   "Bjarne": {
-   "lyd": "noytral",
-   "motevert": "noytral"
+   "lyd": "neutral",
+   "motevert": "neutral"
   },
   "Cecilie": {
-   "motevert": "noytral",
-   "kafe": "darlig",
-   "forbonn": "noytral"
+   "motevert": "neutral",
+   "kafe": "poor",
+   "forbonn": "neutral"
   },
   "Dagfinn": {
-   "lyd": "noytral",
-   "bilde": "noytral",
-   "forbonn": "darlig"
+   "lyd": "neutral",
+   "bilde": "neutral",
+   "forbonn": "poor"
   },
   "Elin": {
-   "lyd": "godt",
-   "motevert": "noytral",
-   "kafe": "noytral"
+   "lyd": "good",
+   "motevert": "neutral",
+   "kafe": "neutral"
   },
   "Frida": {
-   "lyd": "darlig",
-   "motevert": "noytral"
+   "lyd": "poor",
+   "motevert": "neutral"
   },
   "Gro": {
-   "bilde": "noytral",
-   "motevert": "godt",
-   "forbonn": "godt"
+   "bilde": "neutral",
+   "motevert": "good",
+   "forbonn": "good"
   },
   "Henrik": {
-   "bilde": "noytral",
-   "motevert": "godt"
+   "bilde": "neutral",
+   "motevert": "good"
   },
   "Ingrid": {
-   "moteleder": "noytral",
-   "taler": "noytral"
+   "moteleder": "neutral",
+   "taler": "neutral"
   },
   "Joakim": {
-   "bilde": "godt",
-   "motevert": "godt"
+   "bilde": "good",
+   "motevert": "good"
   },
   "Kjersti": {
-   "motevert": "godt",
-   "kafe": "noytral"
+   "motevert": "good",
+   "kafe": "neutral"
   },
   "Lasse": {
-   "moteleder": "godt",
-   "taler": "noytral"
+   "moteleder": "good",
+   "taler": "neutral"
   },
   "Mona": {
-   "taler": "darlig",
-   "kafe": "noytral",
-   "forbonn": "noytral"
+   "taler": "poor",
+   "kafe": "neutral",
+   "forbonn": "neutral"
   },
   "Njål": {
-   "moteleder": "godt",
-   "forbonn": "noytral"
+   "moteleder": "good",
+   "forbonn": "neutral"
   },
   "Oda": {
-   "moteleder": "godt",
-   "kafe": "noytral",
-   "forbonn": "noytral"
+   "moteleder": "good",
+   "kafe": "neutral",
+   "forbonn": "neutral"
   },
   "Pål": {
-   "moteleder": "noytral",
-   "taler": "godt",
-   "forbonn": "noytral"
+   "moteleder": "neutral",
+   "taler": "good",
+   "forbonn": "neutral"
   },
   "Randi": {
-   "taler": "noytral",
-   "motevert": "noytral",
-   "kafe": "godt"
+   "taler": "neutral",
+   "motevert": "neutral",
+   "kafe": "good"
   },
   "Sindre": {
-   "taler": "godt",
-   "kafe": "godt",
-   "forbonn": "noytral"
+   "taler": "good",
+   "kafe": "good",
+   "forbonn": "neutral"
   }
  },
  "person_dates": {
   "Alma": {
-   "2026-08-16": "ikke",
-   "2026-09-06": "godt",
-   "2026-09-27": "godt",
-   "2026-11-22": "ikke"
+   "2026-08-16": "never",
+   "2026-09-06": "good",
+   "2026-09-27": "good",
+   "2026-11-22": "never"
   },
   "Bjarne": {
-   "2026-08-02": "godt",
-   "2026-09-13": "godt",
-   "2026-10-11": "godt",
-   "2026-10-18": "godt"
+   "2026-08-02": "good",
+   "2026-09-13": "good",
+   "2026-10-11": "good",
+   "2026-10-18": "good"
   },
   "Cecilie": {
-   "2026-08-02": "darlig",
-   "2026-08-23": "godt",
-   "2026-11-08": "godt"
+   "2026-08-02": "poor",
+   "2026-08-23": "good",
+   "2026-11-08": "good"
   },
   "Dagfinn": {
-   "2026-08-09": "darlig",
-   "2026-08-16": "darlig",
-   "2026-09-06": "darlig",
-   "2026-09-20": "godt",
-   "2026-10-11": "darlig",
-   "2026-11-08": "godt",
-   "2026-11-15": "godt",
-   "2026-11-22": "darlig"
+   "2026-08-09": "poor",
+   "2026-08-16": "poor",
+   "2026-09-06": "poor",
+   "2026-09-20": "good",
+   "2026-10-11": "poor",
+   "2026-11-08": "good",
+   "2026-11-15": "good",
+   "2026-11-22": "poor"
   },
   "Elin": {
-   "2026-09-06": "ikke",
-   "2026-10-18": "godt",
-   "2026-11-08": "darlig"
+   "2026-09-06": "never",
+   "2026-10-18": "good",
+   "2026-11-08": "poor"
   },
   "Frida": {
-   "2026-08-02": "ikke",
-   "2026-08-09": "godt",
-   "2026-09-20": "ikke",
-   "2026-09-27": "godt",
-   "2026-10-11": "ikke",
-   "2026-11-15": "godt",
-   "2026-11-22": "darlig"
+   "2026-08-02": "never",
+   "2026-08-09": "good",
+   "2026-09-20": "never",
+   "2026-09-27": "good",
+   "2026-10-11": "never",
+   "2026-11-15": "good",
+   "2026-11-22": "poor"
   },
   "Gro": {
-   "2026-08-23": "godt",
-   "2026-08-30": "darlig",
-   "2026-09-06": "godt",
-   "2026-09-27": "darlig",
-   "2026-11-08": "godt"
+   "2026-08-23": "good",
+   "2026-08-30": "poor",
+   "2026-09-06": "good",
+   "2026-09-27": "poor",
+   "2026-11-08": "good"
   },
   "Henrik": {
-   "2026-08-09": "ikke",
-   "2026-09-27": "godt",
-   "2026-10-11": "darlig"
+   "2026-08-09": "never",
+   "2026-09-27": "good",
+   "2026-10-11": "poor"
   },
   "Ingrid": {
-   "2026-09-20": "darlig",
-   "2026-10-04": "ikke",
-   "2026-10-18": "ikke",
-   "2026-11-22": "darlig"
+   "2026-09-20": "poor",
+   "2026-10-04": "never",
+   "2026-10-18": "never",
+   "2026-11-22": "poor"
   },
   "Joakim": {
-   "2026-08-09": "godt",
-   "2026-08-23": "darlig",
-   "2026-10-25": "darlig"
+   "2026-08-09": "good",
+   "2026-08-23": "poor",
+   "2026-10-25": "poor"
   },
   "Kjersti": {
-   "2026-08-16": "darlig",
-   "2026-08-23": "darlig",
-   "2026-09-06": "darlig",
-   "2026-09-20": "godt",
-   "2026-09-27": "darlig",
-   "2026-10-18": "darlig",
-   "2026-11-15": "godt"
+   "2026-08-16": "poor",
+   "2026-08-23": "poor",
+   "2026-09-06": "poor",
+   "2026-09-20": "good",
+   "2026-09-27": "poor",
+   "2026-10-18": "poor",
+   "2026-11-15": "good"
   },
   "Lasse": {
-   "2026-09-06": "ikke",
-   "2026-11-15": "godt"
+   "2026-09-06": "never",
+   "2026-11-15": "good"
   },
   "Mona": {
-   "2026-08-09": "ikke",
-   "2026-08-16": "ikke",
-   "2026-09-20": "darlig",
-   "2026-11-08": "godt",
-   "2026-11-15": "ikke"
+   "2026-08-09": "never",
+   "2026-08-16": "never",
+   "2026-09-20": "poor",
+   "2026-11-08": "good",
+   "2026-11-15": "never"
   },
   "Njål": {
-   "2026-09-13": "godt",
-   "2026-09-27": "ikke",
-   "2026-10-25": "godt"
+   "2026-09-13": "good",
+   "2026-09-27": "never",
+   "2026-10-25": "good"
   },
   "Oda": {
-   "2026-08-02": "godt",
-   "2026-08-09": "darlig",
-   "2026-08-23": "darlig",
-   "2026-09-06": "godt",
-   "2026-09-20": "godt",
-   "2026-10-04": "ikke",
-   "2026-11-15": "godt",
-   "2026-11-22": "darlig"
+   "2026-08-02": "good",
+   "2026-08-09": "poor",
+   "2026-08-23": "poor",
+   "2026-09-06": "good",
+   "2026-09-20": "good",
+   "2026-10-04": "never",
+   "2026-11-15": "good",
+   "2026-11-22": "poor"
   },
   "Pål": {
-   "2026-08-09": "ikke",
-   "2026-08-23": "godt",
-   "2026-09-20": "ikke"
+   "2026-08-09": "never",
+   "2026-08-23": "good",
+   "2026-09-20": "never"
   },
   "Randi": {
-   "2026-10-04": "godt"
+   "2026-10-04": "good"
   },
   "Sindre": {
-   "2026-08-23": "godt",
-   "2026-09-06": "darlig",
-   "2026-09-27": "godt",
-   "2026-10-25": "ikke"
+   "2026-08-23": "good",
+   "2026-09-06": "poor",
+   "2026-09-27": "good",
+   "2026-10-25": "never"
   }
  },
  "person_task_calendars": {
   "Bjarne": {
    "lyd": {
-    "2026-08-02": "noytral",
-    "2026-08-09": "godt",
-    "2026-08-16": "noytral",
-    "2026-08-23": "noytral",
-    "2026-08-30": "noytral",
-    "2026-09-06": "noytral",
-    "2026-09-13": "noytral",
-    "2026-09-20": "godt",
-    "2026-09-27": "noytral",
-    "2026-10-04": "noytral",
-    "2026-10-11": "godt",
-    "2026-10-18": "noytral",
-    "2026-10-25": "godt",
-    "2026-11-08": "godt",
-    "2026-11-15": "godt",
-    "2026-11-22": "noytral"
+    "2026-08-02": "neutral",
+    "2026-08-09": "good",
+    "2026-08-16": "neutral",
+    "2026-08-23": "neutral",
+    "2026-08-30": "neutral",
+    "2026-09-06": "neutral",
+    "2026-09-13": "neutral",
+    "2026-09-20": "good",
+    "2026-09-27": "neutral",
+    "2026-10-04": "neutral",
+    "2026-10-11": "good",
+    "2026-10-18": "neutral",
+    "2026-10-25": "good",
+    "2026-11-08": "good",
+    "2026-11-15": "good",
+    "2026-11-22": "neutral"
    }
   }
  },
@@ -404,67 +404,67 @@
   {
    "a": "lyd",
    "b": "bilde",
-   "level": "upraktisk"
+   "level": "impractical"
   },
   {
    "a": "moteleder",
    "b": "taler",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "moteleder",
    "b": "lyd",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "moteleder",
    "b": "bilde",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "taler",
    "b": "lyd",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "taler",
    "b": "bilde",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "motevert",
    "b": "kafe",
-   "level": "bor"
+   "level": "preferred"
   },
   {
    "a": "kafe",
    "b": "forbonn",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "kafe",
    "b": "lyd",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "kafe",
    "b": "bilde",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "motevert",
    "b": "forbonn",
-   "level": "praktisk"
+   "level": "practical"
   },
   {
    "a": "lovsang",
    "b": "lyd",
-   "level": "kan_ikke"
+   "level": "cannot"
   },
   {
    "a": "lovsang",
    "b": "bilde",
-   "level": "kan_ikke"
+   "level": "cannot"
   }
  ],
  "groups": [
@@ -515,25 +515,25 @@
    "group": "kafeteam_a",
    "task": "kafe",
    "fills": 3,
-   "level": "noytral"
+   "level": "neutral"
   },
   {
    "group": "kafeteam_b",
    "task": "kafe",
    "fills": 3,
-   "level": "noytral"
+   "level": "neutral"
   },
   {
    "group": "forbonnspar_1",
    "task": "forbonn",
    "fills": 2,
-   "level": "godt"
+   "level": "good"
   },
   {
    "group": "forbonnspar_2",
    "task": "forbonn",
    "fills": 2,
-   "level": "noytral"
+   "level": "neutral"
   }
  ],
  "pools": [

@@ -44,12 +44,12 @@ INVOLVED = {
 }
 TASKS = list(INVOLVED)
 COMBOS = [
-    ("lyd", "bilde", "upraktisk"), ("moteleder", "taler", "kan_ikke"), ("moteleder", "lyd", "kan_ikke"),
-    ("moteleder", "bilde", "kan_ikke"), ("taler", "lyd", "kan_ikke"), ("taler", "bilde", "kan_ikke"),
-    ("motevert", "kafe", "bor"), ("kafe", "forbonn", "kan_ikke"), ("kafe", "lyd", "kan_ikke"),
-    ("kafe", "bilde", "kan_ikke"), ("motevert", "forbonn", "praktisk"),
+    ("lyd", "bilde", "impractical"), ("moteleder", "taler", "cannot"), ("moteleder", "lyd", "cannot"),
+    ("moteleder", "bilde", "cannot"), ("taler", "lyd", "cannot"), ("taler", "bilde", "cannot"),
+    ("motevert", "kafe", "preferred"), ("kafe", "forbonn", "cannot"), ("kafe", "lyd", "cannot"),
+    ("kafe", "bilde", "cannot"), ("motevert", "forbonn", "practical"),
     # De som synger kan ikke samtidig ha Lyd eller Bilde. Vanlig kombinasjonsinnstilling, ingen særregel.
-    ("lovsang", "lyd", "kan_ikke"), ("lovsang", "bilde", "kan_ikke"),
+    ("lovsang", "lyd", "cannot"), ("lovsang", "bilde", "cannot"),
 ]
 
 
@@ -60,7 +60,7 @@ def pick(options, weights):
 person_tasks = {p: {} for p in PEOPLE}
 for t, ps in INVOLVED.items():
     for p in ps:
-        person_tasks[p][t] = pick(["darlig", "noytral", "godt"], [2, 5, 3])
+        person_tasks[p][t] = pick(["poor", "neutral", "good"], [2, 5, 3])
 
 _worship = [d for d, ty in DATES if ty == "gudstjeneste"]
 choir_dates = [_worship[2], _worship[7]]  # koret synger to ganger
@@ -71,13 +71,13 @@ dates_with_tasks = [d for d, ty in DATES if DAY_TYPE_TASKS[ty]]
 for p in PEOPLE:
     cal = {}
     for d in dates_with_tasks:
-        lvl = pick([None, "ikke", "darlig", "godt"], [70, 8, 10, 12])
+        lvl = pick([None, "never", "poor", "good"], [70, 8, 10, 12])
         if lvl and not (p in CHOIR and d in choir_dates):  # de som synger, er der
             cal[d] = lvl
     person_dates[p] = cal
 
 # En lydtekniker som er på gudstjenester men helst vil ha en annen rytme på Lyd (egen kalender)
-person_task_calendars = {"Bjarne": {"lyd": {d: pick(["ikke", "darlig", "godt", "noytral"], [10, 10, 30, 50]) for d in dates_with_tasks}}}
+person_task_calendars = {"Bjarne": {"lyd": {d: pick(["never", "poor", "good", "neutral"], [10, 10, 30, 50]) for d in dates_with_tasks}}}
 
 # Faste team og par som planleggeren kan foreslå som en enhet: (medlemmer, oppgave, plasser)
 TEAMS = {
@@ -104,7 +104,7 @@ data = {
     "groups": [{"id": "kirkekoret", "members": CHOIR}]
     + [{"id": g, "members": mems} for g, (mems, _t, _n) in TEAMS.items()],
     "group_tasks": [
-        {"group": g, "task": t, "fills": n, "level": pick(["noytral", "godt"], [2, 1])}
+        {"group": g, "task": t, "fills": n, "level": pick(["neutral", "good"], [2, 1])}
         for g, (_mems, t, n) in TEAMS.items()
     ],
     "pools": [{"date": d, "task": "lyd", "people": lyd_non_choir[:2]} for d in choir_dates],

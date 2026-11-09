@@ -40,7 +40,7 @@ func (e *env) plannable(name string) (org, plan string) {
 	must(err)
 	person, err := e.st.CreatePerson(ctx, o.Slug, "T", "Aslaug")
 	must(err)
-	must(e.st.SetPersonTask(ctx, o.Slug, "T", person.ID, task.ID, "noytral"))
+	must(e.st.SetPersonTask(ctx, o.Slug, "T", person.ID, task.ID, "neutral"))
 	return o.Slug, p.Slug
 }
 
@@ -182,7 +182,7 @@ func oneAssignment(_ context.Context, input []byte) ([]byte, error) {
 	}
 	return json.Marshal(map[string]any{
 		"status": "OPTIMAL", "wall_time": 0.1,
-		"assignments": []map[string]any{{"date": in.Dates[0].ID, "task": in.Tasks[0].ID, "person": in.People[0].ID, "locked": false, "task_level": "noytral", "date_level": "noytral"}},
+		"assignments": []map[string]any{{"date": in.Dates[0].ID, "task": in.Tasks[0].ID, "person": in.People[0].ID, "locked": false, "task_level": "neutral", "date_level": "neutral"}},
 		"unfilled":    []any{}, "load": map[string]any{}, "violations": []string{},
 	})
 }

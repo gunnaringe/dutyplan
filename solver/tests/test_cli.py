@@ -31,4 +31,4 @@ def test_cli_defaults_gir_standardvektene():
     r = subprocess.run([sys.executable, "-m", "dutyplan_solver", "--defaults"], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr
     d = json.loads(r.stdout)
-    assert d["w_fair"] == 10 and d["w_task_fair"] == 0 and d["w_task"]["godt"] == 2 and d["default_combination"] == "upraktisk"
+    assert d["w_fair"] == 10 and d["w_task_fair"] == 0 and d["w_task"]["good"] == 2 and d["default_combination"] == "impractical"

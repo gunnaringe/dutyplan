@@ -62,16 +62,16 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	if len(me.Tasks) != 2 || me.Tasks[0].Name != "Bilde" || me.Tasks[0].Level != "" || me.Tasks[1].Name != "Lyd" {
 		t.Fatalf("only the planner's tasks are offered, none chosen yet: %+v", me.Tasks)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt"); err != nil {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "good"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.me(t).Tasks[1]; got.Level != "godt" {
+	if got := e.me(t).Tasks[1]; got.Level != "good" {
 		t.Errorf("Lyd = %+v", got)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt"); !errors.Is(err, ErrInvalid) {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "good"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op: %v", err)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "darlig"); err != nil { // changes the level
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "poor"); err != nil { // changes the level
 		t.Fatal(err)
 	}
 	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 1 {
@@ -80,7 +80,7 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "kanskje"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad level: %v", err)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lovsang.ID, "godt"); !errors.Is(err, ErrNotFound) {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lovsang.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a manual-only task cannot be chosen: %v", err)
 	}
 	if err := e.s.RemovePersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID); err != nil {
@@ -103,14 +103,14 @@ func TestAvailabilityPerEvent(t *testing.T) {
 	set := func(levels map[int64]string) error {
 		return e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, levels)
 	}
-	if err := set(map[int64]string{e.ev[0].ID: "ikke", e.ev[2].ID: "godt"}); err != nil {
+	if err := set(map[int64]string{e.ev[0].ID: "never", e.ev[2].ID: "good"}); err != nil {
 		t.Fatal(err)
 	}
 	me := e.me(t)
-	if me.Events[0].Level != "ikke" || me.Events[1].Level != "" || me.Events[2].Level != "godt" {
+	if me.Events[0].Level != "never" || me.Events[1].Level != "" || me.Events[2].Level != "good" {
 		t.Fatalf("events: %+v", me.Events)
 	}
-	if err := set(map[int64]string{e.ev[0].ID: "ikke"}); !errors.Is(err, ErrInvalid) {
+	if err := set(map[int64]string{e.ev[0].ID: "never"}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no change: %v", err)
 	}
 	if err := set(map[int64]string{e.ev[0].ID: ""}); err != nil { // neutral removes the answer
@@ -120,14 +120,14 @@ func TestAvailabilityPerEvent(t *testing.T) {
 		t.Errorf("neutral must remove the row, %d rows left", got)
 	}
 	for name, levels := range map[string]map[int64]string{
-		"bad level": {e.ev[0].ID: "kanskje"}, "empty": {}, "task level on an event": {e.ev[0].ID: "noytral"},
+		"bad level": {e.ev[0].ID: "kanskje"}, "empty": {}, "task level on an event": {e.ev[0].ID: "neutral"},
 	} {
 		if err := set(levels); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 	// all or nothing: one unknown event means none of the others are stored either
-	if err := set(map[int64]string{e.ev[1].ID: "godt", 99999: "ikke"}); !errors.Is(err, ErrNotFound) {
+	if err := set(map[int64]string{e.ev[1].ID: "good", 99999: "never"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown event: %v", err)
 	}
 	if got := e.me(t).Events[1].Level; got != "" {
@@ -139,7 +139,7 @@ func TestAvailabilityPerEvent(t *testing.T) {
 	}
 	// one log line per call, never one per event
 	before := len(mustLog(t, e.s, e.org.Slug, ""))
-	set(map[int64]string{e.ev[0].ID: "darlig", e.ev[1].ID: "darlig", e.ev[2].ID: "darlig"})
+	set(map[int64]string{e.ev[0].ID: "poor", e.ev[1].ID: "poor", e.ev[2].ID: "poor"})
 	if after := len(mustLog(t, e.s, e.org.Slug, "")); after != before+1 {
 		t.Errorf("one call, one log line: %d -> %d", before, after)
 	}
@@ -158,27 +158,27 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 	if _, err := a.s.GetMe(ctx, b.Slug, planB.Slug, a.person.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's person on B's page: %v", err)
 	}
-	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", a.person.ID, taskB.ID, "godt"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", a.person.ID, taskB.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's person via B: %v", err)
 	}
-	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, a.lyd.ID, "godt"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, a.lyd.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's task for B's person: %v", err)
 	}
-	if err := a.s.SetPersonTask(ctx, a.org.Slug, "Ola", personB.ID, a.lyd.ID, "godt"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, a.org.Slug, "Ola", personB.ID, a.lyd.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B's person through A: %v", err)
 	}
 	if err := a.s.RemovePersonTask(ctx, b.Slug, "Eva", a.person.ID, a.lyd.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("remove across: %v", err)
 	}
-	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", personB.ID, map[int64]string{a.ev[0].ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", personB.ID, map[int64]string{a.ev[0].ID: "never"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's event for B's person: %v", err)
 	}
-	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", a.person.ID, map[int64]string{evB.ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, "Eva", a.person.ID, map[int64]string{evB.ID: "never"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's person via B: %v", err)
 	}
 	// an event of another plan in the same organisation does not count for this plan
 	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Ola", "Vår 2027", "")
-	if err := a.s.SetAvailability(ctx, a.org.Slug, other.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "ikke"}); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetAvailability(ctx, a.org.Slug, other.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "never"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another plan's event: %v", err)
 	}
 	if got := count(t, a.s, `SELECT COUNT(*) FROM person_task`) + count(t, a.s, `SELECT COUNT(*) FROM person_event`); got != 0 {
@@ -212,10 +212,10 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 		name, stmt string
 		args       []any
 	}{
-		{"person_task with another organisation's task", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'godt')`, []any{orgA, a.person.ID, taskB.ID}},
-		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'godt')`, []any{orgA, personB.ID, a.lyd.ID}},
-		{"person_event with an event of another plan", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'ikke')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
-		{"person_event for another organisation's person", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'ikke')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
+		{"person_task with another organisation's task", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'good')`, []any{orgA, a.person.ID, taskB.ID}},
+		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'good')`, []any{orgA, personB.ID, a.lyd.ID}},
+		{"person_event with an event of another plan", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
+		{"person_event for another organisation's person", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
 	} {
 		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
 			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)
@@ -226,8 +226,8 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 
 func TestPreferencesGoWhenTheirTaskOrEventGoes(t *testing.T) {
 	e := newPrefEnv(t)
-	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt")
-	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "ikke", e.ev[1].ID: "godt"})
+	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "good")
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "good"})
 	if err := e.s.DeleteEvent(ctx, e.org.Slug, e.plan.Slug, "Ola", e.ev[0].ID); err != nil {
 		t.Fatal(err)
 	}
@@ -253,19 +253,19 @@ func planOf(db interface {
 func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	e := newPrefEnv(t)
 	other, _ := e.s.CreatePerson(ctx, e.org.Slug, "Ola", "Ola Prøve")
-	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "godt")
-	e.s.SetPersonTask(ctx, e.org.Slug, "Ola", other.ID, e.lyd.ID, "ikke")
-	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "godt"})
-	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Ola", other.ID, map[int64]string{e.ev[0].ID: "ikke", e.ev[1].ID: "darlig"})
+	e.s.SetPersonTask(ctx, e.org.Slug, "Kari", e.person.ID, e.lyd.ID, "good")
+	e.s.SetPersonTask(ctx, e.org.Slug, "Ola", other.ID, e.lyd.ID, "never")
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Kari", e.person.ID, map[int64]string{e.ev[0].ID: "good"})
+	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, "Ola", other.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "poor"})
 	mine := e.me(t)
 	theirs, err := e.s.GetMe(ctx, e.org.Slug, e.plan.Slug, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mine.Tasks[1].Level != "godt" || theirs.Tasks[1].Level != "ikke" {
+	if mine.Tasks[1].Level != "good" || theirs.Tasks[1].Level != "never" {
 		t.Errorf("task answers: %+v / %+v", mine.Tasks, theirs.Tasks)
 	}
-	if mine.Events[0].Level != "godt" || mine.Events[1].Level != "" || theirs.Events[0].Level != "ikke" || theirs.Events[1].Level != "darlig" {
+	if mine.Events[0].Level != "good" || mine.Events[1].Level != "" || theirs.Events[0].Level != "never" || theirs.Events[1].Level != "poor" {
 		t.Errorf("event answers: %+v / %+v", mine.Events, theirs.Events)
 	}
 }

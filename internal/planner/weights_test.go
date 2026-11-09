@@ -29,15 +29,15 @@ func TestWeightsBecomeNestedParamsAndPartOfTheHash(t *testing.T) {
 	if len(plain) != 3 || plain["time_limit"] != 5.0 {
 		t.Errorf("without weights the planner is told only time, seed and workers: %v", plain)
 	}
-	if _, err := w.st.SetWeights(ctx, w.org.Slug, w.plan.Slug, "T", map[string]any{"w_fair": 12.0, "w_task.godt": 3.0, "w_task.darlig": -2.0, "default_combination": "praktisk"}); err != nil {
+	if _, err := w.st.SetWeights(ctx, w.org.Slug, w.plan.Slug, "T", map[string]any{"w_fair": 12.0, "w_task.good": 3.0, "w_task.poor": -2.0, "default_combination": "practical"}); err != nil {
 		t.Fatal(err)
 	}
 	got, h1 := paramsOf(Params{TimeLimit: 5, Seed: 1, Workers: 1})
 	wt, _ := got["w_task"].(map[string]any)
-	if got["w_fair"] != 12.0 || wt["godt"] != 3.0 || wt["darlig"] != -2.0 || len(wt) != 2 || got["default_combination"] != "praktisk" || got["time_limit"] != 5.0 {
+	if got["w_fair"] != 12.0 || wt["good"] != 3.0 || wt["poor"] != -2.0 || len(wt) != 2 || got["default_combination"] != "practical" || got["time_limit"] != 5.0 {
 		t.Errorf("params: %v", got)
 	}
-	if _, has := got["w_task.godt"]; has {
+	if _, has := got["w_task.good"]; has {
 		t.Errorf("a dotted key must be nested, not passed as it is: %v", got)
 	}
 	if h1 == h0 {
@@ -133,7 +133,7 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 		p, err := st.CreatePerson(ctx, org.Slug, "T", name)
 		must(err)
 		for _, tk := range tasks {
-			must(st.SetPersonTask(ctx, org.Slug, "T", p.ID, tk.ID, "noytral"))
+			must(st.SetPersonTask(ctx, org.Slug, "T", p.ID, tk.ID, "neutral"))
 		}
 	}
 	svc := New(st, solver, 1, nopLogger())
@@ -153,12 +153,12 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 		return strings.Join(parts, " ")
 	}
 	// Doing both tasks the same day should not cost anything here: it would only get in the way of the fairness.
-	_, err = st.SetWeights(ctx, org.Slug, plan.Slug, "T", map[string]any{"w_combo.upraktisk": 0.0})
+	_, err = st.SetWeights(ctx, org.Slug, plan.Slug, "T", map[string]any{"w_combo.impractical": 0.0})
 	must(err)
 	if got := totals(); got != "a=4 b=4 c=4" {
 		t.Errorf("total load is the goal by default: %s", got)
 	}
-	_, err = st.SetWeights(ctx, org.Slug, plan.Slug, "T", map[string]any{"w_combo.upraktisk": 0.0, "w_fair": 0.0, "w_fair_range": 0.0, "w_task_fair": 10.0, "w_task_range": 10.0})
+	_, err = st.SetWeights(ctx, org.Slug, plan.Slug, "T", map[string]any{"w_combo.impractical": 0.0, "w_fair": 0.0, "w_fair_range": 0.0, "w_task_fair": 10.0, "w_task_range": 10.0})
 	must(err)
 	if got := totals(); got != "a=3 b=6 c=3" {
 		t.Errorf("an equal share of each task, chosen on the plan: %s", got)

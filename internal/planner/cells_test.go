@@ -188,10 +188,10 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 	solver := realSolver(t)
 	w := newWorld(t, "Menighet")
 	for _, n := range []string{"Dina", "Embla"} { // without the rule, Dina and Embla could take Lyd too
-		w.st.SetPersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.lyd.ID, "godt")
+		w.st.SetPersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.lyd.ID, "good")
 	}
-	w.st.SetCombination(ctx, w.org.Slug, "T", w.lovsang.ID, w.lyd.ID, "kan_ikke")
-	w.st.SetCombination(ctx, w.org.Slug, "T", w.lovsang.ID, w.bilde.ID, "kan_ikke")
+	w.st.SetCombination(ctx, w.org.Slug, "T", w.lovsang.ID, w.lyd.ID, "cannot")
+	w.st.SetCombination(ctx, w.org.Slug, "T", w.lovsang.ID, w.bilde.ID, "cannot")
 	koret := w.group(t, "Kirkekoret", []string{"Dina", "Embla"})
 	ev := w.events[3]
 	w.cell(t, ev, w.lovsang, store.NewCell{GroupID: koret.ID})
@@ -260,7 +260,7 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 
 	// nobody in the selection can: the place stays empty and the explanation names the selection and the reason
 	for _, n := range []string{"Aslaug", "Cecilie"} {
-		w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people[n].ID, map[int64]string{ev.ID: "ikke"})
+		w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people[n].ID, map[int64]string{ev.ID: "never"})
 	}
 	v = run()
 	lyd = cellOf(v, ev, w.lyd)

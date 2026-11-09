@@ -8,15 +8,15 @@ import (
 
 func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	a := newPrefEnv(t)
-	a.s.SetPersonTask(ctx, a.org.Slug, "Kari", a.person.ID, a.lyd.ID, "godt")
-	a.s.SetAvailability(ctx, a.org.Slug, a.plan.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "ikke"})
-	a.s.SetCombination(ctx, a.org.Slug, "Ola", a.lyd.ID, a.bilde.ID, "upraktisk")
+	a.s.SetPersonTask(ctx, a.org.Slug, "Kari", a.person.ID, a.lyd.ID, "good")
+	a.s.SetAvailability(ctx, a.org.Slug, a.plan.Slug, "Kari", a.person.ID, map[int64]string{a.ev[0].ID: "never"})
+	a.s.SetCombination(ctx, a.org.Slug, "Ola", a.lyd.ID, a.bilde.ID, "impractical")
 
 	b := mustOrg(t, a.s, "Org B")
 	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Eva", "Høst 2026", "") // same slug as A's plan
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva", "Eva Test")
 	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Eva", "Kafé", true)
-	a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, taskB.ID, "noytral")
+	a.s.SetPersonTask(ctx, b.Slug, "Eva", personB.ID, taskB.ID, "neutral")
 
 	d, err := a.s.GetPlanningData(ctx, a.org.Slug, a.plan.Slug)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	if len(d.Tasks) != 3 || len(d.Events) != 3 || len(d.People) != 1 || len(d.Combinations) != 1 || len(d.DayTypes) != 1 {
 		t.Fatalf("A's data: %d tasks %d events %d people %d combos %d day types", len(d.Tasks), len(d.Events), len(d.People), len(d.Combinations), len(d.DayTypes))
 	}
-	if d.PersonTasks[a.person.ID][a.lyd.ID] != "godt" || d.PersonEvents[a.person.ID][a.ev[0].ID] != "ikke" {
+	if d.PersonTasks[a.person.ID][a.lyd.ID] != "good" || d.PersonEvents[a.person.ID][a.ev[0].ID] != "never" {
 		t.Errorf("answers missing: %v %v", d.PersonTasks, d.PersonEvents)
 	}
 	db, err := a.s.GetPlanningData(ctx, b.Slug, planB.Slug)

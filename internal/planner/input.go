@@ -95,7 +95,7 @@ func notNull(slices ...any) {
 	}
 }
 
-// weightParams turns the plan's weights into the planner's params. «w_task.godt» is nested: {"w_task": {"godt": ...}}.
+// weightParams turns the plan's weights into the planner's params. «w_task.good» is nested: {"w_task": {"good": ...}}.
 // No weights give no params at all, so a plan that never changed them has the same input (and hash) as before they existed.
 func weightParams(weights map[string]any) map[string]any {
 	if len(weights) == 0 {

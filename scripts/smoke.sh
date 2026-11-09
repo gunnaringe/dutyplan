@@ -75,7 +75,7 @@ code 200 GET /api/orgs/test/people
 code 200 GET /api/orgs/test/plans/host-2026/events
 [ "$(grep -o '"date"' "$tmp/body" | wc -l)" -eq 21 ] || fail "seedet skal gi 21 hendelser (søndager 2.8. - 20.12.)"
 code 200 GET /api/orgs/test/combinations
-[ "$(grep -o '"level":"kan_ikke"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"upraktisk"' "$tmp/body" | wc -l)" -eq 1 ] || fail "seedet kombinasjoner er feil: $(cat "$tmp/body")"
+[ "$(grep -o '"level":"cannot"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"impractical"' "$tmp/body" | wc -l)" -eq 1 ] || fail "seedet kombinasjoner er feil: $(cat "$tmp/body")"
 
 # planlegging med den ekte planleggeren: kjøringen er ferdig, kontrollert uten brudd, og usynlig for en annen organisasjon
 # (org-a har en plan med samme navn, host-2026)

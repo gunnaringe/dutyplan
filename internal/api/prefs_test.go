@@ -42,11 +42,11 @@ func TestPersonPageFlow(t *testing.T) {
 	if m.Person.Name != "Kari Test" || len(m.Tasks) != 1 || m.Tasks[0].Level != "" || len(m.Events) != 2 {
 		t.Fatalf("me before: %+v", m)
 	}
-	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/people/%d/tasks/%d", ids.person, ids.lyd), map[string]string{"level": "godt"})
+	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/people/%d/tasks/%d", ids.person, ids.lyd), map[string]string{"level": "good"})
 	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/plans/host-2026/people/%d/availability", ids.person),
-		map[string]any{"levels": map[string]string{fmt.Sprint(ids.events[0]): "ikke", fmt.Sprint(ids.events[1]): "godt"}})
+		map[string]any{"levels": map[string]string{fmt.Sprint(ids.events[0]): "never", fmt.Sprint(ids.events[1]): "good"}})
 	e.mustDo(200, "GET", me, nil).json(&m)
-	if m.Tasks[0].Level != "godt" || m.Events[0].Level != "ikke" || m.Events[1].Level != "godt" {
+	if m.Tasks[0].Level != "good" || m.Events[0].Level != "never" || m.Events[1].Level != "good" {
 		t.Errorf("me after: %+v", m)
 	}
 	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/people/%d/tasks/%d", ids.person, ids.lyd), nil)
@@ -75,29 +75,29 @@ func TestPersonPageErrorsAndIsolation(t *testing.T) {
 		}
 	}
 	notFound("GET", fmt.Sprintf("/api/orgs/org-b/plans/host-2026/people/%d/me", a.person), nil)
-	notFound("PUT", task("org-b", a.person, b.lyd), map[string]string{"level": "godt"})
-	notFound("PUT", task("org-b", b.person, a.lyd), map[string]string{"level": "godt"})
-	notFound("PUT", task("org-b", b.person, b.lovsang), map[string]string{"level": "godt"}) // manual-only task
+	notFound("PUT", task("org-b", a.person, b.lyd), map[string]string{"level": "good"})
+	notFound("PUT", task("org-b", b.person, a.lyd), map[string]string{"level": "good"})
+	notFound("PUT", task("org-b", b.person, b.lovsang), map[string]string{"level": "good"}) // manual-only task
 	notFound("DELETE", task("org-b", b.person, b.lyd), nil)                                 // not chosen
-	notFound("PUT", avail("org-b", b.person), map[string]any{"levels": map[string]string{fmt.Sprint(a.events[0]): "ikke"}})
-	notFound("PUT", avail("org-b", a.person), map[string]any{"levels": map[string]string{fmt.Sprint(b.events[0]): "ikke"}})
-	notFound("PUT", task("org-a", a.person, 99999), map[string]string{"level": "godt"})
-	notFound("PUT", "/api/orgs/org-a/people/abc/tasks/1", map[string]string{"level": "godt"})
+	notFound("PUT", avail("org-b", b.person), map[string]any{"levels": map[string]string{fmt.Sprint(a.events[0]): "never"}})
+	notFound("PUT", avail("org-b", a.person), map[string]any{"levels": map[string]string{fmt.Sprint(b.events[0]): "never"}})
+	notFound("PUT", task("org-a", a.person, 99999), map[string]string{"level": "good"})
+	notFound("PUT", "/api/orgs/org-a/people/abc/tasks/1", map[string]string{"level": "good"})
 
 	for name, c := range map[string]struct {
 		path string
 		body any
 	}{
 		"bad task level":  {task("org-a", a.person, a.lyd), map[string]string{"level": "kanskje"}},
-		"bad event level": {avail("org-a", a.person), map[string]any{"levels": map[string]string{fmt.Sprint(a.events[0]): "noytral"}}},
-		"bad event id":    {avail("org-a", a.person), map[string]any{"levels": map[string]string{"x": "ikke"}}},
+		"bad event level": {avail("org-a", a.person), map[string]any{"levels": map[string]string{fmt.Sprint(a.events[0]): "neutral"}}},
+		"bad event id":    {avail("org-a", a.person), map[string]any{"levels": map[string]string{"x": "never"}}},
 		"no events":       {avail("org-a", a.person), map[string]any{"levels": map[string]string{}}},
 	} {
 		if r := e.do("PUT", c.path, "T", c.body); r.code != 400 || r.errCode() != "invalid" {
 			t.Errorf("%s: %d %s", name, r.code, r.body)
 		}
 	}
-	if r := e.do("PUT", task("org-a", a.person, a.lyd), "", map[string]string{"level": "godt"}); r.code != 400 || r.errCode() != "actor_required" {
+	if r := e.do("PUT", task("org-a", a.person, a.lyd), "", map[string]string{"level": "good"}); r.code != 400 || r.errCode() != "actor_required" {
 		t.Errorf("without actor: %d %s", r.code, r.body)
 	}
 	// nothing was stored by any refused call

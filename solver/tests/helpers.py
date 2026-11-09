@@ -20,7 +20,7 @@ def base(people=("a", "b", "c"), n_dates=4, tasks=None, **extra):
         "dates": [{"id": d, "type": "g"} for d in dates(n_dates)],
         "day_type_tasks": {"g": dict(tasks)},
         "people": [{"id": p} for p in people],
-        "person_tasks": {p: {t: "noytral" for t in tasks} for p in people},
+        "person_tasks": {p: {t: "neutral" for t in tasks} for p in people},
         # workers: 1 gir samme svar hver gang. Flere tråder velger ulikt blant likeverdige løsninger, og da kunne en mutasjon
         # (f.eks. «jevn fordeling av») av og til overleve under CPU-last, fordi uavgjort tilfeldigvis ga riktig utfall.
         "params": {"time_limit": 10, "workers": 1},
