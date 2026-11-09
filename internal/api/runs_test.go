@@ -227,3 +227,63 @@ func TestMyAssignmentsOverHTTP(t *testing.T) {
 		}
 	}
 }
+
+func TestPinningARunOverHTTP(t *testing.T) {
+	e := newEnvWith(t, fakeSolver(oneAssignment))
+	orgA, planA := e.plannable("Org A")
+	orgB, planB := e.plannable("Org B")
+	runPath := func(org, plan string) string { return "/api/orgs/" + org + "/plans/" + plan + "/runs" }
+	var first, second struct{ ID int64 }
+	e.mustDo(202, "POST", runPath(orgA, planA), map[string]any{"time_limit": 5}).json(&first)
+	e.wait()
+	e.mustDo(202, "POST", runPath(orgA, planA), map[string]any{"time_limit": 5}).json(&second)
+	e.wait()
+	pin := runPath(orgA, planA) + "/" + itoa(first.ID) + "/pin"
+
+	if r := e.do("PUT", pin, "", nil); r.code != 400 || r.errCode() != "actor_required" {
+		t.Errorf("pinning without a name: %d %s", r.code, r.body)
+	}
+	e.mustDo(204, "PUT", pin, nil)
+	if r := e.do("PUT", pin, "T", nil); r.code != 400 || r.errCode() != "invalid" {
+		t.Errorf("pinning twice: %d %s", r.code, r.body)
+	}
+	list := mustRuns(t, e, orgA, planA)
+	if len(list) != 2 || list[0].ID != second.ID || list[0].Pinned || list[1].ID != first.ID || !list[1].Pinned {
+		t.Errorf("the list says which run is pinned: %+v", list)
+	}
+	var v planner.RunView
+	e.mustDo(200, "GET", runPath(orgA, planA)+"/"+itoa(first.ID), nil).json(&v)
+	if !v.Run.Pinned {
+		t.Errorf("a run's view says it is pinned: %+v", v.Run)
+	}
+	people, _ := e.st.ListPeople(context.Background(), orgA)
+	var m planner.Mine
+	e.mustDo(200, "GET", "/api/orgs/"+orgA+"/plans/"+planA+"/people/"+itoa(people[0].ID)+"/assignments", nil).json(&m)
+	if m.Run == nil || m.Run.ID != first.ID || !m.Run.Pinned {
+		t.Errorf("«My assignments» comes from the pinned run: %+v", m.Run)
+	}
+
+	// another organisation's plan with the same slug cannot touch A's runs, and an unknown run is not found
+	for _, c := range []struct{ method, path string }{
+		{"PUT", runPath(orgB, planB) + "/" + itoa(second.ID) + "/pin"},
+		{"DELETE", runPath(orgB, planB) + "/" + itoa(first.ID) + "/pin"},
+		{"PUT", runPath(orgA, "nope") + "/" + itoa(second.ID) + "/pin"},
+		{"PUT", runPath(orgA, planA) + "/99999/pin"},
+		{"PUT", runPath(orgA, planA) + "/abc/pin"},
+	} {
+		if r := e.do(c.method, c.path, "T", nil); r.code != 404 || r.errCode() != "not_found" {
+			t.Errorf("%s %s = %d %s", c.method, c.path, r.code, r.body)
+		}
+	}
+	if got := mustRuns(t, e, orgA, planA); !got[1].Pinned || got[0].Pinned {
+		t.Errorf("refused requests changed the pin: %+v", got)
+	}
+	e.mustDo(204, "PUT", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", nil)
+	if got := mustRuns(t, e, orgA, planA); !got[0].Pinned || got[1].Pinned {
+		t.Errorf("pinning the other run moves the pin: %+v", got)
+	}
+	e.mustDo(204, "DELETE", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", nil)
+	if r := e.do("DELETE", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", "T", nil); r.code != 400 {
+		t.Errorf("unpinning twice: %d %s", r.code, r.body)
+	}
+}

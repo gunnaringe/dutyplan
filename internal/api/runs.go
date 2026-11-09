@@ -15,10 +15,12 @@ func (s *server) runsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/runs", s.startRun)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/runs", s.listRuns)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/runs/{id}", s.getRun)
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/runs/{id}/pin", s.pinRun(true))
+	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/runs/{id}/pin", s.pinRun(false))
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/people/{id}/assignments", s.myAssignments)
 }
 
-// myAssignments: «mine oppdrag», from the plan's newest finished run. A person of another organisation is not found.
+// myAssignments: «My assignments», from the plan's pinned run, or else its newest finished one. A person of another organisation is not found.
 func (s *server) myAssignments(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.idParam(w, r)
 	if !ok {
@@ -95,4 +97,15 @@ func (s *server) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, v)
+}
+
+// pinRun pins (PUT) or unpins (DELETE) a finished run as the plan's current plan.
+func (s *server) pinRun(pin bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := s.idParam(w, r)
+		if !ok {
+			return
+		}
+		noContent(w, s.st.PinRun(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, pin), s)
+	}
 }

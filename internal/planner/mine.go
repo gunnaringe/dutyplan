@@ -26,7 +26,8 @@ type MineRun struct {
 	ID         int64  `json:"id"`
 	Actor      string `json:"actor"`
 	FinishedAt string `json:"finished_at"`
-	Stale      bool   `json:"stale"` // the plan's data has changed since
+	Stale      bool   `json:"stale"`  // the plan's data has changed since
+	Pinned     bool   `json:"pinned"` // chosen as the current plan; else it is just the newest finished one
 }
 
 // Mine is «mine oppdrag»: what one person has in the plan.
@@ -37,8 +38,8 @@ type Mine struct {
 	Assignments []MyAssignment `json:"assignments"`
 }
 
-// Mine reads the plan's newest finished run (a run that is still going or failed is not a plan) and picks out what the
-// person has in it, in the order of the events. The person must belong to the organisation.
+// Mine reads the plan's pinned run, or else its newest finished run (a run that is still going or failed is not a plan), and
+// picks out what the person has in it, in the order of the events. The person must belong to the organisation.
 func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID int64, lang ...i18n.Lang) (Mine, error) {
 	m := Mine{Assignments: []MyAssignment{}}
 	var err error
@@ -49,16 +50,28 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 	if err != nil {
 		return m, err
 	}
-	for _, r := range runs { // newest first
+	// The pinned run wins; otherwise the newest finished one (the list is newest first).
+	var chosen *store.Run
+	for i, r := range runs {
 		if r.Status != "done" {
 			continue
 		}
+		if r.Pinned {
+			chosen = &runs[i]
+			break
+		}
+		if chosen == nil {
+			chosen = &runs[i]
+		}
+	}
+	if chosen != nil {
+		r := *chosen
 		v, err := s.View(ctx, orgSlug, planSlug, r.ID, lang...)
 		if err != nil {
 			return m, err
 		}
 		m.HasPlan = true
-		m.Run = &MineRun{ID: r.ID, Actor: r.Actor, FinishedAt: r.FinishedAt, Stale: v.Run.Stale}
+		m.Run = &MineRun{ID: r.ID, Actor: r.Actor, FinishedAt: r.FinishedAt, Stale: v.Run.Stale, Pinned: r.Pinned}
 		names := map[int64]string{}
 		for _, t := range v.Tasks {
 			names[t.ID] = t.Name
@@ -95,7 +108,6 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 			sort.SliceStable(day, func(i, j int) bool { return day[i].Task < day[j].Task })
 			m.Assignments = append(m.Assignments, day...)
 		}
-		break
 	}
 	return m, nil
 }

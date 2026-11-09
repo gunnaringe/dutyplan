@@ -278,9 +278,10 @@ function dayTypeSelect(dayTypes, value, onchange, label) {
   return h('select', { 'aria-label': label, onchange }, dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === value }, d.name)));
 }
 
-// «Plan»: the latest run of the planner as a list of events (mobile first), with a button to plan or try again.
+// «Plan»: a run of the planner (the latest at first) as a list of events (mobile first), with a button to plan or try again, the
+// earlier runs, and a pin that makes a finished run the plan people see under «My assignments».
 // The run happens on the server; the panel asks for status every second until it is done and redraws only itself.
-function planPanel(r, canPlan, first) {
+function planPanel(r, canPlan, first, firstRuns) {
   const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/runs`;
   const box = h('div', { class: 'plan-panel' });
   const limits = [[10, '10 s'], [20, '20 s'], [60, '60 s']];
@@ -288,16 +289,30 @@ function planPanel(r, canPlan, first) {
   limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
   let timer = 0;
   let lastView = first;
+  let runs = firstRuns;  // newest first, with the pinned run too
+  let historyOpen = false;  // the list of earlier runs stays open when the panel is redrawn
   // Grid on wide screens, list on narrow ones, until the user chooses.
   const planView = () => store.get('planview') || (window.matchMedia('(min-width: 56rem)').matches ? 'grid' : 'list');
 
   async function start() {
     let view;
-    if (await write(async () => { const res = await api('POST', path, { time_limit: parseInt(limitSel.value, 10) }); view = await api('GET', `${path}/${res.id}`); })) show(view);
+    if (await write(async () => { const res = await api('POST', path, { time_limit: parseInt(limitSel.value, 10) }); runs = await api('GET', path); view = await api('GET', `${path}/${res.id}`); })) show(view);
   }
   async function poll() {
     if (!box.isConnected) return;  // the page has been replaced
-    try { show(await api('GET', `${path}/latest`)); } catch (e) { say(errorText(e), 'err'); }
+    try {
+      const view = await api('GET', `${path}/latest`);
+      if (view.run.status !== 'running') runs = await api('GET', path);
+      show(view);
+    } catch (e) { say(errorText(e), 'err'); }
+  }
+  async function showRun(id) {
+    try { show(await api('GET', `${path}/${id}`)); } catch (e) { say(errorText(e), 'err'); }
+  }
+  // Pin or unpin the run on show, then show it again (not the latest: the user is looking at this one).
+  async function pin(id, on) {
+    if (!(await write(() => api(on ? 'PUT' : 'DELETE', `${path}/${id}/pin`)))) return;
+    try { runs = await api('GET', path); show(await api('GET', `${path}/${id}`)); say(on ? t('run.pin_done', { id }) : t('run.unpin_done')); } catch (e) { say(errorText(e), 'err'); }
   }
   function show(view) {
     lastView = view;
@@ -348,6 +363,10 @@ function planPanel(r, canPlan, first) {
     if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: run.error || t('run.unknown_error') }))); return out; }
 
     out.push(h('p', { class: 'small muted' }, t('run.made_by', { actor: run.actor, time: fmtTime(run.finished_at || run.started_at) }) + ' ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'))));
+    if (runs.length && run.id !== runs[0].id) out.push(h('p', { class: 'small' }, t('run.older_note', { id: run.id }), ' ', h('button', { type: 'button', class: 'link-button', onclick: () => showRun(runs[0].id) }, t('run.show_newest'))));
+    out.push(run.pinned
+      ? h('p', { class: 'small' }, h('span', { class: 'tag lock' }, t('run.pinned_tag')), ' ' + t('run.pinned_note') + ' ', h('button', { type: 'button', class: 'link-button', onclick: () => pin(run.id, false) }, t('run.unpin')))
+      : h('p', { class: 'small muted' }, h('button', { type: 'button', class: 'ghost', onclick: () => pin(run.id, true) }, t('run.pin')), ' ' + t('run.pin_hint')));
     if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, t('run.stale')));
     if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
     else if (run.checked) out.push(h('p', { class: 'small muted' }, t('run.checked_ok')));
@@ -362,6 +381,10 @@ function planPanel(r, canPlan, first) {
       h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, ev.day_type + (ev.note ? ' · ' + ev.note : ''))),
       h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => [h('div', { class: 'task' }, names.get(c.task_id) || '?'), cellContent(c, names.get(c.task_id) || '?', ev.id, false)]))))));
     if (view.weak.length) out.push(h('details', {}, h('summary', {}, t('run.compromises', { n: view.weak.length })), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
+    if (runs.length > 1) out.push(h('details', { open: historyOpen, ontoggle: (e) => { historyOpen = e.target.open; } }, h('summary', {}, t('run.history', { n: runs.length })), h('ul', { class: 'plain runs' }, runs.map((x) => h('li', { class: 'run-row' + (x.id === run.id ? ' shown' : '') },
+      h('span', {}, '#' + x.id), h('span', { class: 'muted small' }, `${x.actor} · ${fmtTime(x.finished_at || x.started_at)}`),
+      x.status !== 'done' ? h('span', { class: 'tag' }, t('run.status.' + x.status)) : '', x.pinned ? h('span', { class: 'tag lock' }, t('run.pinned_tag')) : '',
+      x.id === run.id ? '' : h('button', { type: 'button', class: 'link-button', 'aria-label': t('run.show_aria', { id: x.id }), onclick: () => showRun(x.id) }, t('run.show')))))));
     if (view.load.length) out.push(h('details', {}, h('summary', {}, t('run.distribution')), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) }))))));
     return out;
   }
@@ -493,17 +516,19 @@ function weightsSection(r, wr) {
           h('button', { type: 'button', class: 'ghost', onclick: save({}, t('weights.reset_done')) }, t('weights.reset'))))));
 }
 
-// The latest run, or null. The list is always 200; asking for «latest» right away with no runs would give a 404 in the browser console.
-async function latestRun(path) {
-  return (await api('GET', path)).length ? api('GET', path + '/latest') : null;
+// The plan's runs and the latest one's view (or null). The list is always 200; asking for «latest» right away with no runs
+// would give a 404 in the browser console.
+async function runsAndLatest(path) {
+  const runs = await api('GET', path);
+  return { runs, latest: runs.length ? await api('GET', path + '/latest') : null };
 }
 
 async function pagePlan(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log, people, health, latest, tasks, groups, cells, pools, weights] = await Promise.all([
+  const [plan, dates, dayTypes, log, people, health, { runs, latest }, tasks, groups, cells, pools, weights] = await Promise.all([
     api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
     api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people'),
-    api('GET', '/health'), latestRun(`${base}/plans/${enc(r.plan)}/runs`),
+    api('GET', '/health'), runsAndLatest(`${base}/plans/${enc(r.plan)}/runs`),
     api('GET', base + '/tasks'), api('GET', base + '/groups'), api('GET', `${base}/plans/${enc(r.plan)}/cells`), api('GET', `${base}/plans/${enc(r.plan)}/pools`), api('GET', `${base}/plans/${enc(r.plan)}/weights`)]);
   const refresh = () => render();
   const dpath = `${base}/plans/${enc(r.plan)}/events`;
@@ -558,7 +583,7 @@ async function pagePlan(r, org) {
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
     h('h1', {}, plan.name),
     fillIn,
-    section(t('plan.section'), planPanel(r, !!health.planner, latest)),
+    section(t('plan.section'), planPanel(r, !!health.planner, latest, runs)),
     rulesSection(r, base, dates, tasks, groups, people, cells, pools),
     weightsSection(r, weights),
     section(t('plan.events'),
@@ -593,7 +618,7 @@ async function pageMe(r, org) {
       h('span', {}, a.via ? t('me.with', { task: a.task, via: a.via }) : a.task, a.locked ? h('span', { class: 'tag lock' }, t('cell.locked')) : '', a.weak ? h('span', { class: 'tag' }, t('cell.poor')) : ''),
       h('span', { class: 'small muted' }, a.day_type + (a.note ? ' · ' + a.note : ''))));
     return section(t('me.assignments'),
-      h('p', { class: 'small muted' }, t('me.from_plan', { actor: mine.run.actor, time: fmtTime(mine.run.finished_at) })),
+      h('p', { class: 'small muted' }, t(mine.run.pinned ? 'me.from_pinned' : 'me.from_latest', { actor: mine.run.actor, time: fmtTime(mine.run.finished_at) })),
       mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, t('me.stale')) : '',
       rows.length ? [h('p', { class: 'small' }, tn('me.count', rows.length)), h('ul', { class: 'mine' }, rows)] : h('p', { class: 'muted' }, t('me.none')));
   })();

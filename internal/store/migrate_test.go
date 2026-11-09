@@ -148,3 +148,33 @@ func TestAFreshDatabaseHasTheEnglishCodesAndNoOldRows(t *testing.T) {
 		t.Errorf("no table definition may mention an old code: %d %v", n, err)
 	}
 }
+
+func TestMigrationAddsPinningToExistingRuns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	databaseAtVersion8(t, path)
+	s, err := Open(path) // applies migrations 9 and 10 to the old database
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if n := count(t, s, `SELECT COUNT(*) FROM plan_run WHERE pinned = 0`); n != 3 {
+		t.Fatalf("old runs start unpinned: %d of 3", n)
+	}
+	// migration 9 turned the old finished run into a failed one ("made by an older version"), so none of them can be pinned
+	if err := s.PinRun(ctx, "org", "a", "Ola", 1, true); !codeIs(err, "run_not_done") {
+		t.Errorf("an old run cannot be pinned: %v", err)
+	}
+	id, err := s.CreateRun(ctx, "org", "a", "Ola", 4, 5, "h", []byte("{}"), []byte("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FinishRun(ctx, id, []byte(`{"status":"OPTIMAL"}`), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.PinRun(ctx, "org", "a", "Ola", id, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM plan_run WHERE pinned = 1`); n != 1 {
+		t.Errorf("pinned runs: %d", n)
+	}
+}

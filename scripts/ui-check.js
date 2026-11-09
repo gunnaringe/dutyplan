@@ -226,6 +226,31 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Try again' }).click();
     await page.waitForSelector('.plan-panel .warn', { state: 'detached', timeout: 20000 });
 
+    // history and pin: an earlier run can be shown and made the current plan, which «My assignments» then follows
+    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.waitForSelector('.plan-event');
+    await page.click('summary:has-text("Earlier runs")');
+    ok((await page.locator('.run-row').count()) >= 3, 'every run is in the history');
+    ok(!(await page.innerText('.plan-panel')).includes('not the newest'), 'the newest run is shown at first');
+    await page.locator('.run-row button:has-text("Show")').last().click();
+    await page.waitForSelector('.plan-panel :text("not the newest")');
+    await page.getByRole('button', { name: 'Use as the current plan' }).click();
+    await msgHas(page, 'is now the current plan');
+    await page.waitForSelector('.plan-panel :text("not the newest")');  // still the older run, now with the pin
+    await page.waitForSelector('.run-row .tag:has-text("pinned")');
+    await page.goto(base + kariUrl);
+    await page.waitForSelector('.mine-row');
+    ok((await page.innerText('main')).includes('From the pinned plan'), 'my page follows the pinned plan: ' + (await page.innerText('main')));
+    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.waitForSelector('.plan-event');
+    await page.click('summary:has-text("Earlier runs")');
+    await page.locator('.run-row:has(.tag:has-text("pinned")) button:has-text("Show")').click();
+    await page.getByRole('button', { name: 'Unpin' }).click();
+    await msgHas(page, 'Unpinned');
+    await page.goto(base + kariUrl);
+    await page.waitForSelector('.mine-row');
+    ok((await page.innerText('main')).includes('From the newest plan'), 'unpinned, my page follows the newest plan');
+
     // a group that a manual cell names cannot be deleted, and the message says so (not «already exists»)
     await page.goto(base + '/o/sports-club/p/autumn-2026');
     await page.click('summary:has-text("New manual cell")');
@@ -333,7 +358,7 @@ const { spawn } = require('child_process');
     await page.waitForSelector('.plan-event');
     panel = await page.innerText('.plan-panel');
     ok(panel.includes('Mangler 2') && panel.includes('har ikke valgt oppgaven'), 'the server explains in Norwegian too: ' + panel);
-    ok(panel.includes('Kontrollert uavhengig'), 'the run texts are Norwegian: ' + panel);
+    ok(panel.includes('Kontrollert uavhengig') && panel.includes('Bruk som gjeldende plan'), 'the run texts are Norwegian: ' + panel);
     await page.goto(base + '/o/sports-club/setup');
     await h1is(page, 'Oppsett');
     await page.fill('input[placeholder="Ny oppgave"]', 'Sound');

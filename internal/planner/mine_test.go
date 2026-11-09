@@ -122,3 +122,52 @@ func TestMineIsScopedToThePersonsOrganisationAndPlan(t *testing.T) {
 		t.Errorf("B has no plan yet: %+v %v", m, err)
 	}
 }
+
+func TestMineUsesThePinnedRunInsteadOfTheNewestOne(t *testing.T) {
+	w := newWorld(t, "Club")
+	koret := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.lyd.ID, Fills: 1, Level: "neutral"})
+	anna := w.people["Aslaug"].ID
+	w.runWith(t, groupAnswer(w, koret)) // Aslaug has two assignments here
+	empty := []byte(`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`)
+	newer := newService(w, func(context.Context, []byte) ([]byte, error) { return empty, nil })
+	newer.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})
+	waitDone(t, newer)
+	mine := func() Mine {
+		t.Helper()
+		m, err := newer.Mine(ctx, w.org.Slug, w.plan.Slug, anna)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	runs, _ := w.st.ListRuns(ctx, w.org.Slug, w.plan.Slug, 0)
+	if len(runs) != 2 {
+		t.Fatalf("runs: %+v", runs)
+	}
+	newestID, olderID := runs[0].ID, runs[1].ID
+	if m := mine(); m.Run.ID != newestID || m.Run.Pinned || len(m.Assignments) != 0 {
+		t.Errorf("nothing pinned: the newest finished run is the plan: %+v", m.Run)
+	}
+	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, "Ola", olderID, true); err != nil {
+		t.Fatal(err)
+	}
+	if m := mine(); m.Run.ID != olderID || !m.Run.Pinned || len(m.Assignments) != 2 {
+		t.Errorf("the pinned run is the plan, although a newer one exists: %+v %d assignments", m.Run, len(m.Assignments))
+	}
+	// a newer run, finished or failed, does not move the pin
+	failing := newService(w, func(context.Context, []byte) ([]byte, error) { return nil, errors.New("boom") })
+	failing.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5})
+	waitDone(t, failing)
+	third := newService(w, func(context.Context, []byte) ([]byte, error) { return empty, nil })
+	third.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})
+	waitDone(t, third)
+	if m := mine(); m.Run.ID != olderID || len(m.Assignments) != 2 {
+		t.Errorf("new runs leave the pin where it was: %+v", m.Run)
+	}
+	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, "Ola", olderID, false); err != nil {
+		t.Fatal(err)
+	}
+	if m := mine(); m.Run.Pinned || m.Run.ID == olderID || len(m.Assignments) != 0 {
+		t.Errorf("unpinned: back to the newest finished run: %+v", m.Run)
+	}
+}
