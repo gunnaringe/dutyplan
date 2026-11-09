@@ -88,11 +88,11 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Legg til alle' }).click();
     await page.waitForSelector('td:has-text("Kafé")');
     await page.fill('input[placeholder^="Ny dagtype"]', 'Gudstjeneste');
-    await page.getByRole('button', { name: 'Opprett', exact: true }).click();
+    await page.locator('form:has(input[placeholder^="Ny dagtype"]) button').click();
     await page.waitForSelector('input[aria-label="Plasser for Lyd på Gudstjeneste"]');
     await page.fill('input[aria-label="Plasser for Lyd på Gudstjeneste"]', '1');
     await page.fill('input[aria-label="Plasser for Kafé på Gudstjeneste"]', '3');
-    await page.click('text=Lagre oppgaver');
+    await page.locator('.card:has(input[aria-label="Navn på dagtype"]) button:has-text("Lagre oppgaver")').click();
     await page.selectOption('select[aria-label="Bilde og Lyd"]', 'kan_ikke');
     await page.reload();
     await h1is('Oppsett');
@@ -143,6 +143,30 @@ const { spawn } = require('child_process');
     await page.waitForSelector('input[aria-label="Kan foreslås: Kari Test"]');
     await page.check('input[aria-label="Kan foreslås: Kari Test"]');  // slått av tidligere i testen
     await page.waitForFunction(() => document.querySelector('input[aria-label="Kan foreslås: Kari Test"]').checked && document.body.innerText.includes('true -> false') && document.body.innerText.includes('false -> true'));
+    // en gruppe: Ola Test er med i «Koret», som planleggeren kan foreslå til Kafé (1 av 3 plasser)
+    await page.goto(base + '/o/menigheten');
+    await page.fill('form.row input[placeholder="Ny person"]', 'Ola Test');
+    await page.click('text=Legg til');
+    await page.waitForSelector('td:has-text("Ola Test")');
+    await page.goto(base + '/o/menigheten/oppsett');
+    await h1is('Oppsett');
+    await page.fill('input[placeholder^="Ny gruppe"]', 'Koret');
+    await page.locator('form:has(input[placeholder^="Ny gruppe"]) button').click();
+    await page.waitForSelector('input[aria-label="Navn på gruppen"]');
+    await page.check('input[aria-label="Ola Test i Koret"]');
+    // hver lagring tegner siden på nytt: vent til den er ferdig før neste felt fylles ut
+    const saved = async (suffix, button) => {
+      await Promise.all([page.waitForResponse((r) => r.url().endsWith(suffix) && r.request().method() === 'PUT'), page.locator('.card:has(input[aria-label="Navn på gruppen"]) button:has-text("' + button + '")').click()]);
+      await page.waitForLoadState('networkidle');
+    };
+    await saved('/members', 'Lagre medlemmer');
+    await page.fill('input[aria-label="Plasser Koret fyller på Kafé"]', '1');
+    await saved('/tasks', 'Lagre oppgaver');
+    await page.reload();
+    await page.waitForSelector('input[aria-label="Plasser Koret fyller på Kafé"]');
+    ok((await page.inputValue('input[aria-label="Plasser Koret fyller på Kafé"]')) === '1', 'gruppens oppgave ligger igjen etter omlasting');
+    ok(await page.isChecked('input[aria-label="Ola Test i Koret"]'), 'gruppens medlem ligger igjen etter omlasting');
+    ok(await page.isChecked('input[aria-label="Kan foreslås: Koret"]'), 'en ny gruppe kan foreslås');
     await page.goto(base + '/o/menigheten/p/host-2026');
     await h1is('Høst 2026');
     ok((await page.innerText('main')).includes('Ingen plan er laget ennå'), 'planen er tom før første kjøring');
@@ -151,7 +175,8 @@ const { spawn } = require('child_process');
     let panel = await page.innerText('.plan-panel');
     ok(panel.includes('Kari Test'), 'Kari fikk Lyd: ' + panel);
     ok(panel.includes('Kontrollert uavhengig: ingen brudd'), 'kontrollen ble kjørt: ' + panel);
-    ok(panel.includes('Ikke fylt') && panel.includes('har ikke valgt oppgaven'), 'plasser som ikke kan fylles, forklares: ' + panel);
+    ok(panel.includes('Koret (Ola Test)'), 'gruppen er foreslått på Kafé, med medlemmene: ' + panel);
+    ok(panel.includes('Mangler 2') && panel.includes('har ikke valgt oppgaven'), 'plasser som ikke kan fylles, forklares: ' + panel);
     ok((await page.locator('.plan-event').count()) === 5, 'en rad per hendelse');
     await page.getByRole('button', { name: 'Prøv igjen' }).click();
     await page.waitForSelector('.plan-panel p:has-text("Planlegger")', { timeout: 3000 }).catch(() => {});  // kan være ferdig før vi rekker å se den

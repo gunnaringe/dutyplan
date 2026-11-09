@@ -24,7 +24,7 @@ func isForeignKey(err error) bool {
 // with it (a reference into another organisation is "not found"); the composite foreign keys are the backstop.
 func inOrg(ctx context.Context, q dbq, table string, oid, id int64) error {
 	switch table {
-	case "task", "day_type", "person":
+	case "task", "day_type", "person", "grp":
 	default:
 		panic("inOrg: unknown table " + table)
 	}
@@ -208,7 +208,7 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug, actor string, id int64)
 			return logEntry{}, err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return logEntry{}, fmt.Errorf("%w: task %q is used by a day type; remove it there first", ErrConflict, name)
+			return logEntry{}, fmt.Errorf("%w: task %q is used by a day type, a group or a manual cell; remove it there first", ErrConflict, name)
 		} else if err != nil {
 			return logEntry{}, err
 		}

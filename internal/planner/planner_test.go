@@ -155,8 +155,8 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[did(w.dt.ID)].(map[string]any)) != 3 {
 		t.Errorf("events and day type: %v %v", in["dates"], in["day_type_tasks"])
 	}
-	// the snapshot only names the planner's tasks and the active people
-	if len(snap.Tasks) != 2 || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.lovsang.ID] != 0 || snap.Slots[w.dt.ID][w.lyd.ID] != 1 {
+	// the snapshot names every task (with its planned flag) and the active people
+	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.lovsang.ID] != 0 || snap.Slots[w.dt.ID][w.lyd.ID] != 1 {
 		t.Errorf("snapshot: %+v", snap)
 	}
 	// deterministic, and the hash ignores seed and time limit but not the data
@@ -214,9 +214,25 @@ func TestBuildInputOnlyContainsTheOrganisationsOwnData(t *testing.T) {
 	}
 }
 
+func testNames() Namer {
+	look := func(m map[string]string) func(string) string {
+		return func(id string) string {
+			if n, ok := m[id]; ok {
+				return n
+			}
+			return id
+		}
+	}
+	return Namer{
+		Person: look(map[string]string{"p1": "Aslaug", "p2": "Birger", "p3": "Cecilie"}),
+		Task:   look(map[string]string{"t1": "Lyd", "t2": "Lovsang"}),
+		Group:  look(map[string]string{"g1": "Kirkekoret", "g2": "Bandet"}),
+		Event:  look(map[string]string{"e5": "2026-08-09"}),
+	}
+}
+
 func TestExplain(t *testing.T) {
-	person := func(id string) string { return map[string]string{"p1": "Aslaug", "p2": "Birger", "p3": "Cecilie"}[id] }
-	task := func(id string) string { return map[string]string{"t1": "Lyd", "t2": "Lovsang"}[id] }
+	const busy = "1 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har"
 	cases := []struct {
 		why  map[string]any
 		want string
@@ -228,13 +244,51 @@ func TestExplain(t *testing.T) {
 			"Ingen kan ta denne: har sagt «ikke» til oppgaven: Cecilie; kan ikke foreslås: Aslaug."},
 		{map[string]any{"kandidater": 2.0, "opptatt": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
 			"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Lyd, Lovsang), Birger (Lyd)."},
+		// a group's task is named with the group
 		{map[string]any{"kandidater": 1.0, "opptatt": map[string]any{"p1": []any{"t2 (g1)"}}},
-			"1 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (t2 (g1))."},
+			busy + ": opptatt med noe annet på hendelsen: Aslaug (Lovsang (Kirkekoret))."},
+		// the utvalg and who is outside it
+		{map[string]any{"kandidater": 0.0, "utvalg": []any{"p1", "p2"}, "utvalg_grupper": []any{"g1"}, "utenfor_utvalg": 4.0},
+			"Ingen kan ta denne: utvalget er Aslaug, Birger, Kirkekoret (4 andre står utenfor)."},
+		{map[string]any{"kandidater": 0.0, "utvalg": []any{"p1"}}, "Ingen kan ta denne: utvalget er Aslaug."},
+		// why a group could not be proposed; a group that could have been is not mentioned
+		{map[string]any{"kandidater": 0.0, "grupper": map[string]any{
+			"g1": "dato_ikke:p2", "g2": "kandidat"}},
+			"Ingen kan ta denne: Kirkekoret: Birger passer ikke."},
+		{map[string]any{"kandidater": 0.0, "grupper": map[string]any{
+			"g1": "ikke_foreslaas", "g2": "for_mange_plasser"}},
+			"Ingen kan ta denne: Bandet trenger flere plasser enn det er igjen; Kirkekoret kan ikke foreslås."},
+		{map[string]any{"kandidater": 0.0, "grupper": map[string]any{"g1": "ikke_foreslaas:p3", "g2": "utenfor_utvalg"}},
+			"Ingen kan ta denne: Bandet står utenfor utvalget; Kirkekoret kan ikke foreslås fordi Cecilie ikke kan foreslås."},
+		{map[string]any{"kandidater": 0.0, "grupper": map[string]any{"g1": "oppgave_ikke:p1", "g2": "opptatt:p2"}},
+			"Ingen kan ta denne: Bandet: Birger er opptatt med noe annet; Kirkekoret: Aslaug har sagt «ikke» til oppgaven."},
 	}
 	for _, c := range cases {
-		if got := Explain(c.why, person, task); got != c.want {
+		if got := Explain(c.why, testNames()); got != c.want {
 			t.Errorf("\n got %q\nwant %q", got, c.want)
 		}
+	}
+}
+
+func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
+	n := testNames()
+	for in, want := range map[string]string{
+		"låst: p1 på t1 e5 bryter «dato_ikke» (manuelt valg beholdt)":                 "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om det ikke passer.",
+		"låst: p1 på t1 e5 bryter «ikke_med» (manuelt valg beholdt)":                  "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven.",
+		"låst: p1 på t1 e5 bryter «oppgave_ikke» (manuelt valg beholdt)":              "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven.",
+		"låst: p1 på t1 e5 bryter «utenfor_utvalg» (manuelt valg beholdt)":            "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen står utenfor utvalget.",
+		"låst: p1 på t1 e5 bryter «opptatt:t2 (g1)» (manuelt valg beholdt)":           "Aslaug er satt på Lyd 2026-08-09 for hånd, selv om hen er opptatt med Lovsang (Kirkekoret).",
+		"gruppe g1 står på t2 e5, men p3 har «ikke» den dagen (manuelt valg beholdt)": "Kirkekoret er satt på Lovsang 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer.",
+		"p2 er låst på t1 e5 samtidig som gruppe g1 står på t2":                       "Birger er satt på Lyd 2026-08-09 for hånd samtidig som Kirkekoret står på Lovsang; de to kan ikke kombineres.",
+		"noe annet fra solveren": "noe annet fra solveren",
+	} {
+		if got := TranslateWarning(in, n); got != want {
+			t.Errorf("\n got %q\nwant %q", got, want)
+		}
+	}
+	// a manual cell for someone who «kan ikke foreslås» is how that setting is meant to be used: no warning
+	if got := TranslateWarning("låst: p1 på t1 e5 bryter «ikke_foreslaas» (manuelt valg beholdt)", n); got != "" {
+		t.Errorf("must be silent, got %q", got)
 	}
 }
 
@@ -245,6 +299,8 @@ type fakeSolver struct {
 }
 
 func (f fakeSolver) Solve(c context.Context, input []byte) ([]byte, error) { return f.reply(c, input) }
+
+func nopLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
 func newService(w world, f func(ctx context.Context, input []byte) ([]byte, error)) *Service {
 	return New(w.st, fakeSolver{f}, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -260,8 +316,9 @@ func cannedAnswer(w world) []byte {
 		},
 		"unfilled": []map[string]any{{"date": eid(w.events[1].ID), "task": tid(w.lyd.ID), "missing": 1,
 			"why": map[string]any{"kandidater": 0, "dato_ikke": []string{pid(w.people["Aslaug"].ID)}}}},
-		"load":       map[string]any{pid(w.people["Aslaug"].ID): map[string]any{"count": 1, "target": 1.26, "capacity": 4, "history": 0}},
-		"violations": []string{},
+		"concessions": []map[string]any{{"date": eid(w.events[0].ID), "task": tid(w.lyd.ID), "person": pid(w.people["Aslaug"].ID), "task_level": "noytral", "date_level": "darlig"}},
+		"load":        map[string]any{pid(w.people["Aslaug"].ID): map[string]any{"count": 1, "target": 1.26, "capacity": 4, "history": 0}},
+		"violations":  []string{},
 	}
 	b, _ := json.Marshal(out)
 	return b

@@ -23,6 +23,7 @@ func tid(id int64) string { return "t" + strconv.FormatInt(id, 10) }
 func eid(id int64) string { return "e" + strconv.FormatInt(id, 10) }
 func did(id int64) string { return "d" + strconv.FormatInt(id, 10) }
 func pid(id int64) string { return "p" + strconv.FormatInt(id, 10) }
+func gid(id int64) string { return "g" + strconv.FormatInt(id, 10) }
 
 type solverInput struct {
 	Tasks []struct {
@@ -45,7 +46,22 @@ type solverInput struct {
 		B     string `json:"b"`
 		Level string `json:"level"`
 	} `json:"combinations"`
-	Params *solverParams `json:"params,omitempty"`
+	Groups     []solverGroup     `json:"groups,omitempty"`
+	GroupTasks []solverGroupTask `json:"group_tasks,omitempty"`
+	Params     *solverParams     `json:"params,omitempty"`
+}
+
+type solverGroup struct {
+	ID         string   `json:"id"`
+	Members    []string `json:"members"`
+	Proposable bool     `json:"proposable"`
+}
+
+type solverGroupTask struct {
+	Group string `json:"group"`
+	Task  string `json:"task"`
+	Fills int    `json:"fills"`
+	Level string `json:"level"`
 }
 
 type solverParams struct {
@@ -58,9 +74,19 @@ type solverParams struct {
 // renamed or removed later.
 type Snapshot struct {
 	Events []SnapEvent             `json:"events"`
-	Tasks  []SnapTask              `json:"tasks"` // the planner's tasks only
+	Tasks  []SnapTask              `json:"tasks"` // every task of the organisation (names for the view)
 	People []SnapPerson            `json:"people"`
 	Slots  map[int64]map[int64]int `json:"slots"` // day type -> task -> places
+	Groups []SnapGroup             `json:"groups,omitempty"`
+	// Warnings are things the planner was not told about, such as a manual cell for a person who is no longer active.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// SnapGroup is a group as the run saw it: the active members only.
+type SnapGroup struct {
+	ID      int64   `json:"id"`
+	Name    string  `json:"name"`
+	Members []int64 `json:"members"`
 }
 
 type SnapEvent struct {
@@ -71,8 +97,9 @@ type SnapEvent struct {
 	Note      string `json:"note"`
 }
 type SnapTask struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Planned bool   `json:"planned"` // the planner distributes it (otherwise it only has manual cells)
 }
 type SnapPerson struct {
 	ID   int64  `json:"id"`
@@ -115,9 +142,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			ID      string `json:"id"`
 			Planned bool   `json:"planned"`
 		}{tid(t.ID), t.Planned})
-		if t.Planned {
-			snap.Tasks = append(snap.Tasks, SnapTask{t.ID, t.Name})
-		}
+		snap.Tasks = append(snap.Tasks, SnapTask{t.ID, t.Name, t.Planned})
 	}
 	sort.Slice(snap.Tasks, func(i, j int) bool { return snap.Tasks[i].Name < snap.Tasks[j].Name })
 	in.DayTypeTasks = map[string]map[string]int{}
@@ -168,6 +193,38 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 				m[eid(ev)] = level
 			}
 			in.PersonDates[pid(person.ID)] = m
+		}
+	}
+	// Groups: only active members count. A group left with none is not sent (nor anything that names it).
+	active := map[int64]bool{}
+	for _, person := range d.People {
+		if person.Active {
+			active[person.ID] = true
+		}
+	}
+	groups := map[int64]bool{}
+	for _, g := range d.Groups {
+		sg := solverGroup{ID: gid(g.ID), Members: []string{}, Proposable: g.Proposable}
+		snapG := SnapGroup{ID: g.ID, Name: g.Name, Members: []int64{}}
+		for _, m := range g.Members {
+			if active[m] {
+				sg.Members = append(sg.Members, pid(m))
+				snapG.Members = append(snapG.Members, m)
+			}
+		}
+		if len(sg.Members) == 0 {
+			if len(g.Tasks) > 0 {
+				snap.Warnings = append(snap.Warnings, "Gruppen «"+g.Name+"» har ingen aktive medlemmer og er ikke med i planleggingen.")
+			}
+			continue
+		}
+		groups[g.ID] = true
+		in.Groups = append(in.Groups, sg)
+		snap.Groups = append(snap.Groups, snapG)
+		for _, t := range g.Tasks {
+			if planned[t.TaskID] { // the task may have been taken out of the planner's hands after the group was set up
+				in.GroupTasks = append(in.GroupTasks, solverGroupTask{gid(g.ID), tid(t.TaskID), t.Fills, t.Level})
+			}
 		}
 	}
 	for _, c := range d.Combinations {

@@ -54,6 +54,7 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	mux.HandleFunc("GET /api/orgs/{org}/log", s.listLog)
 
 	s.setupRoutes(mux)
+	s.groupsRoutes(mux)
 	s.runsRoutes(mux)
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })

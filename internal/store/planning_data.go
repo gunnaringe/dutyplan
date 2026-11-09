@@ -23,6 +23,7 @@ type PlanningData struct {
 	PersonTasks  map[int64]map[int64]string // person -> task -> level (a row means: takes part)
 	PersonEvents map[int64]map[int64]string // person -> event -> level (no row = neutral)
 	Combinations []Combination
+	Groups       []Group
 }
 
 func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (PlanningData, error) {
@@ -116,6 +117,9 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 			d.Combinations = append(d.Combinations, c)
 			return err
 		}); err != nil {
+		return d, err
+	}
+	if d.Groups, err = listGroups(ctx, tx, oid); err != nil {
 		return d, err
 	}
 	return d, nil
