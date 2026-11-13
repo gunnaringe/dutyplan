@@ -72,8 +72,8 @@ func (s *Store) RenamePlan(ctx context.Context, orgSlug, planSlug, actor, name s
 }
 
 // DeletePlan removes a plan with everything that belongs to it: its events and what hangs on them (answers, manual cells,
-// selections) and all its runs, a pinned one too. People, tasks, day types and groups are the organisation's and stay. The
-// change log stays too, so the history of the organisation is whole: lines about the plan lose their link to it and get the
+// selections, places per event, info values), its info rows and all its runs, a pinned one too. People, tasks, day types
+// and groups are the organisation's and stay. The change log stays too, so the history of the organisation is whole: lines about the plan lose their link to it and get the
 // plan's name in front of the text, and the deletion itself is a line without a plan. A plan with a run in progress is
 // refused: the run would have nowhere to finish.
 func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug, actor string) error {
@@ -97,10 +97,10 @@ func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug, actor string)
 		if running > 0 {
 			return logEntry{}, Conflict("plan_busy", map[string]any{"name": name}, "plan %q has a run in progress", name)
 		}
-		// The runs have no cascade, so they go first; the events take their answers, manual cells and selections with them (ON
-		// DELETE CASCADE). A table added later that refers to a plan or an event without a cascade makes this fail, and the test
-		// that lists the tables with a plan_id says where to look.
-		for _, table := range []string{"plan_run", "event"} {
+		// The runs have no cascade, so they go first; the events take their answers, manual cells, selections, places and info
+		// values with them (ON DELETE CASCADE), and then the info rows can go. A table added later that refers to a plan or an
+		// event without a cascade makes this fail, and the test that lists the tables with a plan_id says where to look.
+		for _, table := range []string{"plan_run", "event", "plan_field"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ? AND plan_id = ?`, oid, pid); err != nil {
 				return logEntry{}, err
 			}

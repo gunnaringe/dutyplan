@@ -1,0 +1,474 @@
+package store
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// tableWorld is an organisation with a plan of two events of one day type (Sound 1, Camera 1), a second plan with an event,
+// and a second organisation with its own plan, event and task.
+type tableWorld struct {
+	s                 *Store
+	org, otherOrg     Org
+	plan, other, away Plan
+	sound, camera     Task
+	foreignTask       Task
+	ev, ev2, otherEv  Event
+	awayEv            Event
+	dayType           DayType
+}
+
+func newTableWorld(t *testing.T) tableWorld {
+	t.Helper()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := open(t)
+	w := tableWorld{s: s, org: mustOrg(t, s, "Club"), otherOrg: mustOrg(t, s, "Elsewhere")}
+	var err error
+	w.sound, err = s.CreateTask(ctx, w.org.Slug, "Ola", "Sound", true)
+	must(err)
+	w.camera, err = s.CreateTask(ctx, w.org.Slug, "Ola", "Camera", true)
+	must(err)
+	w.dayType, err = s.CreateDayType(ctx, w.org.Slug, "Ola", "Match day")
+	must(err)
+	_, err = s.SetDayTypeTasks(ctx, w.org.Slug, "Ola", w.dayType.ID, []DayTypeTask{{TaskID: w.sound.ID, Slots: 1}, {TaskID: w.camera.ID, Slots: 1}})
+	must(err)
+	w.plan, err = s.CreatePlan(ctx, w.org.Slug, "Ola", "Spring", "")
+	must(err)
+	w.other, err = s.CreatePlan(ctx, w.org.Slug, "Ola", "Summer", "")
+	must(err)
+	w.ev, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", "2026-08-09", w.dayType.ID, "")
+	must(err)
+	w.ev2, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", "2026-08-16", w.dayType.ID, "")
+	must(err)
+	w.otherEv, err = s.AddEvent(ctx, w.org.Slug, w.other.Slug, "Ola", "2026-08-23", w.dayType.ID, "")
+	must(err)
+
+	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, "Eva", "Doors", true)
+	must(err)
+	adt, err := s.CreateDayType(ctx, w.otherOrg.Slug, "Eva", "Fair")
+	must(err)
+	w.away, err = s.CreatePlan(ctx, w.otherOrg.Slug, "Eva", "Spring", "")
+	must(err)
+	w.awayEv, err = s.AddEvent(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", "2026-08-09", adt.ID, "")
+	must(err)
+	return w
+}
+
+func (w tableWorld) places(t *testing.T, org, plan string) string {
+	t.Helper()
+	list, err := w.s.ListEventPlaces(ctx, org, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, p := range list {
+		out = append(out, fmt.Sprintf("%d/%d=%d", p.EventID, p.TaskID, p.Slots))
+	}
+	return strings.Join(out, " ")
+}
+
+func TestPlacesPerEventOverrideTheDayType(t *testing.T) {
+	w := newTableWorld(t)
+	s, org, plan := w.s, w.org.Slug, w.plan.Slug
+	if got := w.places(t, org, plan); got != "" {
+		t.Fatalf("a new plan has no overrides, got %q", got)
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, ptr(2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev2.ID, w.camera.ID, ptr(0)); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("%d/%d=2 %d/%d=0", w.ev.ID, w.sound.ID, w.ev2.ID, w.camera.ID)
+	if got := w.places(t, org, plan); got != want {
+		t.Fatalf("places: got %q, want %q", got, want)
+	}
+	if l := mustLog(t, s, org, plan); l[0].Action != "event.places" || l[0].Detail != "2026-08-16 Camera: 0 (day type: 1)" || l[1].Detail != "2026-08-09 Sound: 2 (day type: 1)" {
+		t.Errorf("log: %+v", l[:2])
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, ptr(2)); !errors.Is(err, ErrInvalid) {
+		t.Errorf("the same places again: want nothing to change, got %v", err)
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, ptr(3)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if l := mustLog(t, s, org, plan); l[0].Detail != "2026-08-09 Sound: as the day type (1)" {
+		t.Errorf("log after the reset: %+v", l[0])
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, nil); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a reset without an override: want nothing to change, got %v", err)
+	}
+	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=0", w.ev2.ID, w.camera.ID) {
+		t.Errorf("after the reset: %q", got)
+	}
+	for _, n := range []int{-1, maxSlots + 1} {
+		var ie *Coded
+		if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, ptr(n)); !errors.As(err, &ie) || ie.Code != "places_invalid" {
+			t.Errorf("places %d: want places_invalid, got %v", n, err)
+		}
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "", w.ev.ID, w.sound.ID, ptr(4)); !errors.Is(err, ErrActor) {
+		t.Errorf("without an actor: %v", err)
+	}
+	if err := s.SetEventPlaces(ctx, org, plan, "Ola", w.ev.ID, w.sound.ID, ptr(maxSlots)); err != nil {
+		t.Errorf("the most places: %v", err)
+	}
+}
+
+func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
+	w := newTableWorld(t)
+	s, org := w.s, w.org.Slug
+	for name, c := range map[string]struct {
+		org, plan   string
+		event, task int64
+	}{
+		"event of another plan":            {org, w.plan.Slug, w.otherEv.ID, w.sound.ID},
+		"event of another organisation":    {org, w.plan.Slug, w.awayEv.ID, w.sound.ID},
+		"task of another organisation":     {org, w.plan.Slug, w.ev.ID, w.foreignTask.ID},
+		"own event through another org":    {w.otherOrg.Slug, w.away.Slug, w.ev.ID, w.sound.ID},
+		"foreign task through its own org": {w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, w.sound.ID},
+		"unknown plan":                     {org, "nope", w.ev.ID, w.sound.ID},
+	} {
+		if err := s.SetEventPlaces(ctx, c.org, c.plan, "Ola", c.event, c.task, ptr(2)); !errors.Is(err, ErrNotFound) {
+			t.Errorf("%s: want not found, got %v", name, err)
+		}
+	}
+	if err := s.SetEventPlaces(ctx, org, w.other.Slug, "Ola", w.otherEv.ID, w.sound.ID, ptr(2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEventPlaces(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", w.awayEv.ID, w.foreignTask.ID, ptr(3)); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.places(t, org, w.plan.Slug); got != "" {
+		t.Errorf("the other plans' places show in this one: %q", got)
+	}
+	if got := w.places(t, org, w.other.Slug); got != fmt.Sprintf("%d/%d=2", w.otherEv.ID, w.sound.ID) {
+		t.Errorf("other plan: %q", got)
+	}
+	if got := w.places(t, w.otherOrg.Slug, w.away.Slug); got != fmt.Sprintf("%d/%d=3", w.awayEv.ID, w.foreignTask.ID) {
+		t.Errorf("other organisation: %q", got)
+	}
+	if _, err := s.ListEventPlaces(ctx, org, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown plan: %v", err)
+	}
+}
+
+func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
+	w := newTableWorld(t)
+	s, org, plan := w.s, w.org.Slug, w.plan.Slug
+	extra, err := s.CreateTask(ctx, org, "Ola", "Coffee", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ ev, task int64 }{{w.ev.ID, w.sound.ID}, {w.ev2.ID, w.sound.ID}, {w.ev2.ID, extra.ID}} {
+		if err := s.SetEventPlaces(ctx, org, plan, "Ola", c.ev, c.task, ptr(2)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.DeleteEvent(ctx, org, plan, "Ola", w.ev.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteTask(ctx, org, "Ola", extra.ID); err != nil {
+		t.Fatalf("a task with only places on an event can be deleted: %v", err)
+	}
+	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=2", w.ev2.ID, w.sound.ID) {
+		t.Errorf("after deleting an event and a task: %q", got)
+	}
+}
+
+func TestInfoRowsOfAPlan(t *testing.T) {
+	w := newTableWorld(t)
+	s, org, plan := w.s, w.org.Slug, w.plan.Slug
+	theme, err := s.AddField(ctx, org, plan, "Ola", "  Theme ")
+	if err != nil || theme.Name != "Theme" {
+		t.Fatalf("add: %+v %v", theme, err)
+	}
+	if _, err := s.AddField(ctx, org, plan, "Ola", "Theme"); !errors.Is(err, ErrConflict) {
+		t.Errorf("the same name twice: want a conflict, got %v", err)
+	}
+	if _, err := s.AddField(ctx, org, w.other.Slug, "Ola", "Theme"); err != nil {
+		t.Errorf("the same name in another plan: %v", err)
+	}
+	for name, n := range map[string]string{"blank": " ", "too long": strings.Repeat("x", 81), "control": "a\nb"} {
+		if _, err := s.AddField(ctx, org, plan, "Ola", n); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s name: want invalid, got %v", name, err)
+		}
+	}
+	speaker, err := s.AddField(ctx, org, plan, "Ola", "Speaker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev.ID, theme.ID, " Light "); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev2.ID, theme.ID, "Dark"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev.ID, speaker.ID, "Guest"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev.ID, theme.ID, "Light"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("the same value again: want nothing to change, got %v", err)
+	}
+	if l := mustLog(t, s, org, plan); l[0].Action != "field.value" || l[0].Detail != `2026-08-09 Speaker: "Guest"` {
+		t.Errorf("log: %+v", l[0])
+	}
+	for name, v := range map[string]string{"too long": strings.Repeat("é", maxFieldValueRune+1), "control": "a\x00b"} {
+		var ie *Coded
+		if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev.ID, theme.ID, v); !errors.As(err, &ie) || ie.Code != "field_value_invalid" {
+			t.Errorf("%s value: want field_value_invalid, got %v", name, err)
+		}
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev2.ID, theme.ID, strings.Repeat("é", maxFieldValueRune)); err != nil {
+		t.Errorf("the longest value: %v", err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev2.ID, theme.ID, "  "); err != nil {
+		t.Fatalf("an empty value removes it: %v", err)
+	}
+	if err := s.SetFieldValue(ctx, org, plan, "Ola", w.ev2.ID, theme.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Errorf("removing what is not there: want nothing to change, got %v", err)
+	}
+
+	got, err := s.ListFields(ctx, org, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Theme} {%d Speaker}]", theme.ID, speaker.ID) ||
+		fmt.Sprint(got.Values) != fmt.Sprintf("[{%d %d Light} {%d %d Guest}]", w.ev.ID, theme.ID, w.ev.ID, speaker.ID) {
+		t.Errorf("list: %+v", got)
+	}
+
+	renamed, err := s.RenameField(ctx, org, plan, "Ola", theme.ID, "Motto")
+	if err != nil || renamed.Name != "Motto" {
+		t.Fatalf("rename: %+v %v", renamed, err)
+	}
+	if _, err := s.RenameField(ctx, org, plan, "Ola", theme.ID, "Motto"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("rename to the same name: want nothing to change, got %v", err)
+	}
+	if _, err := s.RenameField(ctx, org, plan, "Ola", theme.ID, "Speaker"); !errors.Is(err, ErrConflict) {
+		t.Errorf("rename to a taken name: want a conflict, got %v", err)
+	}
+	if err := s.DeleteField(ctx, org, plan, "Ola", theme.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.ListFields(ctx, org, plan)
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Speaker}]", speaker.ID) || len(got.Values) != 1 || got.Values[0].FieldID != speaker.ID {
+		t.Errorf("after deleting a row its values must be gone: %+v", got)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM event_field WHERE field_id = ?`, theme.ID); n != 0 {
+		t.Errorf("values of the deleted row are left: %d", n)
+	}
+	if l := mustLog(t, s, org, plan); l[0].Action != "field.delete" || l[0].Detail != "Motto" || l[1].Action != "field.rename" || l[1].Detail != `"Theme" -> "Motto"` {
+		t.Errorf("log: %+v", l[:2])
+	}
+	if err := s.DeleteEvent(ctx, org, plan, "Ola", w.ev.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.ListFields(ctx, org, plan); len(got.Values) != 0 || len(got.Fields) != 1 {
+		t.Errorf("a deleted event takes its values, not the row: %+v", got)
+	}
+}
+
+func TestAPlanHasAtMostSoManyInfoRows(t *testing.T) {
+	w := newTableWorld(t)
+	for i := range maxFieldsPerPlan {
+		if _, err := w.s.AddField(ctx, w.org.Slug, w.plan.Slug, "Ola", fmt.Sprintf("Row %d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var ie *Coded
+	if _, err := w.s.AddField(ctx, w.org.Slug, w.plan.Slug, "Ola", "One more"); !errors.As(err, &ie) || ie.Code != "too_many_fields" {
+		t.Errorf("want too_many_fields, got %v", err)
+	}
+	if _, err := w.s.AddField(ctx, w.org.Slug, w.other.Slug, "Ola", "One more"); err != nil {
+		t.Errorf("the limit is per plan: %v", err)
+	}
+}
+
+func TestInfoRowsStayInTheirPlanAndOrganisation(t *testing.T) {
+	w := newTableWorld(t)
+	s, org := w.s, w.org.Slug
+	mine, err := s.AddField(ctx, org, w.plan.Slug, "Ola", "Theme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := s.AddField(ctx, org, w.other.Slug, "Ola", "Theme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	away, err := s.AddField(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", "Theme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, org, w.other.Slug, "Ola", w.otherEv.ID, theirs.ID, "Theirs"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetFieldValue(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", w.awayEv.ID, away.ID, "Away"); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]struct {
+		org, plan    string
+		event, field int64
+	}{
+		"row of another plan":         {org, w.plan.Slug, w.ev.ID, theirs.ID},
+		"row of another organisation": {org, w.plan.Slug, w.ev.ID, away.ID},
+		"event of another plan":       {org, w.plan.Slug, w.otherEv.ID, mine.ID},
+		"own row through another org": {w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, mine.ID},
+	} {
+		if err := s.SetFieldValue(ctx, c.org, c.plan, "Ola", c.event, c.field, "x"); !errors.Is(err, ErrNotFound) {
+			t.Errorf("value, %s: want not found, got %v", name, err)
+		}
+	}
+	if _, err := s.RenameField(ctx, org, w.plan.Slug, "Ola", theirs.ID, "Mine"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("rename a row of another plan: %v", err)
+	}
+	if _, err := s.RenameField(ctx, org, w.plan.Slug, "Ola", away.ID, "Mine"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("rename a row of another organisation: %v", err)
+	}
+	if err := s.DeleteField(ctx, org, w.plan.Slug, "Ola", theirs.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("delete a row of another plan: %v", err)
+	}
+	if err := s.DeleteField(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", mine.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("delete a row of another organisation: %v", err)
+	}
+	got, err := s.ListFields(ctx, org, w.plan.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Fields) != 1 || got.Fields[0].ID != mine.ID || len(got.Values) != 0 {
+		t.Errorf("this plan sees others' rows or values: %+v", got)
+	}
+	if got, _ := s.ListFields(ctx, w.otherOrg.Slug, w.away.Slug); len(got.Fields) != 1 || len(got.Values) != 1 || got.Values[0].Value != "Away" {
+		t.Errorf("other organisation: %+v", got)
+	}
+	if _, err := s.ListFields(ctx, org, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown plan: %v", err)
+	}
+}
+
+func TestAnswersForTheTable(t *testing.T) {
+	w := newTableWorld(t)
+	s, org := w.s, w.org.Slug
+	kari, err := s.CreatePerson(ctx, org, "Ola", "Kari Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ola, err := s.CreatePerson(ctx, org, "Ola", "Ola Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	eva, err := s.CreatePerson(ctx, w.otherOrg.Slug, "Eva", "Eva Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAvailability(ctx, org, w.plan.Slug, "Ola", kari.ID, map[int64]string{w.ev.ID: "good", w.ev2.ID: "never"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAvailability(ctx, org, w.plan.Slug, "Ola", ola.ID, map[int64]string{w.ev2.ID: "poor"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAvailability(ctx, org, w.other.Slug, "Ola", kari.ID, map[int64]string{w.otherEv.ID: "poor"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAvailability(ctx, w.otherOrg.Slug, w.away.Slug, "Eva", eva.ID, map[int64]string{w.awayEv.ID: "good"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPersonTask(ctx, org, "Ola", kari.ID, w.sound.ID, "good"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPersonTask(ctx, org, "Ola", ola.ID, w.camera.ID, "poor"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPersonTask(ctx, w.otherOrg.Slug, "Eva", eva.ID, w.foreignTask.ID, "good"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListAnswers(ctx, org, w.plan.Slug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantEvents := fmt.Sprintf("[{%d %d good} {%d %d never} {%d %d poor}]", kari.ID, w.ev.ID, kari.ID, w.ev2.ID, ola.ID, w.ev2.ID)
+	wantTasks := fmt.Sprintf("[{%d %d good} {%d %d poor}]", kari.ID, w.sound.ID, ola.ID, w.camera.ID)
+	if fmt.Sprint(got.Events) != wantEvents || fmt.Sprint(got.Tasks) != wantTasks {
+		t.Errorf("answers:\n got %v %v\nwant %s %s", got.Events, got.Tasks, wantEvents, wantTasks)
+	}
+	if _, err := s.ListAnswers(ctx, org, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown plan: %v", err)
+	}
+	if got, _ := s.ListAnswers(ctx, w.otherOrg.Slug, w.away.Slug); len(got.Events) != 1 || len(got.Tasks) != 1 || got.Events[0].PersonID != eva.ID {
+		t.Errorf("other organisation: %+v", got)
+	}
+}
+
+func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
+	w := newTableWorld(t)
+	s, org := w.s, w.org.Slug
+	coffee, err := s.CreateTask(ctx, org, "Ola", "Coffee", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignToo, err := s.CreateTask(ctx, w.otherOrg.Slug, "Eva", "Ticket", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCombination(ctx, w.otherOrg.Slug, "Eva", w.foreignTask.ID, foreignToo.ID, "preferred"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCombination(ctx, org, "Ola", w.sound.ID, w.camera.ID, "practical"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCombination(ctx, org, "Ola", w.camera.ID, coffee.ID, "preferred"); err != nil {
+		t.Fatal(err)
+	}
+	pairs := func(org string) string {
+		t.Helper()
+		list, err := s.ListCombinations(ctx, org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(list)
+	}
+	if err := s.SetTaskCombinations(ctx, org, "Ola", w.sound.ID, "cannot"); err != nil {
+		t.Fatal(err)
+	}
+	want := fmt.Sprintf("[{%d %d cannot} {%d %d cannot} {%d %d preferred}]", w.sound.ID, w.camera.ID, w.sound.ID, coffee.ID, w.camera.ID, coffee.ID)
+	if got := pairs(org); got != want {
+		t.Errorf("cannot with anything:\n got %s\nwant %s", got, want)
+	}
+	if l := mustLog(t, s, org, ""); l[0].Action != "combination.all" || l[0].Detail != "Sound + every other task: cannot (2 changed)" {
+		t.Errorf("log: %+v", l[0])
+	}
+	if err := s.SetTaskCombinations(ctx, org, "Ola", w.sound.ID, "cannot"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("again: want nothing to change, got %v", err)
+	}
+	if err := s.SetTaskCombinations(ctx, org, "Ola", w.sound.ID, "standard"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairs(org); got != fmt.Sprintf("[{%d %d preferred}]", w.camera.ID, coffee.ID) {
+		t.Errorf("back to standard: %s", got)
+	}
+	if err := s.SetTaskCombinations(ctx, org, "Ola", w.sound.ID, "sometimes"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("unknown level: %v", err)
+	}
+	if err := s.SetTaskCombinations(ctx, org, "Ola", w.foreignTask.ID, "cannot"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a task of another organisation: want not found, got %v", err)
+	}
+	if err := s.SetTaskCombinations(ctx, w.otherOrg.Slug, "Eva", w.foreignTask.ID, "cannot"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pairs(w.otherOrg.Slug); got != fmt.Sprintf("[{%d %d cannot}]", w.foreignTask.ID, foreignToo.ID) {
+		t.Errorf("other organisation: %s", got)
+	}
+	if got := pairs(org); got != fmt.Sprintf("[{%d %d preferred}]", w.camera.ID, coffee.ID) {
+		t.Errorf("another organisation's change reached this one: %s", got)
+	}
+}

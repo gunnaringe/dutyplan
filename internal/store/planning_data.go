@@ -24,9 +24,10 @@ type PlanningData struct {
 	PersonEvents map[int64]map[int64]string // person -> event -> level (no row = neutral)
 	Combinations []Combination
 	Groups       []Group
-	Cells        []ManualCell   // manual cells of the plan
-	Pools        []Pool         // selections of the plan
-	Weights      map[string]any // what the plan changed in the planner's weighting (the rest is the default)
+	Cells        []ManualCell            // manual cells of the plan
+	Pools        []Pool                  // selections of the plan
+	Weights      map[string]any          // what the plan changed in the planner's weighting (the rest is the default)
+	EventPlaces  map[int64]map[int64]int // event -> task -> places, where the event differs from its day type (0 = not on it)
 }
 
 func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (PlanningData, error) {
@@ -133,6 +134,17 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 	}
 	if d.Weights, err = getWeights(ctx, tx, oid, pid); err != nil {
 		return d, err
+	}
+	places, err := listEventPlaces(ctx, tx, oid, pid)
+	if err != nil {
+		return d, err
+	}
+	d.EventPlaces = map[int64]map[int64]int{}
+	for _, x := range places {
+		if d.EventPlaces[x.EventID] == nil {
+			d.EventPlaces[x.EventID] = map[int64]int{}
+		}
+		d.EventPlaces[x.EventID][x.TaskID] = x.Slots
 	}
 	return d, nil
 }

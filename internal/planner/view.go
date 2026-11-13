@@ -96,7 +96,7 @@ type CellText struct {
 
 type Cell struct {
 	TaskID      int64        `json:"task_id"`
-	Slots       int          `json:"slots"` // filled + missing: the day type's places, or more when manual cells exceed them
+	Slots       int          `json:"slots"` // filled + missing: the event's places, or more when manual cells exceed them
 	People      []CellPerson `json:"people"`
 	Groups      []CellGroup  `json:"groups"`
 	Texts       []CellText   `json:"texts"`
@@ -323,9 +323,9 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		v.Weak = append(v.Weak, i18n.T(l, "compromise", who, taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
 	}
 
-	// A day-type place the answer says nothing about is shown as missing, never dropped silently.
+	// A place (the day type's, or the event's own) the answer says nothing about is shown as missing, never dropped silently.
 	for _, e := range snap.Events {
-		for task, n := range snap.Slots[e.DayTypeID] {
+		for task, n := range snap.SlotsFor(e) {
 			if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {
 				c := cell(eid(e.ID), tid(task))
 				c.missing, c.why = n, i18n.T(l, "explain.silent")

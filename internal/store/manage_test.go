@@ -72,6 +72,11 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
 		must(err)
 		must(s.SetPool(ctx, slug, p.Slug, "Ola", []int64{evs[0].ID}, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
+		two := 2
+		must(s.SetEventPlaces(ctx, slug, p.Slug, "Ola", evs[0].ID, r.sound.ID, &two))
+		field, err := s.AddField(ctx, slug, p.Slug, "Ola", "Theme")
+		must(err)
+		must(s.SetFieldValue(ctx, slug, p.Slug, "Ola", evs[1].ID, field.ID, "Light"))
 		_, err = s.SetWeights(ctx, slug, p.Slug, "Ola", map[string]any{"w_fair": 12.0})
 		must(err)
 		done, err := s.CreateRun(ctx, slug, p.Slug, "Kari", 1, 5, "h", []byte("{}"), []byte("{}"))
@@ -156,10 +161,10 @@ func sameCounts(t *testing.T, what string, before, after map[string]int) {
 func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	s := open(t)
 	got := func(column string) string { return strings.Join(tablesWith(t, s, column), " ") }
-	if want := "change_log event manual_cell person_event plan_run pool_member"; got("plan_id") != want {
+	if want := "change_log event event_field event_task manual_cell person_event plan_field plan_run pool_member"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "change_log day_type day_type_task event grp grp_member grp_task manual_cell person person_event person_task plan plan_run pool_member task task_combination"
+	want := "change_log day_type day_type_task event event_field event_task grp grp_member grp_task manual_cell person person_event person_task plan plan_field plan_run pool_member task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}
@@ -252,7 +257,7 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	orgB := idOf(t, s, `SELECT id FROM organization WHERE slug = ?`, b.org.Slug)
 
 	before := rowsWith(t, s, "plan_id", planID)
-	for _, table := range []string{"event", "manual_cell", "pool_member", "person_event", "plan_run", "change_log"} {
+	for _, table := range []string{"event", "manual_cell", "pool_member", "person_event", "plan_run", "change_log", "event_task", "plan_field", "event_field"} {
 		if before[table] == 0 {
 			t.Fatalf("the plan must have rows in %s for this test to mean anything", table)
 		}
