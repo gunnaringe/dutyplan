@@ -76,6 +76,12 @@ depends = ["app:build"]
 quiet = true
 run = "node scripts/ui-check.js"
 
+[tasks."app:shots"]
+description = "The pictures of the README (docs/img) from the real app on invented data (about 30 s). Needs playwright-core from ../scoreboard; run it again when the page changes visibly"
+depends = ["app:build"]
+quiet = true
+run = "node scripts/shots.js"
+
 [tasks."app:seed"]
 description = "Put test data into a running app: the organisation «Test» with the tasks Singing, Sound and Video. Args: -- http://127.0.0.1:8080"
 quiet = true

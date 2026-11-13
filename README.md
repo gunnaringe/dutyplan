@@ -1,31 +1,99 @@
 # Dutyplan
 
-Dutyplan (*Tjenesteplan* in Norwegian) shares out recurring duties among a group of people: who runs the sound on which
-Sunday, who brings the coffee to which match, who covers which shift. People say what they can take part in and when they
-cannot; a planner (a constraint solver) proposes who does what, as evenly as it can, and tells you why a place stays empty.
+**Share out recurring duties fairly, and know why.** Who runs the sound on which Saturday, who is on the door, who brings the
+coffee? People say what they can take part in and when they cannot; a planner proposes who does what as evenly as it can,
+and tells you why a place stays empty.
 
-It is a general tool. Tasks, people, groups, events and kinds of day are all things you create yourself.
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+![Go, SQLite and plain JavaScript](https://img.shields.io/badge/go-SQLite%20%2B%20vanilla%20JS-00ADD8)
+![English and Norwegian bokmål](https://img.shields.io/badge/UI-English%20%C2%B7%20bokm%C3%A5l-lightgrey)
 
-- **One small server**: a single Go binary with an embedded web page and a SQLite file. The planner is a separate Python
-  program (OR-Tools CP-SAT) that the server starts when you press **Plan**.
-- **English and Norwegian** (bokmål): the page follows the browser's language and has a switch in the header; the
-  explanations the planner writes follow it too.
-- **No login.** Read the warning below before you put it anywhere other people can reach.
+![A plan as a grid: events across, tasks down, who does what, and one place left empty](docs/img/hero.png)
+
+*Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, groups, events and kinds of day are all things you
+create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
+
+## The problem
+
+A rota made by hand is a puzzle that never stays solved. Some people cannot on some days, some would rather not, two jobs
+cannot be done by the same person on the same evening, a couple wants to work together, and somebody always ends up with twice
+as many turns as the rest. Every change means starting again.
+
+Dutyplan keeps the facts in one place and lets a constraint solver (OR-Tools CP-SAT) do the puzzle: press **Plan** and you get
+a proposal that follows every hard rule, is as even as it can be, and says so when it cannot fill a place.
+
+## What it does
+
+**You describe your own world.** A *task* is something to do (Sound, Video, Doors, Coffee). A *day type* says which tasks an
+event has and how many places each: a concert needs two on the door, a rehearsal needs none. Nothing is built in.
+
+![Day types: which tasks an event has and how many places each](docs/img/02-day-types.png)
+
+**Groups, and what can go together.** A *group* is a named set of people who work as one: a team, a couple. The members are
+busy together, and each counts as having worked. For every pair of tasks you say whether they can be done by the same person on
+the same day: *cannot*, *impractical*, *practical* or *preferred*.
+
+![A group with its members, and the combinations of tasks](docs/img/03-groups-combinations.png)
+
+**Events with a time.** A plan is a list of events: two can fall on the same day. An event has a day type, and can have a start
+time and an end time, a short note and a longer description. On a day the events with a time come first, in time order. Add
+a whole season at once (*every Saturday from … to …*).
+
+![The events of a plan: day type, start and end time, note and description](docs/img/04-events.png)
+
+**Everyone answers for themselves.** Each person has their own page, with a link you can send. They pick the tasks they can take
+part in (and how willingly), and answer *does not suit / poor / good* for each event. It works with a finger.
+
+![A person's own page: assignments, tasks and answers for each event](docs/img/05-my-page.png)
+
+**A proposal you can read.** The result shows as a list or a grid. A person can be *locked* onto a place with one click, and
+the planner never moves a locked place. The planner is checked afterwards by a second, independent program, and the page says
+if a rule was broken (it should never be).
+
+![The plan as a list, with times, descriptions and locked places](docs/img/06-plan-list.png)
+
+**It says why.** When a place cannot be filled, the plan tells you the reason in plain words: who is outside the selection, who
+cannot come, who has not chosen the task. Weak spots the planner had to accept are listed as *compromises*.
+
+![An empty place, and the reason](docs/img/07-why.png)
+
+**Manual cells and selections.** A *manual cell* fixes a person (or a group, or a text) to a place; a *selection* says that
+only these people can be picked for a task on an event, which covers things like *their own sound engineer* without any special
+rule.
+
+![A locked place, and a selection for one task on one event](docs/img/08-locks-selections.png)
+
+**Fair, and yours to tune.** «Even» means an equal *total* load: someone who only takes one task does not end up with half of
+someone who takes two. The weights behind the proposal are configuration per plan, with defaults that work and limits that
+keep them sane.
+
+![The weighting of a plan: fairness, wishes and combinations](docs/img/09-weighting.png)
+
+**Every run is kept, and one is the current plan.** Run again and compare. **Pin** a finished run as the plan's current plan,
+and everybody's *My assignments* follows it; with nothing pinned they see the newest finished run. The distribution shows
+how many turns each person got against their fair share.
+
+![Earlier runs with the pinned one, and the distribution](docs/img/10-history-distribution.png)
+
+**English and Norwegian, on a phone.** The page follows the browser's language and has a switch in the header; the
+explanations the planner writes follow it too. The page works on a phone, and people's own pages are made for one.
+
+![The plan on a phone](docs/img/11-phone-plan.png)
+![A person's answers on a phone](docs/img/12-phone-my-page.png)
+![The same plan in Norwegian](docs/img/13-norwegian.png)
+
+**Small to run.** One Go binary with the web page inside it and a SQLite file; the planner is a separate Python program that the
+server starts when you press **Plan**. **No login**: read the warning below before you put it anywhere other people can reach.
 
 ## How it works
 
-1. An **organisation** holds everything that is shared: people, tasks, kinds of day (*day types*: which tasks an event has and
-   how many places each), groups (a team or a couple that works together) and which tasks can be combined on the same day.
-2. An organisation has several **plans** (for example *Autumn 2026*). A plan is a list of **events**; two events may fall on
-   the same day. An event has a day type, and can have a start time (and an end time), a short note and a longer description;
-   on a day the events with a time come first, in time order.
-3. Each person has their own page (`/o/<organisation>/p/<plan>/me/<id>`; send them the link). There they pick the tasks they
-   can take part in and answer *does not suit / poor / good* for each event.
-4. On the plan page, **Plan** runs the planner. The result shows as a list or a grid, with the reasons for anything left
-   empty. A person can be **locked** onto a place (a *manual cell*), and a *selection* limits who can be picked for a task on
-   an event. **Weighting** says what the planner cares about; the default is an equal *total* load per person.
-5. Each run is kept. **Pin** a finished run as the plan's current plan and everybody's *My assignments* follows it; with
-   nothing pinned they see the newest finished run.
+1. An **organisation** holds everything that is shared: people, tasks, day types, groups and the combinations.
+2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**.
+3. Each person has their own page (`/o/<organisation>/p/<plan>/me/<id>`; send them the link).
+4. On the plan page, **Plan** runs the planner. Lock people, set selections, change the weighting, and run again.
+5. Each run is kept. **Pin** the one you want to use.
+
+![An organisation: its plans and its people](docs/img/01-organisation.png)
 
 Everything you create can be renamed, and plans and organisations can be deleted (an organisation only when it has no plans).
 Every change is recorded in a change log with the name the person typed in under **Who are you?**.
@@ -125,6 +193,7 @@ Everything goes through mise; `mise tasks` lists the tasks.
 | `mise run mutations` | breaks every rule in turn and checks that a test fails (about 7 min) |
 | `mise run app:smoke` | starts the server on a temporary database and checks the tenant isolation with curl |
 | `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium; see the script) |
+| `mise run app:shots` | makes the pictures in `docs/img` from the real app on invented data (about 30 s); run it again when the page changes visibly |
 | `mise run verify` | tests, mutations and the smoke test: everything that must be green before a commit |
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the planner's
