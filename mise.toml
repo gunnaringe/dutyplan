@@ -101,9 +101,11 @@ run = "uv run python scripts/mutations.py"
 
 [tasks.verify]
 description = "Tests (Go + Python) + mutations + smoke test of the app: everything that must be green before a commit"
-depends = ["test", "mutations", "app:smoke"]
+# The mutations come after the rest, never beside it: the Python ones edit solver/dutyplan_solver/ in place while they run, so a test
+# or smoke run against the real planner at the same time would run a broken planner (seen 2026-11-13 as a KeyError from the solver).
+depends = ["test", "app:smoke"]
 quiet = true
-run = "echo 'verify: ok'"
+run = ["mise run mutations", "echo 'verify: ok'"]
 
 [tasks.plan]
 description = "Run the planner on the test data and print a short summary (about 6 lines). Args: --full, --info, --time N, --seed N, --input file (a path from the repo root)"

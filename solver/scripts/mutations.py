@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -109,8 +110,8 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("tenant: runs are listed without org and plan", "internal/store/runs.go", "FROM plan_run WHERE org_id = ? AND plan_id = ? AND (pinned = 1 OR", "FROM plan_run WHERE ? > 0 AND ? > 0 AND (pinned = 1 OR"),
     ("tenant: runs are listed without the plan", "internal/store/runs.go", "FROM plan_run WHERE org_id = ? AND plan_id = ? AND (pinned = 1 OR", "FROM plan_run WHERE org_id = ? AND ? > 0 AND (pinned = 1 OR"),
     # rename and delete an organisation or a plan
-    ("delete plan: the plan's runs are kept", "internal/store/manage.go", '[]string{"plan_run", "event"}', '[]string{"event"}'),
-    ("delete plan: the plan's events are kept", "internal/store/manage.go", '[]string{"plan_run", "event"}', '[]string{"plan_run"}'),
+    ("delete plan: the plan's runs are kept", "internal/store/manage.go", '[]string{"plan_run", "event", "plan_field"}', '[]string{"event", "plan_field"}'),
+    ("delete plan: the plan's events are kept", "internal/store/manage.go", '[]string{"plan_run", "event", "plan_field"}', '[]string{"plan_run", "plan_field"}'),
     ("delete plan: manual cells do not follow their event", "internal/store/migrations/007_cells.sql", "REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE", "REFERENCES event (org_id, plan_id, id)"),
     ("delete plan: answers do not follow their event", "internal/store/migrations/009_english_codes.sql", "REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE", "REFERENCES event (org_id, plan_id, id)"),
     ("delete plan: the log lines are deleted too", "internal/store/manage.go", "UPDATE change_log SET plan_id = NULL, detail = ? || ': ' || detail WHERE org_id = ? AND plan_id = ?`, name, oid, pid", "DELETE FROM change_log WHERE ? != '' AND org_id = ? AND plan_id = ?`, name, oid, pid"),
@@ -354,6 +355,9 @@ def tests_pass() -> int:
 
 
 def main() -> int:
+    # A task runner that stops us sends SIGTERM, which would end Python without the finally blocks that put the Python files back
+    # (a mutation was left in model.py once, 2026-11-13). Exit normally instead, so they run.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", help="only mutations with this text in the name")
     ap.add_argument("--list", action="store_true", help="show the names and exit")

@@ -9,7 +9,8 @@ Run only through mise (never python/uv/pytest directly). All tasks are quiet: on
 2. Before you are done: `mise run test` (about 15 s, everything).
 3. Changed or added a **rule**: `mise run mutations -- --only <word from the name>` (seconds), and finally
    `mise run mutations` (about 7 min). Quiet on success; prints only SURVIVED / OUTDATED / INVALID.
-4. Before a commit: `mise run verify` (tests + all mutations + smoke test of the built app).
+4. Before a commit: `mise run verify` (tests + smoke test of the built app, then all mutations; about 8 min). The Python mutations edit
+   `solver/dutyplan_solver/` in place, so run nothing against the real planner while mutations run.
 5. Changed the frontend (`web/`): `mise run app:ui` (headless browser, about 20 s, English and Norwegian; it also fails if a page becomes wider than a phone screen). Skip it for changes that are not visible.
 
 If a mutation survived, a test that depends on the rule is missing. Write it so that independent terms do not cover for it:

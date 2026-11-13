@@ -6,8 +6,9 @@ program *Tjenesteplan*, and the binary, the Python package and `DUTYPLAN_SOLVER`
 «Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, the no-login warning); keep it true when behaviour changes.
 
 Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, change log, setup (tasks, day types with places,
-combinations, events, groups), «My page», «Plan» on the plan, manual cells, selections and «Lock» (phase 4), grid and «My assignments» (phase 5), run history with a pinned current plan,
-rename and delete of organisations and plans, rename of people and tasks, and a page in English and Norwegian. Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not
+combinations, events, groups), «Plan» on the plan, manual cells, selections and «Lock» (phase 4), run history with a pinned current plan,
+rename and delete of organisations and plans, rename of people and tasks, a page in English and Norwegian, and (2026-11-13) **one table per plan** where the events, places, info rows,
+everyone's answers and the plan are set and shown together (it replaced «My page», the event list, the grid and «My assignments»). Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not
 start on it unless asked.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the input from the database,
@@ -22,6 +23,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - The usual loop: change → `mise run test:fast` (Go + Python rules, about 5 s) → `mise run test` (everything, about 15 s) → after a rule change
   `mise run mutations -- --only <word>` (the whole set takes about 7 min) → before a commit `mise run verify` (tests + all mutations + smoke test of the app).
   For a change to the page also `mise run app:ui` (browser check in both languages, about 20 s).
+- **The Python mutations edit `solver/dutyplan_solver/` in place** while they run (restored at the end, on Ctrl-C and on SIGTERM; a leftover is restored from
+  `solver/.mutation-backup/` by the next run). Never run tests, the smoke test or the app against the real planner at the same time; `verify` runs the mutations last for this reason.
 - **Do not read** `PLAN.md` in full (about 300 lines). `grep -n '^## ' PLAN.md`, read only the section you need.
   Do not read `solver/fixtures/autumn2026.json` or `solver/uv.lock` (large, generated); use `mise run plan -- --info`.
 - Do not run `--full`, `measure:*` or `app:ui` without a reason; they are expensive or need sibling dependencies.
@@ -43,8 +46,17 @@ starts the Python planner, turns the answer into a view with explanations), `int
   when it has no plans, and the caller confirms with its slug. `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
   and group busyness apply to the event. The planner's «dates» are events (the id is arbitrary text).
-- **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; «My assignments» follows the pinned run, else the newest finished one. Pinned runs are never pruned.
-  There is still no approval flow or publishing.
+- **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; the page opens with it (else the newest run), and
+  `GET .../people/{id}/assignments` follows the pinned run, else the newest finished one. Pinned runs are never pruned. There is still no approval flow or publishing.
+- **One table per plan, one view** (2026-11-13): events across (date, day type, note, info rows), then the tasks with places per event, the number of people who said yes,
+  and one row per person with their answers; «Show plan» puts the run's assignments into the same cells. Clicking a date, task, person or info row opens its dialog. Do not add
+  separate pages for these again.
+  - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank.
+  - **Places: the day type's places, overridden per event** (`event_task`). An event whose places differ gets a synthetic day type in the input (`<day type>-<event>`),
+    so a plan without overrides gives the same input and hash as before.
+  - **Info rows are per plan** (`plan_field`, `event_field`): text for people, never sent to the planner, not in the hash.
+  - «My page» is gone, but `/o/<org>/p/<plan>/me/<id>` links (already sent to people) must keep working: they open the table with the person's row highlighted and set the
+    actor if none is set.
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
 - **A general tool.** Tasks, people, groups, events and day types are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).

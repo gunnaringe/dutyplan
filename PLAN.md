@@ -44,9 +44,9 @@ texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalog
 - Chooses a preference per task: *never / poor / neutral / good*. People differ, and it is up to them.
 - Chooses for each **event**: *does not suit / poor / good* (not marked = neutral). **One list covers all the tasks the person takes part in.**
   Sound and Video share the preference, so there is one choice per event. The event counts, not the calendar day: two events on the same day
-  have an answer each.
+  have an answer each. Since 2026-11-13 this is their row in the plan's table (see *The table*): a click cycles blank → good → poor → does not suit → blank.
 - A task with a different pattern can get **its own list** (off by default; not built yet). It starts as a copy of the shared one.
-- Sees the plan and their own assignments.
+- Sees the plan and their own assignments: the personal link opens the table with their row highlighted.
 
 **Setup and planning** (part of the same app, not a separate area)
 - Tasks, people, groups, events and day types, **a shared setting for which tasks can be combined**, manual cells and selections. Running the
@@ -199,11 +199,28 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
   Time, seed and threads are not. The defaults in Go are copies of the planner's own, and a test against the real planner (`--defaults`) keeps them equal.
 - Per plan, not per organisation: the plan is the unit that is optimised within. If new plans should inherit from the previous one or from an organisation default, that is added then.
 
-### Grid and "My assignments" (built, phase 5)
+### Grid and "My assignments" (built, phase 5; the page parts replaced by *The table*)
 - `GET /plans/{plan}/people/{id}/assignments`: the person's assignments in the plan's **pinned run, or else its newest finished run** (a run in progress or failed is not a plan; the one before it applies).
   Both their own places and places through a group ("Singing (with the Choir)"), in event order, with "locked" and "poor" (for group places: only if it is the person's own "poor").
   The numbers agree with the distribution (tested against the real planner). The plan is marked when it was made before the latest changes. A person in another organisation gives 404.
 - The grid uses the same view as the list (`/runs/{id}`); the explanation for an empty place is behind "Why?".
+
+### The table (built, 2026-11-13)
+One view per plan, inspired by *whenever*: the person making the plan sets everything in the same table people give their answers in.
+- **Columns are events**: date (click: the event's dialog with day type, times, note, description, delete; "+" adds one), the day type (select) and the note.
+- **Info rows** per plan ("+ info row"; for example a theme per event): text for people, not for the planner (not in the input or hash). `plan_field` + `event_field`,
+  `GET|POST /plans/{plan}/fields`, `PATCH|DELETE /fields/{id}`, `PUT /events/{id}/fields/{field}`.
+- **One row per task** with the places per event: the day type's number is shown faded; typing another number overrides it for that event (`event_task`,
+  `PUT|DELETE /events/{id}/places/{task}`, `GET /plans/{plan}/places`), and an empty field or the day type's number resets it. The planner gets an event with own places as a
+  synthetic day type (`<day type>-<event>`), so a plan without overrides gives the same input and hash. Clicking the task: rename, planned or manual, places per day type,
+  "Cannot be combined with anything" (`PUT /orgs/{org}/tasks/{id}/combinations`, `{level}` for all pairs with the task) and the single pairs, delete.
+- **The people row** per event: how many said good, poor and does not suit ("✓ 3 · ? 1 · ✗ 2").
+- **One row per person** with the answers (`GET /plans/{plan}/answers` loads everyone's in one call): blank = not answered, a click cycles good → poor → does not suit → blank.
+  Clicking the name: tasks and levels, the personal link, rename, active, can be proposed.
+- **"Show plan"** (remembered in the browser, on by default) puts the run's assignments into the task rows and each person's cells; the plan bar has "Plan"/"Try again", the
+  time limit and the pin. The page opens with the pinned run, else the newest. Compromises, distribution, earlier runs, "Add several events" and the change log are folds below.
+- "My page", the event list, the list/grid choice and "My assignments" are gone. `/o/<org>/p/<plan>/me/<id>` (links already sent) opens the table with the row highlighted and
+  sets the actor if none is set; an unknown id is "Page not found".
 
 ### Groups, manual cells and selections (built, phase 4 round 2)
 - **Groups** (`/orgs/{org}/groups`, the "Groups" section under Setup): name, members, "can be proposed" and the tasks the planner may propose the group for
@@ -244,6 +261,7 @@ The first version has no login, no personal links and no roles. The consequences
 4. **Planning**: run, preview, lock, selections, groups, explanations. **Round 1 done (2026-11-08):** "Plan" / "Try again" on the plan, background run, grid per event with explanations, compromises and distribution, check and out-of-date marking (see *Running the planner*). **Round 2 done (2026-11-09):** groups, manual cells, selections and "Lock" (see *Groups, manual cells and selections*). Optimisation happens only within the plan; no history from other plans.
 5. **Grid (done 2026-11-09)**: the **grid** (events across, tasks down, fixed first column, sideways scrolling in its own box; the default on wide screens, with a "List / Grid" choice that is remembered) and **"My assignments"** at the top of My page. *No calendar feed* (dropped by the user 2026-11-09: it would show drafts without an approved plan, and events had no times of day then; times of day were added the same day, but the feed was not asked for again).
 5b. **Bilingual page, run history and pin, rename and delete, README, time of day and description on events (done 2026-11-09)**: English and Norwegian page and server texts, English codes on the wire, earlier runs and a pinned current plan, rename/delete of organisations and plans, rename of people and tasks, a time of day and a description on events.
+5c. **The table (done 2026-11-13)**: one view per plan for events, places per event, info rows, everyone's answers and the plan (see *The table*); replaced My page, the list and the grid.
 6. **Deployment on kate**: image, Flux, SQLite backup. **Postponed (the user's choice 2026-11-09)**; not started. Remember when it is taken up: Python and `ortools` must be in the image, `DUTYPLAN_SOLVER` must be set, and the database needs a backup.
 
 **Pilot**: first two or three tasks with manual cells, groups and selections, then the rest of the tasks.

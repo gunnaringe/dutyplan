@@ -42,7 +42,6 @@ const { spawn } = require('child_process');
 
     await page.goto(base + '/');
     await page.waitForSelector('h1');
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));  // the grid is the default on wide screens; most checks below look for the list
     ok((await page.textContent('h1')) === 'Choose organisation', 'the front page shows the organisation choice');
     ok((await page.getAttribute('html', 'lang')) === 'en', 'the page language is English');
 
@@ -110,46 +109,144 @@ const { spawn } = require('child_process');
     ok((await page.inputValue('input[aria-label="Places for Café on Match day"]')) === '3', 'places stay after a reload');
     ok((await page.inputValue('select[aria-label="Sound + Video"]')) === 'cannot', 'the combination stays');
 
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    // --- the plan page: one table ---
+    const planUrl = '/o/sports-club/p/autumn-2026';
+    const cols = (p) => p.locator('.dp-table thead th[scope=col]:not(.addcol)').count();
+    const dialog = page.locator('dialog.modal');
+    const closeDialog = async () => { await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' }); };
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
+    await page.click('summary:has-text("Add several events")');
     await page.fill('input[aria-label="From"]', '2026-08-01');
     await page.fill('input[aria-label="To"]', '2026-08-31');
     await page.getByRole('button', { name: 'Add all' }).click();
-    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Day type 2026"]').length === 5);
-    ok((await page.textContent('#msg')).includes('New events: 5'), 'five Sundays in August 2026');
-    // an extra event on the same day is just another event
-    await page.fill('input[aria-label="Date"]', '2026-08-09');
-    await page.fill('input[aria-label="Note"]', 'evening');
-    await page.click('text=Add event');
-    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Day type 2026-08-09"]').length === 2);
-    await page.click('button[aria-label^="Delete the event 2026-08-30"]');
-    await page.waitForFunction(() => document.querySelectorAll('select[aria-label^="Day type 2026"]').length === 5);
+    await msgHas(page, 'New events: 5');
+    ok((await cols(page)) === 5, 'five Sundays in August 2026, one column each');
+    // an extra event on the same day is just another event: «+» at the end of the date row
+    await page.getByRole('button', { name: 'Add an event' }).click();
+    await dialog.locator('input[aria-label="Date"]').fill('2026-08-09');
+    await dialog.locator('input[aria-label="Note"]').fill('evening');
+    await dialog.getByRole('button', { name: 'Add event' }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.dp-table thead th[scope=col]:not(.addcol)').length === 6);
+    ok((await page.locator('button[aria-label="Open the event 2026-08-09 Match day"]').count()) === 2, 'two events on 9 August');
+    await page.click('button[aria-label="Open the event 2026-08-30 Match day"]');
+    await dialog.getByRole('button', { name: 'Delete the event' }).click();  // the confirmation is accepted
+    await page.waitForFunction(() => document.querySelectorAll('.dp-table thead th[scope=col]:not(.addcol)').length === 5);
 
-    // --- phase 3: my page ---
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
-    await h1is(page, 'Autumn 2026');
-    await page.selectOption('select[aria-label="Pick your name"]', { label: 'Kari Test' });
-    await page.click('text=Open my page');
-    await h1is(page, 'Kari Test');
-    await page.click('button[aria-label="Add Sound"]');
-    await page.waitForSelector('[aria-label="How willingly: Sound"]');
-    await page.click('[aria-label="How willingly: Sound"] button[data-level="good"]');
-    await page.waitForSelector('[aria-label="How willingly: Sound"] button[data-level="good"][aria-pressed="true"]');
-    await page.click('.avail-row:first-child button[data-level="never"]');
-    await page.waitForSelector('.avail-row:first-child button[data-level="never"][aria-pressed="true"]');
-    ok((await page.innerText('main')).includes('1 do not suit'), 'the summary counts the answer');
+    // answers: a click moves the cell on (blank → yes → maybe → no → blank), and the count above the event follows
+    const cell = (who, label) => page.locator(`button.ans[aria-label^="${who}, ${label}:"]`);
+    const kari1 = cell('Kari Test', '2026-08-02 Match day');
+    const level = (loc) => loc.getAttribute('data-level');
+    const clickTo = async (loc, want) => { await loc.click(); await page.waitForFunction(([sel, w]) => document.querySelector(sel).dataset.level === w, [`button.ans[aria-label^="Kari Test, 2026-08-02 Match day:"]`, want]); };
+    ok((await level(kari1)) === 'none', 'a new person has not answered');
+    await clickTo(kari1, 'good');
+    ok((await kari1.innerText()) === '✓' && (await kari1.getAttribute('aria-label')).endsWith(': yes'), 'one click is yes');
+    await clickTo(kari1, 'poor');
+    await clickTo(kari1, 'never');
+    ok((await kari1.innerText()) === '✗', 'three clicks are no');
+    ok((await page.locator('.dp-table td.count').first().innerText()).includes('✗ 1'), 'the count above the event follows: ' + (await page.locator('.dp-table td.count').first().innerText()));
     await page.reload();
-    await h1is(page, 'Kari Test');
-    await page.waitForSelector('.avail-row:first-child button[data-level="never"][aria-pressed="true"]');
-    await page.waitForSelector('[aria-label="How willingly: Sound"] button[data-level="good"][aria-pressed="true"]');
-    await page.click('.row-inline button:has-text("Good")');  // everything to good; one answer is overwritten, the confirmation is accepted
-    await page.waitForFunction(() => document.querySelectorAll('.avail-row button[data-level="good"][aria-pressed="true"]').length === document.querySelectorAll('.avail-row').length);
-    await page.click('.avail-row:first-child button[data-level="good"]');  // pressing the chosen answer again removes it
-    await page.waitForSelector('.avail-row:first-child button[aria-pressed="true"]', { state: 'detached' });
+    await page.waitForSelector('.dp-table');
+    ok((await level(kari1)) === 'never', 'the answer stays after a reload');
+    await clickTo(kari1, 'none');
+    await clickTo(kari1, 'good');
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await level(kari1)) === 'good', 'and its next state too');
 
-    // --- phase 4: plan ---
-    const kariUrl = page.url().replace(base, '');
-    ok(/\/o\/sports-club\/p\/autumn-2026\/me\/\d+$/.test(kariUrl), 'the personal page has an English address: ' + kariUrl);
+    // the person: what they take part in, from the dialog behind the name
+    ok((await page.locator('tr:has(button[aria-label="Open Kari Test"]) .sub.prompt').innerText()) === 'choose tasks', 'a person without tasks is asked to choose');
+    await page.click('button[aria-label="Open Kari Test"]');
+    await dialog.locator('select[aria-label="Sound for Kari Test"]').selectOption('good');
+    // the page is drawn again with the new data (the chosen task under the name), and the dialog opens again on top
+    const kariSub = page.locator('tr:has(button[aria-label="Open Kari Test"]) .sub').first();
+    await page.waitForFunction(() => { return [...document.querySelectorAll('tr[data-person]')].some((tr) => tr.querySelector('button[aria-label="Open Kari Test"]') && tr.querySelector('.sub').textContent === 'Sound'); });
+    await dialog.waitFor();
+    ok((await dialog.locator('select[aria-label="Sound for Kari Test"]').inputValue()) === 'good', 'the dialog opens again with the new data');
+    await closeDialog();
+    ok((await kariSub.getAttribute('class')) === 'sub', 'no longer asked to choose');
+    await page.reload();
+    await page.click('button[aria-label="Open Kari Test"]');
+    ok((await dialog.locator('select[aria-label="Sound for Kari Test"]').inputValue()) === 'good', 'the task choice stays after a reload');
+    await closeDialog();
+
+    // places on one event: faded from the day type, bold when the event has its own, and back when emptied
+    const cafe1 = page.locator('input[aria-label="Places for Café on 2026-08-02 Match day"]');
+    ok((await cafe1.inputValue()) === '' && (await cafe1.getAttribute('placeholder')) === '3', 'the day type’s places show faded');
+    await cafe1.fill('2');
+    await cafe1.blur();
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Places for Café on 2026-08-02 Match day"]').classList.contains('own'));
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await cafe1.inputValue()) === '2' && (await cafe1.getAttribute('class')) === 'own', 'the event’s own places stay after a reload');
+    await cafe1.fill('3');  // the day type’s own number: back to the day type
+    await cafe1.blur();
+    await page.waitForFunction(() => !document.querySelector('input[aria-label="Places for Café on 2026-08-02 Match day"]').classList.contains('own'));
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await cafe1.inputValue()) === '', 'typing the day type’s number goes back to it');
+    await cafe1.fill('0');
+    await cafe1.blur();
+    await page.waitForFunction(() => document.querySelector('input[aria-label="Places for Café on 2026-08-02 Match day"]').classList.contains('own'));
+    await cafe1.fill('');
+    await cafe1.blur();
+    await page.waitForFunction(() => !document.querySelector('input[aria-label="Places for Café on 2026-08-02 Match day"]').classList.contains('own'));
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await cafe1.inputValue()) === '', 'emptying the field goes back to the day type');
+
+    // an info row of the plan: add, a value, rename and delete
+    await page.fill('input[placeholder="New info row, e.g. Theme"]', 'Theme');
+    await page.press('input[placeholder="New info row, e.g. Theme"]', 'Enter');
+    await page.waitForSelector('button[aria-label="Open the info row Theme"]');
+    await page.fill('input[aria-label="Theme 2026-08-02 Match day"]', 'Opening');
+    await Promise.all([page.waitForResponse((r) => r.url().includes('/fields/') && r.request().method() === 'PUT'), page.locator('input[aria-label="Theme 2026-08-02 Match day"]').blur()]);
+    await page.reload();
+    ok((await page.inputValue('input[aria-label="Theme 2026-08-02 Match day"]')) === 'Opening', 'the value stays after a reload');
+    await page.click('button[aria-label="Open the info row Theme"]');
+    await dialog.locator('input[aria-label="Name of the info row"]').fill('Motto');
+    await dialog.getByRole('button', { name: 'Rename' }).click();
+    await page.waitForSelector('button[aria-label="Open the info row Motto"]');
+    await page.reload();
+    ok((await page.inputValue('input[aria-label="Motto 2026-08-02 Match day"]')) === 'Opening', 'a renamed row keeps its values');
+    await page.click('button[aria-label="Open the info row Motto"]');
+    await dialog.getByRole('button', { name: 'Delete the info row' }).click();  // the confirmation is accepted
+    await page.waitForSelector('button[aria-label="Open the info row Motto"]', { state: 'detached' });
+    await page.reload();
+    ok((await page.locator('button[aria-label="Open the info row Motto"]').count()) === 0, 'the row is gone after a reload');
+
+    // a task: «cannot be combined with anything» sets every pair, and unticking sets them back to standard
+    const comboApi = () => page.evaluate(() => fetch('/api/orgs/sports-club/combinations').then((r) => r.json()));
+    await page.click('button[aria-label="Open the task Café"]');
+    await dialog.locator('input[aria-label="Cannot be combined with anything"]').check();
+    await page.waitForFunction(() => { const b = document.querySelector('dialog.modal input[aria-label="Cannot be combined with anything"]'); return b && b.checked && document.querySelector('dialog.modal select[aria-label="Café + Sound"]').value === 'cannot'; });
+    await closeDialog();
+    await page.reload();
+    await page.click('button[aria-label="Open the task Café"]');
+    ok(await dialog.locator('input[aria-label="Cannot be combined with anything"]').isChecked(), 'it stays after a reload');
+    ok((await comboApi()).filter((c) => c.level === 'cannot').length === 3, 'Café cannot be combined with Sound or Video, and Sound + Video stays: ' + JSON.stringify(await comboApi()));
+    await dialog.locator('input[aria-label="Cannot be combined with anything"]').uncheck();  // the confirmation is accepted
+    await page.waitForFunction(() => { const s = document.querySelector('dialog.modal select[aria-label="Café + Sound"]'); return s && s.value === 'standard'; });
+    await closeDialog();
+    ok((await comboApi()).length === 1, 'back to standard; Sound + Video is untouched: ' + JSON.stringify(await comboApi()));
+
+    // a personal link: the table with the person's row marked, and the name filled in at the top when it is empty
+    const kariId = await page.locator('tr:has(button[aria-label="Open Kari Test"])').getAttribute('data-person');
+    const kariUrl = `${planUrl}/me/${kariId}`;
+    await page.evaluate(() => localStorage.setItem('tp.actor', ''));
+    await page.goto(base + kariUrl);
+    await page.waitForSelector('tr.me');
+    ok((await page.locator('tr.me button.cellbtn').getAttribute('aria-label')) === 'Open Kari Test', 'the row of the person is marked');
+    ok((await page.inputValue('#actor')) === 'Kari Test', 'the name is filled in');
+    await page.fill('#actor', 'Ola Nordmann');
+    await page.dispatchEvent('#actor', 'change');
+    const beforeBad404 = errors.length;
+    await page.goto(base + planUrl + '/me/99999');
+    await h1is(page, 'Page not found');
+    errors.length = beforeBad404;
+    ok((await page.evaluate(() => localStorage.getItem('tp.org'))) === 'sports-club', 'an unknown person does not forget the organisation');
+
+    // --- the plan ---
     await page.goto(base + '/o/sports-club');
     await page.waitForSelector('input[aria-label="Can be proposed: Kari Test"]');
     await page.check('input[aria-label="Can be proposed: Kari Test"]');  // switched off earlier in the check
@@ -177,7 +274,7 @@ const { spawn } = require('child_process');
     ok((await page.inputValue('input[aria-label="Places Team A fills on Café"]')) === '1', 'the group task stays after a reload');
     ok(await page.isChecked('input[aria-label="Ola Test in Team A"]'), 'the group member stays after a reload');
     ok(await page.isChecked('input[aria-label="Can be proposed: Team A"]'), 'a new group can be proposed');
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
     ok((await page.innerText('main')).includes('No plan has been made yet'), 'the plan is empty before the first run');
     // manual cells and selections, for several events at a time: a guest on Sound the first Sunday, and Kari alone in the selection for Sound on 16 August
@@ -202,57 +299,64 @@ const { spawn } = require('child_process');
     await page.locator('form:has(input[placeholder^="Text"]) button[type=submit]').click();  // no event chosen: an explanation, not an error
     await msgHas(page, 'Choose at least one event');
     await page.getByRole('button', { name: 'Plan', exact: true }).click();
-    await page.waitForSelector('.plan-event', { timeout: 20000 });
-    let panel = await page.innerText('.plan-panel');
-    ok(panel.includes('Kari Test'), 'Kari got Sound: ' + panel);
-    ok(panel.includes('Checked independently: no rule violations'), 'the check ran: ' + panel);
-    ok(panel.includes('Team A (Ola Test)'), 'the group is proposed for Café, with its members: ' + panel);
-    ok(panel.includes('Missing 2') && panel.includes('have not chosen the task'), 'places that cannot be filled are explained: ' + panel);
-    ok(panel.includes('Outside guest'), 'the manual guest is on Sound: ' + panel);
-    ok((await page.locator('.plan-event').nth(0).innerText()).includes('Outside guest') && !(await page.locator('.plan-event').nth(0).innerText()).includes('Kari Test'), 'the guest fills the place the first Sunday, so Kari does not get Sound then');
-    ok((await page.locator('.plan-event').count()) === 5, 'one row per event');
+    await page.waitForSelector('.plan-cell', { timeout: 20000 });
+    // the explanations are behind «Why?», so read the text of the table, not only what is visible
+    const tableText = () => page.locator('.dp-table').evaluate((e) => e.textContent);
+    let text = await tableText();
+    const bar = () => page.innerText('.plan-bar');
+    ok(text.includes('Kari Test') && (await page.locator('tr:has(button[aria-label="Open Kari Test"]) .tag.task').count()) >= 1, 'Kari got Sound, and her row says so: ' + text);
+    ok((await bar()).includes('Checked independently: no rule violations'), 'the check ran: ' + (await bar()));
+    ok(text.includes('Team A (Ola Test)'), 'the group is proposed for Café, with its members: ' + text);
+    ok((await page.locator('tr:has(button[aria-label="Open Ola Test"]) .tag.task', { hasText: 'Café (with Team A)' }).count()) >= 1, 'work through a group is in the member’s row');
+    ok(text.includes('Missing 2') && text.includes('have not chosen the task'), 'places that cannot be filled are explained: ' + text);
+    const sound1 = await page.locator('td.places:has(input[aria-label="Places for Sound on 2026-08-02 Match day"])').innerText();
+    ok(sound1.includes('Outside guest') && !sound1.includes('Kari Test'), 'the guest fills the place the first Sunday, so Kari does not get Sound then: ' + sound1);
     await page.getByRole('button', { name: 'Try again' }).click();
-    await page.waitForSelector('.plan-panel p:has-text("Planning")', { timeout: 3000 }).catch(() => {});  // it may be done before we get to see it
+    await page.waitForSelector('.plan-bar p:has-text("Planning")', { timeout: 3000 }).catch(() => {});  // it may be done before we get to see it
     await page.waitForSelector('button:has-text("Try again"):not([disabled])', { timeout: 20000 });
-    ok((await page.locator('.plan-event').count()) === 5, 'a new plan after «Try again»');
+    await page.waitForSelector('.plan-cell');
     // the plan goes out of date when an answer changes
-    await page.goto(base + kariUrl);
-    await h1is(page, 'Kari Test');
-    await page.click('.avail-row:nth-child(2) button[data-level="poor"]');
-    await page.waitForSelector('.avail-row:nth-child(2) button[data-level="poor"][aria-pressed="true"]');
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
-    await page.waitForSelector('.plan-panel .warn');
-    ok((await page.innerText('.plan-panel')).includes('have changed since this plan was made'), 'an out-of-date plan is marked');
+    await cell('Kari Test', '2026-08-09 Match day').first().click();
+    await page.waitForFunction(() => document.querySelector('button.ans[aria-label^="Kari Test, 2026-08-09 Match day:"]').dataset.level === 'good');
+    await page.reload();
+    await page.waitForSelector('.plan-bar .warn');
+    ok((await bar()).includes('have changed since this plan was made'), 'an out-of-date plan is marked');
     await page.getByRole('button', { name: 'Try again' }).click();
-    await page.waitForSelector('.plan-panel .warn', { state: 'detached', timeout: 20000 });
+    await page.waitForSelector('.plan-bar .warn', { state: 'detached', timeout: 20000 });
 
-    // history and pin: an earlier run can be shown and made the current plan, which «My assignments» then follows
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
-    await page.waitForSelector('.plan-event');
+    // «Show plan» takes the plan out of the table and back, and the choice stays
+    await page.waitForSelector('.plan-cell');
+    await page.getByRole('button', { name: 'Show plan' }).click();
+    await page.waitForSelector('.plan-cell', { state: 'detached' });
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await page.locator('.plan-cell').count()) === 0 && (await page.getAttribute('button.toggle', 'aria-pressed')) === 'false', 'the choice stays after a reload');
+    await page.getByRole('button', { name: 'Show plan' }).click();
+    await page.waitForSelector('.plan-cell');
+
+    // history and pin: an earlier run can be shown and made the current plan, which the page then opens with, and which a
+    // person's assignments follow
+    const assignments = () => page.evaluate((id) => fetch(`/api/orgs/sports-club/plans/autumn-2026/people/${id}/assignments`).then((r) => r.json()), kariId);
     await page.click('summary:has-text("Earlier runs")');
     ok((await page.locator('.run-row').count()) >= 3, 'every run is in the history');
-    ok(!(await page.innerText('.plan-panel')).includes('not the newest'), 'the newest run is shown at first');
+    ok(!(await bar()).includes('not the newest'), 'without a pinned run the newest is shown');
     await page.locator('.run-row button:has-text("Show")').last().click();
-    await page.waitForSelector('.plan-panel :text("not the newest")');
+    await page.waitForSelector('.plan-bar :text("not the newest")');
     await page.getByRole('button', { name: 'Use as the current plan' }).click();
     await msgHas(page, 'is now the current plan');
-    await page.waitForSelector('.plan-panel :text("not the newest")');  // still the older run, now with the pin
-    await page.waitForSelector('.run-row .tag:has-text("pinned")');
-    await page.goto(base + kariUrl);
-    await page.waitForSelector('.mine-row');
-    ok((await page.innerText('main')).includes('From the pinned plan'), 'my page follows the pinned plan: ' + (await page.innerText('main')));
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
-    await page.waitForSelector('.plan-event');
-    await page.click('summary:has-text("Earlier runs")');
-    await page.locator('.run-row:has(.tag:has-text("pinned")) button:has-text("Show")').click();
+    await page.waitForSelector('.plan-bar :text("not the newest")');  // still the older run, now with the pin
+    await page.goto(base + planUrl);
+    await page.waitForSelector('.plan-bar .tag.lock');
+    ok((await bar()).includes('not the newest') && (await bar()).includes('pinned'), 'the page opens with the pinned run: ' + (await bar()));
+    ok((await assignments()).run.pinned === true, 'a person’s assignments follow the pinned run');
     await page.getByRole('button', { name: 'Unpin' }).click();
     await msgHas(page, 'Unpinned');
-    await page.goto(base + kariUrl);
-    await page.waitForSelector('.mine-row');
-    ok((await page.innerText('main')).includes('From the newest plan'), 'unpinned, my page follows the newest plan');
+    ok((await assignments()).run.pinned === false, 'unpinned, they follow the newest');
+    await page.goto(base + planUrl);
+    await page.waitForSelector('.plan-cell');
+    ok(!(await bar()).includes('not the newest'), 'and the page opens with the newest again');
 
     // a group that a manual cell names cannot be deleted, and the message says so (not «already exists»)
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
     await page.click('summary:has-text("New manual cell")');
     const grpForm = page.locator('form:has(input[placeholder^="Text"])');
     await grpForm.locator('summary:has-text("Events")').click();
@@ -267,18 +371,18 @@ const { spawn } = require('child_process');
     await msgHas(page, 'is in use and cannot be deleted');
     errors.length = beforeConflict;
     ok(!(await page.textContent('#msg')).includes('already exists'), 'in use is not «already exists»: ' + (await page.textContent('#msg')));
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + planUrl);
     await page.click('button[aria-label^="Remove the cell"][aria-label*="Team A"]');
     await page.waitForSelector('.rule:has-text("Team A")', { state: 'detached' });
     // «Lock» turns a proposal into a manual cell (and the plan goes out of date); «Remove» takes it away again
     await page.locator('button[aria-label^="Lock Kari Test"]').first().click();
     await page.waitForSelector('.rule:has-text("Sound: Kari Test")');
-    await page.waitForSelector('.plan-panel .warn');
+    await page.waitForSelector('.plan-bar .warn');
     await page.click('button[aria-label^="Remove the cell Sound Outside guest"]');
     await page.waitForSelector('.rule:has-text("Outside guest")', { state: 'detached' });
 
     // weighting: changed per plan, stays, makes the plan out of date, and can be reset to the default
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
     await page.click('summary:has-text("Show and change weighting")');
     const perTask = page.locator('input[aria-label="Equal share of each task"]');
@@ -287,7 +391,7 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Save weighting' }).click();
     await msgHas(page, 'Weighting saved');
     await page.waitForSelector('summary:has-text("1 changed")');
-    ok((await page.innerText('.plan-panel')).includes('weights'), 'a different weighting makes the plan out of date');
+    ok((await bar()).includes('weights'), 'a different weighting makes the plan out of date');
     await page.reload();
     await page.click('summary:has-text("1 changed")');
     ok((await page.locator('input[aria-label="Equal share of each task"]').inputValue()) === '5', 'the weighting stays after a reload');
@@ -302,32 +406,7 @@ const { spawn } = require('child_process');
     await page.click('summary:has-text("Show and change weighting")');
     ok((await page.locator('input[aria-label="Equal share of each task"]').inputValue()) === '0', 'back to the default');
 
-    // the grid (events across, tasks down) and «my assignments»
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
-    await h1is(page, 'Autumn 2026');
-    await page.waitForSelector('.plan-event');
-    await page.getByRole('button', { name: 'Grid', exact: true }).click();
-    await page.waitForSelector('table.plan-grid');
-    ok((await page.locator('table.plan-grid thead th[scope=col]').count()) === 5, 'one column per event');
-    ok((await page.locator('table.plan-grid tbody tr').count()) >= 2, 'one row per task');
-    ok((await page.innerText('table.plan-grid')).includes('Team A (Ola Test)'), 'the group is in the grid');
-    ok((await page.locator('table.plan-grid button[aria-label^="Lock"]').count()) >= 1, 'proposals can be locked in the grid too');
-    await page.reload();
-    await page.waitForSelector('table.plan-grid');  // the choice stays
-    await page.getByRole('button', { name: 'List', exact: true }).click();
-    await page.waitForSelector('.plan-event');
-    await page.selectOption('select[aria-label="Pick your name"]', { label: 'Ola Test' });
-    await page.click('text=Open my page');
-    await h1is(page, 'Ola Test');
-    await page.waitForSelector('.mine-row');
-    ok((await page.innerText('.mine')).includes('Café (with Team A)'), 'an assignment through a group names the group: ' + (await page.innerText('main')));
-    await page.goto(base + kariUrl);
-    await h1is(page, 'Kari Test');
-    await page.waitForSelector('.mine-row');
-    ok((await page.innerText('.mine')).includes('Sound'), 'Kari has Sound in «my assignments»');
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'grid'));  // the width of the grid is checked below
-
-    const urls = ['/o/sports-club', '/o/sports-club/setup', '/o/sports-club/p/autumn-2026', kariUrl];
+    const urls = ['/o/sports-club', '/o/sports-club/setup', planUrl, kariUrl];
     const noSideways = async (lang) => {
       for (const url of urls) {
         await page.goto(base + url);
@@ -337,7 +416,7 @@ const { spawn } = require('child_process');
         ok(w[0] <= w[1], `[${lang}] the page ${url} is ${w[0]} px wide on a ${w[1]} px screen (scrolls sideways)`);
       }
     };
-    // no page may be wider than a phone screen
+    // no page may be wider than a phone screen (the table scrolls in its own box)
     await page.setViewportSize({ width: 390, height: 844 });
     await noSideways('en');
 
@@ -349,7 +428,7 @@ const { spawn } = require('child_process');
     await page.locator('input[aria-label="Name of Kari Test"]').blur();  // leaving the field saves it
     await page.waitForSelector('input[aria-label="Name of Kari Renamed"]');
     await page.goto(base + kariUrl);  // the personal link still works, with the new name
-    await h1is(page, 'Kari Renamed');
+    await page.waitForSelector('tr.me button[aria-label="Open Kari Renamed"]');
     await page.goto(base + '/o/sports-club');
     await page.fill('input[aria-label="Name of Kari Renamed"]', 'Kari Test');
     await page.locator('input[aria-label="Name of Kari Renamed"]').blur();  // leaving the field saves it
@@ -379,16 +458,16 @@ const { spawn } = require('child_process');
     ok((await page.innerText('main')).includes('cannot be deleted'), 'an organisation with plans cannot be deleted: the form is not offered');
     ok((await page.locator('button:has-text("Delete the organisation")').count()) === 0, 'no delete button while there are plans');
 
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
     await page.click('summary:has-text("Rename or delete")');
     await page.fill('input[aria-label="Name of the plan"]', 'Fall 2026');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
     await h1is(page, 'Fall 2026');
     ok(page.url().endsWith('/p/autumn-2026'), 'the address stays when the plan is renamed');
-    await page.goto(base + kariUrl);  // the link to a person's page in this plan still works
-    await page.waitForSelector('.mine-row');
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + kariUrl);  // a personal link in this plan still works
+    await page.waitForSelector('tr.me');
+    await page.goto(base + planUrl);
     await page.click('summary:has-text("Rename or delete")');
     await page.fill('input[aria-label="Name of the plan"]', 'Autumn 2026');
     await page.getByRole('button', { name: 'Rename', exact: true }).click();
@@ -436,52 +515,34 @@ const { spawn } = require('child_process');
     ok(!(await page.innerText('main')).includes('Temp Org'), 'the deleted organisation is not listed');
     await page.evaluate(() => localStorage.setItem('tp.org', 'sports-club'));
 
-    // --- a time of day and a description on an event ---
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    // --- a time of day and a description on an event, in its dialog ---
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
-    await page.fill('input[aria-label="Start time 2026-08-02 Match day"]', '11:00');
-    await page.locator('input[aria-label="Start time 2026-08-02 Match day"]').blur();
-    await page.waitForSelector('input[aria-label="End time 2026-08-02 11:00 Match day"]');  // the labels carry the time now
-    await page.fill('input[aria-label="End time 2026-08-02 11:00 Match day"]', '12:30');
-    await page.locator('input[aria-label="End time 2026-08-02 11:00 Match day"]').blur();
-    await page.waitForFunction(() => { const i = document.querySelector('input[aria-label="End time 2026-08-02 11:00 Match day"]'); return i && i.value === '12:30'; });
-    await page.fill('input[aria-label="End time 2026-08-02 11:00 Match day"]', '10:00');  // before the start: refused, and the old time comes back
+    await page.click('button[aria-label="Open the event 2026-08-02 Match day"]');
+    await dialog.locator('input[aria-label="Start time"]').fill('11:00');
+    await dialog.locator('input[aria-label="End time"]').fill('10:00');  // before the start: refused, and the dialog says why
     const beforeEnd = errors.length;
-    await page.locator('input[aria-label="End time 2026-08-02 11:00 Match day"]').blur();
-    await msgHas(page, 'The end time must be after the start time');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await page.waitForFunction(() => document.querySelector('dialog.modal [data-msg]').textContent.includes('The end time must be after the start time'));
     errors.length = beforeEnd;  // 400 is the right answer here
-    ok((await page.inputValue('input[aria-label="End time 2026-08-02 11:00 Match day"]')) === '12:30', 'a refused time puts the old one back');
-    const descLabel = 'textarea[aria-label="Description 2026-08-02 11:00 Match day"]';
-    await page.click('details.event-desc:has(' + descLabel + ') summary');
-    await page.fill(descLabel, 'Doors open at 10:30.\nBring the banner.');
-    await page.locator(descLabel).blur();
-    await page.waitForSelector('summary:has-text("Description: Doors open at 10:30.")');
+    await dialog.locator('input[aria-label="End time"]').fill('12:30');
+    await dialog.locator('textarea[aria-label="Description"]').fill('Doors open at 10:30.\nBring the banner.');
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await page.waitForSelector('button[aria-label="Open the event 2026-08-02 11:00 Match day"]');  // the labels carry the time now
     await page.reload();
-    await h1is(page, 'Autumn 2026');
-    ok((await page.inputValue('input[aria-label="Start time 2026-08-02 11:00 Match day"]')) === '11:00', 'the time stays after a reload');
-    await page.waitForSelector('.plan-event');
-    const firstEvent = await page.locator('.plan-event').nth(0).innerText();
-    ok(firstEvent.includes('11:00–12:30') && firstEvent.includes('Doors open at 10:30.') && firstEvent.includes('Bring the banner.'), 'the plan shows the time and the description: ' + firstEvent);
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'grid'));
-    await page.reload();
-    await page.waitForSelector('table.plan-grid');
-    ok((await page.innerText('table.plan-grid thead')).includes('11:00–12:30'), 'the grid shows the time');
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));
-    await page.goto(base + kariUrl);  // a person's page: the time and the description of each event they answer for
-    await h1is(page, 'Kari Test');
-    await page.waitForSelector('.avail-row');
-    const firstRow = await page.locator('.avail-row').nth(0).innerText();
-    ok(firstRow.includes('11:00–12:30') && firstRow.includes('Bring the banner.'), 'a person\'s page shows the time and the description: ' + firstRow);
-    await page.goto(base + '/o/sports-club/p/autumn-2026');  // clearing the start time clears the end time too
-    await page.fill('input[aria-label="Start time 2026-08-02 11:00 Match day"]', '');
-    await page.locator('input[aria-label="Start time 2026-08-02 11:00 Match day"]').blur();
-    await page.waitForSelector('input[aria-label="End time 2026-08-02 Match day"]');
-    ok((await page.inputValue('input[aria-label="End time 2026-08-02 Match day"]')) === '', 'clearing the start clears the end');
+    const head1 = await page.locator('button[aria-label="Open the event 2026-08-02 11:00 Match day"]').innerText();
+    ok(head1.includes('11:00–12:30') && head1.includes('description'), 'the date row shows the time and that there is a description: ' + head1);
+    await page.click('button[aria-label="Open the event 2026-08-02 11:00 Match day"]');
+    ok((await dialog.locator('textarea[aria-label="Description"]').inputValue()) === 'Doors open at 10:30.\nBring the banner.', 'the description stays after a reload');
+    await dialog.locator('input[aria-label="Start time"]').fill('');  // clearing the start time clears the end time too
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await page.waitForSelector('button[aria-label="Open the event 2026-08-02 Match day"]');
+    await page.click('button[aria-label="Open the event 2026-08-02 Match day"]');
+    ok((await dialog.locator('input[aria-label="End time"]').inputValue()) === '', 'clearing the start clears the end');
+    await closeDialog();
 
     // --- Norwegian: the switch, what the server writes, the errors, and the same width check ---
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'list'));  // the explanations are read from the list
     await page.goto(base + '/o/sports-club');
     await h1is(page, 'Sports Club');
     await page.selectOption('#lang', 'nb');
@@ -491,12 +552,13 @@ const { spawn } = require('child_process');
     ok((await page.evaluate(() => localStorage.getItem('tp.lang'))) === 'nb', 'the choice is kept');
     await page.reload();
     await page.waitForSelector('h2:has-text("Planer")');  // and survives a reload
-    await page.goto(base + '/o/sports-club/p/autumn-2026');
+    await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
-    await page.waitForSelector('.plan-event');
-    panel = await page.innerText('.plan-panel');
-    ok(panel.includes('Mangler 2') && panel.includes('har ikke valgt oppgaven'), 'the server explains in Norwegian too: ' + panel);
-    ok(panel.includes('Kontrollert uavhengig') && panel.includes('Bruk som gjeldende plan'), 'the run texts are Norwegian: ' + panel);
+    await page.waitForSelector('.plan-cell');
+    text = await tableText();
+    ok(text.includes('Mangler 2') && text.includes('har ikke valgt oppgaven'), 'the server explains in Norwegian too: ' + text);
+    ok((await bar()).includes('Kontrollert uavhengig') && (await bar()).includes('Bruk som gjeldende plan'), 'the run texts are Norwegian: ' + (await bar()));
+    ok((await page.locator('button.ans[aria-label^="Kari Test, 2026-08-09 Match day:"]').first().getAttribute('aria-label')).endsWith(': ja'), 'the answers are Norwegian');
     await page.goto(base + '/o/sports-club/setup');
     await h1is(page, 'Oppsett');
     await page.fill('input[placeholder="Ny oppgave"]', 'Sound');
@@ -505,10 +567,8 @@ const { spawn } = require('child_process');
     await msgHas(page, 'Oppgave «Sound» finnes allerede');  // an error code from the server, written in Norwegian
     errors.length = beforeDup;  // 409 is the right answer here
     await page.goto(base + kariUrl);
-    await h1is(page, 'Kari Test');
-    await page.waitForSelector('.mine-row');
-    ok((await page.innerText('main')).includes('Mine oppdrag') && (await page.innerText('main')).includes('Når kan du?'), 'my page is Norwegian');
-    await page.evaluate(() => localStorage.setItem('tp.planview', 'grid'));
+    await page.waitForSelector('tr.me');
+    ok((await page.innerText('.dp-table')).includes('Dato') && (await page.innerText('.dp-table')).includes('PERSONER'), 'the table is Norwegian: ' + (await page.innerText('.dp-table')).slice(0, 80));
     await page.setViewportSize({ width: 390, height: 844 });
     await noSideways('nb');
 

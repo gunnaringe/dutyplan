@@ -97,6 +97,11 @@ const CHOICES = {
     await levels('Sunniva Test', { 2: 'never' });
     await levels('Jon Demo', { 0: 'never' });
 
+    // the plan's own info row, and one event that needs more people at the doors than its day type says
+    const theme = await api('POST', `${p}/fields`, { name: 'Theme' });
+    for (const [i, value] of [[0, 'Brass night'], [1, 'Strings'], [2, 'Christmas']]) await api('PUT', `${p}/events/${concerts[i].id}/fields/${theme.id}`, { value });
+    await api('PUT', `${p}/events/${gala.id}/places/${task.Doors}`, { slots: 3 });
+
     // a locked place (a manual cell), and a selection: only these two can run the video at the gala (and neither can come, so
     // the place stays empty and the plan says why)
     await api('POST', `${p}/cells`, { events: [first.id], task: task.Doors, person: person['Ola Sample'] });
@@ -137,8 +142,9 @@ const CHOICES = {
     browser = await launch('en');
     browserNb = await launch('nb');
     const context = async (opts, lang = 'en') => {
-      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, timezoneId: 'UTC', ...opts });
-      await c.addInitScript(([l, who, view]) => { try { localStorage.setItem('tp.lang', l); localStorage.setItem('tp.actor', who); localStorage.setItem('tp.planview', view); } catch (e) { /* ignore */ } }, [lang, ADMIN, opts.planview || 'grid']);
+      const { showplan, ...rest } = opts;
+      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, timezoneId: 'UTC', ...rest });
+      await c.addInitScript(([l, who, show]) => { try { localStorage.setItem('tp.lang', l); localStorage.setItem('tp.actor', who); localStorage.setItem('tp.showplan', show); } catch (e) { /* ignore */ } }, [lang, ADMIN, opts.showplan || 'on']);
       return c;
     };
     const errors = [];
@@ -171,12 +177,14 @@ const CHOICES = {
       await pg.screenshot({ path: path.join(OUT, name + '.png'), fullPage: true, clip: { x: 0, y: 0, width: pg.viewportSize().width, height: b.y + b.height + 20 } });
     };
     const planPath = `/o/${ORG.slug}/p/${PLAN.slug}`;
+    const dialog = (pg) => pg.locator('dialog.modal');
+    const closeDialog = async (pg) => { await pg.keyboard.press('Escape'); await dialog(pg).waitFor({ state: 'detached' }); };
 
-    // The plan, as a grid: the picture at the top of the README.
-    const wide = await context({ viewport: { width: 1000, height: 800 } });
+    // The plan page: one table, here with the plan shown in it. The picture at the top of the README.
+    const wide = await context({ viewport: { width: 1280, height: 900 } });
     const page = await open(wide);
-    await go(page, planPath);
-    await save(page, 'hero', sec(page, 'Plan'));
+    await go(page, planPath, '.dp-table');
+    await range(page, 'hero', page.locator('main h1'), page.locator('.grid-scroll'));
 
     await go(page, `/o/${ORG.slug}`);
     await fromTop(page, '01-organisation', page.getByText('the planner never picks the person itself'));
@@ -184,35 +192,47 @@ const CHOICES = {
     await save(page, '02-day-types', sec(page, 'Day types'));
     await range(page, '03-groups-combinations', sec(page, 'Groups'), sec(page, 'What can be combined on the same day\\?'));
 
-    await go(page, planPath);
-    await save(page, '04-events', sec(page, 'Events'));
-    await go(page, `${planPath}/me/${person['Kari Test']}`);
-    await page.screenshot({ path: path.join(OUT, '05-my-page.png'), fullPage: true, clip: { x: 0, y: 0, width: 1000, height: 1560 } });
+    // The same table while people answer, without the plan.
+    const answers = await open(await context({ viewport: { width: 1280, height: 900 }, showplan: 'off' }));
+    await go(answers, planPath, '.dp-table');
+    await save(answers, '04-table', answers.locator('.grid-scroll'));
+    await answers.getByRole('button', { name: 'Open the task Doors' }).click();
+    await save(answers, '05-task', dialog(answers));
+    await closeDialog(answers);
+    await answers.getByRole('button', { name: /^Open the event 2015-12-19/ }).click();
+    await save(answers, '06-event', dialog(answers));
+    await closeDialog(answers);
 
-    const list = await open(await context({ viewport: { width: 1000, height: 800 }, planview: 'list' }));
-    await go(list, planPath);
-    await save(list, '06-plan-list', sec(list, 'Plan'));
-    await save(list, '07-why', list.locator('li.plan-event', { hasText: 'Not filled' }));
-    await save(list, '08-locks-selections', sec(list, 'Manual cells and selections'));
-    await sec(list, 'Weighting').locator('summary').first().click();
-    await head(list, '09-weighting', sec(list, 'Weighting'), 720);
-    const detailsOf = (re) => sec(list, 'Plan').locator('details', { has: list.locator('summary', { hasText: re }) });
-    await detailsOf(/^Earlier runs/).locator('summary').click();
-    await detailsOf(/^Distribution$/).locator('summary').click();
-    await range(list, '10-history-distribution', detailsOf(/^Earlier runs/), detailsOf(/^Distribution$/));
+    // A personal link: the table with the person's row marked, and what the person chooses.
+    await go(answers, `${planPath}/me/${person['Kari Test']}`, 'tr.me');
+    await range(answers, '07-personal-link', answers.locator('main h1'), answers.locator('.grid-scroll'));
+    await answers.getByRole('button', { name: 'Open Kari Test' }).click();
+    // the link carries the temporary server's random port: show a fixed address, so the picture is the same every time
+    await dialog(answers).locator('input[readonly]').evaluate((e) => { e.value = e.value.replace(location.origin, 'https://dutyplan.example'); });
+    await save(answers, '08-person', dialog(answers));
+    await closeDialog(answers);
 
-    // On a phone the header takes a lot of room: the pictures start at what they are about.
-    const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, planview: 'list' }));
-    await go(phone, planPath);
-    await phone.locator('.view-toggle').evaluate((e) => e.scrollIntoView());
-    await phone.screenshot({ path: path.join(OUT, '11-phone-plan.png') });
-    await go(phone, `${planPath}/me/${person['Kari Test']}`);
-    await phone.getByRole('heading', { name: 'What can you take part in?' }).evaluate((e) => e.scrollIntoView());
-    await phone.screenshot({ path: path.join(OUT, '12-phone-my-page.png') });
+    await go(page, planPath, '.dp-table');
+    const empty = page.locator('td.places', { hasText: 'Not filled' }).first();
+    await empty.locator('summary').click();
+    await save(page, '09-why', empty);
+    await save(page, '10-locks-selections', sec(page, 'Manual cells and selections'));
+    await sec(page, 'Weighting').locator('summary').first().click();
+    await head(page, '11-weighting', sec(page, 'Weighting'), 720);
+    const fold = (re) => page.locator('.below details', { has: page.locator('summary', { hasText: re }) });
+    await fold(/^Earlier runs/).locator('summary').click();
+    await fold(/^Distribution$/).locator('summary').click();
+    await range(page, '12-history-distribution', fold(/^Distribution$/), fold(/^Earlier runs/));
 
-    const nb = await open(await context({ viewport: { width: 1000, height: 800 } }, 'nb'));
-    await go(nb, planPath);
-    await fromTop(nb, '13-norwegian', nb.locator('main section').nth(1));
+    // On a phone the table scrolls sideways under the names.
+    const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
+    await go(phone, planPath, '.dp-table');
+    await phone.locator('.plan-bar').evaluate((e) => e.scrollIntoView());
+    await phone.screenshot({ path: path.join(OUT, '13-phone.png') });
+
+    const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));
+    await go(nb, planPath, '.dp-table');
+    await range(nb, '14-norwegian', nb.locator('main h1'), nb.locator('.grid-scroll'));
 
     if (errors.length) throw new Error('the page failed: ' + errors.join('; '));
     // Smaller files: a text page has few colours. pngquant is optional (the pictures are kept as they are without it).

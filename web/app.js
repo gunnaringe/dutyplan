@@ -22,7 +22,7 @@ function h(tag, props, ...kids) {
 }
 
 function say(text, kind) {
-  const m = document.getElementById('msg');
+  const m = document.querySelector('dialog[open] [data-msg]') || document.getElementById('msg');
   m.textContent = text || '';
   m.className = text ? kind || 'ok' : '';
 }
@@ -88,8 +88,6 @@ const clock = (ev) => (ev.start_time ? (ev.end_time ? `${ev.start_time}–${ev.e
 const evMeta = (ev) => [clock(ev), ev.day_type, ev.note].filter(Boolean).join(' · ');
 // A date with its time, as used in labels: «2026-08-09 11:00 Match day».
 const evLabel = (ev) => `${ev.date}${ev.start_time ? ' ' + ev.start_time : ''} ${ev.day_type}`;
-// A description with its line breaks kept; nothing when there is none.
-const descText = (text) => (text ? h('div', { class: 'desc small muted' }, text) : '');
 
 function go(path) {
   history.pushState({}, '', path);
@@ -226,8 +224,6 @@ function managePlan(r, plan) {
 const SELECT_LEVELS = ['standard', 'cannot', 'impractical', 'practical', 'preferred'];
 const COMBO_OPTIONS = ['cannot', 'impractical', 'practical', 'preferred'];
 const GROUP_LEVELS = ['poor', 'neutral', 'good'];
-const TASK_LEVELS = [['never', 'level.task.never'], ['poor', 'level.poor'], ['neutral', 'level.neutral'], ['good', 'level.good']];
-const EVENT_LEVELS = [['never', 'level.event.never'], ['poor', 'level.poor'], ['good', 'level.good']];
 
 function section(title, ...kids) { return h('section', {}, h('h2', {}, title), ...kids); }
 
@@ -325,124 +321,20 @@ async function pageSetup(r, org) {
       pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : h('p', { class: 'muted' }, t('setup.combos_need_two'))));
 }
 
-function dayTypeSelect(dayTypes, value, onchange, label) {
-  return h('select', { 'aria-label': label, onchange }, dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === value }, d.name)));
-}
-
-// «Plan»: a run of the planner (the latest at first) as a list of events (mobile first), with a button to plan or try again, the
-// earlier runs, and a pin that makes a finished run the plan people see under «My assignments».
-// The run happens on the server; the panel asks for status every second until it is done and redraws only itself.
-function planPanel(r, canPlan, first, firstRuns) {
-  const path = `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/runs`;
-  const box = h('div', { class: 'plan-panel' });
-  const limits = [[10, '10 s'], [20, '20 s'], [60, '60 s']];
-  const limitSel = h('select', { 'aria-label': t('run.limit_aria') }, limits.map(([v, text]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, text)));
-  limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
-  let timer = 0;
-  let lastView = first;
-  let runs = firstRuns;  // newest first, with the pinned run too
-  let historyOpen = false;  // the list of earlier runs stays open when the panel is redrawn
-  // Grid on wide screens, list on narrow ones, until the user chooses.
-  const planView = () => store.get('planview') || (window.matchMedia('(min-width: 56rem)').matches ? 'grid' : 'list');
-
-  async function start() {
-    let view;
-    if (await write(async () => { const res = await api('POST', path, { time_limit: parseInt(limitSel.value, 10) }); runs = await api('GET', path); view = await api('GET', `${path}/${res.id}`); })) show(view);
-  }
-  async function poll() {
-    if (!box.isConnected) return;  // the page has been replaced
-    try {
-      const view = await api('GET', `${path}/latest`);
-      if (view.run.status !== 'running') runs = await api('GET', path);
-      show(view);
-    } catch (e) { say(errorText(e), 'err'); }
-  }
-  async function showRun(id) {
-    try { show(await api('GET', `${path}/${id}`)); } catch (e) { say(errorText(e), 'err'); }
-  }
-  // Pin or unpin the run on show, then show it again (not the latest: the user is looking at this one).
-  async function pin(id, on) {
-    if (!(await write(() => api(on ? 'PUT' : 'DELETE', `${path}/${id}/pin`)))) return;
-    try { runs = await api('GET', path); show(await api('GET', `${path}/${id}`)); say(on ? t('run.pin_done', { id }) : t('run.unpin_done')); } catch (e) { say(errorText(e), 'err'); }
-  }
-  function show(view) {
-    lastView = view;
-    clearTimeout(timer);
-    box.replaceChildren(...body(view));
-    if (view && view.run.status === 'running') timer = setTimeout(poll, 1000);
-  }
-
-  async function lock(evId, taskId, personId) {
-    if (await write(() => api('POST', `/orgs/${enc(r.org)}/plans/${enc(r.plan)}/cells`, { events: [evId], task: taskId, person: personId }))) render();
-  }
-
-  // What is in a cell: people, groups and texts, and what is missing. compact (the grid): the explanation behind a «Why?».
-  function cellContent(c, taskName, evId, compact) {
-    const tag = (text, cls) => h('span', { class: 'tag' + (cls ? ' ' + cls : '') }, text);
-    const times = (n) => (n > 1 ? ` ×${n}` : '');
-    const who = [
-      ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag(t('cell.locked'), 'lock') : '', p.weak ? tag(t('cell.poor')) : '',
-        p.locked ? '' : h('button', { type: 'button', class: 'lockbtn', title: t('cell.lock_title', { name: p.name }), 'aria-label': t('cell.lock_aria', { name: p.name, task: taskName }), onclick: () => lock(evId, c.task_id, p.id) }, t('cell.lock')))),
-      ...c.groups.map((g) => h('span', { class: 'person' }, `${g.name} (${g.members.join(', ')})${times(g.fills)}`, g.locked ? tag(t('cell.locked'), 'lock') : '', g.weak ? tag(t('cell.poor')) : '')),
-      ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag(t('cell.locked'), 'lock'))),
-    ];
-    if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? t('cell.not_filled') : t('cell.missing', { n: c.missing })));
-    const why = c.missing > 0 && c.explanation
-      ? (compact ? h('details', { class: 'why' }, h('summary', {}, t('cell.why')), h('div', { class: 'small muted' }, c.explanation)) : h('div', { class: 'small muted' }, c.explanation))
-      : '';
-    return h('div', {}, h('div', { class: 'who' }, who), why);
-  }
-
-  // The grid: events across, tasks down. It scrolls sideways in its own box, not the page.
-  function gridTable(view) {
-    const head = h('tr', {}, h('th', { class: 'corner' }, ''),
-      view.events.map((ev) => h('th', { scope: 'col' }, fmtShortDate(ev.date), h('div', { class: 'small muted' }, evMeta(ev)),
-        ev.description ? h('details', { class: 'why' }, h('summary', {}, t('plan.description')), descText(ev.description)) : '')));
-    const rows = view.tasks.map((tk) => h('tr', {}, h('th', { scope: 'row' }, tk.name),
-      view.events.map((ev) => { const c = ev.cells.find((x) => x.task_id === tk.id); return h('td', {}, c ? cellContent(c, tk.name, ev.id, true) : h('span', { class: 'muted' }, '–')); })));
-    return h('div', { class: 'grid-scroll' }, h('table', { class: 'plan-grid' }, h('thead', {}, head), h('tbody', {}, rows)));
-  }
-
-  function body(view) {
-    const running = !!view && view.run.status === 'running';
-    const out = [h('div', { class: 'row-inline' },
-      h('button', { type: 'button', disabled: !canPlan || running, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')),
-      h('label', { class: 'small muted' }, t('run.time') + ' ', limitSel))];
-    if (!canPlan) out.push(h('p', { class: 'muted' }, t('run.no_planner')));
-    if (!view) { out.push(h('p', { class: 'muted' }, t('run.none_yet'))); return out; }
-    const run = view.run;
-    if (running) { out.push(h('p', { role: 'status' }, t('run.running', { n: run.time_limit }))); return out; }
-    if (run.status === 'failed') { out.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: run.error || t('run.unknown_error') }))); return out; }
-
-    out.push(h('p', { class: 'small muted' }, t('run.made_by', { actor: run.actor, time: fmtTime(run.finished_at || run.started_at) }) + ' ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'))));
-    if (runs.length && run.id !== runs[0].id) out.push(h('p', { class: 'small' }, t('run.older_note', { id: run.id }), ' ', h('button', { type: 'button', class: 'link-button', onclick: () => showRun(runs[0].id) }, t('run.show_newest'))));
-    out.push(run.pinned
-      ? h('p', { class: 'small' }, h('span', { class: 'tag lock' }, t('run.pinned_tag')), ' ' + t('run.pinned_note') + ' ', h('button', { type: 'button', class: 'link-button', onclick: () => pin(run.id, false) }, t('run.unpin')))
-      : h('p', { class: 'small muted' }, h('button', { type: 'button', class: 'ghost', onclick: () => pin(run.id, true) }, t('run.pin')), ' ' + t('run.pin_hint')));
-    if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, t('run.stale')));
-    if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
-    else if (run.checked) out.push(h('p', { class: 'small muted' }, t('run.checked_ok')));
-    if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
-
-    const names = new Map(view.tasks.map((tk) => [tk.id, tk.name]));
-    const mode = planView();
-    out.push(h('div', { class: 'view-toggle', role: 'group', 'aria-label': t('run.view_aria') },
-      [['list', t('run.view_list')], ['grid', t('run.view_grid')]].map(([v, text]) => h('button', { type: 'button', class: 'ghost', 'aria-pressed': String(mode === v), onclick: () => { store.set('planview', v); show(lastView); } }, text))));
-    if (mode === 'grid') out.push(gridTable(view));
-    else out.push(h('ul', { class: 'plan-events' }, view.events.map((ev) => h('li', { class: 'plan-event' },
-      h('div', {}, h('strong', {}, fmtDate(ev.date)), ' ', h('span', { class: 'muted' }, evMeta(ev)), descText(ev.description)),
-      h('div', { class: 'plan-cells' }, ev.cells.flatMap((c) => [h('div', { class: 'task' }, names.get(c.task_id) || '?'), cellContent(c, names.get(c.task_id) || '?', ev.id, false)]))))));
-    if (view.weak.length) out.push(h('details', {}, h('summary', {}, t('run.compromises', { n: view.weak.length })), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))));
-    if (runs.length > 1) out.push(h('details', { open: historyOpen, ontoggle: (e) => { historyOpen = e.target.open; } }, h('summary', {}, t('run.history', { n: runs.length })), h('ul', { class: 'plain runs' }, runs.map((x) => h('li', { class: 'run-row' + (x.id === run.id ? ' shown' : '') },
-      h('span', {}, '#' + x.id), h('span', { class: 'muted small' }, `${x.actor} · ${fmtTime(x.finished_at || x.started_at)}`),
-      x.status !== 'done' ? h('span', { class: 'tag' }, t('run.status.' + x.status)) : '', x.pinned ? h('span', { class: 'tag lock' }, t('run.pinned_tag')) : '',
-      x.id === run.id ? '' : h('button', { type: 'button', class: 'link-button', 'aria-label': t('run.show_aria', { id: x.id }), onclick: () => showRun(x.id) }, t('run.show')))))));
-    if (view.load.length) out.push(h('details', {}, h('summary', {}, t('run.distribution')), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) }))))));
-    return out;
-  }
-
-  show(first);
-  return box;
+// What is in a cell of the run on show: people, groups and texts, what is missing, and why (behind a «Why?»). onlock(task, person)
+// turns a proposal into a manual cell.
+function cellContent(c, taskName, onlock) {
+  const tag = (text, cls) => h('span', { class: 'tag' + (cls ? ' ' + cls : '') }, text);
+  const times = (n) => (n > 1 ? ` ×${n}` : '');
+  const who = [
+    ...c.people.map((p) => h('span', { class: 'person' }, p.name, p.locked ? tag(t('cell.locked'), 'lock') : '', p.weak ? tag(t('cell.poor')) : '',
+      p.locked ? '' : h('button', { type: 'button', class: 'lockbtn', title: t('cell.lock_title', { name: p.name }), 'aria-label': t('cell.lock_aria', { name: p.name, task: taskName }), onclick: () => onlock(c.task_id, p.id) }, t('cell.lock')))),
+    ...c.groups.map((g) => h('span', { class: 'person' }, `${g.name} (${g.members.join(', ')})${times(g.fills)}`, g.locked ? tag(t('cell.locked'), 'lock') : '', g.weak ? tag(t('cell.poor')) : '')),
+    ...c.texts.map((x) => h('span', { class: 'person' }, x.text + times(x.fills), tag(t('cell.locked'), 'lock'))),
+  ];
+  if (c.missing > 0) who.push(h('span', { class: 'err' }, c.missing === c.slots ? t('cell.not_filled') : t('cell.missing', { n: c.missing })));
+  const why = c.missing > 0 && c.explanation ? h('details', { class: 'why' }, h('summary', {}, t('cell.why')), h('div', { class: 'small muted' }, c.explanation)) : '';
+  return h('div', { class: 'plan-cell' }, h('div', { class: 'who' }, who), why);
 }
 
 // Several events at a time: an expandable list with ticks. selected() gives the ids.
@@ -568,69 +460,398 @@ function weightsSection(r, wr) {
           h('button', { type: 'button', class: 'ghost', onclick: save({}, t('weights.reset_done')) }, t('weights.reset'))))));
 }
 
-// The plan's runs and the latest one's view (or null). The list is always 200; asking for «latest» right away with no runs
-// would give a 404 in the browser console.
-async function runsAndLatest(path) {
-  const runs = await api('GET', path);
-  return { runs, latest: runs.length ? await api('GET', path + '/latest') : null };
+// ---- the plan page: one table ----------------------------------------------------------------------------------------
+// Events across. Above the people: what each event is and needs (date, day type, note, the plan's info rows, places per task).
+// Below: everyone's answer per event, set with a click (blank → yes → maybe → no → blank; blank = not answered, which the
+// planner counts as neutral). «Show plan» puts the run on show into the same table. The names of dates, info rows, tasks and
+// people open a dialog with the rest. Tasks, day types, combinations and people belong to the organisation, not the plan.
+
+const ANSWER_NEXT = { '': 'good', good: 'poor', poor: 'never', never: '' };
+const ANSWER_MARK = { '': '', good: '✓', poor: '?', never: '✗' };
+const PERSON_TASK_LEVELS = [['', 'person.not_taking_part'], ['never', 'level.task.never'], ['poor', 'level.poor'], ['neutral', 'level.neutral'], ['good', 'level.good']];
+
+// What the page keeps between redraws of the same plan: the run picked in the history, and a dialog to open again after a change in it.
+const planState = { key: '', runId: null, reopen: null };
+
+// A dialog over the page; messages (say) go into it while it is open, and it is removed when closed.
+function modal(title, ...kids) {
+  const dlg = h('dialog', { class: 'modal', 'aria-label': title },
+    h('div', { class: 'modal-head' }, h('h2', {}, title), h('button', { type: 'button', class: 'ghost', 'aria-label': t('common.close'), onclick: () => dlg.close() }, '×')),
+    h('p', { 'data-msg': '', role: 'status' }), ...kids);
+  dlg.addEventListener('close', () => dlg.remove());
+  document.body.append(dlg);
+  dlg.showModal();
+  return dlg;
 }
 
-async function pagePlan(r, org) {
+// A small form in the first column of the table: a name and «+».
+function addRow(placeholder, onsubmit) {
+  const input = h('input', { type: 'text', placeholder, maxlength: '80', required: true, 'aria-label': placeholder });
+  return h('form', { class: 'addrow', onsubmit: async (e) => {
+    e.preventDefault();
+    if (await write(() => onsubmit(input.value))) render();
+  } }, input, h('button', { type: 'submit', 'aria-label': placeholder }, '+'));
+}
+
+async function pagePlan(r, org, people) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plan, dates, dayTypes, log, people, health, { runs, latest }, tasks, groups, cells, pools, weights] = await Promise.all([
-    api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/events`),
-    api('GET', base + '/day-types'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`), api('GET', base + '/people'),
-    api('GET', '/health'), runsAndLatest(`${base}/plans/${enc(r.plan)}/runs`),
-    api('GET', base + '/tasks'), api('GET', base + '/groups'), api('GET', `${base}/plans/${enc(r.plan)}/cells`), api('GET', `${base}/plans/${enc(r.plan)}/pools`), api('GET', `${base}/plans/${enc(r.plan)}/weights`)]);
-  const refresh = () => render();
-  const dpath = `${base}/plans/${enc(r.plan)}/events`;
+  const pbase = `${base}/plans/${enc(r.plan)}`;
+  const epath = pbase + '/events';
+  const key = r.org + '/' + r.plan;
+  if (planState.key !== key) Object.assign(planState, { key, runId: null, reopen: null });
+  const [plan, events, dayTypes, tasks, combos, groups, fields, answers, places, cells, pools, weights, log, health, runs] = await Promise.all([
+    api('GET', pbase), api('GET', epath), api('GET', base + '/day-types'), api('GET', base + '/tasks'), api('GET', base + '/combinations'),
+    api('GET', base + '/groups'), api('GET', pbase + '/fields'), api('GET', pbase + '/answers'), api('GET', pbase + '/places'),
+    api('GET', pbase + '/cells'), api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', `${base}/log?limit=30&plan=${enc(r.plan)}`),
+    api('GET', '/health'), api('GET', pbase + '/runs')]);
+  // A personal link (…/me/<id>) opens the table with that person's row marked; an unknown id is a page that does not exist.
+  const highlight = r.person ? people.find((p) => String(p.id) === r.person) : null;
+  if (r.person && !highlight) throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: true });
 
-  const patch = (d, body, revert) => async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, body(e.target.value)))) refresh(); else revert(e.target); };
-  const firstLine = (text) => { const l = text.split('\n')[0]; return l.length > 60 ? l.slice(0, 60) + '…' : l; };
-  const rows = dates.map((d) => {
-    const label = evLabel(d);
-    const note = h('input', { type: 'text', value: d.note, maxlength: '200', placeholder: t('plan.note'), 'aria-label': t('plan.note_aria', { label }), onchange: patch(d, (v) => ({ note: v }), (el) => { el.value = d.note; }) });
-    // clearing the start time clears the end time too: an end time needs a start time
-    const start = h('input', { type: 'time', value: d.start_time, 'aria-label': t('plan.start_time_aria', { label }), onchange: patch(d, (v) => (v ? { start_time: v } : { start_time: '', end_time: '' }), (el) => { el.value = d.start_time; }) });
-    const end = h('input', { type: 'time', value: d.end_time, 'aria-label': t('plan.end_time_aria', { label }), onchange: patch(d, (v) => ({ end_time: v }), (el) => { el.value = d.end_time; }) });
-    const desc = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('plan.description_placeholder'), 'aria-label': t('plan.description_aria', { label }), onchange: patch(d, (v) => ({ description: v }), (el) => { el.value = d.description; }) }, d.description);
-    return h('li', { class: 'event-row' },
-      h('div', { class: 'event-line' },
-        h('strong', { class: 'when' }, fmtDate(d.date)),
-        dayTypeSelect(dayTypes, d.day_type_id, async (e) => { if (await write(() => api('PATCH', `${dpath}/${d.id}`, { day_type_id: parseInt(e.target.value, 10) }))) refresh(); else e.target.value = String(d.day_type_id); }, t('plan.daytype_of_aria', { label })),
-        h('div', { class: 'times' }, start, end),
-        note,
-        h('button', { type: 'button', class: 'danger', 'aria-label': t('plan.delete_event_aria', { label }), onclick: async () => {
-          if (!confirm(t('plan.delete_event_confirm', { date: fmtDate(d.date), daytype: d.day_type }))) return;
-          if (await write(() => api('DELETE', `${dpath}/${d.id}`))) refresh();
-        } }, t('common.delete'))),
-      h('details', { class: 'event-desc' }, h('summary', {}, d.description ? t('plan.description') + ': ' + firstLine(d.description) : t('plan.add_description')), desc));
-  });
+  // The run on show: the one picked in the history, else the pinned one (the plan people go by), else the newest.
+  const pinned = runs.find((x) => x.pinned);
+  const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : pinned ? pinned.id : runs.length ? runs[0].id : null;
+  const view = shownId ? await api('GET', `${pbase}/runs/${shownId}`) : null;
+  const done = !!view && view.run.status === 'done';
+  const showPlan = done && store.get('showplan') !== 'off';
 
-  const active = people.filter((p) => p.active);
-  const pick = h('select', { 'aria-label': t('plan.pick_aria') }, h('option', { value: '' }, t('plan.pick_name')), active.map((p) => h('option', { value: String(p.id) }, p.name)));
-  const mine = (id) => `/o/${enc(r.org)}/p/${enc(r.plan)}/me/${id}`;
-  const fillIn = section(t('plan.fill_in'),
-    active.length ? h('div', { class: 'row-inline' }, pick, h('button', { type: 'button', onclick: () => { if (pick.value) go(mine(pick.value)); } }, t('plan.open_mine'))) : h('p', { class: 'muted' }, t('plan.add_people_a'), link(`/o/${enc(r.org)}`, t('plan.add_people_link')), t('plan.add_people_b')),
-    active.length ? h('p', { class: 'muted small' }, t('plan.personal_hint')) : '',
-    active.length ? h('div', { class: 'chips' }, active.map((p) => link(mine(p.id), p.name, { class: 'chip' }))) : '');
+  const label = (ev) => evLabel(ev);
+  const taskName = (id) => (tasks.find((x) => x.id === id) || { name: '?' }).name;
+  const ans = {};  // person -> event -> never | poor | good ('' or missing = not answered)
+  answers.events.forEach((a) => { (ans[a.person_id] ||= {})[a.event_id] = a.level; });
+  const chosen = {};  // person -> the tasks they take part in, with how willingly
+  answers.tasks.forEach((a) => { (chosen[a.person_id] ||= []).push(a); });
+  const own = {};  // 'event/task' -> the event's own places
+  places.forEach((p) => { own[p.event_id + '/' + p.task_id] = p.slots; });
+  const dtSlots = {};  // day type -> task -> places
+  dayTypes.forEach((d) => { dtSlots[d.id] = {}; d.tasks.forEach((x) => { dtSlots[d.id][x.task_id] = x.slots; }); });
+  const fieldValue = {};  // 'event/field' -> text
+  fields.values.forEach((v) => { fieldValue[v.event_id + '/' + v.field_id] = v.value; });
 
-  const noTypes = !dayTypes.length;
-  let addForm = '', bulkForm = '';
-  if (!noTypes) {
+  // The run on show, by cell and by person (work through a group counts for each member).
+  const planCell = {};  // 'event/task' -> cell
+  const assigned = {};  // 'person/event' -> [{task, via}]
+  if (done) {
+    const viewTask = new Map(view.tasks.map((x) => [x.id, x.name]));
+    for (const ev of view.events) for (const c of ev.cells) {
+      planCell[ev.id + '/' + c.task_id] = c;
+      const put = (pid, via) => { (assigned[pid + '/' + ev.id] ||= []).push({ task: viewTask.get(c.task_id) || taskName(c.task_id), via }); };
+      c.people.forEach((p) => put(p.id, ''));
+      c.groups.forEach((g) => (g.member_ids || []).forEach((m) => put(m, g.name)));
+    }
+  }
+  const lock = async (evId, taskId, personId) => { if (await write(() => api('POST', pbase + '/cells', { events: [evId], task: taskId, person: personId }))) render(); };
+
+  // ---- the plan bar: plan or try again, and what the run on show is
+  const runsPath = pbase + '/runs';
+  const newest = runs[0];
+  const running = !!newest && newest.status === 'running';
+  const bar = h('div', { class: 'plan-bar' });
+  const poll = async () => {
+    if (!bar.isConnected) return;  // the page has been replaced
+    try {
+      const latest = await api('GET', runsPath + '/latest');
+      if (latest.run.status === 'running') setTimeout(poll, 1000);
+      else { planState.runId = latest.run.id; render(); }
+    } catch (e) { say(errorText(e), 'err'); }
+  };
+  {
+    const limits = [[10, '10 s'], [20, '20 s'], [60, '60 s']];
+    const limitSel = h('select', { 'aria-label': t('run.limit_aria') }, limits.map(([v, text]) => h('option', { value: String(v), selected: String(v) === (store.get('limit') || '20') }, text)));
+    limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
+    const start = async () => {
+      let id;
+      if (await write(async () => { id = (await api('POST', runsPath, { time_limit: parseInt(limitSel.value, 10) })).id; })) { planState.runId = id; render(); }
+    };
+    const pin = async (id, on) => {
+      if (!(await write(() => api(on ? 'PUT' : 'DELETE', `${runsPath}/${id}/pin`)))) return;
+      planState.runId = id;
+      await render();
+      say(on ? t('run.pin_done', { id }) : t('run.unpin_done'));
+    };
+    const out = [h('div', { class: 'row-inline' },
+      h('button', { type: 'button', disabled: !health.planner || running, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')),
+      h('label', { class: 'small muted' }, t('run.time') + ' ', limitSel),
+      done ? h('button', { type: 'button', class: 'ghost toggle', 'aria-pressed': String(showPlan), onclick: () => { store.set('showplan', showPlan ? 'off' : 'on'); render(); } }, t('table.show_plan')) : '')];
+    if (!health.planner) out.push(h('p', { class: 'muted' }, t('run.no_planner')));
+    if (running) { out.push(h('p', { role: 'status' }, t('run.running', { n: newest.time_limit }))); setTimeout(poll, 1000); }
+    if (!view) { if (!running) out.push(h('p', { class: 'muted' }, t('run.none_yet'))); }
+    else if (view.run.status === 'failed') out.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: view.run.error || t('run.unknown_error') })));
+    else if (done) {
+      const run = view.run;
+      out.push(h('p', { class: 'small muted' }, t('run.made_by', { actor: run.actor, time: fmtTime(run.finished_at || run.started_at) }) + ' ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'))));
+      if (run.id !== newest.id) out.push(h('p', { class: 'small' }, t('run.older_note', { id: run.id }), ' ', h('button', { type: 'button', class: 'link-button', onclick: () => { planState.runId = newest.id; render(); } }, t('run.show_newest'))));
+      out.push(run.pinned
+        ? h('p', { class: 'small' }, h('span', { class: 'tag lock' }, t('run.pinned_tag')), ' ' + t('run.pinned_note') + ' ', h('button', { type: 'button', class: 'link-button', onclick: () => pin(run.id, false) }, t('run.unpin')))
+        : h('p', { class: 'small muted' }, h('button', { type: 'button', class: 'ghost', onclick: () => pin(run.id, true) }, t('run.pin')), ' ' + t('run.pin_hint')));
+      if (run.stale) out.push(h('p', { class: 'warn', role: 'status' }, t('run.stale')));
+      if (run.checked && run.violations.length) out.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
+      else if (run.checked) out.push(h('p', { class: 'small muted' }, t('run.checked_ok')));
+      if (view.warnings.length) out.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
+    }
+    bar.replaceChildren(...out);
+  }
+
+  // ---- dialogs
+  const again = (kind, id) => { planState.reopen = { kind, id }; };
+
+  function eventDialog(ev) {
+    const isNew = !ev;
     const date = h('input', { type: 'date', required: true, 'aria-label': t('plan.date_aria') });
-    const typeSel = h('select', { 'aria-label': t('plan.daytype_aria') }, dayTypes.map((d) => h('option', { value: String(d.id) }, d.name)));
-    const noteIn = h('input', { type: 'text', placeholder: t('plan.note_optional'), maxlength: '200', 'aria-label': t('plan.note') });
-    const startIn = h('input', { type: 'time', 'aria-label': t('plan.start_time') });
-    const endIn = h('input', { type: 'time', 'aria-label': t('plan.end_time') });
-    const descIn = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('plan.description_placeholder'), 'aria-label': t('plan.description') });
-    addForm = h('form', { class: 'stack', onsubmit: async (e) => {
-      e.preventDefault();
-      if (await write(() => api('POST', dpath, { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: noteIn.value, start_time: startIn.value, end_time: endIn.value, description: descIn.value }))) refresh();
-    } },
-      h('div', { class: 'row-inline' }, date, typeSel, startIn, endIn, noteIn, h('button', { type: 'submit' }, t('plan.add_event'))),
-      h('details', {}, h('summary', {}, t('plan.description_optional')), descIn));
+    const typeSel = h('select', { 'aria-label': t('plan.daytype_aria') }, dayTypes.map((d) => h('option', { value: String(d.id), selected: !!ev && d.id === ev.day_type_id }, d.name)));
+    const start = h('input', { type: 'time', value: ev ? ev.start_time : '', 'aria-label': t('plan.start_time') });
+    const end = h('input', { type: 'time', value: ev ? ev.end_time : '', 'aria-label': t('plan.end_time') });
+    const note = h('input', { type: 'text', maxlength: '200', value: ev ? ev.note : '', placeholder: t('plan.note_optional'), 'aria-label': t('plan.note') });
+    const desc = h('textarea', { rows: '4', maxlength: '2000', placeholder: t('plan.description_placeholder'), 'aria-label': t('plan.description') }, ev ? ev.description : '');
+    const field = (text, input) => h('label', { class: 'field' }, h('span', {}, text), input);
+    const dlg = modal(isNew ? t('event.new') : fmtDate(ev.date) + (clock(ev) ? ' ' + clock(ev) : ''),
+      h('form', { class: 'stack', onsubmit: async (e) => {
+        e.preventDefault();
+        let body;
+        if (isNew) body = { date: date.value, day_type_id: parseInt(typeSel.value, 10), note: note.value, start_time: start.value, end_time: end.value, description: desc.value };
+        else {
+          body = {};
+          const endWanted = start.value ? end.value : '';  // an end time needs a start time
+          if (parseInt(typeSel.value, 10) !== ev.day_type_id) body.day_type_id = parseInt(typeSel.value, 10);
+          if (note.value !== ev.note) body.note = note.value;
+          if (start.value !== ev.start_time) body.start_time = start.value;
+          if (endWanted !== ev.end_time) body.end_time = endWanted;
+          if (desc.value !== ev.description) body.description = desc.value;
+          if (!Object.keys(body).length) { dlg.close(); return; }
+        }
+        if (await write(() => (isNew ? api('POST', epath, body) : api('PATCH', `${epath}/${ev.id}`, body)))) { dlg.close(); render(); }
+      } },
+        isNew ? field(t('plan.date_aria'), date) : '',
+        field(t('plan.daytype_aria'), typeSel),
+        h('div', { class: 'row-inline' }, field(t('plan.start_time'), start), field(t('plan.end_time'), end)),
+        field(t('plan.note'), note),
+        field(t('plan.description'), desc),
+        h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, isNew ? t('plan.add_event') : t('common.save')),
+          isNew ? '' : h('button', { type: 'button', class: 'danger', onclick: async () => {
+            if (await write(async () => { confirmed(t('plan.delete_event_confirm', { date: fmtDate(ev.date), daytype: ev.day_type })); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
+          } }, t('event.delete')))));
+    if (isNew) date.focus();
+  }
 
+  function fieldDialog(f) {
+    const name = h('input', { type: 'text', value: f.name, maxlength: '80', 'aria-label': t('field.name_label') });
+    const dlg = modal(f.name,
+      h('form', { class: 'row', onsubmit: async (e) => {
+        e.preventDefault();
+        if (name.value.trim() === f.name) { dlg.close(); return; }
+        if (await write(() => api('PATCH', `${pbase}/fields/${f.id}`, { name: name.value }))) { dlg.close(); render(); }
+      } }, name, h('button', { type: 'submit' }, t('common.rename'))),
+      h('p', { class: 'muted small' }, t('field.hint')),
+      h('button', { type: 'button', class: 'danger', onclick: async () => {
+        if (await write(async () => { confirmed(t('field.delete_confirm', { name: f.name })); await api('DELETE', `${pbase}/fields/${f.id}`); })) { dlg.close(); render(); }
+      } }, t('field.delete')));
+  }
+
+  function taskDialog(tk) {
+    let dlg;
+    const changed = () => { again('task', tk.id); dlg.close(); render(); };
+    const name = h('input', { type: 'text', value: tk.name, maxlength: '80', 'aria-label': t('common.name_of_aria', { name: tk.name }) });
+    const planned = h('input', { type: 'checkbox', checked: tk.planned, 'aria-label': t('setup.planned_aria', { name: tk.name }) });
+    planned.addEventListener('change', async () => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { planned: planned.checked }))) changed(); else planned.checked = tk.planned; });
+    const others = tasks.filter((x) => x.id !== tk.id);
+    const levelWith = (o) => (combos.find((c) => c.a === Math.min(tk.id, o.id) && c.b === Math.max(tk.id, o.id)) || { level: 'standard' }).level;
+    const alone = others.length > 0 && others.every((o) => levelWith(o) === 'cannot');
+    const aloneBox = h('input', { type: 'checkbox', checked: alone, disabled: !others.length, 'aria-label': t('task.alone') });
+    aloneBox.addEventListener('change', async () => {
+      const on = aloneBox.checked;
+      // unticking sets every pair with this task back to standard, also ones set by hand: ask first
+      if (await write(async () => { if (!on) confirmed(t('task.alone_off_confirm', { name: tk.name })); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
+      else aloneBox.checked = !on;
+    });
+    const slots = dayTypes.map((d) => ({ d, cur: (dtSlots[d.id] || {})[tk.id] || 0 }));
+    slots.forEach((x) => { x.input = h('input', { type: 'number', min: '0', max: '50', value: String(x.cur), 'aria-label': t('setup.places_aria', { task: tk.name, daytype: x.d.name }) }); });
+    // A day type's list of tasks is written as a whole: keep the other tasks as they are.
+    const savePlaces = async () => {
+      const todo = slots.filter((x) => (parseInt(x.input.value, 10) || 0) !== x.cur);
+      if (!todo.length) return;
+      if (await write(async () => {
+        for (const { d, input } of todo) {
+          const n = parseInt(input.value, 10) || 0;
+          const list = d.tasks.filter((x) => x.task_id !== tk.id).map((x) => ({ task_id: x.task_id, slots: x.slots }));
+          if (n > 0) list.push({ task_id: tk.id, slots: n });
+          await api('PUT', `${base}/day-types/${d.id}/tasks`, { tasks: list });
+        }
+      })) changed();
+    };
+    const pairRows = others.map((o) => {
+      const cur = levelWith(o);
+      return h('tr', {}, h('td', {}, o.name), h('td', {}, h('select', { 'aria-label': `${tk.name} + ${o.name}`, onchange: async (e) => {
+        if (await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: e.target.value }))) changed(); else e.target.value = cur;
+      } }, SELECT_LEVELS.map((v) => h('option', { value: v, selected: v === cur }, t('combo.' + v))))));
+    });
+    dlg = modal(tk.name,
+      h('p', { class: 'muted small' }, t('task.org_wide')),
+      h('form', { class: 'row', onsubmit: async (e) => {
+        e.preventDefault();
+        if (name.value.trim() !== tk.name && await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: name.value }))) changed();
+      } }, name, h('button', { type: 'submit' }, t('common.rename'))),
+      h('label', { class: 'check' }, planned, ' ' + t('setup.col_planned')),
+      h('h3', {}, t('task.places')),
+      dayTypes.length ? [h('table', {}, h('tbody', {}, slots.map(({ d, input }) => h('tr', {}, h('td', {}, d.name), h('td', {}, input))))),
+        h('button', { type: 'button', onclick: savePlaces }, t('task.save_places'))] : h('p', { class: 'muted' }, t('task.no_daytypes')),
+      h('h3', {}, t('task.combine')),
+      h('label', { class: 'check' }, aloneBox, ' ' + t('task.alone')),
+      h('p', { class: 'muted small' }, t('task.alone_hint')),
+      pairRows.length ? h('table', {}, h('tbody', {}, pairRows)) : '',
+      h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'danger', onclick: async () => {
+        if (await write(async () => { confirmed(t('setup.delete_task_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
+      } }, t('task.delete'))));
+  }
+
+  function personDialog(p) {
+    let dlg;
+    const changed = () => { again('person', p.id); dlg.close(); render(); };
+    const ppath = `${base}/people/${p.id}`;
+    const name = h('input', { type: 'text', value: p.name, maxlength: '80', 'aria-label': t('common.name_of_aria', { name: p.name }) });
+    const flag = (k, text, aria) => {
+      const box = h('input', { type: 'checkbox', checked: p[k], 'aria-label': aria });
+      box.addEventListener('change', async () => { if (await write(() => api('PATCH', ppath, { [k]: box.checked }))) changed(); else box.checked = p[k]; });
+      return h('label', { class: 'check' }, box, ' ' + text);
+    };
+    const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || { level: '' }).level;
+    const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
+      const cur = levelOf(tk);
+      return h('tr', {}, h('td', {}, tk.name), h('td', {}, h('select', { 'aria-label': t('person.task_aria', { name: p.name, task: tk.name }), onchange: async (e) => {
+        const v = e.target.value;
+        if (await write(() => (v ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: v }) : api('DELETE', `${ppath}/tasks/${tk.id}`)))) changed(); else e.target.value = cur;
+      } }, PERSON_TASK_LEVELS.map(([v, k]) => h('option', { value: v, selected: v === cur }, t(k))))));
+    });
+    const url = location.origin + `/o/${enc(r.org)}/p/${enc(r.plan)}/me/${p.id}`;
+    dlg = modal(p.name,
+      p.active ? '' : h('p', { class: 'err' }, t('person.inactive')),
+      h('h3', {}, t('person.tasks')),
+      h('p', { class: 'muted small' }, t('person.tasks_hint')),
+      taskRows.length ? h('table', {}, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
+      h('h3', {}, t('person.link')),
+      h('input', { type: 'text', readonly: true, value: url, class: 'wide', 'aria-label': t('person.link'), onfocus: (e) => e.target.select() }),
+      h('p', { class: 'muted small' }, t('person.link_hint')),
+      h('h3', {}, t('person.about')),
+      h('p', { class: 'muted small' }, t('person.org_wide')),
+      h('form', { class: 'row', onsubmit: async (e) => {
+        e.preventDefault();
+        if (name.value.trim() !== p.name && await write(() => api('PATCH', ppath, { name: name.value }))) changed();
+      } }, name, h('button', { type: 'submit' }, t('common.rename'))),
+      flag('active', t('person.active'), t('org.active_aria', { name: p.name })),
+      flag('proposable', t('common.can_be_proposed'), t('common.can_be_proposed_aria', { name: p.name })),
+      h('p', { class: 'muted small' }, t('org.proposable_hint')));
+  }
+
+  // ---- the table
+  const cols = events.length;
+  const filler = () => h('td', { class: 'addcol' });
+  const sect = (text, hint, cells2) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, text), cells2 || h('td', { colspan: String(cols + 1) }, hint ? h('span', { class: 'small muted' }, hint) : ''));
+  const head = h('tr', {}, h('th', { scope: 'row', class: 'corner' }, t('table.date')),
+    events.map((ev) => h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.event_aria', { label: label(ev) }), onclick: () => eventDialog(ev) },
+      fmtShortDate(ev.date), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', ev.description ? h('span', { class: 'sub' }, t('table.has_description')) : ''))),
+    h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), disabled: !dayTypes.length, onclick: () => eventDialog(null) }, '+')));
+
+  const patch = (ev, body, revert) => async (e) => { if (await write(() => api('PATCH', `${epath}/${ev.id}`, body(e.target.value)))) render(); else revert(e.target); };
+  const typeRow = h('tr', {}, h('th', { scope: 'row' }, t('table.type')), events.map((ev) => h('td', {},
+    h('select', { 'aria-label': t('plan.daytype_of_aria', { label: label(ev) }), onchange: patch(ev, (v) => ({ day_type_id: parseInt(v, 10) }), (el) => { el.value = String(ev.day_type_id); }) },
+      dayTypes.map((d) => h('option', { value: String(d.id), selected: d.id === ev.day_type_id }, d.name))))), filler());
+  // A text in a cell is saved when the field is left, without redrawing the page (so the next field keeps the focus).
+  const textCell = (cur, aria, save) => {
+    let value = cur;
+    const input = h('input', { type: 'text', value, maxlength: '200', 'aria-label': aria });
+    input.addEventListener('change', async () => {
+      if (input.value.trim() === value) { input.value = value; return; }
+      if (await write(() => save(input.value))) value = input.value.trim();
+      input.value = value;
+    });
+    return h('td', {}, input);
+  };
+  const noteRow = h('tr', {}, h('th', { scope: 'row' }, t('plan.note')),
+    events.map((ev) => textCell(ev.note, t('plan.note_aria', { label: label(ev) }), (v) => api('PATCH', `${epath}/${ev.id}`, { note: v }))), filler());
+  const fieldRows = fields.fields.map((f) => h('tr', {},
+    h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.field_aria', { name: f.name }), onclick: () => fieldDialog(f) }, f.name)),
+    events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.value_aria', { name: f.name, label: label(ev) }), (v) => api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }))), filler()));
+  const addField = h('tr', { class: 'adds' }, h('th', { scope: 'row' }, addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))), h('td', { colspan: String(cols + 1) }));
+
+  // Places: empty shows the day type's number (faded); a number of its own is bold. Emptying it, or typing the day type's
+  // number, goes back to the day type. Only a real change is sent.
+  const placesCell = (tk, ev) => {
+    const def = (dtSlots[ev.day_type_id] || {})[tk.id] || 0;
+    let cur = own[ev.id + '/' + tk.id];  // undefined: as the day type
+    const input = h('input', { type: 'number', min: '0', max: '50', inputmode: 'numeric', placeholder: String(def), title: t('table.places_title', { n: def }), 'aria-label': t('table.places_aria', { task: tk.name, label: label(ev) }) });
+    const paint = () => { input.value = cur === undefined ? '' : String(cur); input.classList.toggle('own', cur !== undefined); };
+    input.addEventListener('change', async () => {
+      const raw = input.value.trim();
+      const n = raw === '' ? def : parseInt(raw, 10);
+      const reset = n === def;
+      if (reset ? cur === undefined : n === cur) { paint(); return; }
+      const path = `${epath}/${ev.id}/places/${tk.id}`;
+      if (await write(() => (reset ? api('DELETE', path) : api('PUT', path, { slots: n })))) cur = reset ? undefined : n;
+      paint();
+    });
+    paint();
+    const c = showPlan ? planCell[ev.id + '/' + tk.id] : null;
+    return h('td', { class: 'places' }, input, c ? cellContent(c, tk.name, (task, person) => lock(ev.id, task, person)) : '');
+  };
+  const taskRows = tasks.map((tk) => h('tr', {},
+    h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) },
+      tk.name, tk.planned ? '' : h('span', { class: 'sub' }, t('table.by_hand')))),
+    events.map((ev) => placesCell(tk, ev)), filler()));
+  const addTask = h('tr', { class: 'adds' }, h('th', { scope: 'row' }, addRow(t('setup.new_task'), (name) => api('POST', base + '/tasks', { name }))), h('td', { colspan: String(cols + 1) }));
+
+  // People: one click on a cell moves the answer on; the count above each event follows.
+  const countCells = {};
+  const recount = (evId) => {
+    const c = { good: 0, poor: 0, never: 0 };
+    people.forEach((p) => { const l = p.active && (ans[p.id] || {})[evId]; if (l) c[l]++; });
+    countCells[evId].textContent = t('table.count', c);
+  };
+  const countRow = sect(t('table.people'), '', [...events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small muted', 'aria-live': 'polite' }))), filler()]);
+  const answerCell = (p, ev) => {
+    const b = h('button', { type: 'button', class: 'ans' });
+    let busy = false;  // a second click while the first is on its way would send the same answer twice
+    const paint = () => {
+      const l = (ans[p.id] || {})[ev.id] || '';
+      b.textContent = ANSWER_MARK[l];
+      b.dataset.level = l || 'none';
+      b.setAttribute('aria-label', t('table.answer_aria', { name: p.name, label: label(ev), answer: t('answer.' + (l || 'none')) }));
+    };
+    b.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      const next = ANSWER_NEXT[(ans[p.id] || {})[ev.id] || ''];
+      if (await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } }))) { (ans[p.id] ||= {})[ev.id] = next; paint(); recount(ev.id); }
+      busy = false;
+    });
+    paint();
+    const mine = showPlan ? assigned[p.id + '/' + ev.id] || [] : [];
+    return h('td', { class: 'answer' }, b, mine.length ? h('div', { class: 'assigned' }, mine.map((x) => h('span', { class: 'tag task' }, x.via ? t('table.via', { task: x.task, group: x.via }) : x.task))) : '');
+  };
+  const personRow = (p) => {
+    const mine = (chosen[p.id] || []).filter((x) => tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => taskName(x.task_id));
+    return h('tr', { class: [highlight && p.id === highlight.id ? 'me' : '', p.active ? '' : 'inactive'].filter(Boolean).join(' ') || false, 'data-person': String(p.id) },
+      h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
+        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks')),
+        p.active ? '' : h('span', { class: 'sub' }, t('setup.inactive')))),
+      events.map((ev) => answerCell(p, ev)), filler());
+  };
+  const addPerson = h('tr', { class: 'adds' }, h('th', { scope: 'row' }, addRow(t('org.new_person'), (name) => api('POST', base + '/people', { name }))), h('td', { colspan: String(cols + 1) }));
+
+  const table = h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table' },
+    h('thead', {}, head),
+    h('tbody', {}, typeRow, noteRow, fieldRows, addField,
+      sect(t('table.tasks'), t('table.tasks_hint')), taskRows, addTask,
+      countRow, people.filter((p) => p.active).map(personRow), people.filter((p) => !p.active).map(personRow), addPerson)));
+  events.forEach((ev) => recount(ev.id));
+
+  // ---- below the table, folded away
+  const fold = (title, ...kids) => h('details', { class: 'fold' }, h('summary', {}, title), ...kids);
+  const history = runs.length > 1 ? fold(t('run.history', { n: runs.length }), h('ul', { class: 'plain runs' }, runs.map((x) => h('li', { class: 'run-row' + (view && x.id === view.run.id ? ' shown' : '') },
+    h('span', {}, '#' + x.id), h('span', { class: 'muted small' }, `${x.actor} · ${fmtTime(x.finished_at || x.started_at)}`),
+    x.status !== 'done' ? h('span', { class: 'tag' }, t('run.status.' + x.status)) : '', x.pinned ? h('span', { class: 'tag lock' }, t('run.pinned_tag')) : '',
+    view && x.id === view.run.id ? '' : h('button', { type: 'button', class: 'link-button', 'aria-label': t('run.show_aria', { id: x.id }), onclick: () => { planState.runId = x.id; render(); } }, t('run.show')))))) : '';
+
+  let bulkForm = '';
+  if (dayTypes.length) {
     const from = h('input', { type: 'date', required: true, 'aria-label': t('plan.from') });
     const to = h('input', { type: 'date', required: true, 'aria-label': t('plan.to') });
     const days = [1, 2, 3, 4, 5, 6, 7].map((v) => ({ n: t('week.' + v), v, box: h('input', { type: 'checkbox', checked: v === 7, 'aria-label': t('week.' + v) }) }));
@@ -640,7 +861,7 @@ async function pagePlan(r, org) {
     bulkForm = h('form', { class: 'stack', onsubmit: async (e) => {
       e.preventDefault();
       let res;
-      if (await write(async () => { res = await api('POST', dpath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10), start_time: bStart.value, end_time: bEnd.value }); })) {
+      if (await write(async () => { res = await api('POST', epath + '/bulk', { from: from.value, to: to.value, weekdays: days.filter((x) => x.box.checked).map((x) => x.v), day_type_id: parseInt(bType.value, 10), start_time: bStart.value, end_time: bEnd.value }); })) {
         await render(); say(t('plan.bulk_done', { created: res.created.length, skipped: res.skipped.length }));
       }
     } },
@@ -649,112 +870,32 @@ async function pagePlan(r, org) {
       h('div', { class: 'row-inline' }, bType, bStart, bEnd, h('button', { type: 'submit' }, t('common.add_all'))));
   }
 
-  return h('div', {},
+  const root = h('div', { class: 'plan-page' },
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
     h('h1', {}, plan.name),
-    fillIn,
-    section(t('plan.section'), planPanel(r, !!health.planner, latest, runs)),
-    rulesSection(r, base, dates, tasks, groups, people, cells, pools),
+    bar,
+    dayTypes.length ? '' : h('p', { class: 'muted' }, t('plan.needs_daytype_a'), link(`/o/${enc(r.org)}/setup`, t('plan.needs_daytype_link')), t('plan.needs_daytype_b')),
+    h('p', { class: 'muted small' }, events.length ? t('table.hint') : t('table.no_events')),
+    table,
+    h('div', { class: 'below' },
+      done && view.weak.length ? fold(t('run.compromises', { n: view.weak.length }), h('ul', { class: 'small' }, view.weak.map((w) => h('li', {}, w)))) : '',
+      done && view.load.length ? fold(t('run.distribution'), h('ul', { class: 'small' }, view.load.map((l) => h('li', {}, t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) }))))) : '',
+      history,
+      dayTypes.length ? fold(t('plan.bulk_title'), bulkForm) : '',
+      fold(t('log.title') + ': ' + plan.name, logTable(log))),
+    rulesSection(r, base, events, tasks, groups, people, cells, pools),
     weightsSection(r, weights),
-    section(t('plan.events'),
-      noTypes ? h('p', { class: 'muted' }, t('plan.needs_daytype_a'), link(`/o/${enc(r.org)}/setup`, t('plan.needs_daytype_link')), t('plan.needs_daytype_b')) : '',
-      dates.length ? h('ul', { class: 'events' }, rows) : h('p', { class: 'muted' }, t('plan.no_events')),
-      addForm),
-    section(t('plan.bulk_title'), noTypes ? h('p', { class: 'muted' }, t('plan.needs_daytype')) : bulkForm),
-    section(t('log.title') + ': ' + plan.name, logTable(log)),
     managePlan(r, plan));
-}
+  if (highlight) root.dataset.person = highlight.name;
 
-// A group of buttons where one can be chosen (aria-pressed). set(level) updates the view without redrawing the page.
-function seg(label, options, current, onpick) {
-  const buttons = options.map(([value, key]) => h('button', { type: 'button', 'data-level': value, 'aria-pressed': String(current === value), onclick: () => onpick(value) }, t(key)));
-  return { el: h('div', { class: 'seg', role: 'group', 'aria-label': label }, buttons),
-    set(level) { buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.level === level))); } };
-}
-
-// «My page»: what I can take part in (per organisation) and when I can (per event in the plan). Answers are saved at once.
-async function pageMe(r, org) {
-  const base = `/orgs/${enc(r.org)}`;
-  const [plan, me, mine] = await Promise.all([api('GET', `${base}/plans/${enc(r.plan)}`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/me`), api('GET', `${base}/plans/${enc(r.plan)}/people/${enc(r.person)}/assignments`)]);
-  const taskPath = (id) => `${base}/people/${me.person.id}/tasks/${id}`;
-  const availPath = `${base}/plans/${enc(r.plan)}/people/${me.person.id}/availability`;
-  const refresh = () => render();
-  const list = (cls, items) => h('ul', { class: cls }, items);
-
-  // --- my assignments: from the latest finished plan
-  const mineSection = (() => {
-    if (!mine.has_plan) return section(t('me.assignments'), h('p', { class: 'muted' }, t('me.no_plan')));
-    const rows = mine.assignments.map((a) => h('li', { class: 'mine-row' },
-      h('strong', {}, fmtDate(a.date)),
-      h('span', {}, a.via ? t('me.with', { task: a.task, via: a.via }) : a.task, a.locked ? h('span', { class: 'tag lock' }, t('cell.locked')) : '', a.weak ? h('span', { class: 'tag' }, t('cell.poor')) : ''),
-      h('span', { class: 'small muted' }, evMeta(a))));
-    return section(t('me.assignments'),
-      h('p', { class: 'small muted' }, t(mine.run.pinned ? 'me.from_pinned' : 'me.from_latest', { actor: mine.run.actor, time: fmtTime(mine.run.finished_at) })),
-      mine.run.stale ? h('p', { class: 'warn small', role: 'status' }, t('me.stale')) : '',
-      rows.length ? [h('p', { class: 'small' }, tn('me.count', rows.length)), h('ul', { class: 'mine' }, rows)] : h('p', { class: 'muted' }, t('me.none')));
-  })();
-
-  // --- tasks
-  const chosen = me.tasks.filter((tk) => tk.level);
-  const rest = me.tasks.filter((tk) => !tk.level);
-  const taskRows = chosen.map((tk) => {
-    const ctl = seg(t('me.how_willing_aria', { name: tk.name }), TASK_LEVELS, tk.level, async (v) => { if (v !== tk.level && await write(() => api('PUT', taskPath(tk.task_id), { level: v }))) { tk.level = v; ctl.set(v); } });
-    return h('li', { class: 'card-row' },
-      h('div', { class: 'row-head' }, h('strong', {}, tk.name), h('button', { type: 'button', class: 'link-button', 'aria-label': t('me.remove_aria', { name: tk.name }), onclick: async () => { if (await write(() => api('DELETE', taskPath(tk.task_id)))) refresh(); } }, t('common.remove'))),
-      ctl.el);
-  });
-  const addRows = rest.map((tk) => h('li', { class: 'card-row row-head' }, h('strong', {}, tk.name),
-    h('button', { type: 'button', 'aria-label': t('me.add_aria', { name: tk.name }), onclick: async () => { if (await write(() => api('PUT', taskPath(tk.task_id), { level: 'neutral' }))) refresh(); } }, t('common.add'))));
-  const taskSection = section(t('me.tasks'),
-    !me.tasks.length ? h('p', { class: 'muted' }, t('me.no_tasks'), link(`/o/${enc(r.org)}/setup`, t('me.setup_link'))) : '',
-    chosen.length ? list('cards', taskRows) : (me.tasks.length ? h('p', { class: 'muted' }, t('me.no_chosen')) : ''),
-    me.tasks.length ? h('details', { open: !chosen.length }, h('summary', {}, chosen.length ? t('me.choose_more') : t('me.choose')), rest.length ? list('cards', addRows) : h('p', { class: 'muted' }, t('me.all_chosen'))) : '');
-
-  // --- when can you? One answer per event: does not suit / poor / good; not marked counts as neutral.
-  const levels = {};
-  me.events.forEach((e) => { levels[e.event_id] = e.level; });
-  const ctls = {};
-  const summary = h('p', { class: 'muted small', 'aria-live': 'polite' });
-  const updateSummary = () => {
-    const c = { never: 0, poor: 0, good: 0 };
-    Object.values(levels).forEach((l) => { if (l) c[l]++; });
-    summary.textContent = t('me.summary', { ...c, neutral: me.events.length - c.never - c.poor - c.good });
+  // After a change in a dialog, the page is drawn again with the new data: open the same dialog again on top, once the new
+  // page is in place (render calls this).
+  root.shown = () => {
+    const ro = planState.reopen;
+    planState.reopen = null;
+    if (ro && ro.kind === 'task') { const x = tasks.find((tk) => tk.id === ro.id); if (x) taskDialog(x); }
+    if (ro && ro.kind === 'person') { const x = people.find((p) => p.id === ro.id); if (x) personDialog(x); }
   };
-  async function setLevels(changes) {
-    if (!(await write(() => api('PUT', availPath, { levels: changes })))) return false;
-    for (const [id, l] of Object.entries(changes)) { levels[id] = l; ctls[id].set(l); }
-    updateSummary();
-    return true;
-  }
-  const rows = me.events.map((e) => {
-    const ctl = seg(t('me.can_you', { date: fmtDate(e.date) }), EVENT_LEVELS, e.level, (v) => setLevels({ [e.event_id]: levels[e.event_id] === v ? '' : v }));
-    ctls[e.event_id] = ctl;
-    return h('li', { class: 'avail-row' },
-      h('div', { class: 'what' }, h('strong', { class: 'when' }, fmtDate(e.date)), h('span', { class: 'muted small' }, evMeta(e)), descText(e.description)), ctl.el);
-  });
-  const all = (v) => async () => {
-    const changes = {};
-    for (const e of me.events) if ((levels[e.event_id] || '') !== v) changes[e.event_id] = v;
-    if (!Object.keys(changes).length) return;
-    const overwritten = me.events.filter((e) => levels[e.event_id] && levels[e.event_id] !== v).length;
-    if (overwritten && !confirm(tn('me.overwrite', overwritten))) return;
-    await setLevels(changes);
-  };
-  updateSummary();
-  const bulk = me.events.length ? h('div', { class: 'row-inline' }, h('span', { class: 'muted small' }, t('me.set_all')),
-    h('button', { type: 'button', class: 'ghost', onclick: all('never') }, t('level.event.never')), h('button', { type: 'button', class: 'ghost', onclick: all('poor') }, t('level.poor')),
-    h('button', { type: 'button', class: 'ghost', onclick: all('good') }, t('level.good')), h('button', { type: 'button', class: 'ghost', onclick: all('') }, t('me.clear_all'))) : '';
-
-  const root = h('div', {},
-    h('p', { class: 'small' }, link(`/o/${enc(r.org)}/p/${enc(r.plan)}`, t('common.back', { name: plan.name }))),
-    h('h1', {}, me.person.name),
-    h('p', { class: 'muted' }, t('me.intro')),
-    me.person.active ? '' : h('p', { class: 'err' }, t('me.inactive')),
-    mineSection,
-    taskSection,
-    section(t('me.when', { plan: plan.name }),
-      me.events.length ? [h('p', { class: 'muted small' }, t('me.avail_hint')), bulk, summary, list('avail', rows)] : h('p', { class: 'muted' }, t('me.no_events'))));
-  root.dataset.person = me.person.name;
   return root;
 }
 
@@ -771,21 +912,25 @@ async function render() {
       [org, people] = await Promise.all([api('GET', '/orgs/' + enc(r.org)), api('GET', `/orgs/${enc(r.org)}/people`)]);
       store.set('org', r.org);
     }
-    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : r.page === 'me' ? pageMe(r, org) : pagePlan(r, org)]);
+    const [, body] = await Promise.all([renderHeader(r, people), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : r.page === 'setup' ? pageSetup(r, org) : pagePlan(r, org, people)]);
     if (seq !== renderSeq || !body) return;
     const y = location.pathname === lastPath ? window.scrollY : 0;  // the same page again (after a change): stay where we are
     main.replaceChildren(body);
     lastPath = location.pathname;
     window.scrollTo(0, y);
-    if (r.page === 'me' && body.dataset.person && !store.get('actor').trim()) {  // whoever opens their own page is most likely that person
-      store.set('actor', body.dataset.person);
-      const a = document.getElementById('actor');
-      if (a) a.value = body.dataset.person;
+    if (body.shown) body.shown();
+    if (r.page === 'me' && body.dataset.person) {
+      if (!y) { const row = body.querySelector('tr.me'); if (row) row.scrollIntoView({ block: 'center' }); }
+      if (!store.get('actor').trim()) {  // whoever opens their own link is most likely that person
+        store.set('actor', body.dataset.person);
+        const a = document.getElementById('actor');
+        if (a) a.value = body.dataset.person;
+      }
     }
     document.title = t('brand') + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;
-    if (e.status === 404 && r.org) store.set('org', '');
+    if (e.status === 404 && r.org && !e.keepOrg) store.set('org', '');
     main.replaceChildren(h('div', {}, h('h1', {}, e.status === 404 ? t('page.not_found') : t('page.error')), h('p', {}, link('/?switch', t('page.choose_org'))), h('p', { class: 'muted small' }, errorText(e))));
   }
 }

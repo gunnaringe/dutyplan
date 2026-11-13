@@ -8,7 +8,7 @@ and tells you why a place stays empty.
 ![Go, SQLite and plain JavaScript](https://img.shields.io/badge/go-SQLite%20%2B%20vanilla%20JS-00ADD8)
 ![English and Norwegian bokmål](https://img.shields.io/badge/UI-English%20%C2%B7%20bokm%C3%A5l-lightgrey)
 
-![A plan as a grid: events across, tasks down, who does what, and one place left empty](docs/img/hero.png)
+![The plan page: one table with the events across, what each needs, everyone's answers, and who does what](docs/img/hero.png)
 
 *Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, groups, events and kinds of day are all things you
 create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
@@ -35,52 +35,61 @@ the same day: *cannot*, *impractical*, *practical* or *preferred*.
 
 ![A group with its members, and the combinations of tasks](docs/img/03-groups-combinations.png)
 
-**Events with a time.** A plan is a list of events: two can fall on the same day. An event has a day type, and can have a start
-time and an end time, a short note and a longer description. On a day the events with a time come first, in time order. Add
-a whole season at once (*every Saturday from … to …*).
+**One table for everything.** The plan page is a table with the events across. At the top of each column: the date and time,
+the day type, a note, and the plan's own *info rows* (a theme, who hosts: whatever you need), which you add yourself and the
+planner never reads. Then the places per task: a faded number comes from the day type, and you can type another one for a single
+event. Below come the people, with a cell for each event. Two events can fall on the same day.
 
-![The events of a plan: day type, start and end time, note and description](docs/img/04-events.png)
+![The table while people answer: the events, the places per task, and everyone's answers](docs/img/04-table.png)
 
-**Everyone answers for themselves.** Each person has their own page, with a link you can send. They pick the tasks they can take
-part in (and how willingly), and answer *does not suit / poor / good* for each event. It works with a finger.
+**Everyone answers in the same table.** Click a cell for ✓ *yes*, again for ? *maybe*, again for ✗ *no*, and once more to clear it;
+an empty cell is not answered and counts as neutral. Each person has a link of their own that opens the table with their row
+marked and their name filled in.
 
-![A person's own page: assignments, tasks and answers for each event](docs/img/05-my-page.png)
+![The table opened from a personal link, with the person's row marked](docs/img/07-personal-link.png)
 
-**A proposal you can read.** The result shows as a list or a grid. A person can be *locked* onto a place with one click, and
-the planner never moves a locked place. The planner is checked afterwards by a second, independent program, and the page says
-if a rule was broken (it should never be).
+**The rest is one click away.** The name of a task opens its places per day type, what it can be combined with on the same
+event (or *nothing at all*), and its name. The name of a person opens the tasks they take part in and how willingly, and their
+personal link. A date opens the event's time, note and description. A whole season is added at once under the table
+(*every Saturday from … to …*).
 
-![The plan as a list, with times, descriptions and locked places](docs/img/06-plan-list.png)
+![A task: places per day type, and what it can be combined with](docs/img/05-task.png)
+![A person: the tasks they take part in, and their personal link](docs/img/08-person.png)
+![An event: day type, time, note and description](docs/img/06-event.png)
+
+**A proposal you can read.** Press **Plan**, and *Show plan* puts the result into the table: who has each place, and in each
+person's cell the task they got. A person can be *locked* onto a place with one click, and the planner never moves a locked
+place. The planner is checked afterwards by a second, independent program, and the page says if a rule was broken (it should
+never be).
 
 **It says why.** When a place cannot be filled, the plan tells you the reason in plain words: who is outside the selection, who
 cannot come, who has not chosen the task. Weak spots the planner had to accept are listed as *compromises*.
 
-![An empty place, and the reason](docs/img/07-why.png)
+![An empty place, and the reason](docs/img/09-why.png)
 
 **Manual cells and selections.** A *manual cell* fixes a person (or a group, or a text) to a place; a *selection* says that
 only these people can be picked for a task on an event, which covers things like *their own sound engineer* without any special
 rule.
 
-![A locked place, and a selection for one task on one event](docs/img/08-locks-selections.png)
+![A locked place, and a selection for one task on one event](docs/img/10-locks-selections.png)
 
 **Fair, and yours to tune.** «Even» means an equal *total* load: someone who only takes one task does not end up with half of
 someone who takes two. The weights behind the proposal are configuration per plan, with defaults that work and limits that
 keep them sane.
 
-![The weighting of a plan: fairness, wishes and combinations](docs/img/09-weighting.png)
+![The weighting of a plan: fairness, wishes and combinations](docs/img/11-weighting.png)
 
-**Every run is kept, and one is the current plan.** Run again and compare. **Pin** a finished run as the plan's current plan,
-and everybody's *My assignments* follows it; with nothing pinned they see the newest finished run. The distribution shows
-how many turns each person got against their fair share.
+**Every run is kept, and one is the current plan.** Run again and compare. **Pin** a finished run as the plan's current plan:
+the page opens with it, also from a personal link; with nothing pinned it opens with the newest. The distribution shows how
+many turns each person got against their fair share.
 
-![Earlier runs with the pinned one, and the distribution](docs/img/10-history-distribution.png)
+![The distribution, and earlier runs with the pinned one](docs/img/12-history-distribution.png)
 
 **English and Norwegian, on a phone.** The page follows the browser's language and has a switch in the header; the
-explanations the planner writes follow it too. The page works on a phone, and people's own pages are made for one.
+explanations the planner writes follow it too. On a narrow screen the table scrolls sideways under the names.
 
-![The plan on a phone](docs/img/11-phone-plan.png)
-![A person's answers on a phone](docs/img/12-phone-my-page.png)
-![The same plan in Norwegian](docs/img/13-norwegian.png)
+![The plan on a phone](docs/img/13-phone.png)
+![The same plan in Norwegian](docs/img/14-norwegian.png)
 
 **Small to run.** One Go binary with the web page inside it and a SQLite file; the planner is a separate Python program that the
 server starts when you press **Plan**. **No login**: read the warning below before you put it anywhere other people can reach.
@@ -88,8 +97,9 @@ server starts when you press **Plan**. **No login**: read the warning below befo
 ## How it works
 
 1. An **organisation** holds everything that is shared: people, tasks, day types, groups and the combinations.
-2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**.
-3. Each person has their own page (`/o/<organisation>/p/<plan>/me/<id>`; send them the link).
+2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**, shown as one table.
+3. Everyone answers in the plan's table. Each person's link (`/o/<organisation>/p/<plan>/me/<id>`; send it to them) opens the
+   table with their row marked.
 4. On the plan page, **Plan** runs the planner. Lock people, set selections, change the weighting, and run again.
 5. Each run is kept. **Pin** the one you want to use.
 
