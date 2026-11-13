@@ -15,7 +15,8 @@ const chromeDir = () => {
 
 // The demo: a community hall with concerts on Saturdays and rehearsals on Wednesdays. Every name is invented.
 const ORG = { name: 'Maple Hall', slug: 'maple-hall' };
-const PLAN = { name: 'December 2026', slug: 'december-2026' };
+const PLAN = { name: 'December 2015', slug: 'december-2015' };
+const TODAY = '2015-10-21'; // what the pictures show as the day the plans were made (see the timestamps below)
 const ADMIN = 'Admin';
 const TASKS = ['Sound', 'Video', 'Doors', 'Coffee'];
 const PEOPLE = ['Kari Test', 'Ola Sample', 'Mona Example', 'Pia Demo', 'Ingrid Sample', 'Njål Example', 'Sunniva Test', 'Jon Demo'];
@@ -74,15 +75,15 @@ const CHOICES = {
     await api('PUT', `${o}/groups/${group.id}/tasks`, { tasks: [{ task_id: task.Coffee, fills: 1, level: 'good' }] });
 
     await api('POST', `${o}/plans`, { name: PLAN.name });
-    await api('POST', `${p}/events/bulk`, { from: '2026-12-05', to: '2026-12-19', weekdays: [6], day_type_id: dayType.Concert, start_time: '19:00', end_time: '21:30' });
-    for (const date of ['2026-12-09', '2026-12-16']) {
+    await api('POST', `${p}/events/bulk`, { from: '2015-12-05', to: '2015-12-19', weekdays: [6], day_type_id: dayType.Concert, start_time: '19:00', end_time: '21:30' });
+    for (const date of ['2015-12-09', '2015-12-16']) {
       await api('POST', `${p}/events`, { date, day_type_id: dayType.Rehearsal, start_time: '18:00', end_time: '20:00' });
     }
     const events = await api('GET', `${p}/events`);
     const byDate = (d, type) => events.find((e) => e.date === d && e.day_type === type);
-    const gala = byDate('2026-12-19', 'Concert');
+    const gala = byDate('2015-12-19', 'Concert');
     await api('PATCH', `${p}/events/${gala.id}`, { note: 'Christmas gala', start_time: '18:30', end_time: '22:00', description: 'Doors at 18:00. Load-in from 15:00 through the side entrance.\nThe stage plot is on the notice board by the kitchen.' });
-    const first = byDate('2026-12-05', 'Concert');
+    const first = byDate('2015-12-05', 'Concert');
     await api('PATCH', `${p}/events/${first.id}`, { description: 'Opening night. Two extra chairs for the guest quartet.' });
 
     // answers: when people cannot or would rather not (event id -> never | poor | good)
@@ -119,12 +120,24 @@ const CHOICES = {
     }
     await api('PUT', `${p}/runs/${second.id}/pin`);
 
+    // The server stamps what it writes with the real time. The pictures should not change with the day they are made, so the
+    // stamps in the temporary database are set to a fixed day (the page shows what is stored, in UTC below).
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(path.join(dir, 'shots.db'), { timeout: 5000 });
+    const day = TODAY + ' 10:00:00';
+    for (const { t, c } of db.prepare(`SELECT m.name AS t, p.name AS c FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type = 'table' AND p.name IN ('created_at', 'at', 'started_at', 'finished_at')`).all()) {
+      db.prepare(`UPDATE "${t}" SET "${c}" = strftime('%Y-%m-%dT%H:%M:%SZ', ?, '+' || (rowid * 5) || ' seconds') WHERE "${c}" IS NOT NULL`).run(day);
+    }
+    db.prepare(`UPDATE plan_run SET started_at = strftime('%Y-%m-%dT%H:%M:%SZ', ?, '+' || (30 + id * 2) || ' minutes')`).run(day);
+    db.prepare(`UPDATE plan_run SET finished_at = strftime('%Y-%m-%dT%H:%M:%SZ', started_at, '+12 seconds') WHERE finished_at IS NOT NULL`).run();
+    db.close();
+
     // ---- the pictures ----
     const launch = (lang) => chromium.launch({ executablePath: process.env.CHROME || chromeDir(), args: ['--no-sandbox', lang === 'nb' ? '--lang=nb' : '--lang=en-GB'] });
     browser = await launch('en');
     browserNb = await launch('nb');
     const context = async (opts, lang = 'en') => {
-      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, ...opts });
+      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, timezoneId: 'UTC', ...opts });
       await c.addInitScript(([l, who, view]) => { try { localStorage.setItem('tp.lang', l); localStorage.setItem('tp.actor', who); localStorage.setItem('tp.planview', view); } catch (e) { /* ignore */ } }, [lang, ADMIN, opts.planview || 'grid']);
       return c;
     };
