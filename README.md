@@ -56,14 +56,20 @@ The database is SQLite through a pure-Go driver, so there is nothing to install 
 With mise:
 
 ```sh
-mise install            # Go, Python and uv, in the versions pinned in mise.toml
-mise run setup          # the Python packages (OR-Tools) for the planner
-mise run app:run        # starts on http://127.0.0.1:8080 and prints the address
+mise install            # Go, Python and uv, in the versions pinned in mise.toml (once)
+mise run up             # installs the Python packages, builds, starts on http://127.0.0.1:8080 and prints the address
 ```
 
-`mise.toml` sets `DUTYPLAN_SOLVER` so that the server finds the planner. Open the address, create an organisation, add tasks
-and a day type under **Setup**, create a plan, add events and people, let people answer, and press **Plan**.
-`mise run app:seed -- http://127.0.0.1:8080` fills a running server with a small demo organisation.
+`mise run up` is the whole thing in one command, and the only one you need after `mise install`. When the database file
+(`dutyplan.db` in the current directory, or the one named by `--db`) does not exist yet, it first gets a small demo
+organisation, *Test*, so there is something to look at. Arguments go to the server: `mise run up -- --addr 0.0.0.0:8080 --db /var/lib/dutyplan/dutyplan.db`.
+Stop it with Ctrl-C.
+
+The steps one by one: `mise run setup` (the Python packages, OR-Tools, for the planner), `mise run app:run` (starts the server
+without building a binary or seeding), and `mise run app:seed -- http://127.0.0.1:8080` (fills a running server with the demo
+organisation). `mise.toml` sets `DUTYPLAN_SOLVER` so that the server finds the planner. Open the address, create an
+organisation (or use *Test*), add tasks and a day type under **Setup**, create a plan, add events and people, let people
+answer, and press **Plan**.
 
 Without mise:
 

@@ -1,5 +1,6 @@
 # All tools and commands go through mise. Do not run python/uv/pytest/go directly.
 #   mise install      the tools (python, uv, go) in exact versions (below)
+#   mise run up       setup + build + start the app (a new database gets the demo organisation)
 #   mise run setup    the Python packages (ortools, pytest) from solver/uv.lock; go fetches the Go packages itself
 #   mise tasks        all tasks
 min_version = "2026.10.0"
@@ -57,6 +58,12 @@ run = "uv run pytest tests/test_rules.py"
 description = "Build the app to bin/dutyplan (one static binary with the frontend embedded)"
 quiet = true
 run = "go build -o bin/dutyplan ./cmd/dutyplan"
+
+[tasks.up]
+description = "Everything in one command: the Python packages, the build, then the app in the foreground (a new database gets the demo organisation «Test»). Args: -- --addr 127.0.0.1:8080 --db file.db"
+depends = ["setup", "app:build"]
+quiet = true
+run = "sh scripts/up.sh"
 
 [tasks."app:run"]
 description = "Run the app in the foreground. Prints one line with the address. Args: -- --addr 127.0.0.1:8080 --db file.db"
