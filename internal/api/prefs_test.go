@@ -16,17 +16,15 @@ func prefSetup(t *testing.T, e *env, org string) prefIDs {
 	t.Helper()
 	var p store.Person
 	var sound, lov store.Task
-	var dt store.DayType
-	var ev store.Event
+	var evs []store.Event
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/people", map[string]string{"name": "Kari Test"}).json(&p)
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/tasks", map[string]any{"name": "Sound"}).json(&sound)
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/tasks", map[string]any{"name": "Singing", "planned": false}).json(&lov)
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans", map[string]string{"name": "Autumn 2026"})
-	e.mustDo(201, "POST", "/api/orgs/"+org+"/day-types", map[string]string{"name": "Service"}).json(&dt)
 	ids := prefIDs{person: p.ID, sound: sound.ID, singing: lov.ID}
 	for _, d := range []string{"2026-08-09", "2026-08-16"} {
-		e.mustDo(201, "POST", "/api/orgs/"+org+"/plans/autumn-2026/events", map[string]any{"date": d, "day_type_id": dt.ID}).json(&ev)
-		ids.events = append(ids.events, ev.ID)
+		e.mustDo(201, "POST", "/api/orgs/"+org+"/plans/autumn-2026/events", map[string]any{"date": d}).json(&evs)
+		ids.events = append(ids.events, evs[0].ID)
 	}
 	return ids
 }

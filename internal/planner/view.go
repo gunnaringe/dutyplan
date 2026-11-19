@@ -72,7 +72,7 @@ type CellPerson struct {
 	ID     int64  `json:"id"`
 	Name   string `json:"name"`
 	Weak   bool   `json:"weak"`   // the person said «poor» for the event or the task
-	Locked bool   `json:"locked"` // set by hand: the planner keeps it
+	Locked bool   `json:"locked"` // a manual cell when the run was made (set by hand or locked): the planner kept it
 }
 
 // CellGroup is a group in a place: proposed by the planner, or set by hand (Locked).
@@ -105,10 +105,8 @@ type Cell struct {
 }
 
 type EventRow struct {
-	ID      int64  `json:"id"`
-	Date    string `json:"date"`
-	DayType string `json:"day_type"`
-	Note    string `json:"note"`
+	ID   int64  `json:"id"`
+	Date string `json:"date"`
 	// The time of day and the description are the event's current ones while it exists (they do not change the plan, so
 	// they do not make a run out of date), else the ones from when the run was made. Events of a date are in time order.
 	StartTime   string `json:"start_time"`
@@ -239,7 +237,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 
 	// A cell is every (event, task) the solver says something about: someone in it, a group or text in it, or places
 	// missing. Its places are what is filled plus what is missing, so a manual cell for a task the planner does not
-	// distribute (or beyond the day type's places) just works, and a day-type place of such a task shows nothing.
+	// distribute (or beyond the event's places) just works, and a place of such a task shows nothing.
 	type key struct{ ev, task string }
 	type acc struct {
 		people  []CellPerson
@@ -323,7 +321,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		v.Weak = append(v.Weak, i18n.T(l, "compromise", who, taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
 	}
 
-	// A place (the day type's, or the event's own) the answer says nothing about is shown as missing, never dropped silently.
+	// A place the answer says nothing about is shown as missing, never dropped silently.
 	for _, e := range snap.Events {
 		for task, n := range snap.SlotsFor(e) {
 			if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {
@@ -350,7 +348,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 	}
 	for _, e := range snap.Events {
-		row := EventRow{ID: e.ID, Date: e.Date, DayType: e.DayType, Note: e.Note, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
+		row := EventRow{ID: e.ID, Date: e.Date, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
 		if cur, ok := live[e.ID]; ok {
 			row.StartTime, row.EndTime, row.Description = cur.StartTime, cur.EndTime, cur.Description
 		}

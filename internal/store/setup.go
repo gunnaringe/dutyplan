@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// ---- helpers shared by the setup and date code ---------------------------------------------------------------
+// ---- helpers shared by the setup and event code ---------------------------------------------------------------
 
 type dbq interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -24,7 +24,7 @@ func isForeignKey(err error) bool {
 // with it (a reference into another organisation is "not found"); the composite foreign keys are the backstop.
 func inOrg(ctx context.Context, q dbq, table string, oid, id int64) error {
 	switch table {
-	case "task", "day_type", "person", "grp":
+	case "task", "person", "grp":
 	default:
 		panic("inOrg: unknown table " + table)
 	}
@@ -192,7 +192,8 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 	return t, err
 }
 
-// DeleteTask refuses (ErrConflict) while a day type still uses the task. Its combination settings go with it.
+// DeleteTask refuses (ErrConflict) while a group, a manual cell or a selection uses the task. Its places on events, the
+// people's answers about it and its combination settings go with it.
 func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
@@ -208,202 +209,7 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return inUse("task", name, "a day type, a group or a manual cell")
-		} else if err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-// ---- day types -----------------------------------------------------------------------------------------------
-
-type DayTypeTask struct {
-	TaskID int64 `json:"task_id"`
-	Slots  int   `json:"slots"`
-}
-
-type DayType struct {
-	ID    int64         `json:"id"`
-	Name  string        `json:"name"`
-	Tasks []DayTypeTask `json:"tasks"`
-}
-
-func (s *Store) CreateDayType(ctx context.Context, orgSlug, name string) (DayType, error) {
-	name, err := cleanName(name, "name")
-	if err != nil {
-		return DayType{}, err
-	}
-	d := DayType{Name: name, Tasks: []DayTypeTask{}}
-	err = s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO day_type (org_id, name, created_at) VALUES (?, ?, ?)`, oid, d.Name, s.stamp())
-		if isUnique(err) {
-			return exists("day type", d.Name)
-		}
-		if err != nil {
-			return err
-		}
-		d.ID, _ = res.LastInsertId()
-		return nil
-	})
-	return d, err
-}
-
-func (s *Store) ListDayTypes(ctx context.Context, orgSlug string) ([]DayType, error) {
-	oid, err := orgID(ctx, s.db, orgSlug)
-	if err != nil {
-		return nil, err
-	}
-	return listDayTypes(ctx, s.db, oid)
-}
-
-func listDayTypes(ctx context.Context, q dbq, oid int64) ([]DayType, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id, name FROM day_type WHERE org_id = ? ORDER BY name COLLATE NOCASE`, oid)
-	if err != nil {
-		return nil, err
-	}
-	out := []DayType{}
-	idx := map[int64]int{}
-	for rows.Next() {
-		var d DayType
-		if err := rows.Scan(&d.ID, &d.Name); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		d.Tasks = []DayTypeTask{}
-		idx[d.ID] = len(out)
-		out = append(out, d)
-	}
-	rows.Close()
-	rows, err = q.QueryContext(ctx, `SELECT day_type_id, task_id, slots FROM day_type_task WHERE org_id = ? ORDER BY task_id`, oid)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var did int64
-		var t DayTypeTask
-		if err := rows.Scan(&did, &t.TaskID, &t.Slots); err != nil {
-			return nil, err
-		}
-		if i, ok := idx[did]; ok { // rows of other organisations are never attached to ours
-			out[i].Tasks = append(out[i].Tasks, t)
-		}
-	}
-	return out, rows.Err()
-}
-
-func (s *Store) RenameDayType(ctx context.Context, orgSlug string, id int64, name string) (DayType, error) {
-	name, err := cleanName(name, "name")
-	if err != nil {
-		return DayType{}, err
-	}
-	var d DayType
-	err = s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		var old string
-		err = tx.QueryRowContext(ctx, `SELECT name FROM day_type WHERE id = ? AND org_id = ?`, id, oid).Scan(&old)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if old == name {
-			return errNothingToChange()
-		}
-		if _, err = tx.ExecContext(ctx, `UPDATE day_type SET name = ? WHERE id = ? AND org_id = ?`, name, id, oid); isUnique(err) {
-			return exists("day type", name)
-		} else if err != nil {
-			return err
-		}
-		all, err := listDayTypes(ctx, tx, oid)
-		if err != nil {
-			return err
-		}
-		for _, x := range all {
-			if x.ID == id {
-				d = x
-			}
-		}
-		return nil
-	})
-	return d, err
-}
-
-// SetDayTypeTasks replaces the day type's task list. Slots are 1-50; each task at most once; tasks must be the
-// organisation's own.
-func (s *Store) SetDayTypeTasks(ctx context.Context, orgSlug string, id int64, tasks []DayTypeTask) (DayType, error) {
-	seen := map[int64]bool{}
-	for _, t := range tasks {
-		if t.Slots < 1 || t.Slots > 50 {
-			return DayType{}, Invalid("slots_range", nil, "slots must be 1-50")
-		}
-		if seen[t.TaskID] {
-			return DayType{}, Invalid("task_twice", nil, "a task can be listed once")
-		}
-		seen[t.TaskID] = true
-	}
-	var d DayType
-	err := s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		if err := inOrg(ctx, tx, "day_type", oid, id); err != nil {
-			return err
-		}
-		for _, t := range tasks {
-			if err := inOrg(ctx, tx, "task", oid, t.TaskID); err != nil {
-				return err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM day_type_task WHERE day_type_id = ? AND org_id = ?`, id, oid); err != nil {
-			return err
-		}
-		for _, t := range tasks {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO day_type_task (org_id, day_type_id, task_id, slots) VALUES (?, ?, ?, ?)`, oid, id, t.TaskID, t.Slots); err != nil {
-				return err
-			}
-		}
-		all, err := listDayTypes(ctx, tx, oid)
-		if err != nil {
-			return err
-		}
-		for _, x := range all {
-			if x.ID == id {
-				d = x
-			}
-		}
-		return nil
-	})
-	return d, err
-}
-
-// DeleteDayType refuses (ErrConflict) while any plan still has dates of this type.
-func (s *Store) DeleteDayType(ctx context.Context, orgSlug string, id int64) error {
-	return s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		var name string
-		err = tx.QueryRowContext(ctx, `SELECT name FROM day_type WHERE id = ? AND org_id = ?`, id, oid).Scan(&name)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM day_type WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return inUse("day type", name, "events in a plan")
+			return inUse("task", name, "a group, a manual cell or a selection")
 		} else if err != nil {
 			return err
 		}

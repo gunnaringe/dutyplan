@@ -25,13 +25,12 @@ type world struct {
 	org                    store.Org
 	plan                   store.Plan
 	singing, sound, camera store.Task
-	dt                     store.DayType
 	events                 []store.Event
 	people                 map[string]store.Person
 }
 
-// newWorld: one organisation, three tasks (Singing is manual-only), a day type with one place each, a plan with
-// four Sundays and six people who have chosen tasks and marked a few dates.
+// newWorld: one organisation, three tasks (Singing is manual-only), a plan with four Sundays that have one place for each
+// task, and six people who have chosen tasks and marked a few dates.
 func newWorld(t *testing.T, orgName string) world {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
@@ -61,16 +60,12 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 	w.camera, err = st.CreateTask(ctx, w.org.Slug, "Camera", true)
 	must(err)
 	must(st.SetCombination(ctx, w.org.Slug, w.sound.ID, w.camera.ID, "cannot"))
-	w.dt, err = st.CreateDayType(ctx, w.org.Slug, "Service")
-	must(err)
-	_, err = st.SetDayTypeTasks(ctx, w.org.Slug, w.dt.ID, []store.DayTypeTask{{TaskID: w.sound.ID, Slots: 1}, {TaskID: w.camera.ID, Slots: 1}, {TaskID: w.singing.ID, Slots: 1}})
-	must(err)
 	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "Autumn 2026", "")
 	must(err)
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
-		ev, err := st.AddEvent(ctx, w.org.Slug, w.plan.Slug, d, w.dt.ID, "")
+		evs, err := st.AddEvents(ctx, w.org.Slug, w.plan.Slug, store.NewEvents{Date: d, Places: map[int64]int{w.sound.ID: 1, w.camera.ID: 1, w.singing.ID: 1}})
 		must(err)
-		w.events = append(w.events, ev)
+		w.events = append(w.events, evs[0])
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie", "Dina", "Embla", "Frode"} {
 		p, err := st.CreatePerson(ctx, w.org.Slug, n)
@@ -153,11 +148,11 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if tasks[tid(w.singing.ID)] || !tasks[tid(w.sound.ID)] {
 		t.Errorf("planned flags: %v", tasks)
 	}
-	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[did(w.dt.ID)].(map[string]any)) != 3 {
-		t.Errorf("events and day type: %v %v", in["dates"], in["day_type_tasks"])
+	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[eid(w.events[0].ID)].(map[string]any)) != 3 {
+		t.Errorf("events and their places: %v %v", in["dates"], in["day_type_tasks"])
 	}
 	// the snapshot names every task (with its planned flag) and the active people
-	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.singing.ID] != 0 || snap.Slots[w.dt.ID][w.sound.ID] != 1 {
+	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Places[w.events[0].ID][w.singing.ID] != 0 || snap.Places[w.events[0].ID][w.sound.ID] != 1 {
 		t.Errorf("snapshot: %+v", snap)
 	}
 	// deterministic, and the hash ignores seed and time limit but not the data

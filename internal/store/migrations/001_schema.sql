@@ -46,26 +46,6 @@ CREATE TABLE task (
     UNIQUE (org_id, id)
 );
 
-CREATE TABLE day_type (
-    id         INTEGER PRIMARY KEY,
-    org_id     INTEGER NOT NULL REFERENCES organization(id),
-    name       TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    UNIQUE (org_id, name),
-    UNIQUE (org_id, id)
-);
-
--- Which tasks a day type has, and how many places. Deleting a task that is in use here is refused.
-CREATE TABLE day_type_task (
-    org_id      INTEGER NOT NULL,
-    day_type_id INTEGER NOT NULL,
-    task_id     INTEGER NOT NULL,
-    slots       INTEGER NOT NULL CHECK (slots BETWEEN 1 AND 50),
-    PRIMARY KEY (day_type_id, task_id),
-    FOREIGN KEY (org_id, day_type_id) REFERENCES day_type (org_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id)
-);
-
 -- The shared setting: what can be combined on the same event. A pair is stored once (task_a < task_b); «standard» is no row.
 CREATE TABLE task_combination (
     org_id INTEGER NOT NULL,
@@ -87,15 +67,12 @@ CREATE TABLE event (
     org_id      INTEGER NOT NULL,
     plan_id     INTEGER NOT NULL,
     date        TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-    day_type_id INTEGER NOT NULL,
-    note        TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
     start_time  TEXT NOT NULL DEFAULT '' CHECK (start_time = '' OR start_time GLOB '[0-2][0-9]:[0-5][0-9]'),
     end_time    TEXT NOT NULL DEFAULT '' CHECK (end_time = '' OR (end_time GLOB '[0-2][0-9]:[0-5][0-9]' AND start_time <> '' AND end_time > start_time)),
     description TEXT NOT NULL DEFAULT '',
     UNIQUE (org_id, id),
-    FOREIGN KEY (org_id, plan_id) REFERENCES plan (org_id, id),
-    FOREIGN KEY (org_id, day_type_id) REFERENCES day_type (org_id, id)
+    FOREIGN KEY (org_id, plan_id) REFERENCES plan (org_id, id)
 );
 CREATE INDEX event_plan ON event (plan_id, date, id);
 CREATE UNIQUE INDEX event_org_plan_id ON event (org_id, plan_id, id);
@@ -185,8 +162,10 @@ CREATE TABLE grp_task (
 );
 
 -- Manual cells and selections, per plan.
---   manual_cell: the admin enters a person, a group or a text (for example «Outside guest») for a task on an event.
---                The planner never moves it, and it counts as a filled place (fills for a group and a text).
+--   manual_cell: a person, a group or a text (for example «Outside guest») for a task on an event. The planner never moves
+--                it, and it counts as a filled place (fills for a group and a text). locked = 0: set by hand; locked = 1:
+--                one of the planner's names that was locked so the next run keeps it (never a text). The planner treats
+--                both the same; the page shows them differently, and copying an event takes only those set by hand.
 --   pool_member: a selection, «only these can be picked» for a task on an event. If there are rows, there is a selection.
 -- If the event is deleted, the cells and the selection go with it. A group, task or person in use here cannot be deleted.
 CREATE TABLE manual_cell (
@@ -199,8 +178,10 @@ CREATE TABLE manual_cell (
     group_id   INTEGER,
     label      TEXT,
     fills      INTEGER NOT NULL DEFAULT 1 CHECK (fills BETWEEN 1 AND 50),
+    locked     INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
     created_at TEXT NOT NULL,
     CHECK ((person_id IS NOT NULL) + (group_id IS NOT NULL) + (label IS NOT NULL) = 1),
+    CHECK (locked = 0 OR label IS NULL),
     CHECK (person_id IS NULL OR fills = 1),
     FOREIGN KEY (org_id, plan_id, event_id) REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE, -- cells follow their event
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id),
@@ -231,16 +212,16 @@ CREATE UNIQUE INDEX pool_member_group ON pool_member (event_id, task_id, group_i
 CREATE INDEX pool_member_plan ON pool_member (plan_id, event_id, task_id);
 
 -- The table on the plan page sets everything about an event in one place.
---   event_task:  places for one task on one event, instead of what the day type says (0 = not on this event). The planner
---                uses them, so they are part of a run's input. A deleted event or task takes its places with it.
---   plan_field:  an info row of a plan (for example «Theme»): a name, in the order they were made.
---   event_field: the value of an info row for one event. The planner never sees it.
+--   event_task:  how many places a task has on an event; no row = the task is not needed there. The planner uses them, so
+--                they are part of a run's input. A deleted event or task takes its places with it.
+--   plan_field:  a row of details of a plan (for example «Note» or «Theme»): a name and a position (0, 1, ... from the top).
+--   event_field: the value of a details row for one event. The planner never sees it.
 CREATE TABLE event_task (
     org_id   INTEGER NOT NULL,
     plan_id  INTEGER NOT NULL,
     event_id INTEGER NOT NULL,
     task_id  INTEGER NOT NULL,
-    slots    INTEGER NOT NULL CHECK (slots BETWEEN 0 AND 50),
+    slots    INTEGER NOT NULL CHECK (slots BETWEEN 1 AND 50),
     PRIMARY KEY (event_id, task_id),
     FOREIGN KEY (org_id, plan_id, event_id) REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE, -- places follow their event
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id) ON DELETE CASCADE -- and their task
@@ -252,6 +233,7 @@ CREATE TABLE plan_field (
     org_id     INTEGER NOT NULL,
     plan_id    INTEGER NOT NULL,
     name       TEXT NOT NULL,
+    position   INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE (plan_id, name),
     UNIQUE (org_id, plan_id, id),

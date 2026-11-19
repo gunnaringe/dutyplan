@@ -14,7 +14,6 @@ type rich struct {
 	plan, other   Plan
 	people        []Person
 	sound, camera Task
-	dayType       DayType
 	group         Group
 	pinned, dying int64 // runs of plan: a finished pinned run, and one that failed
 }
@@ -39,10 +38,6 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	must(err)
 	r.camera, err = s.CreateTask(ctx, slug, "Camera", true)
 	must(err)
-	r.dayType, err = s.CreateDayType(ctx, slug, "Match day")
-	must(err)
-	_, err = s.SetDayTypeTasks(ctx, slug, r.dayType.ID, []DayTypeTask{{TaskID: r.sound.ID, Slots: 1}, {TaskID: r.camera.ID, Slots: 1}})
-	must(err)
 	must(s.SetCombination(ctx, slug, r.sound.ID, r.camera.ID, "cannot"))
 	r.group, err = s.CreateGroup(ctx, slug, "Choir")
 	must(err)
@@ -59,9 +54,9 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	for i, p := range []Plan{r.plan, r.other} {
 		var evs []Event
 		for _, d := range []string{"2026-08-09", "2026-08-16"} {
-			ev, err := s.AddEvent(ctx, slug, p.Slug, d, r.dayType.ID, "")
+			ev, err := s.AddEvents(ctx, slug, p.Slug, NewEvents{Date: d, Places: map[int64]int{r.sound.ID: 1, r.camera.ID: 1}})
 			must(err)
-			evs = append(evs, ev)
+			evs = append(evs, ev[0])
 		}
 		must(s.SetAvailability(ctx, slug, p.Slug, r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
 		_, _, err = s.AddCells(ctx, slug, p.Slug, NewCell{EventIDs: []int64{evs[0].ID}, TaskID: r.sound.ID, PersonID: r.people[1].ID})
@@ -71,8 +66,7 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		_, _, err = s.AddCells(ctx, slug, p.Slug, NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
 		must(err)
 		must(s.SetPool(ctx, slug, p.Slug, []int64{evs[0].ID}, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
-		two := 2
-		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, &two))
+		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, 2))
 		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
 		must(s.SetFieldValue(ctx, slug, p.Slug, evs[1].ID, field.ID, "Light"))
@@ -163,7 +157,7 @@ func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "day_type day_type_task event event_field event_task grp grp_member grp_task manual_cell person person_event person_task plan plan_field plan_run pool_member task task_combination"
+	want := "event event_field event_task grp grp_member grp_task manual_cell person person_event person_task plan plan_field plan_run pool_member task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}
@@ -275,9 +269,9 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	sameCounts(t, "the same organisation's other plan", otherBefore, rowsWith(t, s, "plan_id", otherID))
 	sameCounts(t, "the other organisation's plan with the same address", planBBefore, rowsWith(t, s, "plan_id", planB))
 	sameCounts(t, "the other organisation", orgBBefore, rowsWith(t, s, "org_id", orgB))
-	// the organisation keeps its people, tasks, day types and groups
+	// the organisation keeps its people, tasks and groups
 	after := rowsWith(t, s, "org_id", orgA)
-	for _, table := range []string{"person", "task", "day_type", "day_type_task", "task_combination", "grp", "grp_member", "grp_task", "person_task"} {
+	for _, table := range []string{"person", "task", "task_combination", "grp", "grp_member", "grp_task", "person_task"} {
 		if after[table] != orgABefore[table] {
 			t.Errorf("deleting a plan changed the organisation's %s: %d -> %d", table, orgABefore[table], after[table])
 		}

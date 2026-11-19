@@ -34,16 +34,16 @@ func (e *env) cellsWorld(name string) cellsWorld {
 	w.sound = tasks[0]
 	w.sang, err = e.st.CreateTask(ctx, org, "Singing", false)
 	must(err)
-	dts, err := e.st.ListDayTypes(ctx, org)
-	must(err)
-	_, err = e.st.AddEvent(ctx, org, plan, "2026-08-16", dts[0].ID, "")
+	places := map[int64]int{w.sound.ID: 1}
+	_, err = e.st.AddEvents(ctx, org, plan, store.NewEvents{Date: "2026-08-16", Places: places})
 	must(err)
 	w.events, err = e.st.ListEvents(ctx, org, plan)
 	must(err)
 	other, err := e.st.CreatePlan(ctx, org, "Spring 2027", "")
 	must(err)
-	w.otherPlanEvent, err = e.st.AddEvent(ctx, org, other.Slug, "2027-02-07", dts[0].ID, "")
+	others, err := e.st.AddEvents(ctx, org, other.Slug, store.NewEvents{Date: "2027-02-07", Places: places})
 	must(err)
+	w.otherPlanEvent = others[0]
 	people, err := e.st.ListPeople(ctx, org)
 	must(err)
 	w.anna = people[0]
@@ -80,14 +80,19 @@ func TestManualCellsAndSelectionsOverHTTP(t *testing.T) {
 	if len(made.Created) != 1 || made.Skipped != 1 {
 		t.Errorf("partly new: %+v", made)
 	}
+	// a planner's name that was locked is a cell too, marked as locked
+	e.mustDo(201, "POST", base+"/cells", map[string]any{"events": ids[1:], "task": a.sang.ID, "person": a.anna.ID, "locked": true}).json(&made)
+	if len(made.Created) != 1 || !made.Created[0].Locked {
+		t.Errorf("locked: %+v", made)
+	}
 	var list []store.ManualCell
 	e.mustDo(200, "GET", base+"/cells", nil).json(&list)
-	if len(list) != 6 {
+	if len(list) != 7 || !list[6].Locked || list[0].Locked {
 		t.Fatalf("cells: %+v", list)
 	}
 	e.mustDo(204, "DELETE", base+"/cells/"+itoa(list[0].ID), nil)
 	e.mustDo(200, "GET", base+"/cells", nil).json(&list)
-	if len(list) != 5 {
+	if len(list) != 6 {
 		t.Errorf("after delete: %d", len(list))
 	}
 
@@ -125,6 +130,7 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID}, "names nothing"},
 		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID, "group": a.choir.ID}, "names two things"},
 		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID, "fills": 2}, "a person fills one"},
+		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID, "label": "Guest", "locked": true}, "a text cannot be locked"},
 		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": gone.ID}, "inactive person"},
 		{400, "POST", base + "/cells", map[string]any{"events": []int64{}, "task": a.sound.ID, "person": a.anna.ID}, "no events"},
 		{400, "POST", base + "/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID, "plass": 1}, "unknown field"},

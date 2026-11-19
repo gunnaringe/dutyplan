@@ -12,8 +12,6 @@ import (
 type MyAssignment struct {
 	EventID int64  `json:"event_id"`
 	Date    string `json:"date"`
-	DayType string `json:"day_type"`
-	Note    string `json:"note"`
 	// The time of day of the event, when it has one.
 	StartTime string `json:"start_time"`
 	EndTime   string `json:"end_time"`
@@ -90,7 +88,7 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 			var day []MyAssignment
 			for _, c := range ev.Cells {
 				mk := func() MyAssignment {
-					return MyAssignment{EventID: ev.ID, Date: ev.Date, DayType: ev.DayType, Note: ev.Note, StartTime: ev.StartTime, EndTime: ev.EndTime, TaskID: c.TaskID, Task: names[c.TaskID]}
+					return MyAssignment{EventID: ev.ID, Date: ev.Date, StartTime: ev.StartTime, EndTime: ev.EndTime, TaskID: c.TaskID, Task: names[c.TaskID]}
 				}
 				for _, p := range c.People {
 					if p.ID == personID {

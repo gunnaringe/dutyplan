@@ -12,22 +12,25 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 	orgA, orgB := "org-a", "org-b"
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
-	var dtA, dtB store.DayType
-	e.mustDo(201, "POST", "/api/orgs/"+orgA+"/day-types", map[string]string{"name": "Weekend"}).json(&dtA)
-	e.mustDo(201, "POST", "/api/orgs/"+orgB+"/day-types", map[string]string{"name": "Weekend"}).json(&dtB)
 	e.mustDo(201, "POST", "/api/orgs/"+orgA+"/plans", map[string]string{"name": "Autumn 2026"})
 	e.mustDo(201, "POST", "/api/orgs/"+orgB+"/plans", map[string]string{"name": "Autumn 2026"})
 	events := "/api/orgs/" + orgA + "/plans/autumn-2026/events"
 
-	var ev store.Event
-	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID, "start_time": "11:00", "end_time": "12:30", "description": "Bring the banner.\nDoors at 10:30."}).json(&ev)
+	add := func(body map[string]any) store.Event {
+		t.Helper()
+		var evs []store.Event
+		e.mustDo(201, "POST", events, body).json(&evs)
+		if len(evs) != 1 {
+			t.Fatalf("one date gives one event: %+v", evs)
+		}
+		return evs[0]
+	}
+	ev := add(map[string]any{"date": "2026-08-09", "start_time": "11:00", "end_time": "12:30", "description": "Bring the banner.\nDoors at 10:30."})
 	if ev.StartTime != "11:00" || ev.EndTime != "12:30" || ev.Description != "Bring the banner.\nDoors at 10:30." {
 		t.Errorf("created: %+v", ev)
 	}
-	var plain store.Event
-	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID, "note": "evening"}).json(&plain)
-	var early store.Event
-	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09", "day_type_id": dtA.ID, "start_time": "08:00"}).json(&early)
+	plain := add(map[string]any{"date": "2026-08-09"})
+	early := add(map[string]any{"date": "2026-08-09", "start_time": "08:00"})
 	var list []store.Event
 	e.mustDo(200, "GET", events, nil).json(&list)
 	if len(list) != 3 || list[0].ID != early.ID || list[1].ID != ev.ID || list[2].ID != plain.ID {
@@ -45,7 +48,7 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		"bad text":      {map[string]any{"description": "a\x01b"}, "description_invalid"},
 		"too long text": {map[string]any{"description": strings.Repeat("x", 2001)}, "description_invalid"},
 	} {
-		body := map[string]any{"date": "2026-08-16", "day_type_id": dtA.ID}
+		body := map[string]any{"date": "2026-08-16"}
 		for k, v := range c.body {
 			body[k] = v
 		}
@@ -53,14 +56,14 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 			t.Errorf("%s: %+v", name, got)
 		}
 	}
-	if got := e.refused(400, "POST", events, map[string]any{"date": "2026-08-16", "day_type_id": dtA.ID, "time": "11:00"}); got.Error != "invalid" {
+	if got := e.refused(400, "POST", events, map[string]any{"date": "2026-08-16", "time": "11:00"}); got.Error != "invalid" {
 		t.Errorf("an unknown field is still refused: %+v", got)
 	}
 
 	// changing
 	one := events + "/" + itoa(plain.ID)
 	e.mustDo(200, "PATCH", one, map[string]any{"start_time": "19:00", "end_time": "21:00", "description": "Evening session"}).json(&plain)
-	if plain.StartTime != "19:00" || plain.EndTime != "21:00" || plain.Description != "Evening session" || plain.Note != "evening" {
+	if plain.StartTime != "19:00" || plain.EndTime != "21:00" || plain.Description != "Evening session" {
 		t.Errorf("patched: %+v", plain)
 	}
 	if got := e.refused(400, "PATCH", one, map[string]any{"start_time": ""}); got.Code != "end_without_start" {
@@ -78,22 +81,23 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		t.Errorf("A's event through B: %d %s", r.code, r.body)
 	}
 
-	// bulk, with times
-	var res struct {
-		Created []store.Event
-		Skipped []string
+	// every week until a date, with times, all or nothing
+	var weekly []store.Event
+	weeks := map[string]any{"date": "2026-09-06", "until": "2026-09-27", "start_time": "11:00", "end_time": "12:00"}
+	e.mustDo(201, "POST", events, weeks).json(&weekly)
+	if len(weekly) != 4 || weekly[0].Date != "2026-09-06" || weekly[3].Date != "2026-09-27" || weekly[3].StartTime != "11:00" || weekly[3].EndTime != "12:00" {
+		t.Errorf("weekly: %+v", weekly)
 	}
-	bulk := map[string]any{"from": "2026-09-01", "to": "2026-09-30", "weekdays": []int{7}, "day_type_id": dtA.ID, "start_time": "11:00", "end_time": "12:00"}
-	e.mustDo(201, "POST", events+"/bulk", bulk).json(&res)
-	if len(res.Created) != 4 || res.Created[0].StartTime != "11:00" || res.Created[0].EndTime != "12:00" {
-		t.Errorf("bulk: %+v", res)
+	weeks["end_time"] = "10:00"
+	if got := e.refused(400, "POST", events, weeks); got.Code != "end_not_after_start" {
+		t.Errorf("weekly with an end before the start: %+v", got)
 	}
-	e.mustDo(201, "POST", events+"/bulk", bulk).json(&res)
-	if len(res.Created) != 0 || len(res.Skipped) != 4 {
-		t.Errorf("bulk twice: %+v", res)
+	weeks["end_time"], weeks["until"] = "12:00", "2026-09-01"
+	if got := e.refused(400, "POST", events, weeks); got.Code != "range_invalid" {
+		t.Errorf("until before the date: %+v", got)
 	}
-	bulk["end_time"] = "10:00"
-	if got := e.refused(400, "POST", events+"/bulk", bulk); got.Code != "end_not_after_start" {
-		t.Errorf("bulk with an end before the start: %+v", got)
+	e.mustDo(200, "GET", events, nil).json(&list)
+	if len(list) != 7 {
+		t.Errorf("refused additions add nothing: %d events", len(list))
 	}
 }

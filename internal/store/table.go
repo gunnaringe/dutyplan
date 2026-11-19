@@ -8,8 +8,8 @@ import (
 	"unicode/utf8"
 )
 
-// What the table on the plan page needs beyond events and people: places per event (instead of the day type's), the
-// plan's info rows with a value per event, everyone's answers in one call, and how one task combines with all the others.
+// What the table on the plan page needs beyond events and people: places per event, the plan's details rows with a value
+// per event, everyone's answers in one call, and how one task combines with all the others.
 
 const (
 	maxSlots          = 50
@@ -17,7 +17,7 @@ const (
 	maxFieldValueRune = 200
 )
 
-// EventPlaces is an override: the places for one task on one event, instead of what the day type says (0 = not on it).
+// EventPlaces is how many places one task has on one event. A task without a row is not needed on the event.
 type EventPlaces struct {
 	EventID int64 `json:"event_id"`
 	TaskID  int64 `json:"task_id"`
@@ -48,9 +48,9 @@ func (s *Store) ListEventPlaces(ctx context.Context, orgSlug, planSlug string) (
 	return listEventPlaces(ctx, s.db, oid, pid)
 }
 
-// SetEventPlaces sets the places for a task on one event. nil goes back to what the event's day type says.
-func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, eventID, taskID int64, slots *int) error {
-	if slots != nil && (*slots < 0 || *slots > maxSlots) {
+// SetEventPlaces sets the places for a task on one event; 0 means the task is not needed there.
+func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, eventID, taskID int64, slots int) error {
+	if slots < 0 || slots > maxSlots {
 		return Invalid("places_invalid", map[string]any{"max": maxSlots}, "places must be 0-%d", maxSlots)
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
@@ -62,49 +62,42 @@ func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, ev
 		if err != nil {
 			return err
 		}
-		ev, err := getEvent(ctx, tx, oid, pid, eventID)
-		if err != nil {
+		if _, err := getEvent(ctx, tx, oid, pid, eventID); err != nil {
 			return err
 		}
-		var task string
-		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&task); errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		} else if err != nil {
+		if err := inOrg(ctx, tx, "task", oid, taskID); err != nil {
 			return err
 		}
-		var def int
-		err = tx.QueryRowContext(ctx, `SELECT slots FROM day_type_task WHERE day_type_id = ? AND task_id = ? AND org_id = ?`, ev.DayTypeID, taskID, oid).Scan(&def)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		var before sql.NullInt64
+		var before int
 		err = tx.QueryRowContext(ctx, `SELECT slots FROM event_task WHERE event_id = ? AND task_id = ? AND org_id = ?`, eventID, taskID, oid).Scan(&before)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if slots == nil {
-			if !before.Valid {
-				return errNothingToChange()
-			}
-			_, err = tx.ExecContext(ctx, `DELETE FROM event_task WHERE event_id = ? AND task_id = ? AND org_id = ?`, eventID, taskID, oid)
-		} else {
-			if before.Valid && int(before.Int64) == *slots {
-				return errNothingToChange()
-			}
-			_, err = tx.ExecContext(ctx, `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots) VALUES (?, ?, ?, ?, ?)
-				ON CONFLICT (event_id, task_id) DO UPDATE SET slots = excluded.slots`, oid, pid, eventID, taskID, *slots)
+		if before == slots {
+			return errNothingToChange()
 		}
-		if err != nil {
-			return err
-		}
-		return nil
+		return setPlaces(ctx, tx, oid, pid, eventID, taskID, slots)
 	})
 }
 
-// PlanField is an info row of a plan (for example «Theme»); FieldValue is its text for one event.
+// setPlaces writes the places of a task on an event that is known to be in the plan; 0 removes the row.
+func setPlaces(ctx context.Context, tx *sql.Tx, oid, pid, eventID, taskID int64, slots int) error {
+	var err error
+	if slots == 0 {
+		_, err = tx.ExecContext(ctx, `DELETE FROM event_task WHERE event_id = ? AND task_id = ? AND org_id = ?`, eventID, taskID, oid)
+	} else {
+		_, err = tx.ExecContext(ctx, `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots) VALUES (?, ?, ?, ?, ?)
+			ON CONFLICT (event_id, task_id) DO UPDATE SET slots = excluded.slots`, oid, pid, eventID, taskID, slots)
+	}
+	return err
+}
+
+// PlanField is a details row of a plan (for example «Note» or «Theme»); FieldValue is its text for one event. Position
+// orders the rows from the top (0, 1, ...).
 type PlanField struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Position int    `json:"position"`
 }
 
 type FieldValue struct {
@@ -128,10 +121,10 @@ func (s *Store) ListFields(ctx context.Context, orgSlug, planSlug string) (PlanF
 	if err != nil {
 		return out, err
 	}
-	if err := scanAll(ctx, s.db, `SELECT id, name FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY id`, []any{oid, pid},
+	if err := scanAll(ctx, s.db, `SELECT id, name, position FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY position, id`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			var f PlanField
-			err := r.Scan(&f.ID, &f.Name)
+			err := r.Scan(&f.ID, &f.Name, &f.Position)
 			out.Fields = append(out.Fields, f)
 			return err
 		}); err != nil {
@@ -149,7 +142,7 @@ func (s *Store) ListFields(ctx context.Context, orgSlug, planSlug string) (PlanF
 
 func getField(ctx context.Context, q dbq, oid, pid, id int64) (PlanField, error) {
 	var f PlanField
-	err := q.QueryRowContext(ctx, `SELECT id, name FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid).Scan(&f.ID, &f.Name)
+	err := q.QueryRowContext(ctx, `SELECT id, name, position FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid).Scan(&f.ID, &f.Name, &f.Position)
 	if errors.Is(err, sql.ErrNoRows) {
 		return f, ErrNotFound
 	}
@@ -176,16 +169,16 @@ func (s *Store) AddField(ctx context.Context, orgSlug, planSlug, name string) (P
 			return err
 		}
 		if n >= maxFieldsPerPlan {
-			return Invalid("too_many_fields", map[string]any{"max": maxFieldsPerPlan}, "a plan can have at most %d info rows", maxFieldsPerPlan)
+			return Invalid("too_many_fields", map[string]any{"max": maxFieldsPerPlan}, "a plan can have at most %d details rows", maxFieldsPerPlan)
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO plan_field (org_id, plan_id, name, created_at) VALUES (?, ?, ?, ?)`, oid, pid, name, s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO plan_field (org_id, plan_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)`, oid, pid, name, n, s.stamp())
 		if isUnique(err) {
-			return exists("info row", name)
+			return exists("details row", name)
 		} else if err != nil {
 			return err
 		}
 		f.ID, _ = res.LastInsertId()
-		f.Name = name
+		f.Name, f.Position = name, n
 		return nil
 	})
 	return f, err
@@ -214,17 +207,62 @@ func (s *Store) RenameField(ctx context.Context, orgSlug, planSlug string, id in
 			return errNothingToChange()
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE plan_field SET name = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, name, id, oid, pid); isUnique(err) {
-			return exists("info row", name)
+			return exists("details row", name)
 		} else if err != nil {
 			return err
 		}
-		f = PlanField{ID: id, Name: name}
+		f = PlanField{ID: id, Name: name, Position: old.Position}
 		return nil
 	})
 	return f, err
 }
 
-// DeleteField removes an info row with its values on every event.
+// MoveField puts a details row at a position (0 = the top; past the end = the bottom) and renumbers the others.
+func (s *Store) MoveField(ctx context.Context, orgSlug, planSlug string, id int64, position int) error {
+	if position < 0 {
+		return Invalid("position_invalid", nil, "the position must be 0 or more")
+	}
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		pid, err := planID(ctx, tx, oid, planSlug)
+		if err != nil {
+			return err
+		}
+		if _, err := getField(ctx, tx, oid, pid, id); err != nil {
+			return err
+		}
+		return renumberFields(ctx, tx, oid, pid, id, position)
+	})
+}
+
+// renumberFields gives the plan's rows the positions 0, 1, ... in their order, with the row moved (if any) at position.
+func renumberFields(ctx context.Context, tx *sql.Tx, oid, pid, moved int64, position int) error {
+	var order []int64
+	if err := scanAll(ctx, tx, `SELECT id FROM plan_field WHERE org_id = ? AND plan_id = ? AND id <> ? ORDER BY position, id`, []any{oid, pid, moved},
+		func(r *sql.Rows) error {
+			var id int64
+			err := r.Scan(&id)
+			order = append(order, id)
+			return err
+		}); err != nil {
+		return err
+	}
+	if moved != 0 {
+		position = min(position, len(order))
+		order = append(order[:position], append([]int64{moved}, order[position:]...)...)
+	}
+	for i, id := range order {
+		if _, err := tx.ExecContext(ctx, `UPDATE plan_field SET position = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, i, id, oid, pid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteField removes a details row with its values on every event; the rows below move up.
 func (s *Store) DeleteField(ctx context.Context, orgSlug, planSlug string, id int64) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
@@ -241,15 +279,15 @@ func (s *Store) DeleteField(ctx context.Context, orgSlug, planSlug string, id in
 		if _, err := tx.ExecContext(ctx, `DELETE FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid); err != nil {
 			return err
 		}
-		return nil
+		return renumberFields(ctx, tx, oid, pid, 0, 0)
 	})
 }
 
-// SetFieldValue sets the text of an info row for one event; an empty text removes it.
+// SetFieldValue sets the text of a details row for one event; an empty text removes it.
 func (s *Store) SetFieldValue(ctx context.Context, orgSlug, planSlug string, eventID, fieldID int64, value string) error {
 	value = strings.TrimSpace(value)
 	if utf8.RuneCountInString(value) > maxFieldValueRune || !validText(value) {
-		return Invalid("field_value_invalid", map[string]any{"max": maxFieldValueRune}, "an info value must be at most %d printable characters", maxFieldValueRune)
+		return Invalid("field_value_invalid", map[string]any{"max": maxFieldValueRune}, "a details value must be at most %d printable characters", maxFieldValueRune)
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)

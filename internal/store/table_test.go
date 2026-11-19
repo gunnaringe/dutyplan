@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// tableWorld is an organisation with a plan of two events of one day type (Sound 1, Camera 1), a second plan with an event,
-// and a second organisation with its own plan, event and task.
+// tableWorld is an organisation with a plan of two events (no places yet), a second plan with an event, and a second
+// organisation with its own plan, event and task.
 type tableWorld struct {
 	s                 *Store
 	org, otherOrg     Org
@@ -17,7 +17,6 @@ type tableWorld struct {
 	foreignTask       Task
 	ev, ev2, otherEv  Event
 	awayEv            Event
-	dayType           DayType
 }
 
 func newTableWorld(t *testing.T) tableWorld {
@@ -35,28 +34,22 @@ func newTableWorld(t *testing.T) tableWorld {
 	must(err)
 	w.camera, err = s.CreateTask(ctx, w.org.Slug, "Camera", true)
 	must(err)
-	w.dayType, err = s.CreateDayType(ctx, w.org.Slug, "Match day")
-	must(err)
-	_, err = s.SetDayTypeTasks(ctx, w.org.Slug, w.dayType.ID, []DayTypeTask{{TaskID: w.sound.ID, Slots: 1}, {TaskID: w.camera.ID, Slots: 1}})
-	must(err)
 	w.plan, err = s.CreatePlan(ctx, w.org.Slug, "Spring", "")
 	must(err)
 	w.other, err = s.CreatePlan(ctx, w.org.Slug, "Summer", "")
 	must(err)
-	w.ev, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "2026-08-09", w.dayType.ID, "")
+	w.ev, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "2026-08-09")
 	must(err)
-	w.ev2, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "2026-08-16", w.dayType.ID, "")
+	w.ev2, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "2026-08-16")
 	must(err)
-	w.otherEv, err = s.AddEvent(ctx, w.org.Slug, w.other.Slug, "2026-08-23", w.dayType.ID, "")
+	w.otherEv, err = s.AddEvent(ctx, w.org.Slug, w.other.Slug, "2026-08-23")
 	must(err)
 
 	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, "Doors", true)
 	must(err)
-	adt, err := s.CreateDayType(ctx, w.otherOrg.Slug, "Fair")
-	must(err)
 	w.away, err = s.CreatePlan(ctx, w.otherOrg.Slug, "Spring", "")
 	must(err)
-	w.awayEv, err = s.AddEvent(ctx, w.otherOrg.Slug, w.away.Slug, "2026-08-09", adt.ID, "")
+	w.awayEv, err = s.AddEvent(ctx, w.otherOrg.Slug, w.away.Slug, "2026-08-09")
 	must(err)
 	return w
 }
@@ -74,45 +67,48 @@ func (w tableWorld) places(t *testing.T, org, plan string) string {
 	return strings.Join(out, " ")
 }
 
-func TestPlacesPerEventOverrideTheDayType(t *testing.T) {
+func TestPlacesPerEvent(t *testing.T) {
 	w := newTableWorld(t)
 	s, org, plan := w.s, w.org.Slug, w.plan.Slug
 	if got := w.places(t, org, plan); got != "" {
-		t.Fatalf("a new plan has no overrides, got %q", got)
+		t.Fatalf("new events have no places, got %q", got)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, ptr(2)); err != nil {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev2.ID, w.camera.ID, ptr(0)); err != nil {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev2.ID, w.camera.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("%d/%d=2 %d/%d=0", w.ev.ID, w.sound.ID, w.ev2.ID, w.camera.ID)
+	want := fmt.Sprintf("%d/%d=2 %d/%d=1", w.ev.ID, w.sound.ID, w.ev2.ID, w.camera.ID)
 	if got := w.places(t, org, plan); got != want {
 		t.Fatalf("places: got %q, want %q", got, want)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, ptr(2)); !errors.Is(err, ErrInvalid) {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 2); !errors.Is(err, ErrInvalid) {
 		t.Errorf("the same places again: want nothing to change, got %v", err)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, ptr(3)); err != nil {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 3); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, nil); err != nil {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, nil); !errors.Is(err, ErrInvalid) {
-		t.Errorf("a reset without an override: want nothing to change, got %v", err)
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 0); !errors.Is(err, ErrInvalid) {
+		t.Errorf("0 where the task is not needed: want nothing to change, got %v", err)
 	}
-	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=0", w.ev2.ID, w.camera.ID) {
-		t.Errorf("after the reset: %q", got)
+	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=1", w.ev2.ID, w.camera.ID) {
+		t.Errorf("0 takes the task off the event: %q", got)
 	}
 	for _, n := range []int{-1, maxSlots + 1} {
 		var ie *Coded
-		if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, ptr(n)); !errors.As(err, &ie) || ie.Code != "places_invalid" {
+		if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, n); !errors.As(err, &ie) || ie.Code != "places_invalid" {
 			t.Errorf("places %d: want places_invalid, got %v", n, err)
 		}
 	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, ptr(maxSlots)); err != nil {
+	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, maxSlots); err != nil {
 		t.Errorf("the most places: %v", err)
+	}
+	if _, err := s.DB().Exec(`UPDATE event_task SET slots = 0`); err == nil || !strings.Contains(err.Error(), "CHECK") {
+		t.Errorf("0 places is no row, also in the database: %v", err)
 	}
 }
 
@@ -130,14 +126,14 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 		"foreign task through its own org": {w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, w.sound.ID},
 		"unknown plan":                     {org, "nope", w.ev.ID, w.sound.ID},
 	} {
-		if err := s.SetEventPlaces(ctx, c.org, c.plan, c.event, c.task, ptr(2)); !errors.Is(err, ErrNotFound) {
+		if err := s.SetEventPlaces(ctx, c.org, c.plan, c.event, c.task, 2); !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: want not found, got %v", name, err)
 		}
 	}
-	if err := s.SetEventPlaces(ctx, org, w.other.Slug, w.otherEv.ID, w.sound.ID, ptr(2)); err != nil {
+	if err := s.SetEventPlaces(ctx, org, w.other.Slug, w.otherEv.ID, w.sound.ID, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetEventPlaces(ctx, w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, w.foreignTask.ID, ptr(3)); err != nil {
+	if err := s.SetEventPlaces(ctx, w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, w.foreignTask.ID, 3); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.places(t, org, w.plan.Slug); got != "" {
@@ -162,7 +158,7 @@ func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, c := range []struct{ ev, task int64 }{{w.ev.ID, w.sound.ID}, {w.ev2.ID, w.sound.ID}, {w.ev2.ID, extra.ID}} {
-		if err := s.SetEventPlaces(ctx, org, plan, c.ev, c.task, ptr(2)); err != nil {
+		if err := s.SetEventPlaces(ctx, org, plan, c.ev, c.task, 2); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -177,7 +173,7 @@ func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
 	}
 }
 
-func TestInfoRowsOfAPlan(t *testing.T) {
+func TestDetailsRowsOfAPlan(t *testing.T) {
 	w := newTableWorld(t)
 	s, org, plan := w.s, w.org.Slug, w.plan.Slug
 	theme, err := s.AddField(ctx, org, plan, "  Theme ")
@@ -231,7 +227,7 @@ func TestInfoRowsOfAPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Theme} {%d Speaker}]", theme.ID, speaker.ID) ||
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Theme 0} {%d Speaker 1}]", theme.ID, speaker.ID) ||
 		fmt.Sprint(got.Values) != fmt.Sprintf("[{%d %d Light} {%d %d Guest}]", w.ev.ID, theme.ID, w.ev.ID, speaker.ID) {
 		t.Errorf("list: %+v", got)
 	}
@@ -250,7 +246,7 @@ func TestInfoRowsOfAPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ = s.ListFields(ctx, org, plan)
-	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Speaker}]", speaker.ID) || len(got.Values) != 1 || got.Values[0].FieldID != speaker.ID {
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Speaker 0}]", speaker.ID) || len(got.Values) != 1 || got.Values[0].FieldID != speaker.ID {
 		t.Errorf("after deleting a row its values must be gone: %+v", got)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM event_field WHERE field_id = ?`, theme.ID); n != 0 {
@@ -264,7 +260,54 @@ func TestInfoRowsOfAPlan(t *testing.T) {
 	}
 }
 
-func TestAPlanHasAtMostSoManyInfoRows(t *testing.T) {
+func TestMovingADetailsRow(t *testing.T) {
+	w := newTableWorld(t)
+	s, org, plan := w.s, w.org.Slug, w.plan.Slug
+	var ids []int64
+	for _, n := range []string{"Note", "Theme", "Speaker"} {
+		f, err := s.AddField(ctx, org, plan, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, f.ID)
+	}
+	order := func() string {
+		t.Helper()
+		got, err := s.ListFields(ctx, org, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, f := range got.Fields {
+			out = append(out, fmt.Sprintf("%s:%d", f.Name, f.Position))
+		}
+		return strings.Join(out, " ")
+	}
+	if err := s.MoveField(ctx, org, plan, ids[2], 0); err != nil || order() != "Speaker:0 Note:1 Theme:2" {
+		t.Errorf("to the top: %s %v", order(), err)
+	}
+	if err := s.MoveField(ctx, org, plan, ids[2], 99); err != nil || order() != "Note:0 Theme:1 Speaker:2" {
+		t.Errorf("past the end is the bottom: %s %v", order(), err)
+	}
+	if err := s.MoveField(ctx, org, plan, ids[0], 1); err != nil || order() != "Theme:0 Note:1 Speaker:2" {
+		t.Errorf("one down: %s %v", order(), err)
+	}
+	if err := s.DeleteField(ctx, org, plan, ids[1]); err != nil || order() != "Note:0 Speaker:1" {
+		t.Errorf("deleting closes the gap: %s %v", order(), err)
+	}
+	if f, err := s.AddField(ctx, org, plan, "Theme"); err != nil || f.Position != 2 || order() != "Note:0 Speaker:1 Theme:2" {
+		t.Errorf("a new row goes to the bottom: %+v %s %v", f, order(), err)
+	}
+	if err := s.MoveField(ctx, org, plan, ids[0], -1); !codeIs(err, "position_invalid") {
+		t.Errorf("a negative position: %v", err)
+	}
+	away, _ := s.AddField(ctx, org, w.other.Slug, "Away")
+	if err := s.MoveField(ctx, org, plan, away.ID, 0); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a row of another plan: %v", err)
+	}
+}
+
+func TestAPlanHasAtMostSoManyDetailsRows(t *testing.T) {
 	w := newTableWorld(t)
 	for i := range maxFieldsPerPlan {
 		if _, err := w.s.AddField(ctx, w.org.Slug, w.plan.Slug, fmt.Sprintf("Row %d", i)); err != nil {
@@ -280,7 +323,7 @@ func TestAPlanHasAtMostSoManyInfoRows(t *testing.T) {
 	}
 }
 
-func TestInfoRowsStayInTheirPlanAndOrganisation(t *testing.T) {
+func TestDetailsRowsStayInTheirPlanAndOrganisation(t *testing.T) {
 	w := newTableWorld(t)
 	s, org := w.s, w.org.Slug
 	mine, err := s.AddField(ctx, org, w.plan.Slug, "Theme")

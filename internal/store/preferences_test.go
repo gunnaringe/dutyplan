@@ -27,9 +27,8 @@ func newPrefEnv(t *testing.T) prefEnv {
 	e.camera, _ = s.CreateTask(ctx, e.org.Slug, "Camera", true)
 	e.singing, _ = s.CreateTask(ctx, e.org.Slug, "Singing", false)
 	e.plan, _ = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026", "")
-	dt, _ := s.CreateDayType(ctx, e.org.Slug, "Service")
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23"} {
-		ev, err := s.AddEvent(ctx, e.org.Slug, e.plan.Slug, d, dt.ID, "")
+		ev, err := s.AddEvent(ctx, e.org.Slug, e.plan.Slug, d)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,8 +136,7 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
 	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B", true)
 	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
-	dtB, _ := a.s.CreateDayType(ctx, b.Slug, "Type B")
-	evB, _ := a.s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-09", dtB.ID, "")
+	evB, _ := a.s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-09")
 
 	// A's person, task and event through B's path, and the other way round
 	if _, err := a.s.GetMe(ctx, b.Slug, planB.Slug, a.person.ID); !errors.Is(err, ErrNotFound) {

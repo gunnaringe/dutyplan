@@ -23,7 +23,6 @@ type Params struct {
 
 func tid(id int64) string { return "t" + strconv.FormatInt(id, 10) }
 func eid(id int64) string { return "e" + strconv.FormatInt(id, 10) }
-func did(id int64) string { return "d" + strconv.FormatInt(id, 10) }
 func pid(id int64) string { return "p" + strconv.FormatInt(id, 10) }
 func gid(id int64) string { return "g" + strconv.FormatInt(id, 10) }
 
@@ -120,26 +119,19 @@ func weightParams(weights map[string]any) map[string]any {
 // Snapshot keeps the names as they were when the run started, so the result reads correctly even if something is
 // renamed or removed later.
 type Snapshot struct {
-	Events []SnapEvent             `json:"events"`
-	Tasks  []SnapTask              `json:"tasks"` // every task of the organisation (names for the view)
-	People []SnapPerson            `json:"people"`
-	Slots  map[int64]map[int64]int `json:"slots"` // day type -> task -> places
-	// EventSlots are the places of the events whose places differ from their day type: event -> task -> places. Runs made
-	// before places per event existed have none, and their events use the day type's.
-	EventSlots map[int64]map[int64]int `json:"event_slots,omitempty"`
-	Groups     []SnapGroup             `json:"groups,omitempty"`
+	Events []SnapEvent  `json:"events"`
+	Tasks  []SnapTask   `json:"tasks"` // every task of the organisation (names for the view)
+	People []SnapPerson `json:"people"`
+	// Places are the places of the planner's tasks on each event: event -> task -> places.
+	Places map[int64]map[int64]int `json:"places"`
+	Groups []SnapGroup             `json:"groups,omitempty"`
 	// Notes are things the planner was not told about, such as a manual cell for a person who is no longer active. They are
 	// stored as a code and arguments and written in the page's language when the run is shown.
 	Notes []Note `json:"notes,omitempty"`
 }
 
-// SlotsFor is the places of one event of the run: its own where they differ from the day type, else the day type's.
-func (s Snapshot) SlotsFor(e SnapEvent) map[int64]int {
-	if own, ok := s.EventSlots[e.ID]; ok {
-		return own
-	}
-	return s.Slots[e.DayTypeID]
-}
+// SlotsFor is the places of the planner's tasks on one event of the run.
+func (s Snapshot) SlotsFor(e SnapEvent) map[int64]int { return s.Places[e.ID] }
 
 // Note is one such thing: a code (see the catalogs, «note.<code>») and what goes into the sentence.
 type Note struct {
@@ -155,11 +147,8 @@ type SnapGroup struct {
 }
 
 type SnapEvent struct {
-	ID        int64  `json:"id"`
-	Date      string `json:"date"`
-	DayTypeID int64  `json:"day_type_id"`
-	DayType   string `json:"day_type"`
-	Note      string `json:"note"`
+	ID   int64  `json:"id"`
+	Date string `json:"date"`
 	// The time of day and the description as they were when the run was made; the view shows the current ones while the event exists.
 	StartTime   string `json:"start_time,omitempty"`
 	EndTime     string `json:"end_time,omitempty"`
@@ -175,46 +164,15 @@ type SnapPerson struct {
 	Name string `json:"name"`
 }
 
-// eventSlots is the places of one event, every task: the day type's, changed by what was set for the event itself (0 takes
-// the task off the event). Tasks that no longer exist are left out.
-func eventSlots(d store.PlanningData, dayType map[int64]map[int64]int, known map[int64]bool, e store.Event) map[int64]int {
+// eventSlots is the places of one event, every task that still exists.
+func eventSlots(d store.PlanningData, known map[int64]bool, e store.Event) map[int64]int {
 	out := map[int64]int{}
-	for task, n := range dayType[e.DayTypeID] {
-		out[task] = n
-	}
 	for task, n := range d.EventPlaces[e.ID] {
-		switch {
-		case !known[task]:
-		case n == 0:
-			delete(out, task)
-		default:
+		if known[task] && n > 0 {
 			out[task] = n
 		}
 	}
 	return out
-}
-
-func dayTypeSlots(d store.PlanningData) map[int64]map[int64]int {
-	out := map[int64]map[int64]int{}
-	for _, dt := range d.DayTypes {
-		out[dt.ID] = map[int64]int{}
-		for _, t := range dt.Tasks {
-			out[dt.ID][t.TaskID] = t.Slots
-		}
-	}
-	return out
-}
-
-func sameSlots(a, b map[int64]int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if w, ok := b[k]; !ok || w != v {
-			return false
-		}
-	}
-	return true
 }
 
 // HasWork reports whether there is anything to plan: an event with a place for a task the planner assigns.
@@ -223,9 +181,8 @@ func HasWork(d store.PlanningData) bool {
 	for _, t := range d.Tasks {
 		planned[t.ID] = t.Planned
 	}
-	dayType := dayTypeSlots(d)
 	for _, e := range d.Events {
-		for task, n := range eventSlots(d, dayType, planned, e) {
+		for task, n := range eventSlots(d, planned, e) {
 			if planned[task] && n > 0 {
 				return true
 			}
@@ -238,7 +195,7 @@ func HasWork(d store.PlanningData) bool {
 // when the data changes afterwards, a stored run is out of date. Output is deterministic.
 func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap Snapshot, err error) {
 	var in solverInput
-	snap = Snapshot{Events: []SnapEvent{}, Tasks: []SnapTask{}, People: []SnapPerson{}, Slots: map[int64]map[int64]int{}}
+	snap = Snapshot{Events: []SnapEvent{}, Tasks: []SnapTask{}, People: []SnapPerson{}, Places: map[int64]map[int64]int{}}
 	taskIDs := map[int64]bool{}
 	for _, t := range d.Tasks {
 		taskIDs[t.ID] = true
@@ -254,40 +211,22 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 	for _, t := range d.Tasks {
 		planned[t.ID] = t.Planned
 	}
-	for _, dt := range d.DayTypes {
-		in.DayTypeTasks[did(dt.ID)] = map[string]int{}
-		snap.Slots[dt.ID] = map[int64]int{}
-		for _, t := range dt.Tasks {
-			in.DayTypeTasks[did(dt.ID)][tid(t.TaskID)] = t.Slots
-			if planned[t.TaskID] {
-				snap.Slots[dt.ID][t.TaskID] = t.Slots
-			}
-		}
-	}
-	// An event whose places differ from its day type gets a day type of its own in the input (the planner and the checker
-	// know only day types). Where they do not differ, the input is what it was before places per event existed.
-	dayType := dayTypeSlots(d)
+	// The planner and the checker know places only by «day type», so every event is a type of its own.
 	for _, e := range d.Events {
-		typ := did(e.DayTypeID)
-		if own := eventSlots(d, dayType, taskIDs, e); !sameSlots(own, dayType[e.DayTypeID]) {
-			typ = did(e.DayTypeID) + "-" + eid(e.ID)
-			in.DayTypeTasks[typ] = map[string]int{}
-			if snap.EventSlots == nil {
-				snap.EventSlots = map[int64]map[int64]int{}
-			}
-			snap.EventSlots[e.ID] = map[int64]int{}
-			for task, n := range own {
-				in.DayTypeTasks[typ][tid(task)] = n
-				if planned[task] {
-					snap.EventSlots[e.ID][task] = n
-				}
+		typ := eid(e.ID)
+		in.DayTypeTasks[typ] = map[string]int{}
+		snap.Places[e.ID] = map[int64]int{}
+		for task, n := range eventSlots(d, taskIDs, e) {
+			in.DayTypeTasks[typ][tid(task)] = n
+			if planned[task] {
+				snap.Places[e.ID][task] = n
 			}
 		}
 		in.Dates = append(in.Dates, struct {
 			ID   string `json:"id"`
 			Type string `json:"type"`
 		}{eid(e.ID), typ})
-		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.DayTypeID, e.DayType, e.Note, e.StartTime, e.EndTime, e.Description})
+		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.StartTime, e.EndTime, e.Description})
 	}
 	in.PersonTasks = map[string]map[string]string{}
 	in.PersonDates = map[string]map[string]string{}

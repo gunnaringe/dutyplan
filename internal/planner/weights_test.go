@@ -119,14 +119,10 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 	must(err)
 	sound, err := st.CreateTask(ctx, org.Slug, "Sound", true)
 	must(err)
-	dt, err := st.CreateDayType(ctx, org.Slug, "Service")
-	must(err)
-	_, err = st.SetDayTypeTasks(ctx, org.Slug, dt.ID, []store.DayTypeTask{{TaskID: camera.ID, Slots: 1}, {TaskID: sound.ID, Slots: 1}})
-	must(err)
 	plan, err := st.CreatePlan(ctx, org.Slug, "Autumn 2026", "")
 	must(err)
 	for _, d := range []string{"2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"} {
-		_, err = st.AddEvent(ctx, org.Slug, plan.Slug, d, dt.ID, "")
+		_, err = st.AddEvents(ctx, org.Slug, plan.Slug, store.NewEvents{Date: d, Places: map[int64]int{camera.ID: 1, sound.ID: 1}})
 		must(err)
 	}
 	for name, tasks := range map[string][]store.Task{"a": {camera}, "b": {camera, sound}, "c": {sound}} {

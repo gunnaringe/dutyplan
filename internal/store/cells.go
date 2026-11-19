@@ -11,8 +11,9 @@ import (
 
 const maxEventsPerWrite = 400
 
-// ManualCell is a place set by hand: a person, a group or a text for one task on one event. It is locked: the planner
-// never moves it, and it counts as a filled place (Fills places for a group or a text).
+// ManualCell is a fixed place: a person, a group or a text for one task on one event. The planner never moves it, and it
+// counts as a filled place (Fills places for a group or a text). Locked tells how it came about: false = set by hand,
+// true = one of the planner's names that was locked so the next run keeps it. The planner treats both the same.
 type ManualCell struct {
 	ID       int64  `json:"id"`
 	EventID  int64  `json:"event_id"`
@@ -21,6 +22,7 @@ type ManualCell struct {
 	GroupID  *int64 `json:"group_id,omitempty"`
 	Label    string `json:"label,omitempty"`
 	Fills    int    `json:"fills"`
+	Locked   bool   `json:"locked"`
 }
 
 // NewCell is a request for manual cells: the same thing on every listed event. Exactly one of PersonID, GroupID, Label.
@@ -30,7 +32,8 @@ type NewCell struct {
 	PersonID int64   `json:"person"`
 	GroupID  int64   `json:"group"`
 	Label    string  `json:"label"`
-	Fills    int     `json:"fills"` // places a group or a text fills (default 1); a person always fills one
+	Fills    int     `json:"fills"`  // places a group or a text fills (default 1); a person always fills one
+	Locked   bool    `json:"locked"` // a planner's name that is locked (a person or a group, never a text)
 }
 
 // Pool is a selection: only these people and groups can be chosen for the task on the event.
@@ -73,14 +76,14 @@ func eventsOfPlan(ctx context.Context, q dbq, oid, pid int64, ids []int64) ([]st
 
 func listCells(ctx context.Context, q dbq, oid, pid int64) ([]ManualCell, error) {
 	out := []ManualCell{}
-	err := scanAll(ctx, q, `SELECT c.id, c.event_id, c.task_id, c.person_id, c.group_id, c.label, c.fills
+	err := scanAll(ctx, q, `SELECT c.id, c.event_id, c.task_id, c.person_id, c.group_id, c.label, c.fills, c.locked
 		FROM manual_cell c JOIN event e ON e.id = c.event_id AND e.org_id = c.org_id
 		WHERE c.org_id = ? AND c.plan_id = ? ORDER BY e.date, e.id, c.task_id, c.id`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			var c ManualCell
 			var person, group sql.NullInt64
 			var label sql.NullString
-			if err := r.Scan(&c.ID, &c.EventID, &c.TaskID, &person, &group, &label, &c.Fills); err != nil {
+			if err := r.Scan(&c.ID, &c.EventID, &c.TaskID, &person, &group, &label, &c.Fills, &c.Locked); err != nil {
 				return err
 			}
 			if person.Valid {
@@ -127,6 +130,9 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCe
 	}
 	if kinds != 1 {
 		return nil, 0, Invalid("cell_kind", nil, "give exactly one of person, group or text")
+	}
+	if in.Locked && label != "" {
+		return nil, 0, Invalid("lock_text", nil, "only a person or a group can be locked; a text is set by hand")
 	}
 	fills := in.Fills
 	if fills == 0 {
@@ -189,8 +195,8 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCe
 			text = label
 		}
 		for _, ev := range events {
-			res, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, oid, pid, ev, in.TaskID, person, group, text, fills, s.stamp())
+			res, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, locked, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, oid, pid, ev, in.TaskID, person, group, text, fills, in.Locked, s.stamp())
 			if isUnique(err) {
 				skipped++
 				continue
@@ -198,7 +204,7 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCe
 			if err != nil {
 				return err
 			}
-			c := ManualCell{EventID: ev, TaskID: in.TaskID, Label: label, Fills: fills}
+			c := ManualCell{EventID: ev, TaskID: in.TaskID, Label: label, Fills: fills, Locked: in.Locked}
 			c.ID, _ = res.LastInsertId()
 			if in.PersonID != 0 {
 				c.PersonID = &in.PersonID

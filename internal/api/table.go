@@ -7,8 +7,8 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// tableRoutes: what the table on the plan page needs beyond events and people. Places per event (instead of the day
-// type's), the plan's info rows and their values, everyone's answers in one call, and one task against all the others.
+// tableRoutes: what the table on the plan page needs beyond events and people. Places per event, the plan's details rows
+// and their values, everyone's answers in one call, and one task against all the others.
 func (s *server) tableRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/places", s.listPlaces)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}", s.setPlaces)
@@ -17,6 +17,7 @@ func (s *server) tableRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/fields", s.listFields)
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/fields", s.addField)
 	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}/fields/{id}", s.renameField)
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position", s.moveField)
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/fields/{id}", s.deleteField)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}", s.setFieldValue)
 
@@ -62,7 +63,7 @@ func (s *server) setPlaces(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, s.log, store.Invalid("places_invalid", map[string]any{"max": 50}, "send the number of places in slots"))
 		return
 	}
-	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, b.Slots), s)
+	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, *b.Slots), s)
 }
 
 func (s *server) resetPlaces(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,7 @@ func (s *server) resetPlaces(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, nil), s)
+	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, 0), s)
 }
 
 func (s *server) listFields(w http.ResponseWriter, r *http.Request) {
@@ -110,6 +111,24 @@ func (s *server) renameField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, f)
+}
+
+func (s *server) moveField(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.idParam(w, r)
+	if !ok {
+		return
+	}
+	var b struct {
+		Position *int `json:"position"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	if b.Position == nil {
+		writeErr(w, s.log, store.Invalid("position_invalid", nil, "send the new position in position"))
+		return
+	}
+	noContent(w, s.st.MoveField(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, *b.Position), s)
 }
 
 func (s *server) deleteField(w http.ResponseWriter, r *http.Request) {

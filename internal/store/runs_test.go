@@ -22,8 +22,8 @@ func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Tasks) != 3 || len(d.Events) != 3 || len(d.People) != 1 || len(d.Combinations) != 1 || len(d.DayTypes) != 1 {
-		t.Fatalf("A's data: %d tasks %d events %d people %d combos %d day types", len(d.Tasks), len(d.Events), len(d.People), len(d.Combinations), len(d.DayTypes))
+	if len(d.Tasks) != 3 || len(d.Events) != 3 || len(d.People) != 1 || len(d.Combinations) != 1 {
+		t.Fatalf("A's data: %d tasks %d events %d people %d combos", len(d.Tasks), len(d.Events), len(d.People), len(d.Combinations))
 	}
 	if d.PersonTasks[a.person.ID][a.sound.ID] != "good" || d.PersonEvents[a.person.ID][a.ev[0].ID] != "never" {
 		t.Errorf("answers missing: %v %v", d.PersonTasks, d.PersonEvents)

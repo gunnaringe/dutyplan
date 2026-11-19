@@ -42,61 +42,6 @@ func TestTasksCrud(t *testing.T) {
 	}
 }
 
-func TestDayTypeTasksAndDeletesAreProtected(t *testing.T) {
-	s := open(t)
-	o := mustOrg(t, s, "Club")
-	sound, _ := s.CreateTask(ctx, o.Slug, "Sound", true)
-	coffee, _ := s.CreateTask(ctx, o.Slug, "Coffee", true)
-	dt, err := s.CreateDayType(ctx, o.Slug, "Service")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.CreateDayType(ctx, o.Slug, "Service"); !errors.Is(err, ErrConflict) {
-		t.Errorf("duplicate day type: %v", err)
-	}
-	for name, tasks := range map[string][]DayTypeTask{
-		"zero slots": {{sound.ID, 0}}, "too many": {{sound.ID, 51}}, "twice": {{sound.ID, 1}, {sound.ID, 2}},
-	} {
-		if _, err := s.SetDayTypeTasks(ctx, o.Slug, dt.ID, tasks); !errors.Is(err, ErrInvalid) {
-			t.Errorf("%s: want ErrInvalid, got %v", name, err)
-		}
-	}
-	if _, err := s.SetDayTypeTasks(ctx, o.Slug, dt.ID, []DayTypeTask{{999, 1}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("unknown task: %v", err)
-	}
-	got, err := s.SetDayTypeTasks(ctx, o.Slug, dt.ID, []DayTypeTask{{sound.ID, 1}, {coffee.ID, 3}})
-	if err != nil || len(got.Tasks) != 2 {
-		t.Fatalf("set: %+v %v", got, err)
-	}
-	// replacing the list replaces, not appends
-	if got, _ = s.SetDayTypeTasks(ctx, o.Slug, dt.ID, []DayTypeTask{{coffee.ID, 2}}); len(got.Tasks) != 1 || got.Tasks[0].Slots != 2 {
-		t.Errorf("replace: %+v", got)
-	}
-
-	if err := s.DeleteTask(ctx, o.Slug, coffee.ID); !errors.Is(err, ErrConflict) {
-		t.Errorf("task used by a day type must not be deleted, got %v", err)
-	}
-	plan, _ := s.CreatePlan(ctx, o.Slug, "Autumn 2026", "")
-	if _, err := s.AddEvent(ctx, o.Slug, plan.Slug, "2026-08-09", dt.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteDayType(ctx, o.Slug, dt.ID); !errors.Is(err, ErrConflict) {
-		t.Errorf("day type used by a date must not be deleted, got %v", err)
-	}
-	if tasks, _ := s.ListTasks(ctx, o.Slug); len(tasks) != 2 {
-		t.Errorf("task still there: %v", tasks)
-	}
-	// once nothing uses them, both can go
-	dates, _ := s.ListEvents(ctx, o.Slug, plan.Slug)
-	s.DeleteEvent(ctx, o.Slug, plan.Slug, dates[0].ID)
-	if err := s.DeleteDayType(ctx, o.Slug, dt.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteTask(ctx, o.Slug, coffee.ID); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestCombinations(t *testing.T) {
 	s := open(t)
 	o := mustOrg(t, s, "Club")
@@ -142,21 +87,14 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
 	taskA, _ := s.CreateTask(ctx, a.Slug, "Sound A", true)
 	taskB, _ := s.CreateTask(ctx, b.Slug, "Sound B", true)
-	dtA, _ := s.CreateDayType(ctx, a.Slug, "Type A")
-	dtB, _ := s.CreateDayType(ctx, b.Slug, "Type B")
 	planB, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	evB, _ := s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-02")
 
-	if _, err := s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-09", dtA.ID, ""); !errors.Is(err, ErrNotFound) {
-		t.Errorf("A's day type on B's date: want ErrNotFound, got %v", err)
+	if _, err := s.AddEvents(ctx, b.Slug, planB.Slug, NewEvents{Date: "2026-08-09", Places: map[int64]int{taskA.ID: 1}}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's task on B's new event: want ErrNotFound, got %v", err)
 	}
-	if _, _, err := s.AddEventsBulk(ctx, b.Slug, planB.Slug, "2026-08-01", "2026-08-31", []int{7}, dtA.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("A's day type in a bulk add: %v", err)
-	}
-	if _, err := s.SetDayTypeTasks(ctx, b.Slug, dtB.ID, []DayTypeTask{{taskA.ID, 1}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("A's task in B's day type: %v", err)
-	}
-	if _, err := s.SetDayTypeTasks(ctx, b.Slug, dtA.ID, []DayTypeTask{{taskB.ID, 1}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("B setting tasks on A's day type: %v", err)
+	if err := s.SetEventPlaces(ctx, b.Slug, planB.Slug, evB.ID, taskA.ID, 1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("A's task on B's event: %v", err)
 	}
 	if err := s.SetCombination(ctx, b.Slug, taskA.ID, taskB.ID, "cannot"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a combination spanning organisations: %v", err)
@@ -167,29 +105,18 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	if err := s.DeleteTask(ctx, b.Slug, taskA.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B deletes A's task: %v", err)
 	}
-	if err := s.DeleteDayType(ctx, b.Slug, dtA.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("B deletes A's day type: %v", err)
-	}
 
 	// Lists never show the other organisation's setup.
 	if tasks, _ := s.ListTasks(ctx, b.Slug); len(tasks) != 1 || tasks[0].ID != taskB.ID {
 		t.Errorf("B's tasks: %v", tasks)
 	}
-	if dts, _ := s.ListDayTypes(ctx, b.Slug); len(dts) != 1 || dts[0].ID != dtB.ID {
-		t.Errorf("B's day types: %v", dts)
+	if places, _ := s.ListEventPlaces(ctx, b.Slug, planB.Slug); len(places) != 0 {
+		t.Errorf("B's event got A's task: %+v", places)
 	}
 
-	// Each organisation's day types carry only its own tasks, and its combinations are its own.
-	s.SetDayTypeTasks(ctx, a.Slug, dtA.ID, []DayTypeTask{{taskA.ID, 2}})
-	s.SetDayTypeTasks(ctx, b.Slug, dtB.ID, []DayTypeTask{{taskB.ID, 3}})
+	// Each organisation's combinations are its own.
 	otherA, _ := s.CreateTask(ctx, a.Slug, "Camera A", true)
 	s.SetCombination(ctx, a.Slug, taskA.ID, otherA.ID, "cannot")
-	if dts, _ := s.ListDayTypes(ctx, b.Slug); len(dts) != 1 || len(dts[0].Tasks) != 1 || dts[0].Tasks[0].TaskID != taskB.ID || dts[0].Tasks[0].Slots != 3 {
-		t.Errorf("B's day type must hold only B's task: %+v", dts)
-	}
-	if dts, _ := s.ListDayTypes(ctx, a.Slug); len(dts) != 1 || len(dts[0].Tasks) != 1 || dts[0].Tasks[0].TaskID != taskA.ID {
-		t.Errorf("A's day type must hold only A's task: %+v", dts)
-	}
 	if combos, _ := s.ListCombinations(ctx, b.Slug); len(combos) != 0 {
 		t.Errorf("B sees A's combinations: %+v", combos)
 	}
@@ -204,15 +131,14 @@ func TestCrossOrganisationReferences(t *testing.T) {
 		name, stmt string
 		args       []any
 	}{
-		{"date with A's day type", `INSERT INTO event (org_id, plan_id, date, day_type_id, created_at) VALUES (?, ?, '2026-08-09', ?, 'x')`, []any{orgB, planBID, dtA.ID}},
-		{"B's day type holding A's task", `INSERT INTO day_type_task (org_id, day_type_id, task_id, slots) VALUES (?, ?, ?, 1)`, []any{orgB, dtB.ID, taskA.ID}},
+		{"an event in A for B's plan", `INSERT INTO event (org_id, plan_id, date, created_at) VALUES (?, ?, '2026-08-09', 'x')`, []any{orgA, planBID}},
+		{"B's event holding A's task", `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots) VALUES (?, ?, ?, ?, 1)`, []any{orgB, planBID, evB.ID, taskA.ID}},
 		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'preferred')`, []any{orgB, taskA.ID, taskB.ID}},
 	} {
 		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
 			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)
 		}
 	}
-	_ = orgA
 }
 
 func ptr[T any](v T) *T { return &v }

@@ -23,8 +23,6 @@ func cellWorld(t *testing.T, s *Store, orgName string) cellEnv {
 			t.Fatal(err)
 		}
 	}
-	dt, err := s.CreateDayType(ctx, e.org.Slug, "Service")
-	must(err)
 	e.plan1, err = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026", "")
 	must(err)
 	e.plan2, err = s.CreatePlan(ctx, e.org.Slug, "Spring 2027", "")
@@ -33,7 +31,7 @@ func cellWorld(t *testing.T, s *Store, orgName string) cellEnv {
 		plan Plan
 		date string
 	}{{e.plan1, "2026-09-06"}, {e.plan1, "2026-09-13"}, {e.plan2, "2027-02-07"}} {
-		ev, err := s.AddEvent(ctx, e.org.Slug, c.plan.Slug, c.date, dt.ID, "")
+		ev, err := s.AddEvent(ctx, e.org.Slug, c.plan.Slug, c.date)
 		must(err)
 		e.ev = append(e.ev, ev)
 	}

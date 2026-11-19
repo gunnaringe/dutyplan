@@ -56,7 +56,7 @@ func TestEventsOnTheSameDateAreShownInTimeOrderInThePlanAndInMine(t *testing.T) 
 	w := newWorld(t, "Club")
 	// a second event on the first date, made later but earlier in the day, and the first one gets a later time
 	late := w.events[0]
-	early, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date, late.DayTypeID, "early bird")
+	early, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestEventsOnTheSameDateAreShownInTimeOrderInThePlanAndInMine(t *testing.T) 
 	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, early.ID, store.EventPatch{StartTime: ptr("08:30"), EndTime: ptr("09:00")}); err != nil {
 		t.Fatal(err)
 	}
-	plain, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date, late.DayTypeID, "no time yet") // made last, no time: shown last
+	plain, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date) // made last, no time: shown last
 	if err != nil {
 		t.Fatal(err)
 	}

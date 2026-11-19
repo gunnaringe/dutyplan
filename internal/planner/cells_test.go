@@ -161,7 +161,8 @@ func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
 	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
-	otherEv, _ := a.st.AddEvent(ctx, a.org.Slug, other.Slug, "2027-02-07", a.dt.ID, "")
+	otherEvs, _ := a.st.AddEvents(ctx, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07", Places: map[int64]int{a.sound.ID: 1}})
+	otherEv := otherEvs[0]
 	a.cell(t, a.events[0], a.sound, store.NewCell{PersonID: a.people["Aslaug"].ID})
 	b.cell(t, b.events[0], b.sound, store.NewCell{PersonID: b.people["Aslaug"].ID})
 	b.pool(t, b.events[0], b.sound, []string{"Birger"})

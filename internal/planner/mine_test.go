@@ -51,7 +51,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		}
 	}
 	m := mine("Aslaug")
-	if !m.HasPlan || m.Run == nil || m.Run.Stale || m.Person.Name != "Aslaug" || m.Assignments[0].DayType != "Service" {
+	if !m.HasPlan || m.Run == nil || m.Run.Stale || m.Person.Name != "Aslaug" {
 		t.Errorf("%+v", m)
 	}
 	// «a text» is nobody's assignment, and a person with nothing gets a list, not null

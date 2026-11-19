@@ -17,7 +17,6 @@ type PlanPerson struct {
 // Everything is scoped by the organisation (and the plan for events and availability).
 type PlanningData struct {
 	Tasks        []Task
-	DayTypes     []DayType
 	Events       []Event
 	People       []PlanPerson
 	PersonTasks  map[int64]map[int64]string // person -> task -> level (a row means: takes part)
@@ -27,7 +26,7 @@ type PlanningData struct {
 	Cells        []ManualCell            // manual cells of the plan
 	Pools        []Pool                  // selections of the plan
 	Weights      map[string]any          // what the plan changed in the planner's weighting (the rest is the default)
-	EventPlaces  map[int64]map[int64]int // event -> task -> places, where the event differs from its day type (0 = not on it)
+	EventPlaces  map[int64]map[int64]int // event -> task -> places (a task without an entry is not needed on the event)
 }
 
 func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (PlanningData, error) {
@@ -56,13 +55,9 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		}); err != nil {
 		return d, err
 	}
-	if d.DayTypes, err = listDayTypes(ctx, tx, oid); err != nil {
-		return d, err
-	}
 	d.Events = []Event{}
 	// In the order of date and creation, not time of day: the planner's input (and so a run's hash) must not change when a time is set.
 	if err := scanAll(ctx, tx, `SELECT `+eventCols+` FROM event d
-		JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
 		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY d.date, d.id`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			e, err := scanEvent(r)

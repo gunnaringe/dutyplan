@@ -4,60 +4,48 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
 
-// Limits for adding events in bulk, so a typo cannot create a flood of rows.
+// Limits for adding events several at a time (every week until a date, or a copy to several dates), so a typo cannot
+// create a flood of rows.
 const (
-	maxBulkSpanDays  = 366
-	maxEventsPerCall = 400
+	maxRepeatDays    = 366
+	maxEventsPerCall = 200
 )
 
 // Limits for the free text of an event.
 const maxDescriptionRunes = 2000
 
-// Event is one occasion in a plan: a date and a day type (and a note, a time of day and a description). It is the unit that
-// people are available for.
+// Event is one occasion in a plan: a date, and optionally a time of day and a description. It is the unit that people are
+// available for. What else is said about it is in the plan's details rows (event_field), and its places in event_task.
 type Event struct {
 	ID          int64  `json:"id"`
-	Date        string `json:"date"` // YYYY-MM-DD
-	DayTypeID   int64  `json:"day_type_id"`
-	DayType     string `json:"day_type"`
-	Note        string `json:"note"`        // a short line shown next to the date
+	Date        string `json:"date"`        // YYYY-MM-DD
 	StartTime   string `json:"start_time"`  // HH:MM, 24-hour, or "" when not set
 	EndTime     string `json:"end_time"`    // HH:MM after StartTime, or "" (never set without a start time)
 	Description string `json:"description"` // longer text, several lines allowed
 }
 
-// eventCols are the columns of an Event for a query on «event d JOIN day_type t»; scanEvent reads them. eventOrder puts the
-// events of a date in time order, those with a start time first, the rest in the order they were created.
+// eventCols are the columns of an Event for a query on «event d»; scanEvent reads them. eventOrder puts the events of a date
+// in time order, those with a start time first, the rest in the order they were created.
 const (
-	eventCols  = `d.id, d.date, d.day_type_id, t.name, d.note, d.start_time, d.end_time, d.description`
+	eventCols  = `d.id, d.date, d.start_time, d.end_time, d.description`
 	eventOrder = `d.date, CASE WHEN d.start_time = '' THEN 1 ELSE 0 END, d.start_time, d.id`
 )
 
 func scanEvent(sc interface{ Scan(...any) error }) (Event, error) {
 	var e Event
-	err := sc.Scan(&e.ID, &e.Date, &e.DayTypeID, &e.DayType, &e.Note, &e.StartTime, &e.EndTime, &e.Description)
+	err := sc.Scan(&e.ID, &e.Date, &e.StartTime, &e.EndTime, &e.Description)
 	return e, err
 }
-
-// IsoWeekday numbers weekdays 1 = Monday ... 7 = Sunday (ISO 8601). It is computed here, in UTC, never in the browser.
-func IsoWeekday(t time.Time) int { return (int(t.Weekday())+6)%7 + 1 }
 
 func parseISODate(s string) (time.Time, bool) {
 	t, err := time.Parse("2006-01-02", s)
 	return t, err == nil && t.Format("2006-01-02") == s
-}
-
-func cleanNote(raw string) (string, error) {
-	n := strings.TrimSpace(raw)
-	if utf8.RuneCountInString(n) > 200 || !validText(n) {
-		return "", Invalid("note_too_long", nil, "note must be at most 200 printable characters")
-	}
-	return n, nil
 }
 
 // parseClock accepts "" (not set) or HH:MM on a 24-hour clock.
@@ -111,7 +99,7 @@ func (s *Store) ListEvents(ctx context.Context, orgSlug, planSlug string) ([]Eve
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+eventCols+`
-		FROM event d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		FROM event d
 		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY `+eventOrder, oid, pid)
 	if err != nil {
 		return nil, err
@@ -130,7 +118,7 @@ func (s *Store) ListEvents(ctx context.Context, orgSlug, planSlug string) ([]Eve
 
 func getEvent(ctx context.Context, q dbq, oid, pid, id int64) (Event, error) {
 	d, err := scanEvent(q.QueryRowContext(ctx, `SELECT `+eventCols+`
-		FROM event d JOIN day_type t ON t.id = d.day_type_id AND t.org_id = d.org_id
+		FROM event d
 		WHERE d.id = ? AND d.org_id = ? AND d.plan_id = ?`, id, oid, pid))
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, ErrNotFound
@@ -138,39 +126,96 @@ func getEvent(ctx context.Context, q dbq, oid, pid, id int64) (Event, error) {
 	return d, err
 }
 
-// NewEvent is what AddEventFull takes: a date and a day type, and optionally a note, a time of day and a description.
-type NewEvent struct {
-	Date        string
-	DayTypeID   int64
-	Note        string
-	StartTime   string
-	EndTime     string
-	Description string
-}
-
-// AddEvent adds an event with a note and no time of day.
-func (s *Store) AddEvent(ctx context.Context, orgSlug, planSlug, date string, dayTypeID int64, note string) (Event, error) {
-	return s.AddEventFull(ctx, orgSlug, planSlug, NewEvent{Date: date, DayTypeID: dayTypeID, Note: note})
-}
-
-func (s *Store) AddEventFull(ctx context.Context, orgSlug, planSlug string, in NewEvent) (Event, error) {
-	if _, ok := parseISODate(in.Date); !ok {
-		return Event{}, Invalid("date_invalid", nil, "date must be YYYY-MM-DD")
+// repeatWeekly gives every date in dates, and with until each of them again every 7 days up to and including until, in
+// order and without repeats. The dates must be YYYY-MM-DD, until on or after each of them and at most maxRepeatDays later.
+func repeatWeekly(dates []string, until string) ([]string, error) {
+	if len(dates) == 0 {
+		return nil, Invalid("no_dates", nil, "give at least one date")
 	}
-	note, err := cleanNote(in.Note)
+	var last time.Time
+	if until != "" {
+		u, ok := parseISODate(until)
+		if !ok {
+			return nil, Invalid("date_invalid", nil, "date must be YYYY-MM-DD")
+		}
+		last = u
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range dates {
+		day, ok := parseISODate(d)
+		if !ok {
+			return nil, Invalid("date_invalid", nil, "date must be YYYY-MM-DD")
+		}
+		if until == "" {
+			if !seen[d] {
+				seen[d] = true
+				out = append(out, d)
+			}
+			continue
+		}
+		if last.Before(day) {
+			return nil, Invalid("range_invalid", nil, "the last date must be on or after the first")
+		}
+		if last.Sub(day) > maxRepeatDays*24*time.Hour {
+			return nil, Invalid("range_too_long", map[string]any{"max": maxRepeatDays}, "the range can be at most %d days", maxRepeatDays)
+		}
+		for x := day; !x.After(last); x = x.AddDate(0, 0, 7) {
+			if k := x.Format("2006-01-02"); !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
+	}
+	if len(out) > maxEventsPerCall {
+		return nil, Invalid("too_many_dates", map[string]any{"max": maxEventsPerCall}, "at most %d dates at a time", maxEventsPerCall)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// NewEvents is what AddEvents takes: a date (and with Until the same weekday every week up to and including that date),
+// optionally a time of day and a description, and the places for the tasks the events need (task -> places).
+type NewEvents struct {
+	Date        string        `json:"date"`
+	Until       string        `json:"until"`
+	StartTime   string        `json:"start_time"`
+	EndTime     string        `json:"end_time"`
+	Description string        `json:"description"`
+	Places      map[int64]int `json:"places"`
+}
+
+// AddEvent adds one event on a date, with nothing else.
+func (s *Store) AddEvent(ctx context.Context, orgSlug, planSlug, date string) (Event, error) {
+	evs, err := s.AddEvents(ctx, orgSlug, planSlug, NewEvents{Date: date})
 	if err != nil {
 		return Event{}, err
+	}
+	return evs[0], nil
+}
+
+// AddEvents adds the events, all or nothing. Events are independent: a date may already have others.
+func (s *Store) AddEvents(ctx context.Context, orgSlug, planSlug string, in NewEvents) ([]Event, error) {
+	dates, err := repeatWeekly([]string{in.Date}, in.Until)
+	if err != nil {
+		return nil, err
 	}
 	start, end, err := cleanTimes(in.StartTime, in.EndTime)
 	if err != nil {
-		return Event{}, err
+		return nil, err
 	}
 	desc, err := cleanDescription(in.Description)
 	if err != nil {
-		return Event{}, err
+		return nil, err
 	}
-	var out Event
+	for _, n := range in.Places {
+		if n < 1 || n > maxSlots {
+			return nil, Invalid("places_invalid", map[string]any{"max": maxSlots}, "places must be 1-%d", maxSlots)
+		}
+	}
+	var out []Event
 	err = s.write(ctx, func(tx *sql.Tx) error {
+		out = nil
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
 			return err
@@ -179,69 +224,68 @@ func (s *Store) AddEventFull(ctx context.Context, orgSlug, planSlug string, in N
 		if err != nil {
 			return err
 		}
-		if err := inOrg(ctx, tx, "day_type", oid, in.DayTypeID); err != nil {
-			return err
+		for task := range in.Places {
+			if err := inOrg(ctx, tx, "task", oid, task); err != nil {
+				return err
+			}
 		}
-		// Events are independent: the same date may have several (they differ by day type, time and note).
-		res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, day_type_id, note, start_time, end_time, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			oid, pid, in.Date, in.DayTypeID, note, start, end, desc, s.stamp())
-		if err != nil {
-			return err
-		}
-		id, _ := res.LastInsertId()
-		if out, err = getEvent(ctx, tx, oid, pid, id); err != nil {
-			return err
+		for _, d := range dates {
+			e, err := s.insertEvent(ctx, tx, oid, pid, Event{Date: d, StartTime: start, EndTime: end, Description: desc})
+			if err != nil {
+				return err
+			}
+			for task, n := range in.Places {
+				if err := setPlaces(ctx, tx, oid, pid, e.ID, task, n); err != nil {
+					return err
+				}
+			}
+			out = append(out, e)
 		}
 		return nil
 	})
 	return out, err
 }
 
-// AddEventsBulk adds events without a time of day; see AddEventsBulkTimed.
-func (s *Store) AddEventsBulk(ctx context.Context, orgSlug, planSlug, from, to string, weekdays []int, dayTypeID int64) (created []Event, skipped []string, err error) {
-	return s.AddEventsBulkTimed(ctx, orgSlug, planSlug, from, to, weekdays, dayTypeID, "", "")
+func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, oid, pid int64, e Event) (Event, error) {
+	res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, start_time, end_time, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		oid, pid, e.Date, e.StartTime, e.EndTime, e.Description, s.stamp())
+	if err != nil {
+		return Event{}, err
+	}
+	e.ID, _ = res.LastInsertId()
+	return e, nil
 }
 
-// AddEventsBulkTimed adds an event for every date from..to (inclusive) that falls on one of the ISO weekdays, all with the
-// same start and end time (both may be empty). A date that already has an event of the same day type and start time is
-// skipped and reported, not an error.
-func (s *Store) AddEventsBulkTimed(ctx context.Context, orgSlug, planSlug, from, to string, weekdays []int, dayTypeID int64, startTime, endTime string) (created []Event, skipped []string, err error) {
-	startTime, endTime, err = cleanTimes(startTime, endTime)
+// CopyOf says what a copy of an event takes along. Dates are the new dates (and with Until each of them every week up to
+// and including that date). Times copies the start and end time; without it the copies get StartTime and EndTime.
+// Details copies the values of the details rows and the description, Places the places, and Hand the cells set by hand
+// (never the planner's names that were locked: a copy has no draft yet). Answers are never copied.
+type CopyOf struct {
+	Dates     []string `json:"dates"`
+	Until     string   `json:"until"`
+	Times     bool     `json:"times"`
+	StartTime string   `json:"start_time"`
+	EndTime   string   `json:"end_time"`
+	Details   bool     `json:"details"`
+	Places    bool     `json:"places"`
+	Hand      bool     `json:"hand"`
+}
+
+// CopyEvent makes copies of an event on other dates, all or nothing, and returns them in date order.
+func (s *Store) CopyEvent(ctx context.Context, orgSlug, planSlug string, id int64, in CopyOf) ([]Event, error) {
+	dates, err := repeatWeekly(in.Dates, in.Until)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	f, ok1 := parseISODate(from)
-	t, ok2 := parseISODate(to)
-	if !ok1 || !ok2 || t.Before(f) {
-		return nil, nil, Invalid("range_invalid", nil, "from and to must be YYYY-MM-DD with from <= to")
-	}
-	if t.Sub(f) > maxBulkSpanDays*24*time.Hour {
-		return nil, nil, Invalid("range_too_long", map[string]any{"max": maxBulkSpanDays}, "the range can be at most %d days", maxBulkSpanDays)
-	}
-	want := map[int]bool{}
-	for _, w := range weekdays {
-		if w < 1 || w > 7 {
-			return nil, nil, Invalid("weekdays_invalid", nil, "weekdays are 1 (Monday) to 7 (Sunday)")
-		}
-		want[w] = true
-	}
-	if len(want) == 0 {
-		return nil, nil, Invalid("weekdays_none", nil, "choose at least one weekday")
-	}
-	var dates []string
-	for d := f; !d.After(t); d = d.AddDate(0, 0, 1) {
-		if want[IsoWeekday(d)] {
-			dates = append(dates, d.Format("2006-01-02"))
+	start, end := in.StartTime, in.EndTime
+	if !in.Times {
+		if start, end, err = cleanTimes(start, end); err != nil {
+			return nil, err
 		}
 	}
-	if len(dates) == 0 {
-		return nil, nil, Invalid("no_dates", nil, "no dates match")
-	}
-	if len(dates) > maxEventsPerCall {
-		return nil, nil, Invalid("too_many_dates", map[string]any{"max": maxEventsPerCall}, "at most %d dates at a time", maxEventsPerCall)
-	}
+	var out []Event
 	err = s.write(ctx, func(tx *sql.Tx) error {
-		created, skipped = nil, nil
+		out = nil
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
 			return err
@@ -250,37 +294,51 @@ func (s *Store) AddEventsBulkTimed(ctx context.Context, orgSlug, planSlug, from,
 		if err != nil {
 			return err
 		}
-		if err := inOrg(ctx, tx, "day_type", oid, dayTypeID); err != nil {
+		src, err := getEvent(ctx, tx, oid, pid, id)
+		if err != nil {
 			return err
 		}
+		tmpl := Event{StartTime: start, EndTime: end}
+		if in.Times {
+			tmpl.StartTime, tmpl.EndTime = src.StartTime, src.EndTime
+		}
+		if in.Details {
+			tmpl.Description = src.Description
+		}
 		for _, d := range dates {
-			// Running the same bulk add twice must not duplicate: an event with the same date, day type and start time counts as present.
-			res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, day_type_id, note, start_time, end_time, created_at)
-				SELECT ?, ?, ?, ?, '', ?, ?, ? WHERE NOT EXISTS
-				(SELECT 1 FROM event WHERE org_id = ? AND plan_id = ? AND date = ? AND day_type_id = ? AND start_time = ?)`,
-				oid, pid, d, dayTypeID, startTime, endTime, s.stamp(), oid, pid, d, dayTypeID, startTime)
-			if err != nil {
+			e := tmpl
+			e.Date = d
+			if e, err = s.insertEvent(ctx, tx, oid, pid, e); err != nil {
 				return err
 			}
-			if n, _ := res.RowsAffected(); n == 0 {
-				skipped = append(skipped, d)
-				continue
+			if in.Details {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO event_field (org_id, plan_id, event_id, field_id, value)
+					SELECT org_id, plan_id, ?, field_id, value FROM event_field WHERE event_id = ? AND org_id = ? AND plan_id = ?`, e.ID, src.ID, oid, pid); err != nil {
+					return err
+				}
 			}
-			id, _ := res.LastInsertId()
-			sd, err := getEvent(ctx, tx, oid, pid, id)
-			if err != nil {
-				return err
+			if in.Places {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots)
+					SELECT org_id, plan_id, ?, task_id, slots FROM event_task WHERE event_id = ? AND org_id = ? AND plan_id = ?`, e.ID, src.ID, oid, pid); err != nil {
+					return err
+				}
 			}
-			created = append(created, sd)
+			if in.Hand {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, locked, created_at)
+					SELECT org_id, plan_id, ?, task_id, person_id, group_id, label, fills, 0, ? FROM manual_cell
+					WHERE event_id = ? AND org_id = ? AND plan_id = ? AND locked = 0`, e.ID, s.stamp(), src.ID, oid, pid); err != nil {
+					return err
+				}
+			}
+			out = append(out, e)
 		}
 		return nil
 	})
-	return created, skipped, err
+	return out, err
 }
 
+// EventPatch changes the time of day or the description of an event. The date stays: copy the event to move it.
 type EventPatch struct {
-	DayTypeID   *int64  `json:"day_type_id"`
-	Note        *string `json:"note"`
 	StartTime   *string `json:"start_time"`
 	EndTime     *string `json:"end_time"`
 	Description *string `json:"description"`
@@ -288,13 +346,6 @@ type EventPatch struct {
 
 func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id int64, patch EventPatch) (Event, error) {
 	var out Event
-	if patch.Note != nil {
-		n, err := cleanNote(*patch.Note)
-		if err != nil {
-			return out, err
-		}
-		patch.Note = &n
-	}
 	if patch.Description != nil {
 		d, err := cleanDescription(*patch.Description)
 		if err != nil {
@@ -315,19 +366,7 @@ func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id in
 		if err != nil {
 			return err
 		}
-		var changes []string
-		dt, note := cur.DayTypeID, cur.Note
-		if patch.DayTypeID != nil && *patch.DayTypeID != dt {
-			if err := inOrg(ctx, tx, "day_type", oid, *patch.DayTypeID); err != nil {
-				return err
-			}
-			dt = *patch.DayTypeID
-			changes = append(changes, "day type")
-		}
-		if patch.Note != nil && *patch.Note != note {
-			note = *patch.Note
-			changes = append(changes, "note")
-		}
+		changed := false
 		start, end, desc := cur.StartTime, cur.EndTime, cur.Description
 		if patch.StartTime != nil || patch.EndTime != nil {
 			ns, ne := start, end
@@ -343,17 +382,17 @@ func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id in
 			}
 			if ns != start || ne != end {
 				start, end = ns, ne
-				changes = append(changes, "time")
+				changed = true
 			}
 		}
 		if patch.Description != nil && *patch.Description != desc {
 			desc = *patch.Description
-			changes = append(changes, "description")
+			changed = true
 		}
-		if len(changes) == 0 {
+		if !changed {
 			return errNothingToChange()
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE event SET day_type_id = ?, note = ?, start_time = ?, end_time = ?, description = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, dt, note, start, end, desc, id, oid, pid); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE event SET start_time = ?, end_time = ?, description = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, start, end, desc, id, oid, pid); err != nil {
 			return err
 		}
 		if out, err = getEvent(ctx, tx, oid, pid, id); err != nil {
