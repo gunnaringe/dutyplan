@@ -1,5 +1,5 @@
 #!/bin/sh
-# Smoke test of the built binary: two organisations, isolation, the actor requirement, a real planning run, pin, rename, delete, restart.
+# Smoke test of the built binary: two organisations, isolation, cross-site writes, a real planning run, pin, rename, delete, restart.
 # One line on success. Needs bin/dutyplan (mise run app:build). Stops the server on the PID it started itself.
 set -eu
 cd "$(dirname "$0")/.."
@@ -27,12 +27,12 @@ start() {
 }
 stop() { kill "$pid"; wait "$pid" 2>/dev/null || true; pid=""; }
 
-# code <expected> <method> <path> [json] [actor]: checks the status code; the answer is left in $tmp/body
+# code <expected> <method> <path> [json] [header]: checks the status code; the answer is left in $tmp/body
 code() {
-  want=$1; method=$2; path=$3; body=${4:-}; actor=${5-Smoke}
+  want=$1; method=$2; path=$3; body=${4:-}; header=${5:-}
   set -- -s -o "$tmp/body" -w '%{http_code}' -X "$method" "$url$path"
   [ -z "$body" ] || set -- "$@" -H 'Content-Type: application/json' -d "$body"
-  [ -z "$actor" ] || set -- "$@" -H "X-Actor: $actor"
+  [ -z "$header" ] || set -- "$@" -H "$header"
   got=$(curl "$@")
   [ "$got" = "$want" ] || fail "$method $path gave $got, expected $want ($(cat "$tmp/body"))"
 }
@@ -48,7 +48,7 @@ id=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 
 code 201 POST /api/orgs/org-a/plans '{"name":"Spring 2027"}'          # exists only in A
 
-code 400 POST /api/orgs '{"name":"No actor"}' ""                      # no X-Actor
+code 403 POST /api/orgs '{"name":"Cross site"}' 'Sec-Fetch-Site: cross-site'   # a write from another site
 code 404 PATCH "/api/orgs/org-b/people/$id" '{"proposable":false}'    # A's person through B
 code 404 GET /api/orgs/org-b/plans/spring-2027                        # A's plan through B
 code 200 GET /api/orgs/org-a/plans/spring-2027
@@ -60,15 +60,15 @@ code 200 GET / && grep -q Dutyplan "$tmp/body" || fail "the front page is missin
 code 200 GET /i18n.js && grep -q MESSAGES "$tmp/body" || fail "the texts of the page are missing"
 code 200 GET /o/org-a/p/autumn-2026
 
-code 201 POST /api/orgs/org-a/day-types '{"name":"Weekend"}'
-dt=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
-[ -n "$dt" ] || fail "did not find the day type id"
-code 404 POST /api/orgs/org-b/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"   # A's day type on B's date
-code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"
-code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt}"   # two events on the same day
-code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt,\"start_time\":\"11:00\",\"end_time\":\"12:30\",\"description\":\"Doors at 10:30\"}"
+code 201 POST /api/orgs/org-a/tasks '{"name":"Doors","planned":false}'   # filled by hand only, so org-a has nothing to plan
+task=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
+[ -n "$task" ] || fail "did not find the task id"
+code 404 POST /api/orgs/org-b/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"places\":{\"$task\":1}}"   # A's task on B's event
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"places\":{\"$task\":2}}"
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09"}'   # two events on the same day
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"11:00","end_time":"12:30","description":"Doors at 10:30"}'
 grep -q '"start_time":"11:00"' "$tmp/body" && grep -q '"description":"Doors at 10:30"' "$tmp/body" || fail "the time and the description did not come back: $(cat "$tmp/body")"
-code 400 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"day_type_id\":$dt,\"start_time\":\"25:00\"}"
+code 400 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"25:00"}'
 grep -q '"code":"start_time_invalid"' "$tmp/body" || fail "a bad time gave the wrong answer: $(cat "$tmp/body")"
 code 200 GET /api/orgs/org-a/plans/autumn-2026/events
 [ "$(grep -o '"start_time":"[^"]*"' "$tmp/body" | head -1)" = '"start_time":"11:00"' ] || fail "the event with a time is not first on its date: $(cat "$tmp/body")"
@@ -119,8 +119,8 @@ stop
 start                                                                  # the same database after a restart
 code 200 GET /api/orgs
 grep -q '"org-a"' "$tmp/body" && grep -q '"org-b"' "$tmp/body" || fail "the organisations are gone after a restart"
-code 200 GET /api/orgs/org-a/log
-[ "$(grep -o '"action"' "$tmp/body" | wc -l)" -ge 4 ] || fail "the change log is gone after a restart"
+code 200 GET /api/orgs/org-a/plans/autumn-2026/places
+grep -q "\"task_id\":$task,\"slots\":2" "$tmp/body" || fail "the places are gone after a restart: $(cat "$tmp/body")"
 code 200 GET "/api/orgs/test/plans/autumn-2026/runs/latest"
 grep -q '"status":"done"' "$tmp/body" && grep -q '"pinned":true' "$tmp/body" || fail "the plan and its pin are gone after a restart"
 

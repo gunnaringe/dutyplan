@@ -140,11 +140,6 @@ func TestKeysUsedByThePageExist(t *testing.T) {
 			t.Errorf("answer.%s is missing", k)
 		}
 	}
-	for d := 1; d <= 7; d++ {
-		if _, ok := c["en"]["week."+string(rune('0'+d))]; !ok {
-			t.Errorf("week.%d is missing", d)
-		}
-	}
 	for _, l := range []string{"en", "nb"} {
 		if _, ok := c["en"]["lang."+l]; !ok {
 			t.Errorf("lang.%s is missing", l)

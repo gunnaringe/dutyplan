@@ -6,6 +6,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_CORE || path.join(__dirname, '../../scoreboard/node_modules/playwright-core'));
 const { spawn, spawnSync } = require('child_process');
 
+let step = ''; // the picture being made, for the error message
 const OUT = process.env.OUT || path.join(__dirname, '../docs/img');
 const chromeDir = () => {
   const root = path.join(os.homedir(), '.cache/ms-playwright');
@@ -17,7 +18,6 @@ const chromeDir = () => {
 const ORG = { name: 'Maple Hall', slug: 'maple-hall' };
 const PLAN = { name: 'December 2015', slug: 'december-2015' };
 const TODAY = '2015-10-21'; // what the pictures show as the day the plans were made (see the timestamps below)
-const ADMIN = 'Admin';
 const TASKS = ['Sound', 'Video', 'Doors', 'Coffee'];
 const PEOPLE = ['Kari Test', 'Ola Sample', 'Mona Example', 'Pia Demo', 'Ingrid Sample', 'Njål Example', 'Sunniva Test', 'Jon Demo'];
 // what each person takes part in: task -> level (poor | neutral | good)
@@ -46,7 +46,7 @@ const CHOICES = {
 
   // ---- the data, through the API like any client ----
   const api = async (method, p, body) => {
-    const r = await fetch(base + '/api' + p, { method, headers: { 'Content-Type': 'application/json', 'X-Actor': ADMIN }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const r = await fetch(base + '/api' + p, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await r.text();
     if (!r.ok) throw new Error(`${method} ${p}: ${r.status} ${text}`);
     return text ? JSON.parse(text) : null;
@@ -65,64 +65,64 @@ const CHOICES = {
     for (const [name, tasks] of Object.entries(CHOICES)) {
       for (const [t, level] of Object.entries(tasks)) await api('PUT', `${o}/people/${person[name]}/tasks/${task[t]}`, { level });
     }
-    for (const name of ['Concert', 'Rehearsal']) await api('POST', `${o}/day-types`, { name });
-    const dayType = Object.fromEntries((await api('GET', `${o}/day-types`)).map((d) => [d.name, d.id]));
-    await api('PUT', `${o}/day-types/${dayType.Concert}/tasks`, { tasks: [['Sound', 1], ['Video', 1], ['Doors', 2], ['Coffee', 1]].map(([t, slots]) => ({ task_id: task[t], slots })) });
-    await api('PUT', `${o}/day-types/${dayType.Rehearsal}/tasks`, { tasks: [['Sound', 1], ['Coffee', 1]].map(([t, slots]) => ({ task_id: task[t], slots })) });
     // a group that works together: it can take Coffee, and the planner counts one assignment for each member
     const group = await api('POST', `${o}/groups`, { name: 'Kitchen duo' });
     await api('PUT', `${o}/groups/${group.id}/members`, { people: [person['Mona Example'], person['Jon Demo']] });
     await api('PUT', `${o}/groups/${group.id}/tasks`, { tasks: [{ task_id: task.Coffee, fills: 1, level: 'good' }] });
+    await api('POST', `${o}/plans`, { name: 'Spring 2016' });
 
+    // the plan: concerts every Saturday and rehearsals every Wednesday, each event with its own places
     await api('POST', `${o}/plans`, { name: PLAN.name });
-    await api('POST', `${p}/events/bulk`, { from: '2015-12-05', to: '2015-12-19', weekdays: [6], day_type_id: dayType.Concert, start_time: '19:00', end_time: '21:30' });
-    for (const date of ['2015-12-09', '2015-12-16']) {
-      await api('POST', `${p}/events`, { date, day_type_id: dayType.Rehearsal, start_time: '18:00', end_time: '20:00' });
-    }
+    const places = (spec) => Object.fromEntries(Object.entries(spec).map(([t, n]) => [task[t], n]));
+    await api('POST', `${p}/events`, { date: '2015-12-05', until: '2015-12-19', start_time: '19:00', end_time: '21:30', places: places({ Sound: 1, Video: 1, Doors: 2, Coffee: 1 }) });
+    await api('POST', `${p}/events`, { date: '2015-12-09', until: '2015-12-16', start_time: '18:00', end_time: '20:00', places: places({ Sound: 1, Coffee: 1 }) });
     const events = await api('GET', `${p}/events`);
-    const byDate = (d, type) => events.find((e) => e.date === d && e.day_type === type);
-    const gala = byDate('2015-12-19', 'Concert');
-    await api('PATCH', `${p}/events/${gala.id}`, { note: 'Christmas gala', start_time: '18:30', end_time: '22:00', description: 'Doors at 18:00. Load-in from 15:00 through the side entrance.\nThe stage plot is on the notice board by the kitchen.' });
-    const first = byDate('2015-12-05', 'Concert');
-    await api('PATCH', `${p}/events/${first.id}`, { description: 'Opening night. Two extra chairs for the guest quartet.' });
-
-    // answers: when people cannot or would rather not (event id -> never | poor | good)
-    const concerts = events.filter((e) => e.day_type === 'Concert');
-    const levels = (who, spec) => api('PUT', `${p}/people/${person[who]}/availability`, { levels: Object.fromEntries(Object.entries(spec).map(([i, l]) => [concerts[i].id, l])) });
-    await levels('Kari Test', { 1: 'never', 2: 'poor' });
-    await levels('Ola Sample', { 1: 'never' });
-    await levels('Pia Demo', { 0: 'poor', 2: 'never' });
-    await levels('Ingrid Sample', { 1: 'good' });
-    await levels('Njål Example', { 1: 'never' });
-    await levels('Sunniva Test', { 2: 'never' });
-    await levels('Jon Demo', { 0: 'never' });
-
-    // the plan's own info row, and one event that needs more people at the doors than its day type says
-    const theme = await api('POST', `${p}/fields`, { name: 'Theme' });
-    for (const [i, value] of [[0, 'Brass night'], [1, 'Strings'], [2, 'Christmas']]) await api('PUT', `${p}/events/${concerts[i].id}/fields/${theme.id}`, { value });
+    const on = (d) => events.find((e) => e.date === d);
+    const concerts = ['2015-12-05', '2015-12-12', '2015-12-19'].map(on), rehearsals = ['2015-12-09', '2015-12-16'].map(on);
+    const gala = concerts[2];
+    await api('PATCH', `${p}/events/${gala.id}`, { start_time: '18:30', end_time: '22:00', description: 'Doors at 18:00. Load-in from 15:00 through the side entrance.\nThe stage plot is on the notice board by the kitchen.' });
+    await api('PATCH', `${p}/events/${concerts[0].id}`, { description: 'Opening night. Two extra chairs for the guest quartet.' });
     await api('PUT', `${p}/events/${gala.id}/places/${task.Doors}`, { slots: 3 });
 
-    // a locked place (a manual cell), and a selection: only these two can run the video at the gala (and neither can come, so
-    // the place stays empty and the plan says why)
-    await api('POST', `${p}/cells`, { events: [first.id], task: task.Doors, person: person['Ola Sample'] });
+    // the plan's own details rows: text for people, which the planner never reads
+    const note = await api('POST', `${p}/fields`, { name: 'Note' });
+    const theme = await api('POST', `${p}/fields`, { name: 'Theme' });
+    for (const [ev, value] of [[concerts[0], 'Concert'], [rehearsals[0], 'Rehearsal'], [concerts[1], 'Concert'], [rehearsals[1], 'Rehearsal'], [gala, 'Christmas gala']]) {
+      await api('PUT', `${p}/events/${ev.id}/fields/${note.id}`, { value });
+    }
+    for (const [i, value] of [[0, 'Brass night'], [1, 'Strings'], [2, 'Christmas']]) await api('PUT', `${p}/events/${concerts[i].id}/fields/${theme.id}`, { value });
+
+    // answers: when people can, would rather not, or cannot (event id -> good | poor | never)
+    const answer = (who, spec) => api('PUT', `${p}/people/${person[who]}/availability`, { levels: Object.fromEntries(spec.map(([ev, l]) => [ev.id, l])) });
+    await answer('Kari Test', [[concerts[0], 'good'], [rehearsals[0], 'never'], [concerts[1], 'never'], [gala, 'poor']]);
+    await answer('Ola Sample', [[concerts[0], 'good'], [rehearsals[0], 'never'], [concerts[1], 'never'], [gala, 'good']]);
+    await answer('Mona Example', [[concerts[0], 'good'], [concerts[1], 'good'], [gala, 'good']]);
+    await answer('Pia Demo', [[concerts[0], 'poor'], [rehearsals[0], 'good'], [gala, 'never']]);
+    await answer('Ingrid Sample', [[concerts[1], 'good'], [rehearsals[1], 'good']]);
+    await answer('Njål Example', [[rehearsals[0], 'poor'], [concerts[1], 'never'], [gala, 'good']]);
+    await answer('Sunniva Test', [[concerts[0], 'good'], [concerts[1], 'good'], [gala, 'never']]);
+    await answer('Jon Demo', [[concerts[0], 'never'], [rehearsals[0], 'never'], [rehearsals[1], 'good']]);
+
+    // set by hand: a person and a text at the doors; and a selection: only these two can run the video at the gala (and neither
+    // can come, so the place stays empty and the draft says why)
+    await api('POST', `${p}/cells`, { events: [concerts[0].id], task: task.Doors, person: person['Ola Sample'] });
+    await api('POST', `${p}/cells`, { events: [gala.id], task: task.Doors, label: 'Stewards', fills: 2 });
     await api('PUT', `${p}/pools`, { events: [gala.id], task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']], groups: [] });
 
-    // a plan
-    const started = await api('POST', `${p}/runs`, { time_limit: 10 });
-    for (let i = 0; i < 120; i++) {
-      const run = (await api('GET', `${p}/runs/${started.id}`)).run;
-      if (run.status === 'done') break;
-      if (run.status === 'failed') throw new Error('the planner failed: ' + JSON.stringify(run));
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    // a second, newer run, so that the history has more than one; the newest is the one pinned as the current plan
-    const second = await api('POST', `${p}/runs`, { time_limit: 10, seed: 2 });
-    for (let i = 0; i < 120; i++) {
-      const run = (await api('GET', `${p}/runs/${second.id}`)).run;
-      if (run.status === 'done') break;
-      if (run.status === 'failed') throw new Error('the planner failed: ' + JSON.stringify(run));
-      await new Promise((r) => setTimeout(r, 500));
-    }
+    const draft = async (body) => {
+      const started = await api('POST', `${p}/runs`, { time_limit: 10, ...body });
+      for (let i = 0; i < 120; i++) {
+        const run = (await api('GET', `${p}/runs/${started.id}`)).run;
+        if (run.status === 'done') return run;
+        if (run.status === 'failed') throw new Error('the planner failed: ' + JSON.stringify(run));
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      throw new Error('the planner took too long');
+    };
+    // a first draft; then one of its names is locked and the draft is tried again, and the newer one is pinned as the current plan
+    await draft({});
+    await api('POST', `${p}/cells`, { events: [concerts[0].id], task: task.Sound, person: person['Kari Test'], locked: true });
+    const second = await draft({ seed: 2 });
     await api('PUT', `${p}/runs/${second.id}/pin`);
 
     // The server stamps what it writes with the real time. The pictures should not change with the day they are made, so the
@@ -142,9 +142,8 @@ const CHOICES = {
     browser = await launch('en');
     browserNb = await launch('nb');
     const context = async (opts, lang = 'en') => {
-      const { showplan, ...rest } = opts;
-      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, timezoneId: 'UTC', ...rest });
-      await c.addInitScript(([l, who, show]) => { try { localStorage.setItem('tp.lang', l); localStorage.setItem('tp.actor', who); localStorage.setItem('tp.showplan', show); } catch (e) { /* ignore */ } }, [lang, ADMIN, opts.showplan || 'on']);
+      const c = await (lang === 'nb' ? browserNb : browser).newContext({ locale: lang === 'nb' ? 'nb-NO' : 'en-GB', deviceScaleFactor: 2, timezoneId: 'UTC', ...opts });
+      await c.addInitScript((l) => { try { localStorage.setItem('tp.lang', l); } catch (e) { /* ignore */ } }, lang);
       return c;
     };
     const errors = [];
@@ -154,20 +153,13 @@ const CHOICES = {
       await pg.waitForTimeout(250);
       await (target || pg).screenshot({ path: path.join(OUT, name + '.png') });
     };
-    // A section of the page by its heading (the heading text is matched exactly, so «Plan» is not «Plans»).
-    const sec = (pg, title) => pg.locator('main section').filter({ has: pg.locator('h2', { hasText: new RegExp('^' + title + '$') }) }).first();
-    // From the top edge of one element to the bottom edge of another, over the whole width of the content column.
+    // From the top edge of one element to the bottom edge of another, over the width of both.
     const range = async (pg, name, from, to) => {
       await pg.evaluate(() => window.scrollTo(0, 0)); // the boxes are measured from the window, the clip is from the page
       const a = await from.boundingBox(), b = await to.boundingBox();
+      const x = Math.min(a.x, b.x), right = Math.max(a.x + a.width, b.x + b.width);
       await pg.waitForTimeout(250);
-      await pg.screenshot({ path: path.join(OUT, name + '.png'), fullPage: true, clip: { x: a.x - 16, y: a.y - 8, width: a.width + 32, height: b.y + b.height - a.y + 16 } });
-    };
-    const head = async (pg, name, el, height) => {
-      await pg.evaluate(() => window.scrollTo(0, 0));
-      const a = await el.boundingBox();
-      await pg.waitForTimeout(250);
-      await pg.screenshot({ path: path.join(OUT, name + '.png'), fullPage: true, clip: { x: a.x - 16, y: a.y - 8, width: a.width + 32, height } });
+      await pg.screenshot({ path: path.join(OUT, name + '.png'), fullPage: true, clip: { x: x - 16, y: a.y - 8, width: right - x + 32, height: b.y + b.height - a.y + 16 } });
     };
     // From the very top of the page, so the header and the title are in the picture.
     const fromTop = async (pg, name, to) => {
@@ -179,60 +171,74 @@ const CHOICES = {
     const planPath = `/o/${ORG.slug}/p/${PLAN.slug}`;
     const dialog = (pg) => pg.locator('dialog.modal');
     const closeDialog = async (pg) => { await pg.keyboard.press('Escape'); await dialog(pg).waitFor({ state: 'detached' }); };
+    const shoot = async (pg, name, button) => { step = name; await button.click(); await dialog(pg).waitFor(); await save(pg, name, dialog(pg)); await closeDialog(pg); };
 
-    // The plan page: one table, here with the plan shown in it. The picture at the top of the README.
+    // The plan page: the whole table, with the current plan in it. The picture at the top of the README.
     const wide = await context({ viewport: { width: 1280, height: 900 } });
     const page = await open(wide);
     await go(page, planPath, '.dp-table');
     await range(page, 'hero', page.locator('main h1'), page.locator('.grid-scroll'));
 
+    // The organisation: its plans and its groups, and a group.
     await go(page, `/o/${ORG.slug}`);
-    await fromTop(page, '01-organisation', page.getByText('the planner never picks the person itself'));
-    await go(page, `/o/${ORG.slug}/setup`);
-    await save(page, '02-day-types', sec(page, 'Day types'));
-    await range(page, '03-groups-combinations', sec(page, 'Groups'), sec(page, 'What can be combined on the same day\\?'));
+    await fromTop(page, '01-organisation', page.locator('.org-foot'));
+    await shoot(page, '02-group', page.getByRole('button', { name: 'Open the group Kitchen duo' }));
 
-    // The same table while people answer, without the plan.
-    const answers = await open(await context({ viewport: { width: 1280, height: 900 }, showplan: 'off' }));
-    await go(answers, planPath, '.dp-table');
-    await save(answers, '04-table', answers.locator('.grid-scroll'));
-    await answers.getByRole('button', { name: 'Open the task Doors' }).click();
-    await save(answers, '05-task', dialog(answers));
-    await closeDialog(answers);
-    await answers.getByRole('button', { name: /^Open the event 2015-12-19/ }).click();
-    await save(answers, '06-event', dialog(answers));
-    await closeDialog(answers);
-
-    // A personal link: the table with the person's row marked, and what the person chooses.
-    await go(answers, `${planPath}/me/${person['Kari Test']}`, 'tr.me');
-    await range(answers, '07-personal-link', answers.locator('main h1'), answers.locator('.grid-scroll'));
-    await answers.getByRole('button', { name: 'Open Kari Test' }).click();
-    // the link carries the temporary server's random port: show a fixed address, so the picture is the same every time
-    await dialog(answers).locator('input[readonly]').evaluate((e) => { e.value = e.value.replace(location.origin, 'https://dutyplan.example'); });
-    await save(answers, '08-person', dialog(answers));
-    await closeDialog(answers);
-
+    // The sections of the table, one by one.
     await go(page, planPath, '.dp-table');
-    const empty = page.locator('td.places', { hasText: 'Not filled' }).first();
-    await empty.locator('summary').click();
-    await save(page, '09-why', empty);
-    await save(page, '10-locks-selections', sec(page, 'Manual cells and selections'));
-    await sec(page, 'Weighting').locator('summary').first().click();
-    await head(page, '11-weighting', sec(page, 'Weighting'), 720);
-    const fold = (re) => page.locator('.below details', { has: page.locator('summary', { hasText: re }) });
-    await fold(/^Earlier runs/).locator('summary').click();
-    await fold(/^Distribution$/).locator('summary').click();
-    await range(page, '12-history-distribution', fold(/^Distribution$/), fold(/^Earlier runs/));
+    const sects = page.locator('.dp-table tr.sect');
+    const draftHead = page.locator('.dp-table tr.sect.draft');
+    await range(page, '03-details-places', sects.nth(0), draftHead.locator('xpath=preceding-sibling::tr[1]'));
+    const availability = sects.nth(3);
+    await range(page, '04-draft', draftHead, availability.locator('xpath=preceding-sibling::tr[1]'));
+    await range(page, '05-availability', availability, page.locator('.dp-table tbody tr').last());
+
+    // The dialogs behind the names.
+    await shoot(page, '06-task', page.getByRole('button', { name: 'Open the task Doors' }));
+    await shoot(page, '07-event', page.getByRole('button', { name: /^Open the event Sat 19 Dec/ }));
+    await page.getByRole('button', { name: /^Copy the event Sat 5 Dec/ }).click();
+    await dialog(page).waitFor();
+    await dialog(page).getByRole('checkbox', { name: 'Every week until' }).check();
+    await dialog(page).getByLabel('New date').fill('2015-12-26');
+    await dialog(page).getByLabel('The last date').fill('2016-01-30');
+    await dialog(page).getByLabel('The last date').evaluate((e) => e.blur());
+    await save(page, '08-copy', dialog(page));
+    await closeDialog(page);
+    await page.getByRole('button', { name: 'Open Kari Test' }).click();
+    await dialog(page).waitFor();
+    // the link carries the temporary server's random port: show a fixed address, so the picture is the same every time
+    await dialog(page).locator('input[readonly]').evaluate((e) => { e.value = e.value.replace(location.origin, 'https://dutyplan.example'); });
+    await save(page, '09-person', dialog(page));
+    await closeDialog(page);
+    await shoot(page, '10-place', page.getByRole('button', { name: /^Video, Sat 19 Dec .*: open the place$/ }));
+    step = '12-distribution';
+    await page.getByRole('button', { name: 'Distribution', exact: true }).click();
+    await dialog(page).waitFor();
+    await save(page, '12-distribution', dialog(page));
+    await closeDialog(page);
+
+    // ⚙: the name, the weighting (opened) and the earlier drafts, in a window tall enough for all of it.
+    const tall = await open(await context({ viewport: { width: 1280, height: 2000 } }));
+    await go(tall, planPath, '.dp-table');
+    await tall.getByRole('button', { name: /Plan settings/ }).click();
+    await dialog(tall).waitFor();
+    await dialog(tall).locator('summary').first().click();
+    await save(tall, '11-settings', dialog(tall));
+    await closeDialog(tall);
+
+    // A personal link: the table with the person's row marked.
+    await go(page, `${planPath}/me/${person['Kari Test']}`, 'tr.me');
+    await range(page, '13-personal-link', page.locator('main h1'), page.locator('.grid-scroll'));
 
     // On a phone the table scrolls sideways under the names.
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
     await go(phone, planPath, '.dp-table');
-    await phone.locator('.plan-bar').evaluate((e) => e.scrollIntoView());
-    await phone.screenshot({ path: path.join(OUT, '13-phone.png') });
+    await phone.locator('.dp-table tr.sect.draft').evaluate((e) => e.scrollIntoView());
+    await phone.screenshot({ path: path.join(OUT, '14-phone.png') });
 
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));
     await go(nb, planPath, '.dp-table');
-    await range(nb, '14-norwegian', nb.locator('main h1'), nb.locator('.grid-scroll'));
+    await range(nb, '15-norwegian', nb.locator('main h1'), nb.locator('.grid-scroll'));
 
     if (errors.length) throw new Error('the page failed: ' + errors.join('; '));
     // Smaller files: a text page has few colours. pngquant is optional (the pictures are kept as they are without it).
@@ -247,4 +253,4 @@ const CHOICES = {
     if (browser) await browser.close();
     srv.kill('SIGTERM');
   }
-})().catch((e) => { console.error(e.message); process.exit(1); });
+})().catch((e) => { console.error((step ? step + ': ' : '') + e.message); process.exit(1); });
