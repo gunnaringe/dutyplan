@@ -53,7 +53,7 @@ func (s *server) startRun(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	id, err := s.planner.Start(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), planner.Params{TimeLimit: b.TimeLimit, Seed: b.Seed})
+	id, err := s.planner.Start(r.Context(), r.PathValue("org"), r.PathValue("plan"), planner.Params{TimeLimit: b.TimeLimit, Seed: b.Seed})
 	if err != nil {
 		s.writeRunErr(w, err)
 		return
@@ -106,6 +106,6 @@ func (s *server) pinRun(pin bool) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		noContent(w, s.st.PinRun(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, pin), s)
+		noContent(w, s.st.PinRun(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, pin), s)
 	}
 }

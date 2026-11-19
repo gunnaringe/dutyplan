@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 )
 
 // Levels a person can give a task (not marked at all = not involved) and an event (not marked = neutral).
@@ -110,62 +109,60 @@ func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID in
 }
 
 // SetPersonTask makes the person take part in a task (or changes how much they want it).
-func (s *Store) SetPersonTask(ctx context.Context, orgSlug, actor string, personID, taskID int64, level string) error {
+func (s *Store) SetPersonTask(ctx context.Context, orgSlug string, personID, taskID int64, level string) error {
 	if !taskLevels[level] {
 		return fmt.Errorf("%w: level must be never, poor, neutral or good", ErrInvalid)
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		p, err := getPerson(ctx, tx, oid, personID)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getPerson(ctx, tx, oid, personID); err != nil {
+			return err
 		}
 		var name, before string
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ? AND planned = 1`, taskID, oid).Scan(&name); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		err = tx.QueryRowContext(ctx, `SELECT level FROM person_task WHERE person_id = ? AND task_id = ? AND org_id = ?`, personID, taskID, oid).Scan(&before)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, err
+			return err
 		}
 		if before == level {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, ?)
 			ON CONFLICT (person_id, task_id) DO UPDATE SET level = excluded.level`, oid, personID, taskID, level); err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "pref.task", detail: fmt.Sprintf("%s: %s %s -> %s", p.Name, name, orDash(before), level)}, nil
+		return nil
 	})
 }
 
 // RemovePersonTask takes the task off the person's list again.
-func (s *Store) RemovePersonTask(ctx context.Context, orgSlug, actor string, personID, taskID int64) error {
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+func (s *Store) RemovePersonTask(ctx context.Context, orgSlug string, personID, taskID int64) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		p, err := getPerson(ctx, tx, oid, personID)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getPerson(ctx, tx, oid, personID); err != nil {
+			return err
 		}
 		var name string
 		if err := tx.QueryRowContext(ctx, `SELECT t.name FROM person_task pt JOIN task t ON t.id = pt.task_id AND t.org_id = pt.org_id
 			WHERE pt.person_id = ? AND pt.task_id = ? AND pt.org_id = ?`, personID, taskID, oid).Scan(&name); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM person_task WHERE person_id = ? AND task_id = ? AND org_id = ?`, personID, taskID, oid); err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "pref.task", detail: fmt.Sprintf("%s: %s removed", p.Name, name)}, nil
+		return nil
 	})
 }
 
@@ -178,7 +175,7 @@ func orDash(s string) string {
 
 // SetAvailability sets the person's answer for several events of one plan at once (so a page can paint many). A level
 // of "" means neutral and removes the answer. All or nothing; every event must belong to this plan.
-func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor string, personID int64, levels map[int64]string) error {
+func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug string, personID int64, levels map[int64]string) error {
 	if len(levels) == 0 || len(levels) > maxAvailabilityPerCall {
 		return Invalid("levels_count", map[string]any{"max": maxAvailabilityPerCall}, "give 1-%d events", maxAvailabilityPerCall)
 	}
@@ -187,18 +184,17 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 			return fmt.Errorf("%w: level must be never, poor, good or empty", ErrInvalid)
 		}
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		p, err := getPerson(ctx, tx, oid, personID)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getPerson(ctx, tx, oid, personID); err != nil {
+			return err
 		}
 		ids := make([]int64, 0, len(levels))
 		for id := range levels {
@@ -210,14 +206,14 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 		for _, id := range ids {
 			var one int
 			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM event WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid).Scan(&one); errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			} else if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			var before string
 			err := tx.QueryRowContext(ctx, `SELECT level FROM person_event WHERE person_id = ? AND event_id = ? AND org_id = ?`, personID, id, oid).Scan(&before)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, err
+				return err
 			}
 			want := levels[id]
 			if before == want {
@@ -230,13 +226,13 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 					ON CONFLICT (person_id, event_id) DO UPDATE SET level = excluded.level`, oid, pid, personID, id, want)
 			}
 			if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			changed++
 			counts[orDash(want)]++
 		}
 		if changed == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		var parts []string
 		for _, l := range []string{"never", "poor", "good", "–"} {
@@ -245,6 +241,6 @@ func (s *Store) SetAvailability(ctx context.Context, orgSlug, planSlug, actor st
 				parts = append(parts, strconv.Itoa(counts[l])+" "+name)
 			}
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "pref.availability", detail: fmt.Sprintf("%s: %s", p.Name, strings.Join(parts, ", "))}, nil
+		return nil
 	})
 }

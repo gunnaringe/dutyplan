@@ -53,7 +53,7 @@ func (s *Service) Available() bool { return s.solver != nil }
 func (s *Service) Wait() { s.wg.Wait() }
 
 // Start begins a run in the background and returns its id.
-func (s *Service) Start(ctx context.Context, orgSlug, planSlug, actor string, p Params) (int64, error) {
+func (s *Service) Start(ctx context.Context, orgSlug, planSlug string, p Params) (int64, error) {
 	if s.solver == nil {
 		return 0, ErrUnavailable
 	}
@@ -92,7 +92,7 @@ func (s *Service) Start(ctx context.Context, orgSlug, planSlug, actor string, p 
 		return 0, err
 	}
 	snapJSON, _ := json.Marshal(snap)
-	id, err := s.st.CreateRun(ctx, orgSlug, planSlug, actor, p.Seed, p.TimeLimit, hash, input, snapJSON)
+	id, err := s.st.CreateRun(ctx, orgSlug, planSlug, p.Seed, p.TimeLimit, hash, input, snapJSON)
 	if err != nil {
 		release()
 		return 0, err

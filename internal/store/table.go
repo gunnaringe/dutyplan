@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -50,58 +49,55 @@ func (s *Store) ListEventPlaces(ctx context.Context, orgSlug, planSlug string) (
 }
 
 // SetEventPlaces sets the places for a task on one event. nil goes back to what the event's day type says.
-func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug, actor string, eventID, taskID int64, slots *int) error {
+func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, eventID, taskID int64, slots *int) error {
 	if slots != nil && (*slots < 0 || *slots > maxSlots) {
 		return Invalid("places_invalid", map[string]any{"max": maxSlots}, "places must be 0-%d", maxSlots)
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		ev, err := getEvent(ctx, tx, oid, pid, eventID)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var task string
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&task); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var def int
 		err = tx.QueryRowContext(ctx, `SELECT slots FROM day_type_task WHERE day_type_id = ? AND task_id = ? AND org_id = ?`, ev.DayTypeID, taskID, oid).Scan(&def)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, err
+			return err
 		}
 		var before sql.NullInt64
 		err = tx.QueryRowContext(ctx, `SELECT slots FROM event_task WHERE event_id = ? AND task_id = ? AND org_id = ?`, eventID, taskID, oid).Scan(&before)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, err
+			return err
 		}
-		var detail string
 		if slots == nil {
 			if !before.Valid {
-				return logEntry{}, errNothingToChange()
+				return errNothingToChange()
 			}
 			_, err = tx.ExecContext(ctx, `DELETE FROM event_task WHERE event_id = ? AND task_id = ? AND org_id = ?`, eventID, taskID, oid)
-			detail = fmt.Sprintf("%s %s: as the day type (%d)", ev.Date, task, def)
 		} else {
 			if before.Valid && int(before.Int64) == *slots {
-				return logEntry{}, errNothingToChange()
+				return errNothingToChange()
 			}
 			_, err = tx.ExecContext(ctx, `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots) VALUES (?, ?, ?, ?, ?)
 				ON CONFLICT (event_id, task_id) DO UPDATE SET slots = excluded.slots`, oid, pid, eventID, taskID, *slots)
-			detail = fmt.Sprintf("%s %s: %d (day type: %d)", ev.Date, task, *slots, def)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "event.places", detail: detail}, nil
+		return nil
 	})
 }
 
@@ -160,126 +156,123 @@ func getField(ctx context.Context, q dbq, oid, pid, id int64) (PlanField, error)
 	return f, err
 }
 
-func (s *Store) AddField(ctx context.Context, orgSlug, planSlug, actor, name string) (PlanField, error) {
+func (s *Store) AddField(ctx context.Context, orgSlug, planSlug, name string) (PlanField, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return PlanField{}, err
 	}
 	var f PlanField
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM plan_field WHERE org_id = ? AND plan_id = ?`, oid, pid).Scan(&n); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if n >= maxFieldsPerPlan {
-			return logEntry{}, Invalid("too_many_fields", map[string]any{"max": maxFieldsPerPlan}, "a plan can have at most %d info rows", maxFieldsPerPlan)
+			return Invalid("too_many_fields", map[string]any{"max": maxFieldsPerPlan}, "a plan can have at most %d info rows", maxFieldsPerPlan)
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO plan_field (org_id, plan_id, name, created_at) VALUES (?, ?, ?, ?)`, oid, pid, name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, exists("info row", name)
+			return exists("info row", name)
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		f.ID, _ = res.LastInsertId()
 		f.Name = name
-		return logEntry{orgID: oid, planID: &pid, action: "field.create", detail: name}, nil
+		return nil
 	})
 	return f, err
 }
 
-func (s *Store) RenameField(ctx context.Context, orgSlug, planSlug, actor string, id int64, name string) (PlanField, error) {
+func (s *Store) RenameField(ctx context.Context, orgSlug, planSlug string, id int64, name string) (PlanField, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return PlanField{}, err
 	}
 	var f PlanField
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		old, err := getField(ctx, tx, oid, pid, id)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if old.Name == name {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE plan_field SET name = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, name, id, oid, pid); isUnique(err) {
-			return logEntry{}, exists("info row", name)
+			return exists("info row", name)
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		f = PlanField{ID: id, Name: name}
-		return logEntry{orgID: oid, planID: &pid, action: "field.rename", detail: fmt.Sprintf("%q -> %q", old.Name, name)}, nil
+		return nil
 	})
 	return f, err
 }
 
 // DeleteField removes an info row with its values on every event.
-func (s *Store) DeleteField(ctx context.Context, orgSlug, planSlug, actor string, id int64) error {
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+func (s *Store) DeleteField(ctx context.Context, orgSlug, planSlug string, id int64) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		f, err := getField(ctx, tx, oid, pid, id)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getField(ctx, tx, oid, pid, id); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid); err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "field.delete", detail: f.Name}, nil
+		return nil
 	})
 }
 
 // SetFieldValue sets the text of an info row for one event; an empty text removes it.
-func (s *Store) SetFieldValue(ctx context.Context, orgSlug, planSlug, actor string, eventID, fieldID int64, value string) error {
+func (s *Store) SetFieldValue(ctx context.Context, orgSlug, planSlug string, eventID, fieldID int64, value string) error {
 	value = strings.TrimSpace(value)
 	if utf8.RuneCountInString(value) > maxFieldValueRune || !validText(value) {
 		return Invalid("field_value_invalid", map[string]any{"max": maxFieldValueRune}, "an info value must be at most %d printable characters", maxFieldValueRune)
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		ev, err := getEvent(ctx, tx, oid, pid, eventID)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getEvent(ctx, tx, oid, pid, eventID); err != nil {
+			return err
 		}
-		f, err := getField(ctx, tx, oid, pid, fieldID)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := getField(ctx, tx, oid, pid, fieldID); err != nil {
+			return err
 		}
 		var before string
 		err = tx.QueryRowContext(ctx, `SELECT value FROM event_field WHERE event_id = ? AND field_id = ? AND org_id = ?`, eventID, fieldID, oid).Scan(&before)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, err
+			return err
 		}
 		if before == value {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		if value == "" {
 			_, err = tx.ExecContext(ctx, `DELETE FROM event_field WHERE event_id = ? AND field_id = ? AND org_id = ?`, eventID, fieldID, oid)
@@ -288,9 +281,9 @@ func (s *Store) SetFieldValue(ctx context.Context, orgSlug, planSlug, actor stri
 				ON CONFLICT (event_id, field_id) DO UPDATE SET value = excluded.value`, oid, pid, eventID, fieldID, value)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "field.value", detail: fmt.Sprintf("%s %s: %q", ev.Date, f.Name, value)}, nil
+		return nil
 	})
 }
 
@@ -343,20 +336,20 @@ func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answ
 
 // SetTaskCombinations sets how one task combines with every other task of the organisation at once, for example «cannot be
 // combined with anything». "standard" removes the settings, so the plan's default applies again.
-func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug, actor string, taskID int64, level string) error {
+func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug string, taskID int64, level string) error {
 	if level != "standard" && !combinationLevels[level] {
 		return Invalid("level_invalid", nil, "level must be cannot, impractical, practical, preferred or standard")
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var name string
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&name); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var others []int64
 		if err := scanAll(ctx, tx, `SELECT id FROM task WHERE org_id = ? AND id <> ? ORDER BY id`, []any{oid, taskID}, func(r *sql.Rows) error {
@@ -365,14 +358,14 @@ func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug, actor string, 
 			others = append(others, id)
 			return err
 		}); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		changed := 0
 		for _, other := range others {
 			a, b := min(taskID, other), max(taskID, other)
 			before := "standard"
 			if err := tx.QueryRowContext(ctx, `SELECT level FROM task_combination WHERE org_id = ? AND task_a = ? AND task_b = ?`, oid, a, b).Scan(&before); err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, err
+				return err
 			}
 			if before == level {
 				continue
@@ -384,13 +377,13 @@ func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug, actor string, 
 					ON CONFLICT (task_a, task_b) DO UPDATE SET level = excluded.level`, oid, a, b, level)
 			}
 			if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			changed++
 		}
 		if changed == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
-		return logEntry{orgID: oid, action: "combination.all", detail: fmt.Sprintf("%s + every other task: %s (%d changed)", name, level, changed)}, nil
+		return nil
 	})
 }

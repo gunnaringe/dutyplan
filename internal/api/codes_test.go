@@ -19,7 +19,7 @@ type codedBody struct {
 
 func (e *env) refused(want int, method, path string, body any) codedBody {
 	e.t.Helper()
-	r := e.do(method, path, "T", body)
+	r := e.do(method, path, body)
 	if r.code != want {
 		e.t.Fatalf("%s %s = %d %s, want %d", method, path, r.code, r.body, want)
 	}
@@ -74,7 +74,7 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 func TestANothingToPlanRefusalHasItsCode(t *testing.T) {
 	e := newEnvWith(t, fakeSolver(func(context.Context, []byte) ([]byte, error) { return emptyAnswer, nil }))
 	org, _ := e.plannable("Org A")
-	empty, _ := e.st.CreatePlan(context.Background(), org, "T", "Empty", "")
+	empty, _ := e.st.CreatePlan(context.Background(), org, "Empty", "")
 	got := e.refused(400, "POST", "/api/orgs/"+org+"/plans/"+empty.Slug+"/runs", map[string]any{})
 	if got.Code != "nothing_to_plan" || got.Error != "invalid" {
 		t.Errorf("%+v", got)
@@ -128,7 +128,7 @@ func TestTheRunIsWrittenInTheLanguageThePageAsksFor(t *testing.T) {
 	}
 	// the same switch on «mine oppdrag» (no assignments here, but the request must be accepted)
 	people, _ := e.st.ListPeople(context.Background(), org)
-	if r := e.do("GET", "/api/orgs/"+org+"/plans/"+plan+"/people/"+itoa(people[0].ID)+"/assignments?lang=nb", "", nil); r.code != 200 || !strings.Contains(string(r.body), `"has_plan":true`) {
+	if r := e.do("GET", "/api/orgs/"+org+"/plans/"+plan+"/people/"+itoa(people[0].ID)+"/assignments?lang=nb", nil); r.code != 200 || !strings.Contains(string(r.body), `"has_plan":true`) {
 		t.Errorf("assignments with ?lang=nb: %d %s", r.code, r.body)
 	}
 	_ = store.ErrInvalid

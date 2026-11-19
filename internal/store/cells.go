@@ -110,7 +110,7 @@ func (s *Store) ListCells(ctx context.Context, orgSlug, planSlug string) ([]Manu
 
 // AddCells writes the same manual cell on every listed event, all or nothing. An event that already has it is skipped
 // (and counted); if nothing new would be written, that is a conflict. A person must be active.
-func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, in NewCell) (created []ManualCell, skipped int, err error) {
+func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCell) (created []ManualCell, skipped int, err error) {
 	kinds := 0
 	if in.PersonID != 0 {
 		kinds++
@@ -142,48 +142,47 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 	if len(events) == 0 {
 		return nil, 0, Invalid("choose_events", nil, "choose at least one event")
 	}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		created, skipped = nil, 0
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var taskName, what string
 		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, in.TaskID, oid).Scan(&taskName); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var person, group any
 		switch {
 		case in.PersonID != 0:
 			var active bool
 			if err := tx.QueryRowContext(ctx, `SELECT name, active FROM person WHERE id = ? AND org_id = ?`, in.PersonID, oid).Scan(&what, &active); errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			} else if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			if !active {
-				return logEntry{}, Invalid("person_inactive", map[string]any{"name": what}, "%s is not active", what)
+				return Invalid("person_inactive", map[string]any{"name": what}, "%s is not active", what)
 			}
 			person = in.PersonID
 		case in.GroupID != 0:
 			if err := tx.QueryRowContext(ctx, `SELECT name FROM grp WHERE id = ? AND org_id = ?`, in.GroupID, oid).Scan(&what); errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			} else if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			group = in.GroupID
 		default:
 			what = label
 		}
-		dates, err := eventsOfPlan(ctx, tx, oid, pid, events)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := eventsOfPlan(ctx, tx, oid, pid, events); err != nil {
+			return err
 		}
 		var text any
 		if label != "" {
@@ -197,7 +196,7 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 				continue
 			}
 			if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			c := ManualCell{EventID: ev, TaskID: in.TaskID, Label: label, Fills: fills}
 			c.ID, _ = res.LastInsertId()
@@ -210,9 +209,9 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug, actor string, i
 			created = append(created, c)
 		}
 		if len(created) == 0 {
-			return logEntry{}, Conflict("cell_exists", nil, "that manual cell already exists")
+			return Conflict("cell_exists", nil, "that manual cell already exists")
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "cell.add", detail: clip(fmt.Sprintf("%s: %s, %s", taskName, what, datesText(dates)), 200)}, nil
+		return nil
 	})
 	if err != nil {
 		return nil, 0, err
@@ -228,15 +227,15 @@ func datesText(dates []string) string {
 }
 
 // DeleteCell removes one manual cell of this plan. The planner may then choose for the place again.
-func (s *Store) DeleteCell(ctx context.Context, orgSlug, planSlug, actor string, id int64) error {
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+func (s *Store) DeleteCell(ctx context.Context, orgSlug, planSlug string, id int64) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var date, task string
 		var who sql.NullString
@@ -247,15 +246,15 @@ func (s *Store) DeleteCell(ctx context.Context, orgSlug, planSlug, actor string,
 			LEFT JOIN grp g ON g.id = c.group_id AND g.org_id = c.org_id
 			WHERE c.id = ? AND c.org_id = ? AND c.plan_id = ?`, id, oid, pid).Scan(&date, &task, &who)
 		if errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM manual_cell WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid); err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "cell.delete", detail: fmt.Sprintf("%s %s: %s", task, date, who.String)}, nil
+		return nil
 	})
 }
 
@@ -303,7 +302,7 @@ func (s *Store) ListPools(ctx context.Context, orgSlug, planSlug string) ([]Pool
 
 // SetPool replaces the selection for one task on every listed event, all or nothing; no people and no groups removes
 // it. Only a task the planner distributes can have one, and a person in it must be active.
-func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug, actor string, eventIDs []int64, taskID int64, people, groups []int64) error {
+func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventIDs []int64, taskID int64, people, groups []int64) error {
 	events, err := distinct(eventIDs)
 	if err != nil {
 		return err
@@ -319,71 +318,70 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug, actor string, ev
 	if err != nil {
 		return err
 	}
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var taskName string
 		var planned bool
 		if err := tx.QueryRowContext(ctx, `SELECT name, planned FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&taskName, &planned); errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if !planned {
-			return logEntry{}, Invalid("task_not_distributed", nil, "the planner does not distribute %q, so there is nothing to select for", taskName)
+			return Invalid("task_not_distributed", nil, "the planner does not distribute %q, so there is nothing to select for", taskName)
 		}
 		var names []string
 		for _, p := range people {
 			var n string
 			var active bool
 			if err := tx.QueryRowContext(ctx, `SELECT name, active FROM person WHERE id = ? AND org_id = ?`, p, oid).Scan(&n, &active); errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			} else if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			if !active {
-				return logEntry{}, Invalid("person_inactive", map[string]any{"name": n}, "%s is not active", n)
+				return Invalid("person_inactive", map[string]any{"name": n}, "%s is not active", n)
 			}
 			names = append(names, n)
 		}
 		for _, g := range groups {
 			var n string
 			if err := tx.QueryRowContext(ctx, `SELECT name FROM grp WHERE id = ? AND org_id = ?`, g, oid).Scan(&n); errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			} else if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			names = append(names, n)
 		}
-		dates, err := eventsOfPlan(ctx, tx, oid, pid, events)
-		if err != nil {
-			return logEntry{}, err
+		if _, err := eventsOfPlan(ctx, tx, oid, pid, events); err != nil {
+			return err
 		}
 		for _, ev := range events {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM pool_member WHERE org_id = ? AND plan_id = ? AND event_id = ? AND task_id = ?`, oid, pid, ev, taskID); err != nil {
-				return logEntry{}, err
+				return err
 			}
 			for _, p := range people {
 				if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, person_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, ev, taskID, p); err != nil {
-					return logEntry{}, err
+					return err
 				}
 			}
 			for _, g := range groups {
 				if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, group_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, ev, taskID, g); err != nil {
-					return logEntry{}, err
+					return err
 				}
 			}
 		}
 		sort.Strings(names)
 		if len(names) == 0 {
-			return logEntry{orgID: oid, planID: &pid, action: "pool.clear", detail: clip(fmt.Sprintf("%s: %s", taskName, datesText(dates)), 200)}, nil
+			return nil
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "pool.set", detail: clip(fmt.Sprintf("%s: %s, %s", taskName, strings.Join(names, ", "), datesText(dates)), 200)}, nil
+		return nil
 	})
 }

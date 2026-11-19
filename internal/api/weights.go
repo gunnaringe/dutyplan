@@ -38,7 +38,7 @@ func (s *server) setWeights(w http.ResponseWriter, r *http.Request) {
 	if b.Values == nil {
 		b.Values = map[string]any{}
 	}
-	values, err := s.st.SetWeights(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Values)
+	values, err := s.st.SetWeights(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Values)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return

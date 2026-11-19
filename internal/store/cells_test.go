@@ -23,21 +23,21 @@ func cellWorld(t *testing.T, s *Store, orgName string) cellEnv {
 			t.Fatal(err)
 		}
 	}
-	dt, err := s.CreateDayType(ctx, e.org.Slug, "Ola", "Service")
+	dt, err := s.CreateDayType(ctx, e.org.Slug, "Service")
 	must(err)
-	e.plan1, err = s.CreatePlan(ctx, e.org.Slug, "Ola", "Autumn 2026", "")
+	e.plan1, err = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026", "")
 	must(err)
-	e.plan2, err = s.CreatePlan(ctx, e.org.Slug, "Ola", "Spring 2027", "")
+	e.plan2, err = s.CreatePlan(ctx, e.org.Slug, "Spring 2027", "")
 	must(err)
 	for _, c := range []struct {
 		plan Plan
 		date string
 	}{{e.plan1, "2026-09-06"}, {e.plan1, "2026-09-13"}, {e.plan2, "2027-02-07"}} {
-		ev, err := s.AddEvent(ctx, e.org.Slug, c.plan.Slug, "Ola", c.date, dt.ID, "")
+		ev, err := s.AddEvent(ctx, e.org.Slug, c.plan.Slug, c.date, dt.ID, "")
 		must(err)
 		e.ev = append(e.ev, ev)
 	}
-	e.choir, err = s.CreateGroup(ctx, e.org.Slug, "Ola", "Choir")
+	e.choir, err = s.CreateGroup(ctx, e.org.Slug, "Choir")
 	must(err)
 	return e
 }
@@ -54,23 +54,23 @@ func TestManualCellsAreAddedForSeveralEventsAtOnce(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
 	anna := e.people["Aslaug"].ID
-	created, skipped, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0], e.ev[1], e.ev[0]), TaskID: e.sound.ID, PersonID: anna})
+	created, skipped, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0], e.ev[1], e.ev[0]), TaskID: e.sound.ID, PersonID: anna})
 	if err != nil || len(created) != 2 || skipped != 0 || *created[0].PersonID != anna || created[0].Fills != 1 {
 		t.Fatalf("two events (a repeated id counts once): %+v %d %v", created, skipped, err)
 	}
-	if _, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0], e.ev[1]), TaskID: e.sound.ID, PersonID: anna}); !errors.Is(err, ErrConflict) {
+	if _, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0], e.ev[1]), TaskID: e.sound.ID, PersonID: anna}); !errors.Is(err, ErrConflict) {
 		t.Errorf("the same cells again: %v", err)
 	}
 	// a person may be set on several tasks of one event (the planner will warn if they cannot be combined); a new event is added, the old one skipped
-	if created, skipped, err = s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.camera.ID, PersonID: anna}); err != nil || len(created) != 1 {
+	if created, skipped, err = s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.camera.ID, PersonID: anna}); err != nil || len(created) != 1 {
 		t.Fatalf("another task, same event: %+v %v", created, err)
 	}
 	// a task the planner does not distribute can have manual cells (that is what it is for); a group fills several places
-	g, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0], e.ev[1]), TaskID: e.sang.ID, GroupID: e.choir.ID, Fills: 3})
+	g, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0], e.ev[1]), TaskID: e.sang.ID, GroupID: e.choir.ID, Fills: 3})
 	if err != nil || len(g) != 2 || g[0].Fills != 3 || *g[0].GroupID != e.choir.ID {
 		t.Fatalf("a group in a task the planner does not distribute: %+v %v", g, err)
 	}
-	txt, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[1]), TaskID: e.sound.ID, Label: "  Outside guest "})
+	txt, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[1]), TaskID: e.sound.ID, Label: "  Outside guest "})
 	if err != nil || txt[0].Label != "Outside guest" || txt[0].Fills != 1 {
 		t.Fatalf("a text: %+v %v", txt, err)
 	}
@@ -81,10 +81,6 @@ func TestManualCellsAreAddedForSeveralEventsAtOnce(t *testing.T) {
 	if other, _ := s.ListCells(ctx, e.org.Slug, e.plan2.Slug); len(other) != 0 {
 		t.Errorf("another plan lists none of them: %+v", other)
 	}
-	log, _ := s.ListLog(ctx, e.org.Slug, e.plan1.Slug, 5)
-	if len(log) == 0 || log[0].Action != "cell.add" || !strings.Contains(log[0].Detail, "Sound: Outside guest") {
-		t.Errorf("the log says what was set: %+v", log)
-	}
 }
 
 func TestManualCellRefusals(t *testing.T) {
@@ -92,7 +88,7 @@ func TestManualCellRefusals(t *testing.T) {
 	e := cellWorld(t, s, "Club")
 	other := cellWorld(t, s, "Annen")
 	inactive := false
-	s.UpdatePerson(ctx, e.org.Slug, "Ola", e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
+	s.UpdatePerson(ctx, e.org.Slug, e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
 	ev := e.ids(e.ev[0])
 	for name, c := range map[string]struct {
 		in   NewCell
@@ -117,14 +113,11 @@ func TestManualCellRefusals(t *testing.T) {
 		"another organisation's event":  {NewCell{EventIDs: other.ids(other.ev[0]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}, ErrNotFound},
 		"one event of two is not ours":  {NewCell{EventIDs: e.ids(e.ev[0], e.ev[2]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}, ErrNotFound},
 	} {
-		if _, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", c.in); !errors.Is(err, c.want) {
+		if _, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, c.in); !errors.Is(err, c.want) {
 			t.Errorf("%s: want %v, got %v", name, c.want, err)
 		}
 	}
-	if _, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "", NewCell{EventIDs: ev, TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}); !errors.Is(err, ErrActor) {
-		t.Errorf("no actor: %v", err)
-	}
-	if _, _, err := s.AddCells(ctx, e.org.Slug, "nope", "Ola", NewCell{EventIDs: ev, TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
+	if _, _, err := s.AddCells(ctx, e.org.Slug, "nope", NewCell{EventIDs: ev, TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM manual_cell`); n != 0 {
@@ -136,40 +129,33 @@ func TestManualCellsBelongToTheirPlanAndGoWithTheirEvent(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
 	other := cellWorld(t, s, "Annen")
-	made, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID})
+	made, _, err := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := made[0].ID
-	if err := s.DeleteCell(ctx, e.org.Slug, e.plan2.Slug, "Ola", id); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteCell(ctx, e.org.Slug, e.plan2.Slug, id); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete through another plan: %v", err)
 	}
-	if err := s.DeleteCell(ctx, other.org.Slug, other.plan1.Slug, "Eva", id); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteCell(ctx, other.org.Slug, other.plan1.Slug, id); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete through another organisation: %v", err)
-	}
-	if err := s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, "", id); !errors.Is(err, ErrActor) {
-		t.Errorf("no actor: %v", err)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM manual_cell`); n != 1 {
 		t.Fatalf("the cell survived the refused deletes: %d", n)
 	}
 	// deleting the event takes its cells and selections with it
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ids(e.ev[0]), e.sound.ID, []int64{e.people["Birger"].ID}, nil); err != nil {
+	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ids(e.ev[0]), e.sound.ID, []int64{e.people["Birger"].ID}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteEvent(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ev[0].ID); err != nil {
+	if err := s.DeleteEvent(ctx, e.org.Slug, e.plan1.Slug, e.ev[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM manual_cell`) + count(t, s, `SELECT COUNT(*) FROM pool_member`); n != 0 {
 		t.Errorf("cells and selections go with the event: %d", n)
 	}
-	made, _, _ = s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[1]), TaskID: e.sound.ID, Label: "Guest"})
-	if err := s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, "Ola", made[0].ID); err != nil {
+	made, _, _ = s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[1]), TaskID: e.sound.ID, Label: "Guest"})
+	if err := s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, made[0].ID); err != nil {
 		t.Fatal(err)
-	}
-	log, _ := s.ListLog(ctx, e.org.Slug, e.plan1.Slug, 1)
-	if len(log) == 0 || log[0].Action != "cell.delete" || log[0].Detail != "Sound 2026-09-13: Guest" {
-		t.Errorf("log: %+v", log)
 	}
 }
 
@@ -179,7 +165,7 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 	other := cellWorld(t, s, "Annen")
 	a, b := e.people["Aslaug"].ID, e.people["Birger"].ID
 	both := e.ids(e.ev[0], e.ev[1])
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", both, e.sound.ID, []int64{a, b, a}, []int64{e.choir.ID}); err != nil {
+	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, both, e.sound.ID, []int64{a, b, a}, []int64{e.choir.ID}); err != nil {
 		t.Fatal(err)
 	}
 	pools, _ := s.ListPools(ctx, e.org.Slug, e.plan1.Slug)
@@ -187,10 +173,10 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 		t.Fatalf("pools: %+v", pools)
 	}
 	// replacing one event's selection leaves the other untouched; another task has its own
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ids(e.ev[1]), e.sound.ID, []int64{b}, nil); err != nil {
+	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ids(e.ev[1]), e.sound.ID, []int64{b}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ids(e.ev[1]), e.camera.ID, []int64{a}, nil); err != nil {
+	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ids(e.ev[1]), e.camera.ID, []int64{a}, nil); err != nil {
 		t.Fatal(err)
 	}
 	pools, _ = s.ListPools(ctx, e.org.Slug, e.plan1.Slug)
@@ -198,7 +184,7 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 		t.Fatalf("after replacing: %+v", pools)
 	}
 	// no people and no groups removes the selection
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", both, e.sound.ID, nil, nil); err != nil {
+	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, both, e.sound.ID, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pools, _ = s.ListPools(ctx, e.org.Slug, e.plan1.Slug); len(pools) != 1 || pools[0].TaskID != e.camera.ID {
@@ -207,13 +193,9 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 	if other, _ := s.ListPools(ctx, e.org.Slug, e.plan2.Slug); len(other) != 0 {
 		t.Errorf("another plan lists none: %+v", other)
 	}
-	log, _ := s.ListLog(ctx, e.org.Slug, e.plan1.Slug, 1)
-	if len(log) == 0 || log[0].Action != "pool.clear" {
-		t.Errorf("log: %+v", log)
-	}
 
 	inactive := false
-	s.UpdatePerson(ctx, e.org.Slug, "Ola", e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
+	s.UpdatePerson(ctx, e.org.Slug, e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
 	for name, c := range map[string]struct {
 		ev           []int64
 		task         int64
@@ -229,12 +211,9 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 		"an event of another plan":               {e.ids(e.ev[0], e.ev[2]), e.sound.ID, []int64{a}, nil, ErrNotFound},
 		"another organisation's event":           {other.ids(other.ev[0]), e.sound.ID, []int64{a}, nil, ErrNotFound},
 	} {
-		if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", c.ev, c.task, c.people, c.grps); !errors.Is(err, c.want) {
+		if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, c.ev, c.task, c.people, c.grps); !errors.Is(err, c.want) {
 			t.Errorf("%s: want %v, got %v", name, c.want, err)
 		}
-	}
-	if err := s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "", both, e.sound.ID, []int64{a}, nil); !errors.Is(err, ErrActor) {
-		t.Errorf("no actor: %v", err)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM pool_member WHERE task_id = ?`, e.sound.ID); n != 0 {
 		t.Errorf("a refused request changes nothing (all or nothing): %d rows for Sound", n)
@@ -244,23 +223,23 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 func TestWhatIsUsedByCellsAndPoolsCannotBeDeleted(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
-	made, _, _ := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sang.ID, GroupID: e.choir.ID})
-	if err := s.DeleteGroup(ctx, e.org.Slug, "Ola", e.choir.ID); !errors.Is(err, ErrConflict) {
+	made, _, _ := s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sang.ID, GroupID: e.choir.ID})
+	if err := s.DeleteGroup(ctx, e.org.Slug, e.choir.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a group in a manual cell: %v", err)
 	}
-	if err := s.DeleteTask(ctx, e.org.Slug, "Ola", e.sang.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.sang.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a task in a manual cell: %v", err)
 	}
-	s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, "Ola", made[0].ID)
-	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ids(e.ev[0]), e.sound.ID, nil, []int64{e.choir.ID})
-	if err := s.DeleteGroup(ctx, e.org.Slug, "Ola", e.choir.ID); !errors.Is(err, ErrConflict) {
+	s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, made[0].ID)
+	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ids(e.ev[0]), e.sound.ID, nil, []int64{e.choir.ID})
+	if err := s.DeleteGroup(ctx, e.org.Slug, e.choir.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a group in a selection: %v", err)
 	}
-	if err := s.DeleteTask(ctx, e.org.Slug, "Ola", e.sound.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.sound.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a task in a selection: %v", err)
 	}
-	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, "Ola", e.ids(e.ev[0]), e.sound.ID, nil, nil)
-	if err := s.DeleteGroup(ctx, e.org.Slug, "Ola", e.choir.ID); err != nil {
+	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ids(e.ev[0]), e.sound.ID, nil, nil)
+	if err := s.DeleteGroup(ctx, e.org.Slug, e.choir.ID); err != nil {
 		t.Errorf("once nothing names it: %v", err)
 	}
 }
@@ -300,9 +279,9 @@ func TestCellForeignKeysAreTheBackstop(t *testing.T) {
 func TestPlanningDataCarriesCellsAndPoolsOfItsPlanOnly(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
-	s.AddCells(ctx, e.org.Slug, e.plan1.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID})
-	s.AddCells(ctx, e.org.Slug, e.plan2.Slug, "Ola", NewCell{EventIDs: e.ids(e.ev[2]), TaskID: e.sound.ID, PersonID: e.people["Birger"].ID})
-	s.SetPool(ctx, e.org.Slug, e.plan2.Slug, "Ola", e.ids(e.ev[2]), e.sound.ID, []int64{e.people["Birger"].ID}, nil)
+	s.AddCells(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventIDs: e.ids(e.ev[0]), TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID})
+	s.AddCells(ctx, e.org.Slug, e.plan2.Slug, NewCell{EventIDs: e.ids(e.ev[2]), TaskID: e.sound.ID, PersonID: e.people["Birger"].ID})
+	s.SetPool(ctx, e.org.Slug, e.plan2.Slug, e.ids(e.ev[2]), e.sound.ID, []int64{e.people["Birger"].ID}, nil)
 	d1, err := s.GetPlanningData(ctx, e.org.Slug, e.plan1.Slug)
 	d2, _ := s.GetPlanningData(ctx, e.org.Slug, e.plan2.Slug)
 	if err != nil || len(d1.Cells) != 1 || len(d1.Pools) != 0 || len(d2.Cells) != 1 || len(d2.Pools) != 1 || *d2.Cells[0].PersonID != e.people["Birger"].ID {

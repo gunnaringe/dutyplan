@@ -12,7 +12,7 @@ import (
 func (w world) runWith(t *testing.T, answer []byte) *Service {
 	t.Helper()
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return answer, nil })
-	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5}); err != nil {
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); err != nil {
 		t.Fatal(err)
 	}
 	waitDone(t, s)
@@ -51,7 +51,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		}
 	}
 	m := mine("Aslaug")
-	if !m.HasPlan || m.Run == nil || m.Run.Actor != "Kari" || m.Run.Stale || m.Person.Name != "Aslaug" || m.Assignments[0].DayType != "Service" {
+	if !m.HasPlan || m.Run == nil || m.Run.Stale || m.Person.Name != "Aslaug" || m.Assignments[0].DayType != "Service" {
 		t.Errorf("%+v", m)
 	}
 	// «a text» is nobody's assignment, and a person with nothing gets a list, not null
@@ -59,7 +59,7 @@ func TestMineShowsOwnAndGroupAssignmentsInTheOrderOfTheEvents(t *testing.T) {
 		t.Errorf("nothing for Frode: %+v", f)
 	}
 	// the plan is out of date once the data has changed
-	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people["Dina"].ID, map[int64]string{w.events[3].ID: "never"})
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Dina"].ID, map[int64]string{w.events[3].ID: "never"})
 	if !mine("Aslaug").Run.Stale {
 		t.Error("a change after the run makes it stale")
 	}
@@ -74,17 +74,17 @@ func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 		t.Errorf("no run yet: %+v %v", m, err)
 	}
 	failing := newService(w, func(context.Context, []byte) ([]byte, error) { return nil, errors.New("boom") })
-	failing.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	failing.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, failing)
 	if m, _ := failing.Mine(ctx, w.org.Slug, w.plan.Slug, anna); m.HasPlan {
 		t.Errorf("a failed run is not a plan: %+v", m)
 	}
 	good := w.runWith(t, groupAnswer(w, choir))
 	failing2 := newService(w, func(context.Context, []byte) ([]byte, error) { return nil, errors.New("boom") })
-	failing2.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5})
+	failing2.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, failing2)
 	m, err := good.Mine(ctx, w.org.Slug, w.plan.Slug, anna)
-	if err != nil || !m.HasPlan || len(m.Assignments) != 2 || m.Run.Actor != "Kari" {
+	if err != nil || !m.HasPlan || len(m.Assignments) != 2 {
 		t.Errorf("the newest run failed, so the plan is the one before it: %+v %v", m, err)
 	}
 	// of two finished runs the newer is the plan (here one that gives Aslaug nothing)
@@ -92,10 +92,10 @@ func TestMineUsesTheNewestFinishedRunAndSaysWhenThereIsNoPlan(t *testing.T) {
 	newer := newService(w, func(context.Context, []byte) ([]byte, error) {
 		return []byte(`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`), nil
 	})
-	newer.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})
+	newer.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, newer)
 	_ = nothing
-	if m, _ = newer.Mine(ctx, w.org.Slug, w.plan.Slug, anna); m.Run == nil || m.Run.Actor != "Eva" || len(m.Assignments) != 0 {
+	if m, _ = newer.Mine(ctx, w.org.Slug, w.plan.Slug, anna); m.Run == nil || len(m.Assignments) != 0 {
 		t.Errorf("the newest finished run is the plan: %+v", m)
 	}
 }
@@ -130,7 +130,7 @@ func TestMineUsesThePinnedRunInsteadOfTheNewestOne(t *testing.T) {
 	w.runWith(t, groupAnswer(w, choir)) // Aslaug has two assignments here
 	empty := []byte(`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{},"violations":[]}`)
 	newer := newService(w, func(context.Context, []byte) ([]byte, error) { return empty, nil })
-	newer.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})
+	newer.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, newer)
 	mine := func() Mine {
 		t.Helper()
@@ -148,7 +148,7 @@ func TestMineUsesThePinnedRunInsteadOfTheNewestOne(t *testing.T) {
 	if m := mine(); m.Run.ID != newestID || m.Run.Pinned || len(m.Assignments) != 0 {
 		t.Errorf("nothing pinned: the newest finished run is the plan: %+v", m.Run)
 	}
-	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, "Ola", olderID, true); err != nil {
+	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, olderID, true); err != nil {
 		t.Fatal(err)
 	}
 	if m := mine(); m.Run.ID != olderID || !m.Run.Pinned || len(m.Assignments) != 2 {
@@ -156,15 +156,15 @@ func TestMineUsesThePinnedRunInsteadOfTheNewestOne(t *testing.T) {
 	}
 	// a newer run, finished or failed, does not move the pin
 	failing := newService(w, func(context.Context, []byte) ([]byte, error) { return nil, errors.New("boom") })
-	failing.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5})
+	failing.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, failing)
 	third := newService(w, func(context.Context, []byte) ([]byte, error) { return empty, nil })
-	third.Start(ctx, w.org.Slug, w.plan.Slug, "Eva", Params{TimeLimit: 5})
+	third.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, third)
 	if m := mine(); m.Run.ID != olderID || len(m.Assignments) != 2 {
 		t.Errorf("new runs leave the pin where it was: %+v", m.Run)
 	}
-	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, "Ola", olderID, false); err != nil {
+	if err := w.st.PinRun(ctx, w.org.Slug, w.plan.Slug, olderID, false); err != nil {
 		t.Fatal(err)
 	}
 	if m := mine(); m.Run.Pinned || m.Run.ID == olderID || len(m.Assignments) != 0 {

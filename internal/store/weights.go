@@ -140,23 +140,23 @@ func (s *Store) GetWeights(ctx context.Context, orgSlug, planSlug string) (map[s
 
 // SetWeights replaces what the plan has changed from the defaults (an empty map goes back to the defaults) and
 // returns the stored result. Unknown keys and values outside their range are refused, and so is a change that changes nothing.
-func (s *Store) SetWeights(ctx context.Context, orgSlug, planSlug, actor string, values map[string]any) (map[string]any, error) {
+func (s *Store) SetWeights(ctx context.Context, orgSlug, planSlug string, values map[string]any) (map[string]any, error) {
 	clean, err := cleanWeights(values)
 	if err != nil {
 		return nil, err
 	}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		pid, err := planID(ctx, tx, oid, planSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		old, err := getWeights(ctx, tx, oid, pid)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		before, after := effective(old), effective(clean)
 		var changes []string
@@ -166,18 +166,18 @@ func (s *Store) SetWeights(ctx context.Context, orgSlug, planSlug, actor string,
 			}
 		}
 		if len(changes) == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		sort.Strings(changes)
 		b, _ := json.Marshal(clean)
 		if _, err := tx.ExecContext(ctx, `UPDATE plan SET weights = ? WHERE org_id = ? AND id = ?`, string(b), oid, pid); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		detail := strings.Join(changes, "; ")
 		if len(clean) == 0 {
 			detail = "back to the defaults (" + detail + ")"
 		}
-		return logEntry{orgID: oid, planID: &pid, action: "plan.weights", detail: clip(detail, 200)}, nil
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -27,7 +27,6 @@ type MyAssignment struct {
 // MineRun says which plan the assignments come from.
 type MineRun struct {
 	ID         int64  `json:"id"`
-	Actor      string `json:"actor"`
 	FinishedAt string `json:"finished_at"`
 	Stale      bool   `json:"stale"`  // the plan's data has changed since
 	Pinned     bool   `json:"pinned"` // chosen as the current plan; else it is just the newest finished one
@@ -74,7 +73,7 @@ func (s *Service) Mine(ctx context.Context, orgSlug, planSlug string, personID i
 			return m, err
 		}
 		m.HasPlan = true
-		m.Run = &MineRun{ID: r.ID, Actor: r.Actor, FinishedAt: r.FinishedAt, Stale: v.Run.Stale, Pinned: r.Pinned}
+		m.Run = &MineRun{ID: r.ID, FinishedAt: r.FinishedAt, Stale: v.Run.Stale, Pinned: r.Pinned}
 		names := map[int64]string{}
 		for _, t := range v.Tasks {
 			names[t.ID] = t.Name

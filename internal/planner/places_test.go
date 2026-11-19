@@ -31,7 +31,7 @@ func (w world) dates(t *testing.T) (datesView, Snapshot, string) {
 
 func (w world) places(t *testing.T, ev store.Event, task store.Task, n *int) {
 	t.Helper()
-	if err := w.st.SetEventPlaces(ctx, w.org.Slug, w.plan.Slug, "T", ev.ID, task.ID, n); err != nil {
+	if err := w.st.SetEventPlaces(ctx, w.org.Slug, w.plan.Slug, ev.ID, task.ID, n); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,7 +100,7 @@ func TestAnEventsOwnPlacesBecomeADayTypeOfItsOwnInTheInput(t *testing.T) {
 
 func TestATaskOnlyOneEventHasIsSentForThatEvent(t *testing.T) {
 	w := newWorld(t, "Club")
-	extra, err := w.st.CreateTask(ctx, w.org.Slug, "T", "Coffee", true)
+	extra, err := w.st.CreateTask(ctx, w.org.Slug, "Coffee", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestATaskOnlyOneEventHasIsSentForThatEvent(t *testing.T) {
 
 func TestAPlanWithOnlyAnEventsOwnPlacesHasWork(t *testing.T) {
 	w := newWorld(t, "Club")
-	if _, err := w.st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.singing.ID, Slots: 1}}); err != nil {
+	if _, err := w.st.SetDayTypeTasks(ctx, w.org.Slug, w.dt.ID, []store.DayTypeTask{{TaskID: w.singing.ID, Slots: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	if HasWork(w.data(t)) {
@@ -132,7 +132,7 @@ func TestAPlanWithOnlyAnEventsOwnPlacesHasWork(t *testing.T) {
 		t.Error("an event's own place for a planned task is work")
 	}
 	w.places(t, w.events[0], w.camera, nil)
-	if _, err := w.st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.sound.ID, Slots: 1}}); err != nil {
+	if _, err := w.st.SetDayTypeTasks(ctx, w.org.Slug, w.dt.ID, []store.DayTypeTask{{TaskID: w.sound.ID, Slots: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range w.events {
@@ -175,11 +175,11 @@ func TestInfoRowsAreNotPartOfTheInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, err := w.st.AddField(ctx, w.org.Slug, w.plan.Slug, "T", "Theme")
+	f, err := w.st.AddField(ctx, w.org.Slug, w.plan.Slug, "Theme")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.st.SetFieldValue(ctx, w.org.Slug, w.plan.Slug, "T", w.events[0].ID, f.ID, "Light"); err != nil {
+	if err := w.st.SetFieldValue(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, f.ID, "Light"); err != nil {
 		t.Fatal(err)
 	}
 	again, h, _, _ := BuildInput(w.data(t), Params{})
@@ -194,7 +194,7 @@ func TestTheRealSolverFillsAnEventsOwnPlaces(t *testing.T) {
 	w.places(t, w.events[2], w.sound, places(2)) // Aslaug, Birger and Cecilie take Sound
 	w.places(t, w.events[3], w.camera, places(0))
 	s := New(w.st, solver, 1, nopLogger())
-	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5, Seed: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

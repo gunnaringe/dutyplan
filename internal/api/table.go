@@ -62,7 +62,7 @@ func (s *server) setPlaces(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, s.log, store.Invalid("places_invalid", map[string]any{"max": 50}, "send the number of places in slots"))
 		return
 	}
-	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), ev, task, b.Slots), s)
+	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, b.Slots), s)
 }
 
 func (s *server) resetPlaces(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (s *server) resetPlaces(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), ev, task, nil), s)
+	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, nil), s)
 }
 
 func (s *server) listFields(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +87,7 @@ func (s *server) addField(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	f, err := s.st.AddField(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Name)
+	f, err := s.st.AddField(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -104,7 +104,7 @@ func (s *server) renameField(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	f, err := s.st.RenameField(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, b.Name)
+	f, err := s.st.RenameField(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -117,7 +117,7 @@ func (s *server) deleteField(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteField(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
+	noContent(w, s.st.DeleteField(r.Context(), r.PathValue("org"), r.PathValue("plan"), id), s)
 }
 
 func (s *server) setFieldValue(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +131,7 @@ func (s *server) setFieldValue(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetFieldValue(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), ev, field, b.Value), s)
+	noContent(w, s.st.SetFieldValue(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, field, b.Value), s)
 }
 
 func (s *server) listAnswers(w http.ResponseWriter, r *http.Request) {
@@ -154,5 +154,5 @@ func (s *server) setTaskCombinations(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetTaskCombinations(r.Context(), r.PathValue("org"), actor(r), id, b.Level), s)
+	noContent(w, s.st.SetTaskCombinations(r.Context(), r.PathValue("org"), id, b.Level), s)
 }

@@ -50,12 +50,9 @@ func TestGroupsOverHTTP(t *testing.T) {
 		{409, "POST", "/api/orgs/org-a/groups", map[string]any{"name": "Choir"}, "duplicate name"},
 		{404, "PATCH", "/api/orgs/org-a/groups/abc", map[string]any{"proposable": true}, "bad id"},
 	} {
-		if r := e.do(c.method, c.path, "T", c.body); r.code != c.code {
+		if r := e.do(c.method, c.path, c.body); r.code != c.code {
 			t.Errorf("%s: %s %s = %d %s, want %d", c.what, c.method, c.path, r.code, r.body, c.code)
 		}
-	}
-	if r := e.do("POST", "/api/orgs/org-a/groups", "", map[string]string{"name": "No actor"}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("no actor: %d %s", r.code, r.body)
 	}
 	e.mustDo(204, "DELETE", base, nil)
 	e.mustDo(200, "GET", "/api/orgs/org-a/groups", nil).json(&list)

@@ -21,7 +21,7 @@ func TestTheTablesDataOverHTTP(t *testing.T) {
 		t.Errorf("places: %+v", places)
 	}
 	for name, body := range map[string]any{"too many": map[string]int{"slots": 51}, "missing": map[string]any{}} {
-		if r := e.do("PUT", base+"/events/"+itoa(ev.ID)+"/places/"+itoa(a.sound.ID), "T", body); r.code != 400 {
+		if r := e.do("PUT", base+"/events/"+itoa(ev.ID)+"/places/"+itoa(a.sound.ID), body); r.code != 400 {
 			t.Errorf("places %s: %d %s", name, r.code, r.body)
 		}
 	}
@@ -38,7 +38,7 @@ func TestTheTablesDataOverHTTP(t *testing.T) {
 	if f.Name != "Motto" {
 		t.Errorf("rename: %+v", f)
 	}
-	if r := e.do("POST", base+"/fields", "T", map[string]string{"name": "Motto"}); r.code != 409 {
+	if r := e.do("POST", base+"/fields", map[string]string{"name": "Motto"}); r.code != 409 {
 		t.Errorf("the same name twice: %d %s", r.code, r.body)
 	}
 	e.mustDo(204, "PUT", base+"/events/"+itoa(ev.ID)+"/fields/"+itoa(f.ID), map[string]string{"value": "Light"})
@@ -68,11 +68,8 @@ func TestTheTablesDataOverHTTP(t *testing.T) {
 	if len(pairs) != 1 || pairs[0].Level != "cannot" {
 		t.Errorf("combinations: %+v", pairs)
 	}
-	if r := e.do("PUT", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sound.ID)+"/combinations", "T", map[string]string{"level": "cannot"}); r.code != 400 {
+	if r := e.do("PUT", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sound.ID)+"/combinations", map[string]string{"level": "cannot"}); r.code != 400 {
 		t.Errorf("nothing to change: %d %s", r.code, r.body)
-	}
-	if r := e.do("PUT", base+"/events/"+itoa(ev.ID)+"/places/"+itoa(a.sound.ID), "", map[string]int{"slots": 2}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("a write without an actor: %d %s", r.code, r.body)
 	}
 }
 
@@ -107,7 +104,7 @@ func TestTheTablesDataIs404AcrossPlansAndOrganisations(t *testing.T) {
 		{"GET", "/api/orgs/" + a.org + "/plans/nope/answers", nil},
 		{"PUT", "/api/orgs/" + b.org + "/tasks/" + itoa(a.sound.ID) + "/combinations", map[string]string{"level": "cannot"}},
 	} {
-		if r := e.do(c.method, c.path, "T", c.body); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do(c.method, c.path, c.body); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s, want 404", c.method, c.path, r.code, r.body)
 		}
 	}

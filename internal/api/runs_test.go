@@ -26,21 +26,21 @@ func (e *env) plannable(name string) (org, plan string) {
 			e.t.Fatal(err)
 		}
 	}
-	o, err := e.st.CreateOrg(ctx, "T", name, "")
+	o, err := e.st.CreateOrg(ctx, name, "")
 	must(err)
-	task, err := e.st.CreateTask(ctx, o.Slug, "T", "Sound", true)
+	task, err := e.st.CreateTask(ctx, o.Slug, "Sound", true)
 	must(err)
-	dt, err := e.st.CreateDayType(ctx, o.Slug, "T", "Service")
+	dt, err := e.st.CreateDayType(ctx, o.Slug, "Service")
 	must(err)
-	_, err = e.st.SetDayTypeTasks(ctx, o.Slug, "T", dt.ID, []store.DayTypeTask{{TaskID: task.ID, Slots: 1}})
+	_, err = e.st.SetDayTypeTasks(ctx, o.Slug, dt.ID, []store.DayTypeTask{{TaskID: task.ID, Slots: 1}})
 	must(err)
-	p, err := e.st.CreatePlan(ctx, o.Slug, "T", "Autumn 2026", "")
+	p, err := e.st.CreatePlan(ctx, o.Slug, "Autumn 2026", "")
 	must(err)
-	_, err = e.st.AddEvent(ctx, o.Slug, p.Slug, "T", "2026-08-09", dt.ID, "")
+	_, err = e.st.AddEvent(ctx, o.Slug, p.Slug, "2026-08-09", dt.ID, "")
 	must(err)
-	person, err := e.st.CreatePerson(ctx, o.Slug, "T", "Aslaug")
+	person, err := e.st.CreatePerson(ctx, o.Slug, "Aslaug")
 	must(err)
-	must(e.st.SetPersonTask(ctx, o.Slug, "T", person.ID, task.ID, "neutral"))
+	must(e.st.SetPersonTask(ctx, o.Slug, person.ID, task.ID, "neutral"))
 	return o.Slug, p.Slug
 }
 
@@ -67,7 +67,7 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 	if !h["planner"] {
 		t.Errorf("health must say that planning is possible: %v", h)
 	}
-	if r := e.do("GET", "/api/orgs/"+a+"/plans/"+planA+"/runs/latest", "", nil); r.code != 404 {
+	if r := e.do("GET", "/api/orgs/"+a+"/plans/"+planA+"/runs/latest", nil); r.code != 404 {
 		t.Errorf("no run yet: %d", r.code)
 	}
 
@@ -77,7 +77,7 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 	e.wait()
 	var v planner.RunView
 	e.mustDo(200, "GET", "/api/orgs/"+a+"/plans/"+planA+"/runs/"+itoa(started.ID), nil).json(&v)
-	if v.Run.Status != "done" || v.Run.Actor != "Test" || len(v.Events) != 1 || len(v.Tasks) != 1 {
+	if v.Run.Status != "done" || len(v.Events) != 1 || len(v.Tasks) != 1 {
 		t.Fatalf("run: %+v", v)
 	}
 	var latest planner.RunView
@@ -100,7 +100,7 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 		"/api/orgs/" + a + "/plans/" + planA + "/runs/abc",
 		"/api/orgs/" + a + "/plans/" + planA + "/runs/99999",
 	} {
-		if r := e.do("GET", path, "", nil); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do("GET", path, nil); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("GET %s = %d %s, want 404", path, r.code, r.body)
 		}
 	}
@@ -109,7 +109,7 @@ func TestPlanningFlowAndIsolation(t *testing.T) {
 	if len(listB) != 0 {
 		t.Errorf("B must not see A's runs: %v", listB)
 	}
-	if r := e.do("POST", "/api/orgs/nope/plans/"+planA+"/runs", "T", map[string]any{}); r.code != 404 {
+	if r := e.do("POST", "/api/orgs/nope/plans/"+planA+"/runs", map[string]any{}); r.code != 404 {
 		t.Errorf("planning in an unknown organisation: %d", r.code)
 	}
 }
@@ -120,17 +120,14 @@ func TestPlanningRefusals(t *testing.T) {
 	org, plan := e.plannable("Org A")
 	path := "/api/orgs/" + org + "/plans/" + plan + "/runs"
 
-	if r := e.do("POST", path, "", map[string]any{}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("without actor: %d %s", r.code, r.body)
-	}
-	if r := e.do("POST", path, "T", map[string]any{"time_limit": 1}); r.code != 400 || r.errCode() != "invalid" {
+	if r := e.do("POST", path, map[string]any{"time_limit": 1}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("too short a time limit: %d %s", r.code, r.body)
 	}
-	if r := e.do("POST", path, "T", map[string]any{"tid": 5}); r.code != 400 {
+	if r := e.do("POST", path, map[string]any{"tid": 5}); r.code != 400 {
 		t.Errorf("unknown field: %d %s", r.code, r.body)
 	}
-	empty, _ := e.st.CreatePlan(context.Background(), org, "T", "Tom", "")
-	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+empty.Slug+"/runs", "T", map[string]any{}); r.code != 400 || r.errCode() != "invalid" {
+	empty, _ := e.st.CreatePlan(context.Background(), org, "Tom", "")
+	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+empty.Slug+"/runs", map[string]any{}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("a plan without events: %d %s", r.code, r.body)
 	}
 	if n := len(mustRuns(t, e, org, plan)); n != 0 {
@@ -138,7 +135,7 @@ func TestPlanningRefusals(t *testing.T) {
 	}
 
 	e.mustDo(202, "POST", path, map[string]any{})
-	if r := e.do("POST", path, "T", map[string]any{}); r.code != 409 || r.errCode() != "busy" {
+	if r := e.do("POST", path, map[string]any{}); r.code != 409 || r.errCode() != "busy" {
 		t.Errorf("a second run while one is going: %d %s", r.code, r.body)
 	}
 	var v planner.RunView
@@ -165,7 +162,7 @@ func TestPlanningWithoutASolver(t *testing.T) {
 	if h["planner"] {
 		t.Errorf("health must say planning is not possible: %v", h)
 	}
-	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+plan+"/runs", "T", map[string]any{}); r.code != 503 || r.errCode() != "unavailable" {
+	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+plan+"/runs", map[string]any{}); r.code != 503 || r.errCode() != "unavailable" {
 		t.Errorf("no solver: %d %s", r.code, r.body)
 	}
 }
@@ -208,7 +205,7 @@ func TestMyAssignmentsOverHTTP(t *testing.T) {
 	e.mustDo(202, "POST", "/api/orgs/"+orgA+"/plans/"+planA+"/runs", map[string]any{"time_limit": 5})
 	e.wait()
 	m := mine(orgA, annaA)
-	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Sound" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil || m.Run.Actor != "Test" {
+	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Sound" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil {
 		t.Errorf("Aslaug's assignment: %+v", m)
 	}
 	// B has a plan with the same slug and a person with the same name, but A's run is not B's plan
@@ -222,7 +219,7 @@ func TestMyAssignmentsOverHTTP(t *testing.T) {
 		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/abc/assignments", "bad id"},
 		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/99999/assignments", "unknown person"},
 	} {
-		if r := e.do("GET", c.path, "", nil); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do("GET", c.path, nil); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s: %d %s", c.what, r.code, r.body)
 		}
 	}
@@ -240,11 +237,8 @@ func TestPinningARunOverHTTP(t *testing.T) {
 	e.wait()
 	pin := runPath(orgA, planA) + "/" + itoa(first.ID) + "/pin"
 
-	if r := e.do("PUT", pin, "", nil); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("pinning without a name: %d %s", r.code, r.body)
-	}
 	e.mustDo(204, "PUT", pin, nil)
-	if r := e.do("PUT", pin, "T", nil); r.code != 400 || r.errCode() != "invalid" {
+	if r := e.do("PUT", pin, nil); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("pinning twice: %d %s", r.code, r.body)
 	}
 	list := mustRuns(t, e, orgA, planA)
@@ -271,7 +265,7 @@ func TestPinningARunOverHTTP(t *testing.T) {
 		{"PUT", runPath(orgA, planA) + "/99999/pin"},
 		{"PUT", runPath(orgA, planA) + "/abc/pin"},
 	} {
-		if r := e.do(c.method, c.path, "T", nil); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do(c.method, c.path, nil); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s", c.method, c.path, r.code, r.body)
 		}
 	}
@@ -283,7 +277,7 @@ func TestPinningARunOverHTTP(t *testing.T) {
 		t.Errorf("pinning the other run moves the pin: %+v", got)
 	}
 	e.mustDo(204, "DELETE", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", nil)
-	if r := e.do("DELETE", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", "T", nil); r.code != 400 {
+	if r := e.do("DELETE", runPath(orgA, planA)+"/"+itoa(second.ID)+"/pin", nil); r.code != 400 {
 		t.Errorf("unpinning twice: %d %s", r.code, r.body)
 	}
 }

@@ -69,7 +69,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), actor(r), b.Name, b.Planned == nil || *b.Planned)
+	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), b.Name, b.Planned == nil || *b.Planned)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -85,7 +85,7 @@ func (s *server) createTasks(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	created, skipped, err := s.st.CreateTasks(r.Context(), r.PathValue("org"), actor(r), b.Names, b.Planned == nil || *b.Planned)
+	created, skipped, err := s.st.CreateTasks(r.Context(), r.PathValue("org"), b.Names, b.Planned == nil || *b.Planned)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -108,7 +108,7 @@ func (s *server) updateTask(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	t, err := s.st.UpdateTask(r.Context(), r.PathValue("org"), actor(r), id, p)
+	t, err := s.st.UpdateTask(r.Context(), r.PathValue("org"), id, p)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -121,7 +121,7 @@ func (s *server) deleteTask(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteTask(r.Context(), r.PathValue("org"), actor(r), id), s)
+	noContent(w, s.st.DeleteTask(r.Context(), r.PathValue("org"), id), s)
 }
 
 // ---- day types -----------------------------------------------------------------------------------------------
@@ -142,7 +142,7 @@ func (s *server) createDayType(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.CreateDayType(r.Context(), r.PathValue("org"), actor(r), b.Name)
+	d, err := s.st.CreateDayType(r.Context(), r.PathValue("org"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -161,7 +161,7 @@ func (s *server) renameDayType(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.RenameDayType(r.Context(), r.PathValue("org"), actor(r), id, b.Name)
+	d, err := s.st.RenameDayType(r.Context(), r.PathValue("org"), id, b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -180,7 +180,7 @@ func (s *server) setDayTypeTasks(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.SetDayTypeTasks(r.Context(), r.PathValue("org"), actor(r), id, b.Tasks)
+	d, err := s.st.SetDayTypeTasks(r.Context(), r.PathValue("org"), id, b.Tasks)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -193,7 +193,7 @@ func (s *server) deleteDayType(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteDayType(r.Context(), r.PathValue("org"), actor(r), id), s)
+	noContent(w, s.st.DeleteDayType(r.Context(), r.PathValue("org"), id), s)
 }
 
 // ---- combinations --------------------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ func (s *server) setCombination(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetCombination(r.Context(), r.PathValue("org"), actor(r), b.A, b.B, b.Level), s)
+	noContent(w, s.st.SetCombination(r.Context(), r.PathValue("org"), b.A, b.B, b.Level), s)
 }
 
 // ---- dates ---------------------------------------------------------------------------------------------------
@@ -238,7 +238,7 @@ func (s *server) addEvent(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.AddEventFull(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r),
+	d, err := s.st.AddEventFull(r.Context(), r.PathValue("org"), r.PathValue("plan"),
 		store.NewEvent{Date: b.Date, DayTypeID: b.DayTypeID, Note: b.Note, StartTime: b.StartTime, EndTime: b.EndTime, Description: b.Description})
 	if err != nil {
 		writeErr(w, s.log, err)
@@ -259,7 +259,7 @@ func (s *server) addEventsBulk(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	created, skipped, err := s.st.AddEventsBulkTimed(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID, b.StartTime, b.EndTime)
+	created, skipped, err := s.st.AddEventsBulkTimed(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.From, b.To, b.Weekdays, b.DayTypeID, b.StartTime, b.EndTime)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -282,7 +282,7 @@ func (s *server) updateEvent(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	d, err := s.st.UpdateEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, p)
+	d, err := s.st.UpdateEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, p)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -295,5 +295,5 @@ func (s *server) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
+	noContent(w, s.st.DeleteEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), id), s)
 }

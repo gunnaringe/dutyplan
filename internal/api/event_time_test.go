@@ -74,7 +74,7 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		t.Errorf("cleared: %+v", plain)
 	}
 	// B cannot change A's event, with or without times
-	if r := e.do("PATCH", "/api/orgs/"+orgB+"/plans/autumn-2026/events/"+itoa(plain.ID), "T", map[string]any{"start_time": "10:00"}); r.code != 404 {
+	if r := e.do("PATCH", "/api/orgs/"+orgB+"/plans/autumn-2026/events/"+itoa(plain.ID), map[string]any{"start_time": "10:00"}); r.code != 404 {
 		t.Errorf("A's event through B: %d %s", r.code, r.body)
 	}
 

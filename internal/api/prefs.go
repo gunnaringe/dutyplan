@@ -8,7 +8,7 @@ import (
 )
 
 // prefsRoutes: what a person answers about themselves. No login: the page is reached by the person's id, and the
-// answers are logged with the self-declared actor like everything else.
+// answers go through the store like everything else.
 func (s *server) prefsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/people/{id}/me", s.getMe)
 	mux.HandleFunc("PUT /api/orgs/{org}/people/{id}/tasks/{task}", s.setPersonTask)
@@ -53,7 +53,7 @@ func (s *server) setPersonTask(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetPersonTask(r.Context(), r.PathValue("org"), actor(r), pid, tid, b.Level), s)
+	noContent(w, s.st.SetPersonTask(r.Context(), r.PathValue("org"), pid, tid, b.Level), s)
 }
 
 func (s *server) removePersonTask(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,7 @@ func (s *server) removePersonTask(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.RemovePersonTask(r.Context(), r.PathValue("org"), actor(r), pid, tid), s)
+	noContent(w, s.st.RemovePersonTask(r.Context(), r.PathValue("org"), pid, tid), s)
 }
 
 func (s *server) setAvailability(w http.ResponseWriter, r *http.Request) {
@@ -84,5 +84,5 @@ func (s *server) setAvailability(w http.ResponseWriter, r *http.Request) {
 		}
 		levels[id] = v
 	}
-	noContent(w, s.st.SetAvailability(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), pid, levels), s)
+	noContent(w, s.st.SetAvailability(r.Context(), r.PathValue("org"), r.PathValue("plan"), pid, levels), s)
 }

@@ -70,7 +70,7 @@ func TestPersonPageErrorsAndIsolation(t *testing.T) {
 	}
 	notFound := func(method, path string, body any) {
 		t.Helper()
-		if r := e.do(method, path, "T", body); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do(method, path, body); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s, want 404", method, path, r.code, r.body)
 		}
 	}
@@ -93,12 +93,9 @@ func TestPersonPageErrorsAndIsolation(t *testing.T) {
 		"bad event id":    {avail("org-a", a.person), map[string]any{"levels": map[string]string{"x": "never"}}},
 		"no events":       {avail("org-a", a.person), map[string]any{"levels": map[string]string{}}},
 	} {
-		if r := e.do("PUT", c.path, "T", c.body); r.code != 400 || r.errCode() != "invalid" {
+		if r := e.do("PUT", c.path, c.body); r.code != 400 || r.errCode() != "invalid" {
 			t.Errorf("%s: %d %s", name, r.code, r.body)
 		}
-	}
-	if r := e.do("PUT", task("org-a", a.person, a.sound), "", map[string]string{"level": "good"}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("without actor: %d %s", r.code, r.body)
 	}
 	// nothing was stored by any refused call
 	var m store.Me

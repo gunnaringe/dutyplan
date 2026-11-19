@@ -56,8 +56,8 @@ func (r reply) errCode() string {
 	return e.Error
 }
 
-// do sends a request; actor is the percent-encoded X-Actor value (empty = header not sent).
-func (e *env) do(method, path, actor string, body any) reply {
+// do sends a request, with a JSON body when body is not nil.
+func (e *env) do(method, path string, body any) reply {
 	var rd io.Reader
 	if body != nil {
 		b, _ := json.Marshal(body)
@@ -67,9 +67,6 @@ func (e *env) do(method, path, actor string, body any) reply {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if actor != "" {
-		req.Header.Set("X-Actor", actor)
-	}
 	w := httptest.NewRecorder()
 	e.h.ServeHTTP(w, req)
 	return reply{w.Code, w.Body.Bytes(), w.Header()}
@@ -77,7 +74,7 @@ func (e *env) do(method, path, actor string, body any) reply {
 
 func (e *env) mustDo(want int, method, path string, body any) reply {
 	e.t.Helper()
-	r := e.do(method, path, "Test", body)
+	r := e.do(method, path, body)
 	if r.code != want {
 		e.t.Fatalf("%s %s = %d (%s), want %d", method, path, r.code, r.body, want)
 	}
@@ -110,44 +107,60 @@ func TestFlowAndSwitchingOrganisation(t *testing.T) {
 	}
 }
 
-func TestWritesNeedActorJSONAndKnownFields(t *testing.T) {
+func TestWritesNeedJSONAndKnownFields(t *testing.T) {
 	e := newEnv(t)
-	if r := e.do("POST", "/api/orgs", "", map[string]string{"name": "X Org"}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("no actor: %d %s", r.code, r.body)
-	}
 	req := httptest.NewRequest("POST", "/api/orgs", strings.NewReader(`name=X`))
-	req.Header.Set("X-Actor", "T")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w := httptest.NewRecorder()
 	e.h.ServeHTTP(w, req)
 	if w.Code != 415 {
 		t.Errorf("form post must be refused (cross-site writes), got %d", w.Code)
 	}
-	if r := e.do("POST", "/api/orgs", "T", map[string]string{"name": "X Org", "title": "oops"}); r.code != 400 || r.errCode() != "invalid" {
+	if r := e.do("POST", "/api/orgs", map[string]string{"name": "X Org", "title": "oops"}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("unknown field next to a valid one must be refused: %d %s", r.code, r.body)
 	}
 	// A valid body padded past the size limit: only the limit can reject it (the content itself is fine).
 	padded := `{"name":"Padded Org"` + strings.Repeat(" ", 70<<10) + `}`
 	req = httptest.NewRequest("POST", "/api/orgs", strings.NewReader(padded))
-	req.Header.Set("X-Actor", "T")
 	req.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
 	e.h.ServeHTTP(w2, req)
 	if w2.Code != 400 {
 		t.Errorf("oversized body must be refused, got %d", w2.Code)
 	}
-	if r := e.do("POST", "/api/orgs", "T", map[string]string{"name": "   "}); r.code != 400 || r.errCode() != "invalid" {
+	if r := e.do("POST", "/api/orgs", map[string]string{"name": "   "}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("blank name: %d %s", r.code, r.body)
 	}
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
-	if r := e.do("POST", "/api/orgs", "T", map[string]string{"name": "Org A"}); r.code != 409 {
+	if r := e.do("POST", "/api/orgs", map[string]string{"name": "Org A"}); r.code != 409 {
 		t.Errorf("duplicate: %d", r.code)
 	}
-	var log []store.LogEntry
-	e.mustDo(200, "GET", "/api/orgs/org-a/log", nil).json(&log)
-	if len(log) != 1 {
-		t.Errorf("only the one successful write is logged: %v", log)
+}
+
+// A browser refuses nothing by itself for a cross-site DELETE or a bodiless PUT, so the server does: the request a
+// page on another site sends carries Sec-Fetch-Site: cross-site (or an Origin that is not this host).
+func TestCrossSiteWritesAreRefused(t *testing.T) {
+	e := newEnv(t)
+	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
+	for _, h := range []map[string]string{{"Sec-Fetch-Site": "cross-site"}, {"Origin": "https://elsewhere.example"}} {
+		req := httptest.NewRequest("DELETE", "/api/orgs/org-a?confirm=org-a", nil)
+		for k, v := range h {
+			req.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		e.h.ServeHTTP(w, req)
+		if w.Code != 403 {
+			t.Errorf("%v: a cross-site delete must be refused, got %d", h, w.Code)
+		}
 	}
+	same := httptest.NewRequest("GET", "/api/orgs", nil)
+	same.Header.Set("Sec-Fetch-Site", "cross-site")
+	w := httptest.NewRecorder()
+	e.h.ServeHTTP(w, same)
+	if w.Code != 200 {
+		t.Errorf("reads stay open: %d", w.Code)
+	}
+	e.mustDo(204, "DELETE", "/api/orgs/org-a?confirm=org-a", nil)
 }
 
 // Cross-organisation requests look exactly like requests for things that do not exist.
@@ -164,7 +177,7 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 		{"PATCH", "/api/orgs/org-b/people/" + itoa(person.ID)},
 		{"GET", "/api/orgs/nope/plans"},
 		{"POST", "/api/orgs/nope/people"},
-		{"GET", "/api/orgs/nope/log"},
+		{"GET", "/api/orgs/nope/people"},
 		{"PATCH", "/api/orgs/org-a/people/abc"},
 		{"PATCH", "/api/orgs/org-a/people/99999"},
 		{"GET", "/api/nope/nothing"},
@@ -176,7 +189,7 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 				body = map[string]string{"name": "Ny"}
 			}
 		}
-		if r := e.do(c.method, c.path, "T", body); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do(c.method, c.path, body); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s, want 404 not_found", c.method, c.path, r.code, r.body)
 		}
 	}
@@ -184,11 +197,6 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 	e.mustDo(200, "GET", "/api/orgs/org-a/people", nil).json(&people)
 	if len(people) != 1 || !people[0].Proposable {
 		t.Errorf("A's person must be untouched: %v", people)
-	}
-	var logB []store.LogEntry
-	e.mustDo(200, "GET", "/api/orgs/org-b/log", nil).json(&logB)
-	if len(logB) != 1 || logB[0].Action != "org.create" {
-		t.Errorf("B's log shows only B's own creation: %v", logB)
 	}
 }
 
@@ -203,7 +211,7 @@ func TestPersonPatch(t *testing.T) {
 	if p.Proposable || !p.Active {
 		t.Errorf("patch = %+v", p)
 	}
-	if r := e.do("PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), "T", map[string]any{}); r.code != 400 {
+	if r := e.do("PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), map[string]any{}); r.code != 400 {
 		t.Errorf("empty patch: %d", r.code)
 	}
 }
@@ -211,18 +219,18 @@ func TestPersonPatch(t *testing.T) {
 func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 	e := newEnv(t)
 	for _, path := range []string{"/", "/o/org-a", "/o/org-a/p/autumn-2026"} {
-		r := e.do("GET", path, "", nil)
+		r := e.do("GET", path, nil)
 		if r.code != 200 || !strings.Contains(string(r.body), "INDEX") {
 			t.Errorf("%s = %d %q", path, r.code, r.body)
 		}
 	}
 	for _, js := range []string{"/app.js", "/i18n.js"} {
-		r := e.do("GET", js, "", nil)
+		r := e.do("GET", js, nil)
 		if r.code != 200 || !strings.HasPrefix(r.hdr.Get("Content-Type"), "text/javascript") {
 			t.Errorf("%s = %d %v", js, r.code, r.hdr)
 		}
 	}
-	r := e.do("GET", "/app.js", "", nil)
+	r := e.do("GET", "/app.js", nil)
 	if r.code != 200 || !strings.HasPrefix(r.hdr.Get("Content-Type"), "text/javascript") {
 		t.Errorf("app.js = %d %v", r.code, r.hdr)
 	}
@@ -231,13 +239,13 @@ func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 			t.Errorf("missing header %s", h)
 		}
 	}
-	if r := e.do("GET", "/favicon.ico", "", nil); r.code != 204 {
+	if r := e.do("GET", "/favicon.ico", nil); r.code != 204 {
 		t.Errorf("favicon = %d, want 204 (keeps the browser console clean)", r.code)
 	}
-	if r := e.do("GET", "/hemmelig.txt", "", nil); r.code != 404 {
+	if r := e.do("GET", "/hemmelig.txt", nil); r.code != 404 {
 		t.Errorf("unknown path = %d, want 404 (no file listing)", r.code)
 	}
-	if r := e.do("GET", "/api/health", "", nil); r.code != 200 {
+	if r := e.do("GET", "/api/health", nil); r.code != 200 {
 		t.Errorf("health = %d", r.code)
 	}
 }

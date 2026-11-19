@@ -33,7 +33,7 @@ func (s *server) createGroup(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	g, err := s.st.CreateGroup(r.Context(), r.PathValue("org"), actor(r), b.Name)
+	g, err := s.st.CreateGroup(r.Context(), r.PathValue("org"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -50,7 +50,7 @@ func (s *server) updateGroup(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &patch) {
 		return
 	}
-	g, err := s.st.UpdateGroup(r.Context(), r.PathValue("org"), actor(r), id, patch)
+	g, err := s.st.UpdateGroup(r.Context(), r.PathValue("org"), id, patch)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -69,7 +69,7 @@ func (s *server) setGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	g, err := s.st.SetGroupMembers(r.Context(), r.PathValue("org"), actor(r), id, b.People)
+	g, err := s.st.SetGroupMembers(r.Context(), r.PathValue("org"), id, b.People)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -88,7 +88,7 @@ func (s *server) setGroupTasks(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	g, err := s.st.SetGroupTasks(r.Context(), r.PathValue("org"), actor(r), id, b.Tasks)
+	g, err := s.st.SetGroupTasks(r.Context(), r.PathValue("org"), id, b.Tasks)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -101,5 +101,5 @@ func (s *server) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteGroup(r.Context(), r.PathValue("org"), actor(r), id), s)
+	noContent(w, s.st.DeleteGroup(r.Context(), r.PathValue("org"), id), s)
 }

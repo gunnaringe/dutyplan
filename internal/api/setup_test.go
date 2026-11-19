@@ -74,10 +74,10 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	if len(combos) != 0 {
 		t.Errorf("combination must go with its task: %+v", combos)
 	}
-	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/day-types/%d", dt.ID), "Test", nil); r.code != 409 || r.errCode() != "conflict" {
+	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/day-types/%d", dt.ID), nil); r.code != 409 || r.errCode() != "conflict" {
 		t.Errorf("day type in use: %d %s", r.code, r.body)
 	}
-	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), "Test", nil); r.code != 409 {
+	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), nil); r.code != 409 {
 		t.Errorf("task in use: %d %s", r.code, r.body)
 	}
 }
@@ -99,7 +99,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 
 	notFound := func(method, path string, body any) {
 		t.Helper()
-		if r := e.do(method, path, "Test", body); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do(method, path, body); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s, want 404", method, path, r.code, r.body)
 		}
 	}
@@ -129,32 +129,19 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	}
 }
 
-func TestSetupWritesNeedAnActorAndValidInput(t *testing.T) {
+func TestSetupWritesNeedValidInput(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	var task store.Task
 	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&task)
-	for _, c := range []struct {
-		method, path string
-		body         any
-	}{
-		{"DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", task.ID), nil},
-		{"POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Coffee"}},
-		{"PUT", "/api/orgs/org-a/combinations", map[string]any{"a": 1, "b": 2, "level": "preferred"}},
-		{"POST", "/api/orgs/org-a/plans/autumn-2026/events/bulk", map[string]any{"from": "2026-08-01", "to": "2026-08-31", "weekdays": []int{7}, "day_type_id": 1}},
-	} {
-		if r := e.do(c.method, c.path, "", c.body); r.code != 400 || r.errCode() != "actor_required" {
-			t.Errorf("%s %s without actor: %d %s", c.method, c.path, r.code, r.body)
-		}
-	}
-	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", "T", map[string]any{"date": "morgen", "day_type_id": 1}); r.code != 400 {
+	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "morgen", "day_type_id": 1}); r.code != 400 {
 		t.Errorf("bad date: %d", r.code)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", "T", map[string]any{"names": strings.Repeat("a\n", 3) + " "}); r.code != 201 {
+	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", map[string]any{"names": strings.Repeat("a\n", 3) + " "}); r.code != 201 {
 		t.Errorf("duplicates in a paste are folded, not an error: %d %s", r.code, r.body)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", "T", map[string]any{"names": "  \n"}); r.code != 400 {
+	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", map[string]any{"names": "  \n"}); r.code != 400 {
 		t.Errorf("empty paste: %d", r.code)
 	}
 }

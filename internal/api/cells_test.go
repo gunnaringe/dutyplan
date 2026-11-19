@@ -32,22 +32,22 @@ func (e *env) cellsWorld(name string) cellsWorld {
 	tasks, err := e.st.ListTasks(ctx, org)
 	must(err)
 	w.sound = tasks[0]
-	w.sang, err = e.st.CreateTask(ctx, org, "T", "Singing", false)
+	w.sang, err = e.st.CreateTask(ctx, org, "Singing", false)
 	must(err)
 	dts, err := e.st.ListDayTypes(ctx, org)
 	must(err)
-	_, err = e.st.AddEvent(ctx, org, plan, "T", "2026-08-16", dts[0].ID, "")
+	_, err = e.st.AddEvent(ctx, org, plan, "2026-08-16", dts[0].ID, "")
 	must(err)
 	w.events, err = e.st.ListEvents(ctx, org, plan)
 	must(err)
-	other, err := e.st.CreatePlan(ctx, org, "T", "Spring 2027", "")
+	other, err := e.st.CreatePlan(ctx, org, "Spring 2027", "")
 	must(err)
-	w.otherPlanEvent, err = e.st.AddEvent(ctx, org, other.Slug, "T", "2027-02-07", dts[0].ID, "")
+	w.otherPlanEvent, err = e.st.AddEvent(ctx, org, other.Slug, "2027-02-07", dts[0].ID, "")
 	must(err)
 	people, err := e.st.ListPeople(ctx, org)
 	must(err)
 	w.anna = people[0]
-	w.choir, err = e.st.CreateGroup(ctx, org, "T", "Choir")
+	w.choir, err = e.st.CreateGroup(ctx, org, "Choir")
 	must(err)
 	return w
 }
@@ -67,10 +67,10 @@ func TestManualCellsAndSelectionsOverHTTP(t *testing.T) {
 		t.Fatalf("a group on two events: %+v", made)
 	}
 	// what a manual cell names cannot be deleted from under it
-	if r := e.do("DELETE", "/api/orgs/"+a.org+"/groups/"+itoa(a.choir.ID), "T", nil); r.code != 409 {
+	if r := e.do("DELETE", "/api/orgs/"+a.org+"/groups/"+itoa(a.choir.ID), nil); r.code != 409 {
 		t.Errorf("deleting a group a manual cell names: %d %s", r.code, r.body)
 	}
-	if r := e.do("DELETE", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sang.ID), "T", nil); r.code != 409 {
+	if r := e.do("DELETE", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sang.ID), nil); r.code != 409 {
 		t.Errorf("deleting a task a manual cell names: %d %s", r.code, r.body)
 	}
 	e.mustDo(201, "POST", base+"/cells", map[string]any{"events": ids[:1], "task": a.sound.ID, "person": a.anna.ID})
@@ -113,8 +113,8 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 	base := "/api/orgs/" + a.org + "/plans/" + a.plan
 	ids := []int64{a.events[0].ID}
 	inactive := false
-	gone, _ := e.st.CreatePerson(context.Background(), a.org, "T", "Gisle")
-	e.st.UpdatePerson(context.Background(), a.org, "T", gone.ID, store.PersonPatch{Active: &inactive})
+	gone, _ := e.st.CreatePerson(context.Background(), a.org, "Gisle")
+	e.st.UpdatePerson(context.Background(), a.org, gone.ID, store.PersonPatch{Active: &inactive})
 
 	for _, c := range []struct {
 		code         int
@@ -143,12 +143,9 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		{404, "DELETE", base + "/cells/abc", nil, "bad id"},
 		{404, "DELETE", base + "/cells/99999", nil, "no such cell"},
 	} {
-		if r := e.do(c.method, c.path, "T", c.body); r.code != c.code {
+		if r := e.do(c.method, c.path, c.body); r.code != c.code {
 			t.Errorf("%s: %s %s = %d %s, want %d", c.what, c.method, c.path, r.code, r.body, c.code)
 		}
-	}
-	if r := e.do("POST", base+"/cells", "", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("no actor: %d %s", r.code, r.body)
 	}
 	var list []store.ManualCell
 	e.mustDo(200, "GET", base+"/cells", nil).json(&list)
@@ -158,7 +155,7 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 
 	// a conflict is 409, and one organisation's cell is invisible and undeletable for the other (same plan slug)
 	e.mustDo(201, "POST", base+"/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID})
-	if r := e.do("POST", base+"/cells", "T", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID}); r.code != 409 {
+	if r := e.do("POST", base+"/cells", map[string]any{"events": ids, "task": a.sound.ID, "person": a.anna.ID}); r.code != 409 {
 		t.Errorf("the same cell again: %d %s", r.code, r.body)
 	}
 	e.mustDo(200, "GET", base+"/cells", nil).json(&list)
@@ -168,11 +165,11 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 	if len(listB) != 0 || len(list) != 1 {
 		t.Errorf("B must not see A's cell: %+v / %+v", listB, list)
 	}
-	if r := e.do("DELETE", bBase+"/cells/"+itoa(list[0].ID), "T", nil); r.code != 404 {
+	if r := e.do("DELETE", bBase+"/cells/"+itoa(list[0].ID), nil); r.code != 404 {
 		t.Errorf("B deleting A's cell: %d", r.code)
 	}
 	otherPlan := "/api/orgs/" + a.org + "/plans/spring-2027"
-	if r := e.do("DELETE", otherPlan+"/cells/"+itoa(list[0].ID), "T", nil); r.code != 404 {
+	if r := e.do("DELETE", otherPlan+"/cells/"+itoa(list[0].ID), nil); r.code != 404 {
 		t.Errorf("deleting through another plan: %d", r.code)
 	}
 	e.mustDo(200, "GET", base+"/cells", nil).json(&list)

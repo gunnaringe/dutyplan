@@ -30,7 +30,7 @@ func (s *server) addCells(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	created, skipped, err := s.st.AddCells(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), in)
+	created, skipped, err := s.st.AddCells(r.Context(), r.PathValue("org"), r.PathValue("plan"), in)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -43,7 +43,7 @@ func (s *server) deleteCell(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteCell(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
+	noContent(w, s.st.DeleteCell(r.Context(), r.PathValue("org"), r.PathValue("plan"), id), s)
 }
 
 func (s *server) listPools(w http.ResponseWriter, r *http.Request) {
@@ -65,5 +65,5 @@ func (s *server) setPool(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetPool(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.Events, b.Task, b.People, b.Groups), s)
+	noContent(w, s.st.SetPool(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Events, b.Task, b.People, b.Groups), s)
 }

@@ -11,7 +11,7 @@ func ptr(s string) *string { return &s }
 func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 	w := newWorld(t, "Club")
 	// event 0 gets a time before the run (so the snapshot has it), the others later
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", w.events[0].ID, store.EventPatch{StartTime: ptr("10:00"), EndTime: ptr("11:00"), Description: ptr("Doors at 9:30")}); err != nil {
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("10:00"), EndTime: ptr("11:00"), Description: ptr("Doors at 9:30")}); err != nil {
 		t.Fatal(err)
 	}
 	s := w.runWith(t, cannedAnswer(w))
@@ -31,7 +31,7 @@ func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 	}
 
 	// changing a time or a description afterwards shows in the plan at once and does not make the run out of date
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", w.events[0].ID, store.EventPatch{StartTime: ptr("18:00"), EndTime: ptr("19:00"), Description: ptr("Moved to the evening")}); err != nil {
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("18:00"), EndTime: ptr("19:00"), Description: ptr("Moved to the evening")}); err != nil {
 		t.Fatal(err)
 	}
 	v = view()
@@ -43,7 +43,7 @@ func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 	}
 
 	// an event that is gone keeps the time it had in the run
-	if err := w.st.DeleteEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", w.events[0].ID); err != nil {
+	if err := w.st.DeleteEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID); err != nil {
 		t.Fatal(err)
 	}
 	v = view()
@@ -56,17 +56,17 @@ func TestEventsOnTheSameDateAreShownInTimeOrderInThePlanAndInMine(t *testing.T) 
 	w := newWorld(t, "Club")
 	// a second event on the first date, made later but earlier in the day, and the first one gets a later time
 	late := w.events[0]
-	early, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", late.Date, late.DayTypeID, "early bird")
+	early, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date, late.DayTypeID, "early bird")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", late.ID, store.EventPatch{StartTime: ptr("19:00")}); err != nil {
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, late.ID, store.EventPatch{StartTime: ptr("19:00")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", early.ID, store.EventPatch{StartTime: ptr("08:30"), EndTime: ptr("09:00")}); err != nil {
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, early.ID, store.EventPatch{StartTime: ptr("08:30"), EndTime: ptr("09:00")}); err != nil {
 		t.Fatal(err)
 	}
-	plain, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, "Ola", late.Date, late.DayTypeID, "no time yet") // made last, no time: shown last
+	plain, err := w.st.AddEvent(ctx, w.org.Slug, w.plan.Slug, late.Date, late.DayTypeID, "no time yet") // made last, no time: shown last
 	if err != nil {
 		t.Fatal(err)
 	}

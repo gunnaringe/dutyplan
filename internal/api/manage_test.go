@@ -40,33 +40,27 @@ func TestRenamingAndDeletingOverHTTP(t *testing.T) {
 	if p.Name != "Autumn 2026" {
 		t.Errorf("B's plan with the same address was renamed too: %+v", p)
 	}
-	if r := e.do("PATCH", "/api/orgs/"+a.Slug, "", map[string]string{"name": "X"}); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("renaming without a name: %d %s", r.code, r.body)
-	}
 	if got := e.refused(400, "PATCH", pa, map[string]string{"name": "  "}); got.Code != "name_invalid" {
 		t.Errorf("an empty name: %+v", got)
 	}
 	if got := e.refused(400, "PATCH", pa, map[string]string{"name": "Fall"}); got.Code != "nothing_to_change" {
 		t.Errorf("the same name: %+v", got)
 	}
-	if r := e.do("PATCH", pa, "T", map[string]any{"slug": "other"}); r.code != 400 {
+	if r := e.do("PATCH", pa, map[string]any{"slug": "other"}); r.code != 400 {
 		t.Errorf("the address cannot be changed: %d %s", r.code, r.body)
 	}
 	for _, path := range []string{"/api/orgs/nope", "/api/orgs/" + a.Slug + "/plans/nope", "/api/orgs/nope/plans/autumn-2026"} {
-		if r := e.do("PATCH", path, "T", map[string]string{"name": "X"}); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do("PATCH", path, map[string]string{"name": "X"}); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("PATCH %s = %d %s", path, r.code, r.body)
 		}
-		if r := e.do("DELETE", path, "T", nil); r.code != 404 || r.errCode() != "not_found" {
+		if r := e.do("DELETE", path, nil); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("DELETE %s = %d %s", path, r.code, r.body)
 		}
 	}
 
 	// deleting a plan
-	if r := e.do("DELETE", pa, "", nil); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("deleting without a name: %d %s", r.code, r.body)
-	}
 	e.mustDo(204, "DELETE", pa, nil)
-	if r := e.do("GET", pa, "", nil); r.code != 404 {
+	if r := e.do("GET", pa, nil); r.code != 404 {
 		t.Errorf("the deleted plan: %d", r.code)
 	}
 	e.mustDo(200, "GET", pb, nil)
@@ -86,11 +80,8 @@ func TestRenamingAndDeletingOverHTTP(t *testing.T) {
 	if got := e.refused(409, "DELETE", "/api/orgs/"+b.Slug+"?confirm="+b.Slug, nil); got.Code != "org_has_plans" || got.Params["name"] != "Club B" {
 		t.Errorf("an organisation with plans: %+v", got)
 	}
-	if r := e.do("DELETE", "/api/orgs/"+a.Slug+"?confirm="+a.Slug, "", nil); r.code != 400 || r.errCode() != "actor_required" {
-		t.Errorf("deleting without a name: %d %s", r.code, r.body)
-	}
 	e.mustDo(204, "DELETE", "/api/orgs/"+a.Slug+"?confirm="+a.Slug, nil)
-	if r := e.do("GET", "/api/orgs/"+a.Slug, "", nil); r.code != 404 {
+	if r := e.do("GET", "/api/orgs/"+a.Slug, nil); r.code != 404 {
 		t.Errorf("the deleted organisation: %d", r.code)
 	}
 	var orgs []store.Org
@@ -107,16 +98,14 @@ func TestDeletingAnOrganisationIsWrittenToTheServerLog(t *testing.T) {
 	h := New(st, planner.New(st, nil, 1, slog.Default()), nil, slog.New(slog.NewTextHandler(&logged, nil)))
 	create := httptest.NewRequest("POST", "/api/orgs", bytes.NewReader([]byte(`{"name":"Gone Club"}`)))
 	create.Header.Set("Content-Type", "application/json")
-	create.Header.Set("X-Actor", "Ola%20Nordmann")
 	h.ServeHTTP(httptest.NewRecorder(), create)
 	del := httptest.NewRequest("DELETE", "/api/orgs/gone-club?confirm=gone-club", nil)
-	del.Header.Set("X-Actor", "Ola%20Nordmann")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, del)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("delete: %d %s", w.Code, w.Body.String())
 	}
-	for _, want := range []string{"organisation deleted", "org=gone-club", `"Gone Club"`, `"Ola Nordmann"`} {
+	for _, want := range []string{"organisation deleted", "org=gone-club", `"Gone Club"`} {
 		if !bytes.Contains(logged.Bytes(), []byte(want)) {
 			t.Errorf("the server log lacks %s: %s", want, logged.String())
 		}
