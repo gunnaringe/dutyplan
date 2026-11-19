@@ -120,7 +120,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("event time: an end time without a start time is accepted", "internal/store/events.go", 'if en != "" && st == "" {', "if false {"),
     ("event time: an end time before the start is accepted", "internal/store/events.go", 'if en != "" && en <= st {', "if false {"),
     ("event time: an end time equal to the start is accepted", "internal/store/events.go", "en <= st {", "en < st {"),
-    ("event description: no length limit", "internal/store/events.go", "utf8.RuneCountInString(d) > maxDescriptionRunes ||", "false ||"),
+    ("event description: no length limit", "internal/store/events.go", "utf8.RuneCountInString(d) > maxDescriptionRunes ||", "utf8.RuneCountInString(d) > 1<<30 ||"),
     ("event description: control characters are accepted", "internal/store/events.go", '|| !validText(strings.NewReplacer("\\n", " ", "\\t", " ").Replace(d))', "|| false"),
     ("event description: line endings are not normalised", "internal/store/events.go", 'strings.ReplaceAll(raw, "\\r\\n", "\\n")', "raw"),
     ("events: the time of day is ignored in the order", "internal/store/events.go", "eventOrder = `d.date, CASE WHEN d.start_time = '' THEN 1 ELSE 0 END, d.start_time, d.id`", "eventOrder = `d.date, d.id`"),
