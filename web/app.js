@@ -8,6 +8,9 @@ const store = {
   set: (k, v) => { try { localStorage.setItem('tp.' + k, v); } catch (e) { /* private mode */ } },
 };
 
+// This tab's id: sent with every write, so the change the stream announces back can be skipped (the tab has redrawn already).
+const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
 function h(tag, props, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -20,6 +23,23 @@ function h(tag, props, ...kids) {
   for (const kid of kids.flat(2)) el.append(kid instanceof Node ? kid : document.createTextNode(String(kid ?? '')));
   return el;
 }
+
+// Small line icons (after Feather, MIT), drawn in the colour of the text around them.
+const ICONS = {
+  up: '<path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>',
+  down: '<path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>',
+  maybe: '<path d="M8.5 8.5a3.5 3.5 0 1 1 5.2 3.05c-1.1.62-1.7 1.3-1.7 2.45v.5M12 19h.01" stroke-width="3"/>',
+  auto: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  left: '<path d="M15 18l-6-6 6-6"/>', right: '<path d="M9 18l6-6-6-6"/>',
+};
+function icon(name) {
+  const s = h('span', { class: 'ic ic-' + name, 'aria-hidden': 'true' });
+  s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+  return s;
+}
+// The three levels every choice has: can't (red thumb down), if needed (yellow ?), good (green thumb up).
+const LEVEL_ICON = { never: 'down', '': 'down', cannot: 'down', poor: 'maybe', standard: 'maybe', good: 'up', practical: 'up' };
 
 function say(text, kind) {
   const m = document.querySelector('dialog[open] [data-msg]') || document.getElementById('msg');
@@ -35,6 +55,7 @@ async function api(method, path, body) {
   if (method === 'GET' && /\/runs/.test(path)) path += (path.includes('?') ? '&' : '?') + 'lang=' + currentLang;
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (method !== 'GET') headers['X-Dutyplan-Client'] = CLIENT;  // the stream tells this tab's own changes apart
   const res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { kind: data.error, apiCode: data.code, params: data.params, status: res.status });
@@ -120,32 +141,72 @@ async function renderHeader(r) {
     LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
   document.getElementById('top').replaceChildren(
     link('/?switch', t('brand'), { class: 'brand' }),
-    h('label', {}, t('header.org'), select),
+    h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select),
     h('span', { class: 'spacer' }),
     h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang));
 }
 
 // ---- building blocks -------------------------------------------------------------------------------------------------
 
-// After a change in a dialog the page is drawn again with the new data, and the same dialog opens again on top (the page's
-// shown() does it once the new page is in place).
-let reopen = null;
-const again = (kind, id) => { reopen = { kind, id }; };
+// After a change in a dialog the page is drawn again with the new data, and the dialog stays open: the page's shown() builds
+// it again from the new data, and modal() puts the new contents into the dialog that is open (no closing, no flicker).
+// The same happens when the stream says another tab changed something.
+// A dialog that does this has a key («person:12»), set by keyed().
+const keyed = (dlg, kind, id) => { dlg.dataset.key = kind + ':' + id; return dlg; };
+let refreshKey = null;  // while set, modal() fills the open dialog with this key instead of opening a new one
 function reopened(handlers) {
-  const ro = reopen;
-  reopen = null;
-  if (ro && handlers[ro.kind]) handlers[ro.kind](ro.id);
+  for (const dlg of document.querySelectorAll('dialog.modal[open][data-key]')) {
+    const [kind, id] = dlg.dataset.key.split(/:(.*)/s);
+    refreshKey = dlg.dataset.key;
+    if (handlers[kind]) handlers[kind](/^\d+$/.test(id) ? Number(id) : id);
+    if (refreshKey) dlg.close();  // what it showed is gone (deleted in another tab)
+    refreshKey = null;
+  }
 }
 
-// A dialog over the page; messages (say) go into it while it is open, and it is removed when closed.
+// An ⓘ button: the explanation of something, in a dialog of its own, instead of help text on the page.
+const infoBtn = (title, texts) => h('button', { type: 'button', class: 'info', title: t('common.info'), 'aria-label': t('common.info_aria', { name: title }),
+  onclick: () => modal(title, h('div', { class: 'info-text' }, texts.filter(Boolean).map((x) => h('p', {}, x))), foot('', closeBtn())) }, icon('info'));
+
+// A dialog over the page; messages (say) go into it while it is open, and it is removed when closed. A first argument
+// { info: [texts] } puts an ⓘ in its head. key names a dialog that redraws in place (see again()).
 function modal(title, ...kids) {
-  const dlg = h('dialog', { class: 'modal', 'aria-label': title },
-    h('div', { class: 'modal-head' }, h('h2', {}, title), h('button', { type: 'button', class: 'ghost', 'aria-label': t('common.close'), onclick: () => dlg.close() }, '×')),
-    h('p', { 'data-msg': '', role: 'status' }), ...kids);
+  const info = kids[0] && kids[0].info ? kids.shift().info : null;
+  const key = refreshKey;
+  refreshKey = null;
+  const old = key && [...document.querySelectorAll('dialog.modal[open]')].find((d) => d.dataset.key === key);
+  const dlg = old || h('dialog', { class: 'modal', 'aria-label': title });
+  const msg = old ? old.querySelector('[data-msg]') : h('p', { 'data-msg': '', role: 'status' });
+  const content = [h('div', { class: 'modal-head' }, h('h2', {}, title), info ? infoBtn(title, info) : '',
+    h('button', { type: 'button', class: 'ghost x', 'aria-label': t('common.close'), onclick: () => dlg.close() }, '×')), msg, ...kids];
+  if (old) {
+    const top = old.scrollTop;
+    const focus = focusKey(old);
+    old.replaceChildren(...content);
+    old.setAttribute('aria-label', title);
+    old.scrollTop = top;
+    refocus(old, focus);
+    return old;
+  }
+  dlg.append(...content);
   dlg.addEventListener('close', () => dlg.remove());
   document.body.append(dlg);
   dlg.showModal();
   return dlg;
+}
+
+// Where the focus is, as something the same control in a redrawn copy also has, so the focus can be put back there.
+function focusKey(root) {
+  const a = document.activeElement;
+  if (!a || a === document.body || !root.contains(a)) return null;
+  const label = a.getAttribute('aria-label') || a.textContent;
+  return { tag: a.tagName, label, index: [...root.querySelectorAll(a.tagName)].filter((x) => (x.getAttribute('aria-label') || x.textContent) === label).indexOf(a) };
+}
+function refocus(root, k) {
+  if (!k) return;
+  const same = [...root.querySelectorAll(k.tag)].filter((x) => (x.getAttribute('aria-label') || x.textContent) === k.label);
+  const el = same[k.index] || same[0];
+  if (el) el.focus({ preventScroll: true });
 }
 // The bottom line of a dialog: something destructive on the left, the buttons on the right.
 const foot = (left, ...right) => h('div', { class: 'modal-foot' }, h('div', {}, left || ''), h('div', { class: 'row-inline' }, ...right));
@@ -242,16 +303,33 @@ async function pageOrg(r, org) {
 // tasks and people open a dialog with the rest. Tasks, combinations and people belong to the organisation, not the plan.
 
 const ANSWER_NEXT = { '': 'good', good: 'poor', poor: 'never', never: '' };
-const ANSWER_MARK = { '': '', good: '✓', poor: '?', never: '✗' };
+const answerMark = (l) => (l ? icon(LEVEL_ICON[l]) : '');
 // One click moves a setting on, the same way as the answers. A person's task: not → bad → good (not = no row).
 // Two tasks on the same event: can't → bad → good (bad = no row: a pair that is not set is impractical for the planner).
 const TASK_NEXT = { '': 'poor', poor: 'good', good: '' };
 const COMBO_NEXT = { cannot: 'standard', standard: 'practical', practical: 'cannot' };
-// cycle: a button that shows a level and moves it on with a click. kind 'task' or 'combo' picks the texts and colours.
+// cycle: a button that shows a level as an icon (red thumb down, yellow ?, green thumb up) and moves it on with a click. kind
+// 'task' or 'combo' picks the texts. The button shows the new level at once; onNext(next) saves it and says whether it went
+// through (if not, the button goes back).
 function cycle(kind, level, aria, onNext) {
   const text = (l) => t(kind === 'task' ? ({ '': 'pick.not', poor: 'pick.poor', good: 'pick.good' })[l] : ({ cannot: 'combo.cannot', standard: 'combo.bad', practical: 'combo.good' })[l]);
-  const b = h('button', { type: 'button', class: 'cyc', 'data-level': level, 'aria-label': `${aria}: ${text(level)}` }, text(level));
-  b.addEventListener('click', () => onNext(kind === 'task' ? TASK_NEXT[level] : COMBO_NEXT[level], b));
+  const b = h('button', { type: 'button', class: 'cyc' });
+  const paint = (l) => {
+    b.dataset.level = l || 'none';
+    b.title = text(l);
+    b.setAttribute('aria-label', `${aria}: ${text(l)}`);
+    b.replaceChildren(icon(LEVEL_ICON[l]));
+  };
+  let busy = false;
+  b.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    const next = kind === 'task' ? TASK_NEXT[level] : COMBO_NEXT[level];
+    paint(next);
+    if (await onNext(next)) level = next; else paint(level);
+    busy = false;
+  });
+  paint(level);
   return b;
 }
 
@@ -277,12 +355,12 @@ function weightsForm(path, wr, saved) {
       const def = spec.default;
       return h('div', { class: 'weight-row' + (changed ? ' changed' : '') },
         h('label', {}, h('span', { class: 'wlabel' }, weightLabel(spec.key), changed ? h('span', { class: 'tag' }, t('weights.changed')) : ''), input),
-        h('div', { class: 'small muted' }, `${t('weight.' + spec.key + '.hint')} ${t('weights.default', { value: def })}`));
+        h('div', { class: 'small muted' }, t('weights.default', { value: def })));
     })));
   const save = (values, text) => async () => { if (await write(() => api('PUT', path, { values }))) saved(text); };
   const nChanged = Object.keys(wr.values || {}).length;
   return h('details', {}, h('summary', {}, nChanged ? t('weights.show_changed', { n: nChanged }) : t('weights.show')),
-    h('p', { class: 'muted small' }, t('weights.hint')),
+    h('div', { class: 'row-inline' }, infoBtn(t('weights.title'), [t('weights.hint'), ...wr.specs.map((x) => `${weightLabel(x.key)}: ${t('weight.' + x.key + '.hint')}`)])),
     h('div', { class: 'stack' }, blocks,
       h('div', { class: 'row-inline' },
         h('button', { type: 'button', onclick: () => {
@@ -302,6 +380,59 @@ const planState = { key: '', runId: null };
 // stays put. The same width as the phone rule in style.css, and width only, so the keyboard coming up never redraws the page.
 const PHONE = matchMedia('(max-width: 40rem)');
 PHONE.addEventListener('change', () => { if (route().page === 'plan') render(); });
+
+// Sideways through the events: ◀ ▶ move a screenful, «Next» goes to the first event from today. Over the dates the wheel scrolls
+// sideways too. grid is the table's scroll box (null on a phone, where the events go down).
+function sideways(grid, events) {
+  if (!grid) return '';
+  const firstCol = () => (grid.querySelector('tbody th[scope=row]') || { offsetWidth: 0 }).offsetWidth;
+  const by = (dir) => grid.scrollBy({ left: dir * Math.max(120, grid.clientWidth - firstCol() - 40), behavior: 'smooth' });
+  const toNext = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const i = events.findIndex((ev) => ev.date >= today);
+    const th = grid.querySelectorAll('thead th[scope=col]')[i < 0 ? events.length - 1 : i];
+    if (th) grid.scrollTo({ left: th.offsetLeft - firstCol(), behavior: 'smooth' });
+  };
+  grid.addEventListener('wheel', (e) => {
+    if (!e.target.closest('thead') || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    grid.scrollLeft += e.deltaY;
+  });
+  grid.addEventListener('keydown', (e) => {
+    if (e.target !== grid) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); by(e.key === 'ArrowRight' ? 1 : -1); }
+  });
+  grid.tabIndex = 0;
+  grid.setAttribute('aria-label', t('table.scroll_aria'));
+  return h('span', { class: 'sideways' },
+    h('button', { type: 'button', class: 'ghost icon', title: t('table.earlier'), 'aria-label': t('table.earlier'), onclick: () => by(-1) }, icon('left')),
+    h('button', { type: 'button', class: 'ghost sm', title: t('table.next_aria'), onclick: toNext }, t('table.next')),
+    h('button', { type: 'button', class: 'ghost icon', title: t('table.later'), 'aria-label': t('table.later'), onclick: () => by(1) }, icon('right')));
+}
+
+// With a mouse, the table can be dragged sideways from anywhere that is not a control.
+function dragScroll(grid) {
+  let start = null;
+  let moved = false;
+  grid.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, .grip')) return;
+    start = { x: e.clientX, left: grid.scrollLeft };
+    moved = false;
+  });
+  grid.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    if (!moved && Math.abs(dx) < 5) return;
+    if (!moved) grid.setPointerCapture(e.pointerId);
+    moved = true;
+    grid.classList.add('dragging');
+    grid.scrollLeft = start.left - dx;
+  });
+  const end = () => { start = null; grid.classList.remove('dragging'); };
+  grid.addEventListener('pointerup', end);
+  grid.addEventListener('pointercancel', end);
+  grid.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+}
 
 async function pagePlan(r, org, people) {
   const base = `/orgs/${enc(r.org)}`;
@@ -373,7 +504,7 @@ async function pagePlan(r, org, people) {
     if (!bar.isConnected) return;  // the page has been replaced
     try {
       const latest = await api('GET', runsPath + '/latest');
-      if (latest.run.status === 'running') setTimeout(poll, 1000);
+      if (latest.run.status === 'running') setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000);  // the stream says when it ends
       else { planState.runId = latest.run.id; render(); }
     } catch (e) { say(errorText(e), 'err'); }
   };
@@ -388,7 +519,7 @@ async function pagePlan(r, org, people) {
     const line = [h('button', { type: 'button', disabled: !health.planner || running, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel];
     const notes = [];
     if (!health.planner) line.push(h('span', { class: 'small' }, t('run.no_planner')));
-    if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.time_limit }))); setTimeout(poll, 1000); }
+    if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.time_limit }))); setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000); }
     if (!view) { if (!running) line.push(h('span', { class: 'small' }, t('run.none_yet'))); }
     else if (view.run.status === 'failed') notes.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: view.run.error || t('run.unknown_error') })));
     else if (done) {
@@ -404,6 +535,7 @@ async function pagePlan(r, org, people) {
     const legend = h('span', { class: 'legend small' }, h('span', { class: 'slot hand' }, t('draft.key_hand')),
       h('span', {}, h('span', { class: 'chip' }, t('draft.locked')), ' ' + t('draft.key_locked')));
     bar.replaceChildren(h('div', { class: 'row-inline' }, line, legend), ...notes);
+    bar.prepend(h('span', { class: 'bar-title' }, t('draft.title'), infoBtn(t('draft.title'), [t('draft.info')])));
   }
 
   // ---- dialogs
@@ -413,7 +545,7 @@ async function pagePlan(r, org, people) {
     const end = h('input', { type: 'time', value: ev.end_time, 'aria-label': t('event.ends') });
     const desc = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('event.description_placeholder'), 'aria-label': t('event.description') }, ev.description);
     const values = fields.fields.map((f) => ({ f, input: h('input', { type: 'text', maxlength: '200', value: fieldValue[ev.id + '/' + f.id] || '', 'aria-label': f.name }) }));
-    dlg = modal(fmtDate(ev.date),
+    dlg = modal(fmtDate(ev.date), { info: [t('event.planner_ignores')] },
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         const body = {};
@@ -431,7 +563,6 @@ async function pagePlan(r, org, people) {
         h('div', { class: 'row-inline' }, field(t('event.starts'), start), field(t('event.ends'), end)),
         values.map(({ f, input }) => field(f.name, input)),
         field(t('event.description'), desc),
-        h('p', { class: 'muted small' }, t('event.planner_ignores')),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
           if (await write(async () => { confirmed(t('event.delete_confirm', { date: fmtDate(ev.date) })); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
         } }, t('event.delete')),
@@ -490,7 +621,7 @@ async function pagePlan(r, org, people) {
     const det = check(true, t('copy.details'), details.join(', ') || t('copy.none'));
     const pl = check(true, t('copy.places'), placeText || t('copy.none'));
     const hand = check(false, t('copy.hand'));
-    dlg = modal(t('copy.title_of', { label: fmtShortDate(ev.date) }),
+    dlg = modal(t('copy.title_of', { label: fmtShortDate(ev.date) }), { info: [t('copy.never')] },
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         let made;
@@ -503,7 +634,6 @@ async function pagePlan(r, org, people) {
         week.el,
         h('h3', {}, t('copy.comes_along')),
         times.el, det.el, pl.el, hand.el,
-        h('p', { class: 'muted small' }, t('copy.never')),
         foot('', h('button', { type: 'submit' }, t('copy.button')))));
     week.update();
   }
@@ -553,7 +683,7 @@ async function pagePlan(r, org, people) {
     const now = sections.findIndex((o) => o.id === x.id);
     const where = h('select', { 'aria-label': t('section.where') }, h('option', { value: '0', selected: now === 0 }, t('section.first')),
       others.map((o, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: o.name }))));
-    dlg = modal(t('section.title', { name: x.name }),
+    dlg = modal(t('section.title', { name: x.name }), { info: [t('section.hint', { org: org.name })] },
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         const pos = parseInt(where.value, 10);
@@ -565,7 +695,6 @@ async function pagePlan(r, org, people) {
       } },
         field(t('common.name'), name),
         others.length ? field(t('section.where'), where) : '',
-        h('p', { class: 'muted small' }, t('section.hint', { org: org.name })),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
           if (await write(async () => { confirmed(t('section.delete_confirm', { name: x.name })); await api('DELETE', `${base}/sections/${x.id}`); })) { dlg.close(); render(); }
         } }, t('section.delete')), h('button', { type: 'submit' }, t('common.save')))));
@@ -579,7 +708,7 @@ async function pagePlan(r, org, people) {
     const now = fields.fields.findIndex((x) => x.id === f.id);
     const where = h('select', { 'aria-label': t('field.where') }, h('option', { value: '0', selected: now === 0 }, t('field.at_top')),
       others.map((x, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: x.name }))));
-    dlg = modal(t('field.title', { name: f.name }),
+    dlg = modal(t('field.title', { name: f.name }), { info: [t('field.hint')] },
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         const pos = parseInt(where.value, 10);
@@ -591,7 +720,6 @@ async function pagePlan(r, org, people) {
       } },
         field(t('common.name'), name),
         others.length ? field(t('field.where'), where) : '',
-        h('p', { class: 'muted small' }, t('field.hint')),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
           if (await write(async () => { confirmed(t('field.delete_confirm', { name: f.name })); await api('DELETE', `${pbase}/fields/${f.id}`); })) { dlg.close(); render(); }
         } }, t('field.delete')), h('button', { type: 'submit' }, t('common.save')))));
@@ -599,7 +727,7 @@ async function pagePlan(r, org, people) {
 
   function taskDialog(tk) {
     let dlg;
-    const changed = () => { again('task', tk.id); dlg.close(); render(); };
+    const changed = () => render();
     const name = h('input', { type: 'text', value: tk.name, maxlength: '80', 'aria-label': t('common.name') });
     const planned = h('input', { type: 'checkbox', checked: tk.planned, 'aria-label': t('task.planned_aria', { name: tk.name }) });
     planned.addEventListener('change', async () => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { planned: planned.checked }))) changed(); else planned.checked = tk.planned; });
@@ -613,9 +741,10 @@ async function pagePlan(r, org, people) {
       if (await write(async () => { if (!on) confirmed(t('task.alone_off_confirm', { name: tk.name })); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
       else aloneBox.checked = !on;
     });
-    const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next, b) => {
-      b.disabled = true;
-      if (await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: next }))) changed(); else b.disabled = false;
+    const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next) => {
+      const ok = await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: next }));
+      if (ok) changed();
+      return ok;
     }))));
     // Where the task stands in the table (also for those who cannot drag, such as on a phone).
     const now = tasks.findIndex((x) => x.id === tk.id);
@@ -633,35 +762,28 @@ async function pagePlan(r, org, people) {
       if (Number.isNaN(n)) return;
       if (await write(() => api('PUT', `${pbase}/tasks/${tk.id}/places`, { slots: n }))) changed();
     } }, fillN, h('button', { type: 'submit' }, t('task.fill')));
-    dlg = modal(tk.name,
-      h('p', { class: 'muted small' }, t('task.org_wide', { org: org.name })),
+    dlg = keyed(modal(tk.name, { info: [t('task.org_wide', { org: org.name }), t('task.planned_off'), t('task.combine_hint'), t('task.fill_hint', { plan: plan.name })] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== tk.name && await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       others.length ? field(t('task.where'), where) : '',
-      h('label', { class: 'check' }, planned, ' ' + t('task.planned'), h('span', { class: 'muted small' }, ' ' + t('task.planned_off'))),
+      h('label', { class: 'check' }, planned, ' ' + t('task.planned')),
       h('h3', {}, t('task.combine')),
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
-      pairRows.length ? [h('p', { class: 'muted small' }, t('task.combine_hint')), h('table', { class: 'mini' }, h('tbody', {}, pairRows))] : '',
+      pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
       h('h3', {}, t('task.fill_title')),
-      h('p', { class: 'muted small' }, t('task.fill_hint', { plan: plan.name })),
       fillForm,
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
         if (await write(async () => { confirmed(t('task.delete_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
-      } }, t('task.delete')), closeBtn()));
+      } }, t('task.delete')), closeBtn())), 'task', tk.id);
   }
 
   function personDialog(p) {
     let dlg;
-    const changed = () => { again('person', p.id); dlg.close(); render(); };
+    const changed = () => render();
     const ppath = `${base}/people/${p.id}`;
     const name = h('input', { type: 'text', value: p.name, maxlength: '80', 'aria-label': t('common.name') });
-    const flag = (k, text, aria, off) => {
-      const box = h('input', { type: 'checkbox', checked: p[k], 'aria-label': aria });
-      box.addEventListener('change', async () => { if (await write(() => api('PATCH', ppath, { [k]: box.checked }))) changed(); else box.checked = p[k]; });
-      return h('label', { class: 'check' }, box, ' ' + text, off ? h('span', { class: 'muted small' }, ' ' + off) : '');
-    };
     // the section the person is placed in (last in it); only where they stand in the table
     const sectionSel = h('select', { 'aria-label': t('person.section') }, h('option', { value: '0', selected: !p.section }, t('person.no_section')),
       sections.map((x) => h('option', { value: String(x.id), selected: p.section === x.id }, x.name)));
@@ -671,21 +793,21 @@ async function pagePlan(r, org, people) {
     const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || { level: '' }).level;
     const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
       const cur = levelOf(tk);
-      return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, cycle('task', cur, t('person.task_aria', { name: p.name, task: tk.name }), async (next, b) => {
-        b.disabled = true;
-        if (await write(() => (next ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: next }) : api('DELETE', `${ppath}/tasks/${tk.id}`)))) changed(); else b.disabled = false;
+      return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, cycle('task', cur, t('person.task_aria', { name: p.name, task: tk.name }), async (next) => {
+        const ok = await write(() => (next ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: next }) : api('DELETE', `${ppath}/tasks/${tk.id}`)));
+        if (ok) changed();
+        return ok;
       })));
     });
-    dlg = modal(p.name,
+    dlg = keyed(modal(p.name, { info: [t('person.tasks_hint'), t('person.auto_hint'), t('person.org_wide', { org: org.name })] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== p.name && await write(() => api('PATCH', ppath, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('person.tasks')),
-      taskRows.length ? [h('p', { class: 'muted small' }, t('person.tasks_hint')), h('table', { class: 'mini' }, h('tbody', {}, taskRows))] : h('p', { class: 'muted' }, t('person.no_tasks')),
-      flag('proposable', t('person.proposable', { name: p.name }), t('person.proposable_aria', { name: p.name }), t('person.proposable_off')),
+      taskRows.length ? h('table', { class: 'mini' }, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
       sections.length ? field(t('person.section'), sectionSel) : '',
-      foot(h('span', { class: 'small muted' }, t('person.org_wide', { org: org.name })), closeBtn()));
+      foot('', closeBtn())), 'person', p.id);
   }
 
   // A place in the draft: what is set by hand (violet), the planner's names (lock one to keep it), and whom the planner
@@ -693,7 +815,7 @@ async function pagePlan(r, org, people) {
   function placeDialog(ev, tk) {
     let dlg;
     const k = at(ev, tk);
-    const changed = () => { again('place', k); dlg.close(); render(); };
+    const changed = () => render();
     const act = (fn) => async () => { if (await write(fn)) changed(); };
     const s = slotsAt(ev, tk);
     const rows = s.items.map((x) => h('tr', {},
@@ -713,7 +835,7 @@ async function pagePlan(r, org, people) {
       if (!ticked.length) return;
       if (await write(async () => { for (const { p } of ticked) await api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id }); })) changed();
     } }, h('div', { class: 'chips' }, pick.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
-      h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, t('place.add_people')), h('span', { class: 'muted small' }, t('place.add_people_hint')))) : '';
+      h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, t('place.add_people')))) : '';
     const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text') });
     const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('place.fills') });
     const setForm = h('form', { class: 'row-inline', onsubmit: async (e) => {
@@ -722,30 +844,29 @@ async function pagePlan(r, org, people) {
       if (await write(() => api('POST', pbase + '/cells', body))) changed();
     } }, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
 
-    let poolPart = h('p', { class: 'muted small' }, t('place.not_planned'));
+    let poolPart = '';
     if (tk.planned) {
       const pool = poolAt[k] || { people: [] };
       const takes = (p) => (chosen[p.id] || []).some((x) => x.task_id === tk.id && x.level !== 'never');
       const pBoxes = people.filter((p) => takes(p) || pool.people.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: pool.people.includes(p.id), 'aria-label': t('place.pool_person_aria', { name: p.name }) }) }));
       poolPart = [h('h3', {}, t('place.pool')),
-        h('p', { class: 'muted small' }, pool.people.length ? t('place.pool_set') : t('place.pool_anyone', { task: tk.name })),
+        pool.people.length ? h('p', { class: 'muted small' }, t('place.pool_set')) : '',
         pBoxes.length ? [h('div', { class: 'chips' }, pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
           h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost sm', onclick: act(() => api('PUT', pbase + '/pools', {
             event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, t('place.pool_save')))]
           : h('p', { class: 'muted small' }, t('place.pool_nobody', { task: tk.name }))];
     }
     const hands = s.items.filter((x) => x.hand);
-    dlg = modal(`${tk.name} · ${fmtShortDate(ev.date)}`,
+    dlg = keyed(modal(`${tk.name} · ${fmtShortDate(ev.date)}`, { info: [t('place.add_people_hint'), tk.planned ? t('place.pool_anyone', { task: tk.name }) : t('place.not_planned'), t('place.lock_hint')] },
       h('p', { class: 'muted small' }, tn('place.places', s.n)),
       done && s.open && s.why ? h('p', { class: 'warn small' }, t('place.why', { why: s.why })) : '',
       rows.length ? h('table', { class: 'mini' }, h('tbody', {}, rows)) : h('p', { class: 'muted small' }, t('place.nothing')),
       h('h3', {}, t('place.set_by_hand')), peopleForm, setForm,
       poolPart,
-      h('p', { class: 'muted small' }, t('place.lock_hint')),
       foot(hands.length ? h('button', { type: 'button', class: 'danger', onclick: act(async () => {
         confirmed(t('place.clear_confirm', { task: tk.name, date: fmtShortDate(ev.date) }));
         for (const x of hands) await api('DELETE', `${pbase}/cells/${x.cell.id}`);
-      }) }, t('place.clear')) : '', closeBtn()));
+      }) }, t('place.clear')) : '', closeBtn())), 'place', k);
   }
 
   // ⚙: the plan's name, the weighting, the earlier drafts and the pin, delete.
@@ -761,18 +882,18 @@ async function pagePlan(r, org, people) {
           : linkBtn(t('run.show'), () => { planState.runId = x.id; dlg.close(); render(); }, t('run.show_aria', { id: x.id })),
         x.status === 'done' && !x.pinned ? [' · ', linkBtn(t('run.pin_short'), () => { dlg.close(); pin(x.id, true); }, t('run.pin_aria', { id: x.id }))] : ''));
     });
-    dlg = modal(plan.name,
+    dlg = keyed(modal(plan.name,
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== plan.name && await write(() => api('PATCH', pbase, { name: name.value }))) { dlg.close(); await render(); say(t('settings.renamed')); }
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('weights.title')),
-      weightsForm(pbase + '/weights', weights, (text) => { again('settings', 0); dlg.close(); render().then(() => say(text)); }),
+      weightsForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
       h('h3', {}, t('run.history')),
       runs.length ? h('table', { class: 'mini' }, h('tbody', {}, runRows)) : h('p', { class: 'muted small' }, t('run.no_history')),
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
         if (await write(async () => { confirmed(t('settings.delete_confirm', { name: plan.name })); await api('DELETE', pbase); })) { dlg.close(); go(`/o/${enc(r.org)}`); say(t('settings.deleted', { name: plan.name })); }
-      } }, t('settings.delete')), closeBtn()));
+      } }, t('settings.delete')), closeBtn())), 'settings', 0);
   }
 
   const listDialog = (title, items) => modal(title, h('ul', { class: 'small' }, items.map((x) => h('li', {}, x))), foot('', closeBtn()));
@@ -780,8 +901,8 @@ async function pagePlan(r, org, people) {
   // ---- the table
   const cols = events.length;
   const filler = () => h('td', { class: 'addcol' });
-  const sect = (title, hint, cls) => h('tr', { class: 'sect' + (cls ? ' ' + cls : '') }, h('th', { scope: 'row' }, title),
-    h('td', { colspan: String(cols + 1) }, hint ? h('span', { class: 'small' }, hint) : ''));
+  const sect = (title, info) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, title, info ? infoBtn(title, info) : '')),
+    h('td', { colspan: String(cols + 1) }));
   const addLine = (form) => h('tr', { class: 'adds' }, h('th', { scope: 'row' }, form), h('td', { colspan: String(cols + 1) }));
 
   const head = h('tr', {}, h('th', { scope: 'row', class: 'corner' }, t('table.date')),
@@ -882,7 +1003,7 @@ async function pagePlan(r, org, people) {
   const recount = (evId) => {
     const c = { good: 0, poor: 0, never: 0 };
     people.forEach((p) => { const l = (ans[p.id] || {})[evId]; if (l) c[l]++; });
-    countCells[evId].replaceChildren(h('b', { class: 'good' }, '✓ ' + c.good), ' · ', h('b', { class: 'poor' }, '? ' + c.poor), ' · ', h('b', { class: 'never' }, '✗ ' + c.never));
+    countCells[evId].replaceChildren(h('b', { class: 'good' }, icon('up'), c.good), h('b', { class: 'poor' }, icon('maybe'), c.poor), h('b', { class: 'never' }, icon('down'), c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
   const answerCell = (p, ev, got) => {
@@ -890,15 +1011,19 @@ async function pagePlan(r, org, people) {
     let busy = false;  // a second click while the first is on its way would send the same answer twice
     const paint = () => {
       const l = (ans[p.id] || {})[ev.id] || '';
-      b.textContent = ANSWER_MARK[l];
+      b.replaceChildren(answerMark(l));
       b.dataset.level = l || 'none';
       b.setAttribute('aria-label', t('table.answer_aria', { name: p.name, label: label(ev), answer: t('answer.' + (l || 'none')) }));
     };
     b.addEventListener('click', async () => {
       if (busy) return;
       busy = true;
-      const next = ANSWER_NEXT[(ans[p.id] || {})[ev.id] || ''];
-      if (await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } }))) { (ans[p.id] ||= {})[ev.id] = next; paint(); recount(ev.id); }
+      const was = (ans[p.id] || {})[ev.id] || '';
+      const next = ANSWER_NEXT[was];
+      (ans[p.id] ||= {})[ev.id] = next;  // shown at once, taken back if the server refuses
+      paint();
+      recount(ev.id);
+      if (!(await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } })))) { ans[p.id][ev.id] = was; paint(); recount(ev.id); }
       busy = false;
     });
     paint();
@@ -908,13 +1033,34 @@ async function pagePlan(r, org, people) {
   // headings with their people below, the organisation's own; those without a section come first. Only placement.
   const inSection = (id) => people.filter((p) => p.section === id);
   const movePerson = (d, section, position) => api('PUT', `${base}/people/${d.id}/position`, { section, position });
+  // ⚡ by a name: whether the planner may pick the person (one click; manual cells are fine either way).
+  const autoBtn = (p) => {
+    const b = h('button', { type: 'button', class: 'auto' });
+    const paint = () => {
+      b.setAttribute('aria-pressed', String(!!p.proposable));
+      b.title = t(p.proposable ? 'person.auto_on' : 'person.auto_off', { name: p.name });
+      b.setAttribute('aria-label', t('person.proposable_aria', { name: p.name }));
+    };
+    b.append(icon('auto'));
+    let busy = false;
+    b.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true;
+      p.proposable = !p.proposable;
+      paint();
+      if (!(await write(() => api('PATCH', `${base}/people/${p.id}`, { proposable: p.proposable })))) { p.proposable = !p.proposable; paint(); }
+      busy = false;
+    });
+    paint();
+    return b;
+  };
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
     const g = grip(t('person.drag'));
     handleFor(g, 'person', p);
     const row = h('tr', { class: 'person-row' },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
-        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks'))))),
+        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks'))), autoBtn(p))),
       events.map((ev) => answerCell(p, ev)), filler());
     return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
   };
@@ -936,20 +1082,21 @@ async function pagePlan(r, org, people) {
 
   const phone = PHONE.matches;
   const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
-  const table = h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table' },
+  const table = h('div', { class: 'grid-scroll' + (phone ? '' : ' main') }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
-      sect(t('table.details'), t('table.details_hint')),
+      sect(t('table.details'), [t('table.details_hint')]),
       fields.fields.map(fieldRow),
       addLine(addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))),
-      sect(t('table.tasks'), t('table.tasks_hint')),
+      sect(t('table.tasks'), [t('table.tasks_hint')]),
       tasks.map(taskRow),
       addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name }))),
-      h('tr', { class: 'sect draft' }, h('th', { scope: 'row' }, t('draft.title')), h('td', { colspan: String(cols + 1) }, bar)),
+      h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
       tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler())),
       draftFoot,
       phone ? '' : [
-        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
+        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')]))),
+          events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         inSection(0).map(personRow),
         sections.flatMap((x, i) => [sectionRow(x, i), ...inSection(x.id).map(personRow)]),
@@ -967,10 +1114,10 @@ async function pagePlan(r, org, people) {
     }
     const cols = people;
     return h('section', { class: 'turned-wrap' },
-      h('h2', {}, t('table.availability')),
+      h('h2', {}, t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')])),
       h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table turned' },
         h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'corner' }, t('table.date')),
-          cols.map((p) => (h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p))))))),
+          cols.map((p) => (h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p)), autoBtn(p)))))),
         h('tbody', {}, events.map((ev) => h('tr', {},
           h('th', { scope: 'row' }, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', (countCells[ev.id] = h('span', { class: 'sub count' }))),
           cols.map((p) => (answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
@@ -980,11 +1127,16 @@ async function pagePlan(r, org, people) {
   events.forEach((ev) => recount(ev.id));
 
   const root = h('div', { class: 'plan-page' },
-    h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
-    h('div', { class: 'title-bar' }, h('h1', {}, plan.name), h('button', { type: 'button', class: 'ghost', onclick: settingsDialog }, '⚙ ' + t('settings.open'))),
-    h('p', { class: 'muted small' }, events.length ? t(phone ? 'table.hint_phone' : 'table.hint') : t('table.no_events')),
+    h('div', { class: 'title-bar' },
+      link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }),
+      h('h1', {}, plan.name),
+      infoBtn(plan.name, [t(phone ? 'table.hint_phone' : 'table.hint')]),
+      events.length ? sideways(phone ? null : table, events) : '',
+      h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
+    events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
     availability,
     table);
+  if (!phone) dragScroll(table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },
@@ -1010,17 +1162,58 @@ async function render() {
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });
     const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org) : pagePlan(r, org, people)]);
     if (seq !== renderSeq || !body) return;
-    const y = location.pathname === lastPath ? window.scrollY : 0;  // the same page again (after a change): stay where we are
+    // The same page again (after a change): stay where we are, sideways in the tables too, with the focus where it was.
+    const same = location.pathname === lastPath;
+    const y = same ? window.scrollY : 0;
+    const sideways = same ? [...main.querySelectorAll('.grid-scroll')].map((g) => [g.scrollLeft, g.scrollTop]) : [];
+    const focus = same ? focusKey(main) : null;
     main.replaceChildren(body);
     lastPath = location.pathname;
+    main.querySelectorAll('.grid-scroll').forEach((g, i) => { if (sideways[i]) [g.scrollLeft, g.scrollTop] = sideways[i]; });
     window.scrollTo(0, y);
+    refocus(main, focus);
     if (body.shown) body.shown();
+    else document.querySelectorAll('dialog.modal[open][data-key]').forEach((d) => d.close());
+    follow(r.org);
     document.title = t('brand') + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;
     if (e.status === 404 && r.org && !e.keepOrg) store.set('org', '');
     main.replaceChildren(h('div', {}, h('h1', {}, e.status === 404 ? t('page.not_found') : t('page.error')), h('p', {}, link('/?switch', t('page.choose_org'))), h('p', { class: 'muted small' }, errorText(e))));
   }
+}
+
+// ---- live: the organisation's stream -----------------------------------------------------------------------------------
+// The server says when something changed in the organisation (another tab, another person, a planning run that ended).
+// The page then fetches again and redraws in place. While a field is being typed in, the redraw waits until it is left.
+let live = null;  // { org, es }
+let liveTimer = 0;
+function follow(org) {
+  if (live && live.org === org) return;
+  if (live) live.es.close();
+  live = null;
+  if (!org || typeof EventSource === 'undefined') return;
+  const es = new EventSource(`/api/orgs/${enc(org)}/stream`);
+  let broken = false;
+  es.addEventListener('message', (e) => {
+    let c = {};
+    try { c = JSON.parse(e.data); } catch (err) { /* a change all the same */ }
+    if (c.origin !== CLIENT) liveRefresh();
+  });
+  es.addEventListener('error', () => { broken = true; });
+  es.addEventListener('open', () => { if (broken) liveRefresh(); broken = false; });  // back after a break: changes may be missed
+  live = { org, es };
+}
+const typing = () => {
+  const a = document.activeElement;
+  return !!a && (a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes(a.type)));
+};
+function liveRefresh() {
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => {
+    if (typing()) { document.activeElement.addEventListener('blur', liveRefresh, { once: true }); return; }
+    render();
+  }, 150);
 }
 
 window.addEventListener('popstate', render);

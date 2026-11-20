@@ -30,15 +30,17 @@ type server struct {
 	// for a removed API and showed «Page not found»).
 	version map[string]string
 	log     *slog.Logger
+	hub     *hub // the open streams (stream.go)
 }
 
 // New builds the handler. static must contain index.html, i18n.js, app.js and style.css. pl may be nil: planning then answers
 // 503 «unavailable» and everything else works.
-func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) http.Handler {
+func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) *Handler {
 	if pl == nil {
 		pl = planner.New(st, nil, 1, log)
 	}
-	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}}
+	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub()}
+	pl.OnFinish(func(org string) { s.hub.publish(org, "") })
 	for _, name := range assets {
 		if static == nil {
 			break
@@ -59,6 +61,7 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	mux.HandleFunc("POST /api/orgs", s.createOrg)
 	mux.HandleFunc("GET /api/orgs/{org}", s.getOrg)
 	mux.HandleFunc("PATCH /api/orgs/{org}", s.renameOrg)
+	mux.HandleFunc("GET /api/orgs/{org}/stream", s.stream)
 	mux.HandleFunc("DELETE /api/orgs/{org}", s.deleteOrg)
 
 	mux.HandleFunc("GET /api/orgs/{org}/plans", s.listPlans)
@@ -88,7 +91,7 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, name) })
 	}
 
-	return secure(http.NewCrossOriginProtection().Handler(recoverer(mux, log)))
+	return &Handler{Handler: secure(http.NewCrossOriginProtection().Handler(recoverer(s.notifying(mux), log))), hub: s.hub}
 }
 
 // assets are the files index.html links; each gets ?v=<hash of its content>.

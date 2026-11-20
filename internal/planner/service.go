@@ -34,9 +34,10 @@ type Service struct {
 
 	timeoutOverride time.Duration // tests only: replaces time limit + grace
 
-	mu      sync.Mutex
-	running bool
-	wg      sync.WaitGroup
+	mu       sync.Mutex
+	running  bool
+	onFinish []func(org string)
+	wg       sync.WaitGroup
 }
 
 // New returns a service; solver may be nil, in which case planning reports ErrUnavailable.
@@ -48,6 +49,13 @@ func New(st *store.Store, solver Solver, workers int, log *slog.Logger) *Service
 }
 
 func (s *Service) Available() bool { return s.solver != nil }
+
+// OnFinish calls fn with the organisation's slug each time a run has ended and its result is stored (done or failed).
+func (s *Service) OnFinish(fn func(org string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onFinish = append(s.onFinish, fn)
+}
 
 // Wait blocks until the run in progress (if any) has finished. For tests and shutdown.
 func (s *Service) Wait() { s.wg.Wait() }
@@ -102,6 +110,12 @@ func (s *Service) Start(ctx context.Context, orgSlug, planSlug string, p Params)
 		defer s.wg.Done()
 		defer release()
 		s.execute(id, input, p.TimeLimit)
+		s.mu.Lock()
+		fns := s.onFinish
+		s.mu.Unlock()
+		for _, fn := range fns {
+			fn(orgSlug)
+		}
 	}()
 	return id, nil
 }

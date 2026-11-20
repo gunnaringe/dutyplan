@@ -16,7 +16,7 @@ Chrome) and, in a job of its own, `mise run mutations`, on every PR and on main.
 it can merge, no force push or deletion; no review is required. Secret scanning with push protection is on. `.github/workflows/image.yml` builds the image
 (amd64 + arm64; the Go stage cross-compiles) on PRs and publishes `ghcr.io/gunnaringe/dutyplan` from main (`main`, `main-<UTC>-<sha>`, `sha-<sha>`) and `v*` tags.
 A first test runs on kate since 2026-11-20 (asked by the user), behind Pocket ID at dutyplan.haxxor.xyz, manifests in `clusters/kate/dutyplan/`:
-still the image built locally (`mise run app:image`) and imported into the node, not the published one. No backup yet.
+kate runs the published image through Flux image automation (`clusters/kate/flux-system/dutyplan-image.yaml`), with a nightly SQLite backup to NFS.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
 starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
@@ -76,14 +76,15 @@ starts the Python planner, turns the answer into a view with explanations), `int
     names set by hand as chosen; answers and drafts are never copied).
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background; a planner name that was locked is a cell with `locked` and shows a
     «locked» chip; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
-  - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank.
+  - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank (thumb up, ?, thumb down).
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
 - **A general tool.** Tasks, people, events and details rows are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
 - **No groups** (removed 2026-11-20 at the user's request; building them back is issue #9). A place set by hand is a person or a text.
 - **No special rules for single things.** A **selection** (only these people can be picked) covers «their own sound engineer» and the like. No skills or conditional requirements.
-- **Can be proposed** is a setting per person (default yes). No = the planner never picks them; manual cells are fine.
-- **One click per setting** (2026-11-20, the user's choice): a person's task cycles *not → bad → good* (`poor`/`good`, not = no row, the start), two tasks
+- **Can be proposed** is a setting per person (default yes). No = the planner never picks them; manual cells are fine. On the page it is the ⚡ button by
+  the name in the table (2026-11-20), not in the person dialog.
+- **One click per setting** (2026-11-20, the user's choice): a person's task cycles *can't → if needed → good* (red thumb down → yellow ? → green thumb up; `poor`/`good`, can't = no row, the start), two tasks
   on the same event *can't → bad → good* (`cannot`/`practical`, bad = no row = impractical). *Neutral* tasks, *preferred* pairs and the plan setting
   `default_combination` are gone. There is **no «active»** any more (removed 2026-11-20): «Can be proposed» is the only switch per person; people who
   are not taking part are placed in a section.
@@ -96,6 +97,16 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **The weights are configuration per plan** (2026-11-09): `store.WeightSpecs` (default and limits), stored as what differs from the default, and part of the hash. The defaults must be copies of
   the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/app.js`.
 
+- **Live and without flicker** (2026-11-20, the user's choice: "no loading or flickering", "webhooks for all state"). Every write that went
+  through, and the end of a planning run, is announced on the organisation's stream (`GET /api/orgs/{org}/stream`, Server-Sent Events,
+  `internal/api/stream.go`; no data on it, only the origin tab from `X-Dutyplan-Client`). The page (`follow()` in `web/app.js`) then
+  fetches again and redraws in place: scroll (also sideways), focus and open dialogs are kept, a dialog's contents are swapped
+  (`keyed()`/`reopened()`, never closed and opened again), and a redraw waits while a text field is being typed in. Clicks on answers,
+  levels and ⚡ show at once and go back if the server refuses. Hosting will be behind Cloudflare: the stream pings every 25 s (its idle
+  limit is 100 s) and has no write timeout. Do not add polling or full reloads back.
+- **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
+  Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).
+  The main table scrolls inside the window (dates and names stay put); ‹ › / *Next* / wheel over the dates / arrow keys / dragging move sideways.
 - **Assets are versioned** (2026-11-20): the server links `app.js`, `i18n.js` and `style.css` from `index.html` as `?v=<hash of the content>`
   and lets only that exact address be cached (a year, immutable); the page and bare or old addresses are `no-cache`. A new asset must be
   added to `assets` in `internal/api/api.go`. Why: a browser (or Cloudflare's Browser Cache TTL) kept an old `app.js` after a deploy, which
@@ -121,7 +132,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   Used once so far: the group mutations, when groups were removed (2026-11-20, issue #9).
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 243 with the live stream.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).
