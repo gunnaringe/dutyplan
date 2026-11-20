@@ -11,7 +11,8 @@ Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan*
 and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places or description when an event is created (adding weekly with `until`, copying and the availability map stay: the page uses them).
-Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not start on it unless asked.
+A first test runs on kate since 2026-11-20 (asked by the user): the image from `Dockerfile` (`mise run app:image`), behind Pocket ID at
+dutyplan.haxxor.xyz, manifests and the import steps in `clusters/kate/dutyplan/`. No registry, no backup yet.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
 starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
