@@ -6,7 +6,7 @@
 # (SQLite keeps its -wal and -shm files next to the database). There is no login: read «No login» in README.md first.
 
 # The Go build runs on the build machine and cross-compiles (no emulation for arm64).
-FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.10-trixie AS app
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.4-trixie AS app
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
