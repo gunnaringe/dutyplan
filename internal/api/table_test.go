@@ -143,3 +143,54 @@ func TestTheTablesDataIs404AcrossPlansAndOrganisations(t *testing.T) {
 		t.Errorf("places were written across plans or organisations: %+v", places)
 	}
 }
+
+func TestFillingARowAndMovingATaskOverHTTP(t *testing.T) {
+	e := newEnv(t)
+	a := e.cellsWorld("Org A")
+	base := "/api/orgs/" + a.org + "/plans/" + a.plan
+	fill := base + "/tasks/" + itoa(a.sound.ID) + "/places"
+	e.mustDo(204, "PUT", fill, map[string]int{"slots": 3})
+	var places []store.EventPlaces
+	e.mustDo(200, "GET", base+"/places", nil).json(&places)
+	if len(places) != len(a.events) {
+		t.Fatalf("one row per event: %+v", places)
+	}
+	for _, p := range places {
+		if p.TaskID != a.sound.ID || p.Slots != 3 {
+			t.Errorf("filled: %+v", places)
+		}
+	}
+	for name, body := range map[string]any{"too many": map[string]int{"slots": 51}, "missing": map[string]any{}, "the same": map[string]int{"slots": 3}} {
+		if r := e.do("PUT", fill, body); r.code != 400 {
+			t.Errorf("fill %s: %d %s", name, r.code, r.body)
+		}
+	}
+	if r := e.do("PUT", base+"/tasks/x/places", map[string]int{"slots": 1}); r.code != 404 {
+		t.Errorf("a malformed task: %d", r.code)
+	}
+	e.mustDo(204, "PUT", fill, map[string]int{"slots": 0})
+	e.mustDo(200, "GET", base+"/places", nil).json(&places)
+	if len(places) != 0 {
+		t.Errorf("0 clears the row: %+v", places)
+	}
+
+	tasks := "/api/orgs/" + a.org + "/tasks"
+	e.mustDo(204, "PUT", tasks+"/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0})
+	var list []store.Task
+	e.mustDo(200, "GET", tasks, nil).json(&list)
+	if len(list) < 2 || list[0].ID != a.sang.ID || list[1].ID != a.sound.ID {
+		t.Errorf("moved to the top: %+v", list)
+	}
+	for name, body := range map[string]any{"negative": map[string]int{"position": -1}, "missing": map[string]any{}} {
+		if r := e.do("PUT", tasks+"/"+itoa(a.sang.ID)+"/position", body); r.code != 400 {
+			t.Errorf("position %s: %d %s", name, r.code, r.body)
+		}
+	}
+	b := e.cellsWorld("Org B")
+	if r := e.do("PUT", "/api/orgs/"+b.org+"/tasks/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0}); r.code != 404 {
+		t.Errorf("A's task through B: %d", r.code)
+	}
+	if r := e.do("PUT", "/api/orgs/"+b.org+"/plans/"+b.plan+"/tasks/"+itoa(a.sound.ID)+"/places", map[string]int{"slots": 2}); r.code != 404 {
+		t.Errorf("filling A's task through B: %d", r.code)
+	}
+}

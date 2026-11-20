@@ -218,6 +218,8 @@ what the event is, what it needs, who got it, who can come.
   (not in the input or hash). ⋮⋮ drags a row (`PUT /fields/{id}/position`), ✎ renames, moves or deletes it. `GET|POST /plans/{plan}/fields`, `PATCH|DELETE /fields/{id}`,
   `PUT /events/{id}/fields/{field}`.
 - **Tasks**: one row per task with the places per event, typed in (`event_task`, `PUT|DELETE /events/{id}/places/{task}`, `GET /plans/{plan}/places`); empty = not needed.
+  *Fill row* (`PUT /plans/{plan}/tasks/{id}/places {slots}`, one transaction, 0 clears) sets every event of the plan. ⋮⋮ drags a task (`task.position`,
+  the organisation's order, `PUT /tasks/{id}/position`); the planner's input keeps the tasks by id, so the order is not in the hash.
   Clicking the task: rename, planned or only by hand, "Cannot be combined with anything" (`PUT /orgs/{org}/tasks/{id}/combinations`) and the single pairs, delete.
 - **Draft allocation** (green): the bar has "Make a draft"/"Try again", the time limit, "Draft #n · time", "✓ Current plan" with Unpin (or Pin), and a key. One row per task:
   what is set by hand (violet), a locked planner name («locked» chip), the planner's names («maybe» when given against a ?), and "Not filled · Why?". Clicking a place opens

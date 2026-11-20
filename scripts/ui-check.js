@@ -119,10 +119,14 @@ const { spawn } = require('child_process');
 
     // places: typed straight in; Enter moves on to the next event
     const places = (task, e) => page.locator(`input[aria-label="Places for ${task} on ${e}"]`);
-    for (const e of ev) {
-      await places('Sound', e).fill('1');
-      await places('Sound', e).press('Enter');
-    }
+    // Fill row (in the task's dialog): the same number on every event
+    await page.getByRole('button', { name: 'Open the task Sound' }).click();
+    await reopens(async () => {
+      await dialog.locator('input[aria-label="Places for Sound on every event"]').fill('1');
+      await dialog.getByRole('button', { name: 'Fill row' }).click();
+    }, 'Fill row draws the page again');
+    await closeDialog();
+    for (const e of ev) ok((await places('Sound', e).inputValue()) === '1', 'Fill row puts 1 on ' + e);
     await places('Café', ev[0]).fill('2');
     await places('Café', ev[0]).press('Enter');
     await places('Café', ev[1]).fill('1');
@@ -136,6 +140,18 @@ const { spawn } = require('child_process');
     await h1is(page, 'Autumn 2026');
     ok((await places('Café', ev[0]).inputValue()) === '2' && (await places('Video', ev[1]).inputValue()) === '', 'places stay after a reload; empty = not needed');
     ok((await page.locator('td.draft.none').count()) > 0, 'no places: nothing to fill in the draft');
+
+    // tasks: new ones go last; ⋮⋮ drags one, and the dialog's «Place in the table» moves one too (for phones)
+    const taskOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(','));
+    ok((await taskOrder()) === 'Sound,Video,Café', 'tasks in the order they were added: ' + await taskOrder());
+    const taskRowOf = (name) => page.locator('tr.task-row', { has: page.locator(`button[aria-label="Open the task ${name}"]`) });
+    await taskRowOf('Café').locator('.grip').dragTo(taskRowOf('Sound'));
+    await until(page, () => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Café,Sound,Video', null, 'dragging ⋮⋮ moves a task to the top');
+    ok((await page.evaluate(() => [...document.querySelectorAll('tr.draft-row:not(.foot) th')].map((x) => x.textContent).join(','))) === 'Café,Sound,Video', 'the draft follows the order');
+    await page.getByRole('button', { name: 'Open the task Café' }).click();
+    await reopens(() => dialog.locator('select[aria-label="Place in the table"]').selectOption({ label: 'After Video' }), 'moving draws the page again');
+    await closeDialog();
+    ok((await taskOrder()) === 'Sound,Video,Café', 'the dialog moves a task: ' + await taskOrder());
 
     // details rows: a cell is a field; ✎ moves a row
     const value = (row, e) => page.locator(`input[aria-label="${row} ${e}"]`);

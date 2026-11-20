@@ -32,7 +32,9 @@ You add them yourself, type straight into the cells, drag ⋮⋮ to move a row, 
 never reads them.
 
 **Each event has its own places.** A *task* is something to do (Sound, Video, Doors, Coffee). For every task and event you
-type how many places there are: a concert needs two on the door, a rehearsal none. Nothing is built in.
+type how many places there are: a concert needs two on the door, a rehearsal none. Nothing is built in. *Fill row* in a
+task's dialog puts the same number on every event at once, and ⋮⋮ drags a task to another row (the order is the same in
+every plan).
 
 ![Event details and the places each event needs](docs/img/03-details-places.png)
 
