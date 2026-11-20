@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
@@ -46,7 +45,7 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 		{"nothing to change", e.refused(400, "PATCH", base+"/people/"+itoa(a.anna.ID), map[string]any{"proposable": true}), "invalid", "nothing_to_change", nil},
 		{"a weight above its range", e.refused(400, "PUT", plan+"/weights", map[string]any{"values": map[string]any{"w_fair": 500}}), "invalid", "weight_range", map[string]any{"key": "w_fair", "min": 0.0, "max": 100.0}},
 		{"an unknown weight", e.refused(400, "PUT", plan+"/weights", map[string]any{"values": map[string]any{"nope": 1}}), "invalid", "weight_unknown", map[string]any{"key": "nope"}},
-		{"no events chosen", e.refused(400, "POST", plan+"/cells", map[string]any{"events": []int64{}, "task": a.sound.ID, "person": a.anna.ID}), "invalid", "choose_events", nil},
+		{"a cell naming nothing", e.refused(400, "POST", plan+"/cells", map[string]any{"event": a.events[0].ID, "task": a.sound.ID}), "invalid", "cell_kind", nil},
 		{"a bad date", e.refused(400, "POST", plan+"/events", map[string]any{"date": "09.08.2026"}), "invalid", "date_invalid", nil},
 		{"a time limit out of range", e.refused(400, "POST", plan+"/runs", map[string]any{"time_limit": 1}), "invalid", "time_limit", map[string]any{"min": 5.0, "max": 120.0}},
 	} {
@@ -61,7 +60,7 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 	}
 
 	// in use: a group that a manual cell names
-	e.mustDo(201, "POST", plan+"/cells", map[string]any{"events": []int64{a.events[0].ID}, "task": a.sang.ID, "group": a.choir.ID})
+	e.mustDo(201, "POST", plan+"/cells", map[string]any{"event": a.events[0].ID, "task": a.sang.ID, "group": a.choir.ID})
 	if got := e.refused(409, "DELETE", base+"/groups/"+itoa(a.choir.ID), nil); got.Code != "in_use" || got.Params["kind"] != "group" || got.Params["name"] != "Choir" {
 		t.Errorf("in use: %+v", got)
 	}
@@ -74,7 +73,7 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 func TestANothingToPlanRefusalHasItsCode(t *testing.T) {
 	e := newEnvWith(t, fakeSolver(func(context.Context, []byte) ([]byte, error) { return emptyAnswer, nil }))
 	org, _ := e.plannable("Org A")
-	empty, _ := e.st.CreatePlan(context.Background(), org, "Empty", "")
+	empty, _ := e.st.CreatePlan(context.Background(), org, "Empty")
 	got := e.refused(400, "POST", "/api/orgs/"+org+"/plans/"+empty.Slug+"/runs", map[string]any{})
 	if got.Code != "nothing_to_plan" || got.Error != "invalid" {
 		t.Errorf("%+v", got)
@@ -125,11 +124,6 @@ func TestTheRunIsWrittenInTheLanguageThePageAsksFor(t *testing.T) {
 		if got := explanation(query); got != want {
 			t.Errorf("%q: %q, want %q", query, got, want)
 		}
-	}
-	// the same switch on «mine oppdrag» (no assignments here, but the request must be accepted)
-	people, _ := e.st.ListPeople(context.Background(), org)
-	if r := e.do("GET", "/api/orgs/"+org+"/plans/"+plan+"/people/"+itoa(people[0].ID)+"/assignments?lang=nb", nil); r.code != 200 || !strings.Contains(string(r.body), `"has_plan":true`) {
-		t.Errorf("assignments with ?lang=nb: %d %s", r.code, r.body)
 	}
 	_ = store.ErrInvalid
 }

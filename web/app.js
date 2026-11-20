@@ -102,11 +102,11 @@ const linkBtn = (text, onclick, aria) => h('button', { type: 'button', class: 'l
 function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
-    if (parts[2] === 'p' && parts[3] && parts[4] === 'me' && parts[5]) return { page: 'me', org: parts[1], plan: parts[3], person: parts[5] };
-    if (parts[2] === 'p' && parts[3]) return { page: 'plan', org: parts[1], plan: parts[3] };
-    return { page: 'org', org: parts[1] };
+    if (parts.length === 2) return { page: 'org', org: parts[1] };
+    if (parts.length === 4 && parts[2] === 'p') return { page: 'plan', org: parts[1], plan: parts[3] };
+    return { page: 'none', org: parts[1] };
   }
-  return { page: 'home' };
+  return { page: parts.length ? 'none' : 'home' };
 }
 
 async function renderHeader(r) {
@@ -354,9 +354,6 @@ async function pagePlan(r, org, people) {
     api('GET', pbase), api('GET', epath), api('GET', base + '/tasks'), api('GET', base + '/combinations'), api('GET', base + '/groups'),
     api('GET', pbase + '/fields'), api('GET', pbase + '/answers'), api('GET', pbase + '/places'), api('GET', pbase + '/cells'),
     api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', '/health'), api('GET', pbase + '/runs')]);
-  // A personal link (…/me/<id>) opens the table with that person's row marked; an unknown id is a page that does not exist.
-  const highlight = r.person ? people.find((p) => String(p.id) === r.person) : null;
-  if (r.person && !highlight) throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: true });
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest.
   const pinned = runs.find((x) => x.pinned);
@@ -660,12 +657,6 @@ async function pagePlan(r, org, people) {
         if (await write(() => (v ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: v }) : api('DELETE', `${ppath}/tasks/${tk.id}`)))) changed(); else e.target.value = cur;
       } }, PERSON_TASK_LEVELS.map(([v, k]) => h('option', { value: v, selected: v === cur }, t(k))))));
     });
-    const url = location.origin + `/o/${enc(r.org)}/p/${enc(r.plan)}/me/${p.id}`;
-    const urlInput = h('input', { type: 'text', readonly: true, value: url, class: 'wide', 'aria-label': t('person.link'), onfocus: (e) => e.target.select() });
-    const copy = async () => {
-      try { await navigator.clipboard.writeText(url); } catch (e) { urlInput.select(); document.execCommand('copy'); }
-      say(t('person.link_copied'));
-    };
     dlg = modal(p.name,
       p.active ? '' : h('p', { class: 'err' }, t('person.inactive')),
       h('form', { class: 'row', onsubmit: async (e) => {
@@ -674,9 +665,6 @@ async function pagePlan(r, org, people) {
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('person.tasks')),
       taskRows.length ? h('table', { class: 'mini' }, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
-      h('h3', {}, t('person.link')),
-      h('div', { class: 'row-inline' }, urlInput, h('button', { type: 'button', class: 'ghost sm', onclick: copy }, t('person.copy'))),
-      h('p', { class: 'muted small' }, t('person.link_hint', { name: p.name })),
       flag('active', t('person.active'), t('person.active_aria', { name: p.name })),
       flag('proposable', t('person.proposable', { name: p.name }), t('person.proposable_aria', { name: p.name }), t('person.proposable_off')),
       foot(h('span', { class: 'small muted' }, t('person.org_wide', { org: org.name })), closeBtn()));
@@ -696,7 +684,7 @@ async function pagePlan(r, org, people) {
       h('td', { class: 'right' }, x.cell
         ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
         : h('button', { type: 'button', class: 'ghost sm', 'aria-label': t('place.lock_aria', { name: x.name }),
-          onclick: act(() => api('POST', pbase + '/cells', { events: [ev.id], task: tk.id, [x.kind]: x.id, fills: x.kind === 'group' ? x.fills : 0, locked: true })) }, t('place.lock')))));
+          onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, [x.kind]: x.id, fills: x.kind === 'group' ? x.fills : 0, locked: true })) }, t('place.lock')))));
     const active = people.filter((p) => p.active);
     const kind = h('select', { 'aria-label': t('place.kind') }, [['person', t('common.person')], ['group', t('common.group')], ['text', t('common.text')]].map(([v, text]) => h('option', { value: v }, text)));
     const personSel = h('select', { 'aria-label': t('common.person') }, active.map((p) => h('option', { value: String(p.id) }, p.name)));
@@ -706,7 +694,7 @@ async function pagePlan(r, org, people) {
     kind.addEventListener('change', () => { personSel.hidden = kind.value !== 'person'; groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; fills.hidden = kind.value === 'person'; });
     const setForm = h('form', { class: 'row-inline', onsubmit: async (e) => {
       e.preventDefault();
-      const body = { events: [ev.id], task: tk.id };
+      const body = { event: ev.id, task: tk.id };
       if (kind.value === 'person') body.person = parseInt(personSel.value, 10);
       else if (kind.value === 'group') { body.group = parseInt(groupSel.value, 10); body.fills = parseInt(fills.value, 10) || 1; }
       else { body.label = textIn.value; body.fills = parseInt(fills.value, 10) || 1; }
@@ -723,7 +711,7 @@ async function pagePlan(r, org, people) {
         h('p', { class: 'muted small' }, pool.people.length + pool.groups.length ? t('place.pool_set') : t('place.pool_anyone', { task: tk.name })),
         pBoxes.length + gBoxes.length ? [h('div', { class: 'chips' }, pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name)), gBoxes.map(({ g, box }) => h('label', { class: 'chip' }, box, ' ' + t('place.group_suffix', { name: g.name })))),
           h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost sm', onclick: act(() => api('PUT', pbase + '/pools', {
-            events: [ev.id], task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id), groups: gBoxes.filter((x) => x.box.checked).map((x) => x.g.id) })) }, t('place.pool_save')))]
+            event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id), groups: gBoxes.filter((x) => x.box.checked).map((x) => x.g.id) })) }, t('place.pool_save')))]
           : h('p', { class: 'muted small' }, t('place.pool_nobody', { task: tk.name }))];
     }
     const hands = s.items.filter((x) => x.hand);
@@ -877,7 +865,7 @@ async function pagePlan(r, org, people) {
   };
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
-    return h('tr', { class: [highlight && p.id === highlight.id ? 'me' : '', p.active ? '' : 'inactive'].filter(Boolean).join(' ') || false, 'data-person': String(p.id) },
+    return h('tr', { class: p.active ? false : 'inactive' },
       h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks')),
         p.active ? '' : h('span', { class: 'sub' }, t('person.inactive_short')))),
@@ -912,7 +900,6 @@ async function pagePlan(r, org, people) {
     h('div', { class: 'title-bar' }, h('h1', {}, plan.name), h('button', { type: 'button', class: 'ghost', onclick: settingsDialog }, '⚙ ' + t('settings.open'))),
     h('p', { class: 'muted small' }, events.length ? t('table.hint') : t('table.no_events')),
     table);
-  if (highlight) root.dataset.person = highlight.name;
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },
@@ -935,6 +922,7 @@ async function render() {
       [org, people] = await Promise.all([api('GET', '/orgs/' + enc(r.org)), api('GET', `/orgs/${enc(r.org)}/people`)]);
       store.set('org', r.org);
     }
+    if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });
     const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : pagePlan(r, org, people)]);
     if (seq !== renderSeq || !body) return;
     const y = location.pathname === lastPath ? window.scrollY : 0;  // the same page again (after a change): stay where we are
@@ -942,7 +930,6 @@ async function render() {
     lastPath = location.pathname;
     window.scrollTo(0, y);
     if (body.shown) body.shown();
-    if (r.page === 'me' && body.dataset.person && !y) { const row = body.querySelector('tr.me'); if (row) row.scrollIntoView({ block: 'center' }); }
     document.title = t('brand') + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;

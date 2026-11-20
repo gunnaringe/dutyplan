@@ -13,9 +13,9 @@ func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	a.s.SetCombination(ctx, a.org.Slug, a.sound.ID, a.camera.ID, "impractical")
 
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026", "") // same slug as A's plan
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026") // same slug as A's plan
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Coffee", true)
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Coffee")
 	a.s.SetPersonTask(ctx, b.Slug, personB.ID, taskB.ID, "neutral")
 
 	d, err := a.s.GetPlanningData(ctx, a.org.Slug, a.plan.Slug)
@@ -113,9 +113,9 @@ func TestRunsArePrunedToTheNewestTwenty(t *testing.T) {
 func TestRunsBelongToTheirPlanAndOrganisation(t *testing.T) {
 	a := newPrefEnv(t)
 	idA, _ := a.s.CreateRun(ctx, a.org.Slug, a.plan.Slug, 1, 5, "h", []byte("{}"), []byte("{}"))
-	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027")
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 
 	if _, err := a.s.GetRun(ctx, a.org.Slug, other.Slug, idA); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a run through another plan: %v", err)

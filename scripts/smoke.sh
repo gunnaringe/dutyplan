@@ -60,13 +60,21 @@ code 200 GET / && grep -q Dutyplan "$tmp/body" || fail "the front page is missin
 code 200 GET /i18n.js && grep -q MESSAGES "$tmp/body" || fail "the texts of the page are missing"
 code 200 GET /o/org-a/p/autumn-2026
 
-code 201 POST /api/orgs/org-a/tasks '{"name":"Doors","planned":false}'   # filled by hand only, so org-a has nothing to plan
+code 201 POST /api/orgs/org-a/tasks '{"name":"Doors"}'
 task=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 [ -n "$task" ] || fail "did not find the task id"
-code 404 POST /api/orgs/org-b/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"places\":{\"$task\":1}}"   # A's task on B's event
-code 201 POST /api/orgs/org-a/plans/autumn-2026/events "{\"date\":\"2026-08-09\",\"places\":{\"$task\":2}}"
+code 200 PATCH "/api/orgs/org-a/tasks/$task" '{"planned":false}'   # filled by hand only, so org-a has nothing to plan
+code 201 POST /api/orgs/org-b/plans/autumn-2026/events '{"date":"2026-08-09"}'
+evb=$(sed -n 's/^\[{"id":\([0-9]*\),.*/\1/p' "$tmp/body")
+code 404 PUT "/api/orgs/org-b/plans/autumn-2026/events/$evb/places/$task" '{"slots":1}'   # A's task on B's event
+code 204 DELETE "/api/orgs/org-b/plans/autumn-2026/events/$evb"
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09"}'
+ev=$(sed -n 's/^\[{"id":\([0-9]*\),.*/\1/p' "$tmp/body")
+code 204 PUT "/api/orgs/org-a/plans/autumn-2026/events/$ev/places/$task" '{"slots":2}'
 code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09"}'   # two events on the same day
-code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"11:00","end_time":"12:30","description":"Doors at 10:30"}'
+code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"11:00","end_time":"12:30"}'
+timed=$(sed -n 's/^\[{"id":\([0-9]*\),.*/\1/p' "$tmp/body")
+code 200 PATCH "/api/orgs/org-a/plans/autumn-2026/events/$timed" '{"description":"Doors at 10:30"}'
 grep -q '"start_time":"11:00"' "$tmp/body" && grep -q '"description":"Doors at 10:30"' "$tmp/body" || fail "the time and the description did not come back: $(cat "$tmp/body")"
 code 400 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"25:00"}'
 grep -q '"code":"start_time_invalid"' "$tmp/body" || fail "a bad time gave the wrong answer: $(cat "$tmp/body")"

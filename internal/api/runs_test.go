@@ -26,13 +26,13 @@ func (e *env) plannable(name string) (org, plan string) {
 			e.t.Fatal(err)
 		}
 	}
-	o, err := e.st.CreateOrg(ctx, name, "")
+	o, err := e.st.CreateOrg(ctx, name)
 	must(err)
-	task, err := e.st.CreateTask(ctx, o.Slug, "Sound", true)
+	task, err := e.st.CreateTask(ctx, o.Slug, "Sound")
 	must(err)
-	p, err := e.st.CreatePlan(ctx, o.Slug, "Autumn 2026", "")
+	p, err := e.st.CreatePlan(ctx, o.Slug, "Autumn 2026")
 	must(err)
-	_, err = e.st.AddEvents(ctx, o.Slug, p.Slug, store.NewEvents{Date: "2026-08-09", Places: map[int64]int{task.ID: 1}})
+	_, err = addWithPlaces(e.st, o.Slug, p.Slug, store.NewEvents{Date: "2026-08-09"}, map[int64]int{task.ID: 1})
 	must(err)
 	person, err := e.st.CreatePerson(ctx, o.Slug, "Aslaug")
 	must(err)
@@ -122,7 +122,7 @@ func TestPlanningRefusals(t *testing.T) {
 	if r := e.do("POST", path, map[string]any{"tid": 5}); r.code != 400 {
 		t.Errorf("unknown field: %d %s", r.code, r.body)
 	}
-	empty, _ := e.st.CreatePlan(context.Background(), org, "Tom", "")
+	empty, _ := e.st.CreatePlan(context.Background(), org, "Tom")
 	if r := e.do("POST", "/api/orgs/"+org+"/plans/"+empty.Slug+"/runs", map[string]any{}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("a plan without events: %d %s", r.code, r.body)
 	}
@@ -180,47 +180,6 @@ func oneAssignment(_ context.Context, input []byte) ([]byte, error) {
 	})
 }
 
-func TestMyAssignmentsOverHTTP(t *testing.T) {
-	e := newEnvWith(t, fakeSolver(oneAssignment))
-	orgA, planA := e.plannable("Org A")
-	orgB, planB := e.plannable("Org B")
-	if planA != planB {
-		t.Fatal("test needs the same plan slug in both organisations")
-	}
-	peopleA, _ := e.st.ListPeople(context.Background(), orgA)
-	peopleB, _ := e.st.ListPeople(context.Background(), orgB)
-	annaA, annaB := peopleA[0].ID, peopleB[0].ID
-	mine := func(org string, person int64) planner.Mine {
-		var m planner.Mine
-		e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+planA+"/people/"+itoa(person)+"/assignments", nil).json(&m)
-		return m
-	}
-	if m := mine(orgA, annaA); m.HasPlan || len(m.Assignments) != 0 || m.Person.Name != "Aslaug" {
-		t.Errorf("before any plan: %+v", m)
-	}
-	e.mustDo(202, "POST", "/api/orgs/"+orgA+"/plans/"+planA+"/runs", map[string]any{"time_limit": 5})
-	e.wait()
-	m := mine(orgA, annaA)
-	if !m.HasPlan || len(m.Assignments) != 1 || m.Assignments[0].Task != "Sound" || m.Assignments[0].Date != "2026-08-09" || m.Run == nil {
-		t.Errorf("Aslaug's assignment: %+v", m)
-	}
-	// B has a plan with the same slug and a person with the same name, but A's run is not B's plan
-	if mb := mine(orgB, annaB); mb.HasPlan || len(mb.Assignments) != 0 {
-		t.Errorf("B: %+v", mb)
-	}
-	for _, c := range []struct{ path, what string }{
-		{"/api/orgs/" + orgB + "/plans/" + planA + "/people/" + itoa(annaA) + "/assignments", "A's person through B"},
-		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/" + itoa(annaB) + "/assignments", "B's person through A"},
-		{"/api/orgs/" + orgA + "/plans/nope/people/" + itoa(annaA) + "/assignments", "unknown plan"},
-		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/abc/assignments", "bad id"},
-		{"/api/orgs/" + orgA + "/plans/" + planA + "/people/99999/assignments", "unknown person"},
-	} {
-		if r := e.do("GET", c.path, nil); r.code != 404 || r.errCode() != "not_found" {
-			t.Errorf("%s: %d %s", c.what, r.code, r.body)
-		}
-	}
-}
-
 func TestPinningARunOverHTTP(t *testing.T) {
 	e := newEnvWith(t, fakeSolver(oneAssignment))
 	orgA, planA := e.plannable("Org A")
@@ -245,12 +204,6 @@ func TestPinningARunOverHTTP(t *testing.T) {
 	e.mustDo(200, "GET", runPath(orgA, planA)+"/"+itoa(first.ID), nil).json(&v)
 	if !v.Run.Pinned {
 		t.Errorf("a run's view says it is pinned: %+v", v.Run)
-	}
-	people, _ := e.st.ListPeople(context.Background(), orgA)
-	var m planner.Mine
-	e.mustDo(200, "GET", "/api/orgs/"+orgA+"/plans/"+planA+"/people/"+itoa(people[0].ID)+"/assignments", nil).json(&m)
-	if m.Run == nil || m.Run.ID != first.ID || !m.Run.Pinned {
-		t.Errorf("«My assignments» comes from the pinned run: %+v", m.Run)
 	}
 
 	// another organisation's plan with the same slug cannot touch A's runs, and an unknown run is not found

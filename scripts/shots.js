@@ -54,8 +54,8 @@ const CHOICES = {
   const o = `/orgs/${ORG.slug}`, p = `${o}/plans/${PLAN.slug}`;
   let browser, browserNb;
   try {
-    await api('POST', '/orgs', ORG);
-    await api('POST', `${o}/tasks/bulk`, { names: TASKS.join('\n') });
+    await api('POST', '/orgs', { name: ORG.name });
+    for (const name of TASKS) await api('POST', `${o}/tasks`, { name });
     const task = Object.fromEntries((await api('GET', `${o}/tasks`)).map((t) => [t.name, t.id]));
     for (const [a, b, level] of [['Sound', 'Video', 'impractical'], ['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
       await api('PUT', `${o}/combinations`, { a: task[a], b: task[b], level });
@@ -73,9 +73,14 @@ const CHOICES = {
 
     // the plan: concerts every Saturday and rehearsals every Wednesday, each event with its own places
     await api('POST', `${o}/plans`, { name: PLAN.name });
-    const places = (spec) => Object.fromEntries(Object.entries(spec).map(([t, n]) => [task[t], n]));
-    await api('POST', `${p}/events`, { date: '2015-12-05', until: '2015-12-19', start_time: '19:00', end_time: '21:30', places: places({ Sound: 1, Video: 1, Doors: 2, Coffee: 1 }) });
-    await api('POST', `${p}/events`, { date: '2015-12-09', until: '2015-12-16', start_time: '18:00', end_time: '20:00', places: places({ Sound: 1, Coffee: 1 }) });
+    // (as on the page: one event, its places typed in, then copied every week)
+    const weekly = async (date, nextWeek, until, times, places) => {
+      const [first] = await api('POST', `${p}/events`, { date, ...times });
+      for (const [t, slots] of Object.entries(places)) await api('PUT', `${p}/events/${first.id}/places/${task[t]}`, { slots });
+      await api('POST', `${p}/events/${first.id}/copy`, { dates: [nextWeek], until, times: true, places: true });
+    };
+    await weekly('2015-12-05', '2015-12-12', '2015-12-19', { start_time: '19:00', end_time: '21:30' }, { Sound: 1, Video: 1, Doors: 2, Coffee: 1 });
+    await weekly('2015-12-09', '2015-12-16', '2015-12-16', { start_time: '18:00', end_time: '20:00' }, { Sound: 1, Coffee: 1 });
     const events = await api('GET', `${p}/events`);
     const on = (d) => events.find((e) => e.date === d);
     const concerts = ['2015-12-05', '2015-12-12', '2015-12-19'].map(on), rehearsals = ['2015-12-09', '2015-12-16'].map(on);
@@ -105,12 +110,12 @@ const CHOICES = {
 
     // set by hand: a person and a text at the doors; and a selection: only these two can run the video at the gala (and neither
     // can come, so the place stays empty and the draft says why)
-    await api('POST', `${p}/cells`, { events: [concerts[0].id], task: task.Doors, person: person['Ola Sample'] });
-    await api('POST', `${p}/cells`, { events: [gala.id], task: task.Doors, label: 'Stewards', fills: 2 });
-    await api('PUT', `${p}/pools`, { events: [gala.id], task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']], groups: [] });
+    await api('POST', `${p}/cells`, { event: concerts[0].id, task: task.Doors, person: person['Ola Sample'] });
+    await api('POST', `${p}/cells`, { event: gala.id, task: task.Doors, label: 'Stewards', fills: 2 });
+    await api('PUT', `${p}/pools`, { event: gala.id, task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']], groups: [] });
 
-    const draft = async (body) => {
-      const started = await api('POST', `${p}/runs`, { time_limit: 10, ...body });
+    const draft = async () => {
+      const started = await api('POST', `${p}/runs`, { time_limit: 10 });
       for (let i = 0; i < 120; i++) {
         const run = (await api('GET', `${p}/runs/${started.id}`)).run;
         if (run.status === 'done') return run;
@@ -120,9 +125,9 @@ const CHOICES = {
       throw new Error('the planner took too long');
     };
     // a first draft; then one of its names is locked and the draft is tried again, and the newer one is pinned as the current plan
-    await draft({});
-    await api('POST', `${p}/cells`, { events: [concerts[0].id], task: task.Sound, person: person['Kari Test'], locked: true });
-    const second = await draft({ seed: 2 });
+    await draft();
+    await api('POST', `${p}/cells`, { event: concerts[0].id, task: task.Sound, person: person['Kari Test'], locked: true });
+    const second = await draft();
     await api('PUT', `${p}/runs/${second.id}/pin`);
 
     // The server stamps what it writes with the real time. The pictures should not change with the day they are made, so the
@@ -206,8 +211,6 @@ const CHOICES = {
     await closeDialog(page);
     await page.getByRole('button', { name: 'Open Kari Test' }).click();
     await dialog(page).waitFor();
-    // the link carries the temporary server's random port: show a fixed address, so the picture is the same every time
-    await dialog(page).locator('input[readonly]').evaluate((e) => { e.value = e.value.replace(location.origin, 'https://dutyplan.example'); });
     await save(page, '09-person', dialog(page));
     await closeDialog(page);
     await shoot(page, '10-place', page.getByRole('button', { name: /^Video, Sat 19 Dec .*: open the place$/ }));
@@ -225,10 +228,6 @@ const CHOICES = {
     await dialog(tall).locator('summary').first().click();
     await save(tall, '11-settings', dialog(tall));
     await closeDialog(tall);
-
-    // A personal link: the table with the person's row marked.
-    await go(page, `${planPath}/me/${person['Kari Test']}`, 'tr.me');
-    await range(page, '13-personal-link', page.locator('main h1'), page.locator('.grid-scroll'));
 
     // On a phone the table scrolls sideways under the names.
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));

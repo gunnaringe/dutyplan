@@ -15,7 +15,7 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 		t.Fatal("test needs the same plan slug in both organisations")
 	}
 	path := "/api/orgs/" + a.org + "/plans/" + a.plan + "/weights"
-	if _, err := e.st.CreatePlan(context.Background(), a.org, "Kun A", ""); err != nil { // a plan only A has
+	if _, err := e.st.CreatePlan(context.Background(), a.org, "Only A"); err != nil { // a plan only A has
 		t.Fatal(err)
 	}
 	read := func(method, p string, body any) weightsReply { // a fresh reply each time: Unmarshal would merge into an old map
@@ -57,8 +57,8 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 		{400, "PUT", path, map[string]any{"values": map[string]any{"default_combination": "ja"}}, "a choice not offered"},
 		{400, "PUT", path, map[string]any{"values": map[string]any{"w_fair": 15, "w_task_fair": 4, "default_combination": "practical"}}, "no change"},
 		{400, "PUT", path, map[string]any{"verdier": map[string]any{}}, "unknown field"},
-		{404, "PUT", "/api/orgs/" + b.org + "/plans/kun-a/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "A's other plan through B"},
-		{404, "GET", "/api/orgs/" + b.org + "/plans/kun-a/weights", nil, "A's other plan through B (read)"},
+		{404, "PUT", "/api/orgs/" + b.org + "/plans/only-a/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "A's other plan through B"},
+		{404, "GET", "/api/orgs/" + b.org + "/plans/only-a/weights", nil, "A's other plan through B (read)"},
 		{404, "PUT", "/api/orgs/nope/plans/" + a.plan + "/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "unknown organisation"},
 	} {
 		if r := e.do(c.method, c.path, c.body); r.code != c.code {

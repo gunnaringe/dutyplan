@@ -9,6 +9,7 @@ Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + v
 their own places, details rows, answers, drafts (runs) with set-by-hand places, locks and selections, a pinned current plan, rename and delete, a page in English and
 Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan** (details, tasks with places, the draft allocation, availability), dialogs for the rest,
 and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
+Since 2026-11-20 the API covers only what the page uses (no personal links, no «My assignments», no bulk or batch writes).
 Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not start on it unless asked.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the input from the database,
@@ -40,13 +41,16 @@ starts the Python planner, turns the answer into a view with explanations), `int
   (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), the server has no «current organisation». Every lookup is scoped by the organisation, and
   a plan/person from another organisation gives 404 (the isolation tests and the `tenant:` mutations guard this). No login.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
-- **Renaming changes the name only.** The slug is the address; links (also the personal ones people were sent) must keep working. Never make a rename change a slug.
+- **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
+- **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a
+  field the page does not call; add it together with the page change that needs it. **No individual user management**: no personal links, no per-person pages or endpoints,
+  no accounts. A person is a row in the organisation (name, task choices, active, can be proposed) and in each plan's table.
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
   and group busyness apply to the event. The planner's «dates» are events (the id is arbitrary text).
-- **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; the page opens with it (else the newest run), and
-  `GET .../people/{id}/assignments` follows the pinned run, else the newest finished one. Pinned runs are never pruned. There is still no approval flow or publishing.
+- **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; the page opens with it (else the newest run).
+  Pinned runs are never pruned. There is still no approval flow or publishing.
 - **One table per plan, one view** (2026-11-19, from the sketches): events across (date, time, ⧉ copy; **+** adds one), then four sections:
   *Event details* (the plan's rows, `plan_field`/`event_field`: ⋮⋮ drags a row, ✎ renames/moves/deletes it; text for people, never sent to the planner, not in the hash),
   *Tasks* (the places per event, typed into the cells; empty = not needed), the green *Draft allocation* (the run on show merged with what is set by hand), and
@@ -57,7 +61,6 @@ starts the Python planner, turns the answer into a view with explanations), `int
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background; a planner name that was locked is a cell with `locked` and shows a
     «locked» chip; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank.
-  - `/o/<org>/p/<plan>/me/<id>` links (already sent to people) must keep working: they open the table with the person's row highlighted.
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
 - **A general tool.** Tasks, people, groups, events and details rows are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
@@ -84,13 +87,14 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
   (a test checks parity).
 - **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the body is `{error, code, params, message}`. A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
-- Page addresses are English: `/o/<org>`, `/o/<org>/p/<plan>`, `/o/<org>/p/<plan>/me/<id>` (an old `/o/<org>/setup` shows the organisation page).
+- Page addresses are English: `/o/<org>` and `/o/<org>/p/<plan>`; anything else is «Page not found».
 
 ## Testing and data
 
 - `check.py` is an independent checker; keep it independent of `model.py` (only the default values are shared).
 - Every rule must have a test that fails when the rule is broken in the model: `solver/scripts/mutations.py` (`PY_MUTATIONS`, `GO_MUTATIONS`) checks it. An outdated pattern (`OUTDATED`) is fixed, never deleted, and the number of mutations must not drop, unless the rule it guards was removed on purpose
-  (say which, and why, in the commit message; 2026-11-19: 248 → 256 with the day-type and change-log rules gone).
+  (say which, and why, in the commit message; 2026-11-19: 248 → 256 with the day-type and change-log rules gone; 2026-11-20: 256 → 238 with the per-person API,
+  places set when an event is created and cells for several events at once gone).
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

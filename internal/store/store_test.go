@@ -21,9 +21,35 @@ func open(t *testing.T) *Store {
 	return s
 }
 
+// addWithPlaces adds the events and gives each the places (task -> places), the way the page does it.
+func addWithPlaces(ctx context.Context, s *Store, org, plan string, in NewEvents, places map[int64]int) ([]Event, error) {
+	evs, err := s.AddEvents(ctx, org, plan, in)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range evs {
+		for task, n := range places {
+			if err := s.SetEventPlaces(ctx, org, plan, e.ID, task, n); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return evs, nil
+}
+
+// unplannedTask creates a task the planner does not distribute (only names set by hand).
+func unplannedTask(ctx context.Context, s *Store, org, name string) (Task, error) {
+	t, err := s.CreateTask(ctx, org, name)
+	if err != nil {
+		return t, err
+	}
+	off := false
+	return s.UpdateTask(ctx, org, t.ID, TaskPatch{Planned: &off})
+}
+
 func mustOrg(t *testing.T, s *Store, name string) Org {
 	t.Helper()
-	o, err := s.CreateOrg(ctx, name, "")
+	o, err := s.CreateOrg(ctx, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,11 +89,8 @@ func TestSlugify(t *testing.T) {
 		}
 	}
 	s := open(t)
-	if _, err := s.CreateOrg(ctx, "???", ""); !errors.Is(err, ErrInvalid) {
+	if _, err := s.CreateOrg(ctx, "???"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a name with no usable slug must be invalid, got %v", err)
-	}
-	if _, err := s.CreateOrg(ctx, "Fin", "Bad Slug"); !errors.Is(err, ErrInvalid) {
-		t.Errorf("explicit slug must already be a slug, got %v", err)
 	}
 }
 
@@ -76,7 +99,7 @@ func TestTenantIsolation(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
 
-	planA, err := s.CreatePlan(ctx, a.Slug, "Autumn 2026", "")
+	planA, err := s.CreatePlan(ctx, a.Slug, "Autumn 2026")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +129,7 @@ func TestTenantIsolation(t *testing.T) {
 	}
 
 	// The same plan slug and person name may exist in both, as separate things.
-	planB, err := s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	planB, err := s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 	if err != nil || planB.Slug != planA.Slug {
 		t.Fatalf("same plan name in B: %+v, %v", planB, err)
 	}
@@ -114,7 +137,7 @@ func TestTenantIsolation(t *testing.T) {
 		t.Fatalf("same person name in B: %v", err)
 	}
 	// ... but not twice in one organisation.
-	if _, err := s.CreatePlan(ctx, a.Slug, "Autumn 2026", ""); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreatePlan(ctx, a.Slug, "Autumn 2026"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate plan in A: want ErrConflict, got %v", err)
 	}
 	if _, err := s.CreatePerson(ctx, a.Slug, "Kari Test"); !errors.Is(err, ErrConflict) {
@@ -130,7 +153,7 @@ func TestUnknownOrganisationIsNotFoundEverywhere(t *testing.T) {
 	if _, err := s.ListPlans(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Error("ListPlans")
 	}
-	if _, err := s.CreatePlan(ctx, "nope", "Plan", ""); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreatePlan(ctx, "nope", "Plan"); !errors.Is(err, ErrNotFound) {
 		t.Error("CreatePlan")
 	}
 	if _, err := s.CreatePerson(ctx, "nope", "Kari"); !errors.Is(err, ErrNotFound) {

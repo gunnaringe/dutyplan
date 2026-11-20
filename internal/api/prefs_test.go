@@ -19,7 +19,8 @@ func prefSetup(t *testing.T, e *env, org string) prefIDs {
 	var evs []store.Event
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/people", map[string]string{"name": "Kari Test"}).json(&p)
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/tasks", map[string]any{"name": "Sound"}).json(&sound)
-	e.mustDo(201, "POST", "/api/orgs/"+org+"/tasks", map[string]any{"name": "Singing", "planned": false}).json(&lov)
+	e.mustDo(201, "POST", "/api/orgs/"+org+"/tasks", map[string]any{"name": "Singing"}).json(&lov)
+	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/%s/tasks/%d", org, lov.ID), map[string]any{"planned": false})
 	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans", map[string]string{"name": "Autumn 2026"})
 	ids := prefIDs{person: p.ID, sound: sound.ID, singing: lov.ID}
 	for _, d := range []string{"2026-08-09", "2026-08-16"} {
@@ -29,32 +30,44 @@ func prefSetup(t *testing.T, e *env, org string) prefIDs {
 	return ids
 }
 
-func TestPersonPageFlow(t *testing.T) {
+// answersText is everyone's answers in the plan, as the table reads them: "t<task>=<level>" and "e<event>=<level>" per person.
+func answersText(e *env, org string) string {
+	var a store.Answers
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/autumn-2026/answers", nil).json(&a)
+	out := ""
+	for _, x := range a.Tasks {
+		out += fmt.Sprintf("p%d t%d=%s ", x.PersonID, x.TaskID, x.Level)
+	}
+	for _, x := range a.Events {
+		out += fmt.Sprintf("p%d e%d=%s ", x.PersonID, x.EventID, x.Level)
+	}
+	return out
+}
+
+func TestAnswersFlow(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	ids := prefSetup(t, e, "org-a")
-	me := fmt.Sprintf("/api/orgs/org-a/plans/autumn-2026/people/%d/me", ids.person)
-
-	var m store.Me
-	e.mustDo(200, "GET", me, nil).json(&m)
-	if m.Person.Name != "Kari Test" || len(m.Tasks) != 1 || m.Tasks[0].Level != "" || len(m.Events) != 2 {
-		t.Fatalf("me before: %+v", m)
+	if got := answersText(e, "org-a"); got != "" {
+		t.Fatalf("nothing answered yet: %q", got)
 	}
 	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/people/%d/tasks/%d", ids.person, ids.sound), map[string]string{"level": "good"})
 	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/plans/autumn-2026/people/%d/availability", ids.person),
 		map[string]any{"levels": map[string]string{fmt.Sprint(ids.events[0]): "never", fmt.Sprint(ids.events[1]): "good"}})
-	e.mustDo(200, "GET", me, nil).json(&m)
-	if m.Tasks[0].Level != "good" || m.Events[0].Level != "never" || m.Events[1].Level != "good" {
-		t.Errorf("me after: %+v", m)
+	want := fmt.Sprintf("p%d t%d=good p%d e%d=never p%d e%d=good ", ids.person, ids.sound, ids.person, ids.events[0], ids.person, ids.events[1])
+	if got := answersText(e, "org-a"); got != want {
+		t.Errorf("after answering: %q, want %q", got, want)
 	}
 	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/people/%d/tasks/%d", ids.person, ids.sound), nil)
-	e.mustDo(200, "GET", me, nil).json(&m)
-	if m.Tasks[0].Level != "" {
-		t.Errorf("task removed: %+v", m.Tasks)
+	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/plans/autumn-2026/people/%d/availability", ids.person),
+		map[string]any{"levels": map[string]string{fmt.Sprint(ids.events[0]): ""}})
+	want = fmt.Sprintf("p%d e%d=good ", ids.person, ids.events[1])
+	if got := answersText(e, "org-a"); got != want {
+		t.Errorf("after clearing: %q, want %q", got, want)
 	}
 }
 
-func TestPersonPageErrorsAndIsolation(t *testing.T) {
+func TestAnswerErrorsAndIsolation(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
@@ -72,7 +85,6 @@ func TestPersonPageErrorsAndIsolation(t *testing.T) {
 			t.Errorf("%s %s = %d %s, want 404", method, path, r.code, r.body)
 		}
 	}
-	notFound("GET", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/people/%d/me", a.person), nil)
 	notFound("PUT", task("org-b", a.person, b.sound), map[string]string{"level": "good"})
 	notFound("PUT", task("org-b", b.person, a.sound), map[string]string{"level": "good"})
 	notFound("PUT", task("org-b", b.person, b.singing), map[string]string{"level": "good"}) // manual-only task
@@ -96,9 +108,7 @@ func TestPersonPageErrorsAndIsolation(t *testing.T) {
 		}
 	}
 	// nothing was stored by any refused call
-	var m store.Me
-	e.mustDo(200, "GET", fmt.Sprintf("/api/orgs/org-a/plans/autumn-2026/people/%d/me", a.person), nil).json(&m)
-	if m.Tasks[0].Level != "" || m.Events[0].Level != "" || m.Events[1].Level != "" {
-		t.Errorf("refused writes must change nothing: %+v", m)
+	if got := answersText(e, "org-a") + answersText(e, "org-b"); got != "" {
+		t.Errorf("refused writes must change nothing: %q", got)
 	}
 }

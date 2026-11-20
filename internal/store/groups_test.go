@@ -19,13 +19,13 @@ func groupWorld(t *testing.T, s *Store, orgName string) groupEnv {
 	t.Helper()
 	e := groupEnv{s: s, org: mustOrg(t, s, orgName), people: map[string]Person{}}
 	var err error
-	if e.sound, err = s.CreateTask(ctx, e.org.Slug, "Sound", true); err != nil {
+	if e.sound, err = s.CreateTask(ctx, e.org.Slug, "Sound"); err != nil {
 		t.Fatal(err)
 	}
-	if e.camera, err = s.CreateTask(ctx, e.org.Slug, "Camera", true); err != nil {
+	if e.camera, err = s.CreateTask(ctx, e.org.Slug, "Camera"); err != nil {
 		t.Fatal(err)
 	}
-	if e.sang, err = s.CreateTask(ctx, e.org.Slug, "Singing", false); err != nil {
+	if e.sang, err = unplannedTask(ctx, s, e.org.Slug, "Singing"); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
@@ -175,7 +175,7 @@ func TestGroupsNeverCrossOrganisations(t *testing.T) {
 func TestPlanningDataCarriesTheGroups(t *testing.T) {
 	s := open(t)
 	e := groupWorld(t, s, "Club")
-	plan, _ := s.CreatePlan(ctx, e.org.Slug, "Autumn 2026", "")
+	plan, _ := s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
 	g, _ := s.CreateGroup(ctx, e.org.Slug, "Singers")
 	s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{e.people["Aslaug"].ID})
 	s.SetGroupTasks(ctx, e.org.Slug, g.ID, []GroupTask{{e.sound.ID, 2, "good"}})
@@ -184,7 +184,7 @@ func TestPlanningDataCarriesTheGroups(t *testing.T) {
 		t.Fatalf("%+v %v", d.Groups, err)
 	}
 	other := mustOrg(t, s, "Annen")
-	op, _ := s.CreatePlan(ctx, other.Slug, "Autumn 2026", "")
+	op, _ := s.CreatePlan(ctx, other.Slug, "Autumn 2026")
 	if d, _ = s.GetPlanningData(ctx, other.Slug, op.Slug); len(d.Groups) != 0 {
 		t.Errorf("another organisation's planning data has none of them: %+v", d.Groups)
 	}

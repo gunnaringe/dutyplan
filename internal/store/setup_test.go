@@ -9,14 +9,14 @@ import (
 func TestTasksCrud(t *testing.T) {
 	s := open(t)
 	o := mustOrg(t, s, "Club")
-	a, err := s.CreateTask(ctx, o.Slug, "Sound", true)
+	a, err := s.CreateTask(ctx, o.Slug, "Sound")
 	if err != nil || !a.Planned {
 		t.Fatalf("create: %+v %v", a, err)
 	}
-	if _, err := s.CreateTask(ctx, o.Slug, "Sound", true); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreateTask(ctx, o.Slug, "Sound"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate: %v", err)
 	}
-	if _, err := s.CreateTask(ctx, o.Slug, "  ", true); !errors.Is(err, ErrInvalid) {
+	if _, err := s.CreateTask(ctx, o.Slug, "  "); !errors.Is(err, ErrInvalid) {
 		t.Errorf("blank: %v", err)
 	}
 	off := false
@@ -27,17 +27,14 @@ func TestTasksCrud(t *testing.T) {
 	if _, err := s.UpdateTask(ctx, o.Slug, a.ID, TaskPatch{Planned: &off}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op update: %v", err)
 	}
-	created, skipped, err := s.CreateTasks(ctx, o.Slug, "Sound\n\n Camera \nCoffee\ncamera\n", true)
-	if err != nil || len(created) != 2 || len(skipped) != 1 || skipped[0] != "Sound" {
-		t.Errorf("bulk: created %v skipped %v err %v", created, skipped, err)
+	camera, err := s.CreateTask(ctx, o.Slug, "Camera")
+	if err != nil || !camera.Planned {
+		t.Fatalf("a new task is distributed by the planner: %+v %v", camera, err)
 	}
-	if _, _, err := s.CreateTasks(ctx, o.Slug, " \n \n", true); !errors.Is(err, ErrInvalid) {
-		t.Errorf("empty bulk: %v", err)
-	}
-	if err := s.DeleteTask(ctx, o.Slug, created[0].ID); err != nil {
+	if err := s.DeleteTask(ctx, o.Slug, camera.ID); err != nil {
 		t.Fatal(err)
 	}
-	if tasks, _ := s.ListTasks(ctx, o.Slug); len(tasks) != 2 {
+	if tasks, _ := s.ListTasks(ctx, o.Slug); len(tasks) != 1 {
 		t.Errorf("after delete: %v", tasks)
 	}
 }
@@ -45,8 +42,8 @@ func TestTasksCrud(t *testing.T) {
 func TestCombinations(t *testing.T) {
 	s := open(t)
 	o := mustOrg(t, s, "Club")
-	a, _ := s.CreateTask(ctx, o.Slug, "Sound", true)
-	b, _ := s.CreateTask(ctx, o.Slug, "Camera", true)
+	a, _ := s.CreateTask(ctx, o.Slug, "Sound")
+	b, _ := s.CreateTask(ctx, o.Slug, "Camera")
 	if err := s.SetCombination(ctx, o.Slug, b.ID, a.ID, "cannot"); err != nil { // either order
 		t.Fatal(err)
 	}
@@ -85,14 +82,11 @@ func TestCombinations(t *testing.T) {
 func TestCrossOrganisationReferences(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
-	taskA, _ := s.CreateTask(ctx, a.Slug, "Sound A", true)
-	taskB, _ := s.CreateTask(ctx, b.Slug, "Sound B", true)
-	planB, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	taskA, _ := s.CreateTask(ctx, a.Slug, "Sound A")
+	taskB, _ := s.CreateTask(ctx, b.Slug, "Sound B")
+	planB, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 	evB, _ := s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-02")
 
-	if _, err := s.AddEvents(ctx, b.Slug, planB.Slug, NewEvents{Date: "2026-08-09", Places: map[int64]int{taskA.ID: 1}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("A's task on B's new event: want ErrNotFound, got %v", err)
-	}
 	if err := s.SetEventPlaces(ctx, b.Slug, planB.Slug, evB.ID, taskA.ID, 1); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's task on B's event: %v", err)
 	}
@@ -115,7 +109,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	}
 
 	// Each organisation's combinations are its own.
-	otherA, _ := s.CreateTask(ctx, a.Slug, "Camera A", true)
+	otherA, _ := s.CreateTask(ctx, a.Slug, "Camera A")
 	s.SetCombination(ctx, a.Slug, taskA.ID, otherA.ID, "cannot")
 	if combos, _ := s.ListCombinations(ctx, b.Slug); len(combos) != 0 {
 		t.Errorf("B sees A's combinations: %+v", combos)

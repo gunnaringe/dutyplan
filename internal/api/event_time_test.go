@@ -25,8 +25,8 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		}
 		return evs[0]
 	}
-	ev := add(map[string]any{"date": "2026-08-09", "start_time": "11:00", "end_time": "12:30", "description": "Bring the banner.\nDoors at 10:30."})
-	if ev.StartTime != "11:00" || ev.EndTime != "12:30" || ev.Description != "Bring the banner.\nDoors at 10:30." {
+	ev := add(map[string]any{"date": "2026-08-09", "start_time": "11:00", "end_time": "12:30"})
+	if ev.StartTime != "11:00" || ev.EndTime != "12:30" || ev.Description != "" {
 		t.Errorf("created: %+v", ev)
 	}
 	plain := add(map[string]any{"date": "2026-08-09"})
@@ -41,12 +41,10 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		body map[string]any
 		code string
 	}{
-		"bad start":     {map[string]any{"start_time": "25:00"}, "start_time_invalid"},
-		"bad end":       {map[string]any{"start_time": "10:00", "end_time": "noon"}, "end_time_invalid"},
-		"no start":      {map[string]any{"end_time": "10:00"}, "end_without_start"},
-		"end first":     {map[string]any{"start_time": "10:00", "end_time": "09:00"}, "end_not_after_start"},
-		"bad text":      {map[string]any{"description": "a\x01b"}, "description_invalid"},
-		"too long text": {map[string]any{"description": strings.Repeat("x", 2001)}, "description_invalid"},
+		"bad start": {map[string]any{"start_time": "25:00"}, "start_time_invalid"},
+		"bad end":   {map[string]any{"start_time": "10:00", "end_time": "noon"}, "end_time_invalid"},
+		"no start":  {map[string]any{"end_time": "10:00"}, "end_without_start"},
+		"end first": {map[string]any{"start_time": "10:00", "end_time": "09:00"}, "end_not_after_start"},
 	} {
 		body := map[string]any{"date": "2026-08-16"}
 		for k, v := range c.body {
@@ -65,6 +63,11 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 	e.mustDo(200, "PATCH", one, map[string]any{"start_time": "19:00", "end_time": "21:00", "description": "Evening session"}).json(&plain)
 	if plain.StartTime != "19:00" || plain.EndTime != "21:00" || plain.Description != "Evening session" {
 		t.Errorf("patched: %+v", plain)
+	}
+	for name, d := range map[string]string{"bad text": "a\x01b", "too long text": strings.Repeat("x", 2001)} {
+		if got := e.refused(400, "PATCH", one, map[string]any{"description": d}); got.Code != "description_invalid" {
+			t.Errorf("%s: %+v", name, got)
+		}
 	}
 	if got := e.refused(400, "PATCH", one, map[string]any{"start_time": ""}); got.Code != "end_without_start" {
 		t.Errorf("clearing only the start: %+v", got)

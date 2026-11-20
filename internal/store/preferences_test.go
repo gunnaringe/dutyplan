@@ -23,10 +23,10 @@ func newPrefEnv(t *testing.T) prefEnv {
 	s := open(t)
 	e := prefEnv{s: s, org: mustOrg(t, s, "Club")}
 	e.person, _ = s.CreatePerson(ctx, e.org.Slug, "Kari Test")
-	e.sound, _ = s.CreateTask(ctx, e.org.Slug, "Sound", true)
-	e.camera, _ = s.CreateTask(ctx, e.org.Slug, "Camera", true)
-	e.singing, _ = s.CreateTask(ctx, e.org.Slug, "Singing", false)
-	e.plan, _ = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026", "")
+	e.sound, _ = s.CreateTask(ctx, e.org.Slug, "Sound")
+	e.camera, _ = s.CreateTask(ctx, e.org.Slug, "Camera")
+	e.singing, _ = unplannedTask(ctx, s, e.org.Slug, "Singing")
+	e.plan, _ = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23"} {
 		ev, err := s.AddEvent(ctx, e.org.Slug, e.plan.Slug, d)
 		if err != nil {
@@ -37,13 +37,63 @@ func newPrefEnv(t *testing.T) prefEnv {
 	return e
 }
 
-func (e prefEnv) me(t *testing.T) Me {
+// personView is what the plan's table shows for one person: the planner's tasks with the person's level, and the plan's
+// events with the person's answer ("" = not chosen, not answered). It is read the way the page reads it.
+type personView struct {
+	Tasks  []viewTask
+	Events []viewEvent
+}
+type viewTask struct {
+	TaskID      int64
+	Name, Level string
+}
+type viewEvent struct {
+	EventID int64
+	Level   string
+}
+
+func viewOf(t *testing.T, s *Store, org, plan string, personID int64) personView {
 	t.Helper()
-	me, err := e.s.GetMe(ctx, e.org.Slug, e.plan.Slug, e.person.ID)
+	tasks, err := s.ListTasks(ctx, org)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return me
+	events, err := s.ListEvents(ctx, org, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ans, err := s.ListAnswers(ctx, org, plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := personView{}
+	for _, tk := range tasks {
+		if !tk.Planned {
+			continue
+		}
+		x := viewTask{TaskID: tk.ID, Name: tk.Name}
+		for _, a := range ans.Tasks {
+			if a.PersonID == personID && a.TaskID == tk.ID {
+				x.Level = a.Level
+			}
+		}
+		v.Tasks = append(v.Tasks, x)
+	}
+	for _, e := range events {
+		x := viewEvent{EventID: e.ID}
+		for _, a := range ans.Events {
+			if a.PersonID == personID && a.EventID == e.ID {
+				x.Level = a.Level
+			}
+		}
+		v.Events = append(v.Events, x)
+	}
+	return v
+}
+
+func (e prefEnv) me(t *testing.T) personView {
+	t.Helper()
+	return viewOf(t, e.s, e.org.Slug, e.plan.Slug, e.person.ID)
 }
 
 func count(t *testing.T, s *Store, query string, args ...any) int {
@@ -134,14 +184,11 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 	a := newPrefEnv(t)
 	b := mustOrg(t, a.s, "Org B")
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B", true)
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B")
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 	evB, _ := a.s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-09")
 
 	// A's person, task and event through B's path, and the other way round
-	if _, err := a.s.GetMe(ctx, b.Slug, planB.Slug, a.person.ID); !errors.Is(err, ErrNotFound) {
-		t.Errorf("A's person on B's page: %v", err)
-	}
 	if err := a.s.SetPersonTask(ctx, b.Slug, a.person.ID, taskB.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's person via B: %v", err)
 	}
@@ -161,7 +208,7 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 		t.Errorf("A's person via B: %v", err)
 	}
 	// an event of another plan in the same organisation does not count for this plan
-	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027")
 	if err := a.s.SetAvailability(ctx, a.org.Slug, other.Slug, a.person.ID, map[int64]string{a.ev[0].ID: "never"}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another plan's event: %v", err)
 	}
@@ -169,13 +216,12 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 		t.Fatalf("every refused write must leave nothing behind, %d rows", got)
 	}
 
-	// B's own page shows only B's things
-	me, err := a.s.GetMe(ctx, b.Slug, planB.Slug, personB.ID)
-	if err != nil || len(me.Tasks) != 1 || me.Tasks[0].TaskID != taskB.ID || len(me.Events) != 1 || me.Events[0].EventID != evB.ID {
-		t.Errorf("B's page: %+v %v", me, err)
+	// B's table shows only B's things
+	if me := viewOf(t, a.s, b.Slug, planB.Slug, personB.ID); len(me.Tasks) != 1 || me.Tasks[0].TaskID != taskB.ID || len(me.Events) != 1 || me.Events[0].EventID != evB.ID {
+		t.Errorf("B's table: %+v", me)
 	}
 	// the other plan of A lists none of the first plan's events
-	if me, _ := a.s.GetMe(ctx, a.org.Slug, other.Slug, a.person.ID); len(me.Events) != 0 {
+	if me := viewOf(t, a.s, a.org.Slug, other.Slug, a.person.ID); len(me.Events) != 0 {
 		t.Errorf("a plan lists only its own events: %+v", me.Events)
 	}
 }
@@ -185,8 +231,8 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 	a := newPrefEnv(t)
 	b := mustOrg(t, a.s, "Org B")
 	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B", true)
-	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B")
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027")
 	var orgA, orgB, planOther int64
 	db := a.s.DB()
 	db.QueryRow(`SELECT id FROM organization WHERE slug = ?`, a.org.Slug).Scan(&orgA)
@@ -242,10 +288,7 @@ func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, e.person.ID, map[int64]string{e.ev[0].ID: "good"})
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, other.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "poor"})
 	mine := e.me(t)
-	theirs, err := e.s.GetMe(ctx, e.org.Slug, e.plan.Slug, other.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	theirs := viewOf(t, e.s, e.org.Slug, e.plan.Slug, other.ID)
 	if mine.Tasks[1].Level != "good" || theirs.Tasks[1].Level != "never" {
 		t.Errorf("task answers: %+v / %+v", mine.Tasks, theirs.Tasks)
 	}

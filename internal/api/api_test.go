@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -248,4 +249,20 @@ func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 	if r := e.do("GET", "/api/health", nil); r.code != 200 {
 		t.Errorf("health = %d", r.code)
 	}
+}
+
+// addWithPlaces adds the events and gives each the places (task -> places), the way the page does it.
+func addWithPlaces(st *store.Store, org, plan string, in store.NewEvents, places map[int64]int) ([]store.Event, error) {
+	evs, err := st.AddEvents(context.Background(), org, plan, in)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range evs {
+		for task, n := range places {
+			if err := st.SetEventPlaces(context.Background(), org, plan, e.ID, task, n); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return evs, nil
 }

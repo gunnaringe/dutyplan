@@ -46,7 +46,8 @@ texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalog
   Sound and Video share the preference, so there is one choice per event. The event counts, not the calendar day: two events on the same day
   have an answer each. Since 2026-11-13 this is their row in the plan's table (see *The table*): a click cycles blank → good → poor → does not suit → blank.
 - A task with a different pattern can get **its own list** (off by default; not built yet). It starts as a copy of the shared one.
-- Sees the plan and their own assignments: the personal link opens the table with their row highlighted.
+- Sees the plan in the same table (the draft rows show who got what). There are no user accounts and no personal links: a person is a row
+  (2026-11-20: no individual user management for now).
 
 **Setup and planning** (part of the same app, not a separate area)
 - Tasks, people, groups, events with their own places, **a shared setting for which tasks can be combined**, places set by hand and selections. Running the
@@ -159,9 +160,11 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 - **API: plain JSON over `net/http`, not Connect** (chosen 2026-11-07, differs from `scoreboard/`). There are well under ten kinds of endpoint, and
   Connect would have needed `buf`, two code generators and generated code. Switching later is cheap because the interface is narrow.
   Errors are `{"error": kind, "code": code, "params": {...}, "message": english text}` with the right status; the page writes its own text from the code and the parameters.
-- **The organisation is in the address**, in the page (`/o/<org>`, `/o/<org>/p/<plan>`, `/o/<org>/p/<plan>/me/<id>`) and the API (`/api/orgs/{org}/...`). The server has no
+- **The organisation is in the address**, in the page (`/o/<org>`, `/o/<org>/p/<plan>`) and the API (`/api/orgs/{org}/...`). The server has no
   "current organisation", so switching is just going to another address. The list of organisations can be read by anyone who reaches the address.
 - **Renaming changes the name only**; the address stays, so links keep working.
+- **The API covers only what the page uses** (2026-11-20: "start simple and expand"). An endpoint or a field the page does not call is not kept "for later";
+  it is added with the page change that needs it.
 - **Foreign keys** are off by default in SQLite on every connection and are switched on in the DSN; a test checks that they are enforced.
 - **The solver is a Python program with `ortools`** that Go starts as a subprocess: JSON in on stdin, JSON out on stdout, with a time
   limit. The same container image. The contract is small and can be tested without the rest of the app. **Python is kept** (the user's answer
@@ -177,7 +180,7 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
   - I found no pure Go solver that can do what CP-SAT does here.
 
 ### Running the planner (built, phase 4 round 1)
-- `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit, seed}`, both optional) answers 202 with an id at once; the run goes on in the background and the page
+- `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit}`, optional; the server picks the seed) answers 202 with an id at once; the run goes on in the background and the page
   asks `GET .../runs/{id|latest}` every second. Only **one run at a time** in the whole server (409 `busy`), time limit 5–120 s (default 20).
   With no planner configured (`--solver` / `$DUTYPLAN_SOLVER`) the API answers 503 and `/api/health` has `"planner": false`; the rest of the app works.
 - Go builds the input from the database (`internal/planner/input.go`): active people only, the ids `t<id>/e<id>/d<id>/p<id>`, "can be proposed",
@@ -200,11 +203,9 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
   Time, seed and threads are not. The defaults in Go are copies of the planner's own, and a test against the real planner (`--defaults`) keeps them equal.
 - Per plan, not per organisation: the plan is the unit that is optimised within. If new plans should inherit from the previous one or from an organisation default, that is added then.
 
-### Grid and "My assignments" (built, phase 5; the page parts replaced by *The table*)
-- `GET /plans/{plan}/people/{id}/assignments`: the person's assignments in the plan's **pinned run, or else its newest finished run** (a run in progress or failed is not a plan; the one before it applies).
-  Both their own places and places through a group ("Singing (with the Choir)"), in event order, with "locked" and "poor" (for group places: only if it is the person's own "poor").
-  The numbers agree with the distribution (tested against the real planner). The plan is marked when it was made before the latest changes. A person in another organisation gives 404.
-- The grid uses the same view as the list (`/runs/{id}`); the explanation for an empty place is behind "Why?".
+### Grid (built, phase 5; replaced by *The table*)
+- The draft rows use the same view as the list of runs (`/runs/{id}`); the explanation for an empty place is behind "Why?".
+  «My assignments» per person was removed on 2026-11-20 with the rest of the per-person API.
 
 ### The table (built 2026-11-13, redone from the sketches 2026-11-19)
 One view per plan, inspired by *whenever*: the person making the plan sets everything in the same table people give their answers in. Read a column from the top:
@@ -221,15 +222,15 @@ what the event is, what it needs, who got it, who can come.
   "Place in the draft": remove/unlock what is set, lock a planner name, set a person, a group or a text by hand, and the selection (whom the planner picks from).
   Compromises, the distribution and earlier drafts are links under the rows. The page opens with the pinned draft, else the newest.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
-  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, the personal link, rename, active, can be proposed.
+  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, active, can be proposed.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
-- `/o/<org>/p/<plan>/me/<id>` (links already sent) opens the table with the row highlighted; an unknown id is "Page not found". The organisation page has the plans and the
-  groups, and rename/delete of the organisation; there is no setup page any more.
+- The organisation page has the plans and the groups, and rename/delete of the organisation. Any other address (an old setup page, an old personal
+  link) is "Page not found".
 
 ### Groups, manual cells and selections (built, phase 4 round 2)
 - **Groups** (`/orgs/{org}/groups`, on the organisation page): name, members, "can be proposed" and the tasks the planner may propose the group for
   (places and level; only tasks the planner distributes). Not deleted while a cell or selection names it (409).
-- **Manual cells** (`/plans/{plan}/cells`) and **selections** (`/plans/{plan}/pools`): set for several events at a time, all or nothing, only events in the plan.
+- **Manual cells** (`/plans/{plan}/cells`) and **selections** (`/plans/{plan}/pools`): one event at a time, only an event in the plan (copying an event can take its cells set by hand along).
   Cells for people must be active. A cell can be on a task the planner does not distribute (for example "Singing" for the choir). "Lock" on a planner name makes a cell
   with `locked` for it, which the planner keeps like any other cell.
 - **Active only:** inactive people and groups without active members are never sent to the planner (it would count the place without knowing who). What names them is left out,
@@ -251,7 +252,7 @@ The first version has no login, no personal links and no roles. The consequences
   search engines (`noindex`), and SQLite is backed up. Put it on a trusted network or behind a proxy that authenticates (see the README).
   There is no change log and no declared name (both removed 2026-11-19: "Keep it simple for now").
 - Writes must be `application/json`, and `http.CrossOriginProtection` refuses writes from other sites (`Sec-Fetch-Site: cross-site`, 403; no CORS).
-  All writes go through one helper that logs in the same transaction (the one exception is deleting an organisation, above).
+  All writes go through one helper, one transaction each (the one exception is deleting an organisation, above).
 - Adding links or a login later is an addition and needs no new data model.
 
 ## Phases

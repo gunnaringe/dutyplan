@@ -136,7 +136,6 @@ button.ans[data-level="good"] { background: var(--accent); border-color: var(--a
 button.ans[data-level="poor"] { background: var(--warn); border-color: var(--warn); color: #fff; }
 button.ans[data-level="never"] { background: transparent; border-color: var(--err); color: var(--err); }
 @media (prefers-color-scheme: dark) { button.ans[data-level="good"], button.ans[data-level="poor"] { color: #0b1a12; } }
-.dp-table tr.me th, .dp-table tr.me td { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
 .dp-table tr.inactive th, .dp-table tr.inactive td { opacity: .6; }
 
 /* ---- dialogs ---- */

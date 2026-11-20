@@ -19,7 +19,7 @@ type Run struct {
 	Error      string `json:"error,omitempty"`
 	StartedAt  string `json:"started_at"`
 	FinishedAt string `json:"finished_at,omitempty"`
-	Pinned     bool   `json:"pinned"` // the plan people see under «My assignments» (at most one per plan)
+	Pinned     bool   `json:"pinned"` // the plan's current plan, which the page opens with (at most one per plan)
 }
 
 // RunFull adds the stored documents.

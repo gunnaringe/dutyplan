@@ -17,28 +17,6 @@ var (
 
 const maxAvailabilityPerCall = 400
 
-type MeTask struct {
-	TaskID int64  `json:"task_id"`
-	Name   string `json:"name"`
-	Level  string `json:"level"` // "" = the person has not chosen this task
-}
-
-type MeEvent struct {
-	EventID     int64  `json:"event_id"`
-	Date        string `json:"date"`
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Description string `json:"description"`
-	Level       string `json:"level"` // "" = neutral
-}
-
-// Me is everything a person's own page needs in one call.
-type Me struct {
-	Person Person    `json:"person"`
-	Tasks  []MeTask  `json:"tasks"` // the planner's tasks only: manual-only tasks are never assigned by the planner
-	Events []MeEvent `json:"events"`
-}
-
 func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 	var p Person
 	err := q.QueryRowContext(ctx, `SELECT id, name, active, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
@@ -49,64 +27,7 @@ func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 	return p, err
 }
 
-// GetPerson returns one person of the organisation (anyone else's is not found).
-func (s *Store) GetPerson(ctx context.Context, orgSlug string, id int64) (Person, error) {
-	oid, err := orgID(ctx, s.db, orgSlug)
-	if err != nil {
-		return Person{}, err
-	}
-	return getPerson(ctx, s.db, oid, id)
-}
-
-func (s *Store) GetMe(ctx context.Context, orgSlug, planSlug string, personID int64) (Me, error) {
-	var me Me
-	oid, err := orgID(ctx, s.db, orgSlug)
-	if err != nil {
-		return me, err
-	}
-	pid, err := planID(ctx, s.db, oid, planSlug)
-	if err != nil {
-		return me, err
-	}
-	if me.Person, err = getPerson(ctx, s.db, oid, personID); err != nil {
-		return me, err
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT t.id, t.name, COALESCE(pt.level, '')
-		FROM task t LEFT JOIN person_task pt ON pt.task_id = t.id AND pt.org_id = t.org_id AND pt.person_id = ?
-		WHERE t.org_id = ? AND t.planned = 1 ORDER BY t.name COLLATE NOCASE`, personID, oid)
-	if err != nil {
-		return me, err
-	}
-	me.Tasks = []MeTask{}
-	for rows.Next() {
-		var t MeTask
-		if err := rows.Scan(&t.TaskID, &t.Name, &t.Level); err != nil {
-			rows.Close()
-			return me, err
-		}
-		me.Tasks = append(me.Tasks, t)
-	}
-	rows.Close()
-	rows, err = s.db.QueryContext(ctx, `SELECT d.id, d.date, d.start_time, d.end_time, d.description, COALESCE(pe.level, '')
-		FROM event d
-		LEFT JOIN person_event pe ON pe.event_id = d.id AND pe.org_id = d.org_id AND pe.person_id = ?
-		WHERE d.org_id = ? AND d.plan_id = ? ORDER BY `+eventOrder, personID, oid, pid)
-	if err != nil {
-		return me, err
-	}
-	defer rows.Close()
-	me.Events = []MeEvent{}
-	for rows.Next() {
-		var e MeEvent
-		if err := rows.Scan(&e.EventID, &e.Date, &e.StartTime, &e.EndTime, &e.Description, &e.Level); err != nil {
-			return me, err
-		}
-		me.Events = append(me.Events, e)
-	}
-	return me, rows.Err()
-}
-
-// SetPersonTask makes the person take part in a task (or changes how much they want it).
+// SetPersonTask sets whether and how willingly a person takes part in a task.
 func (s *Store) SetPersonTask(ctx context.Context, orgSlug string, personID, taskID int64, level string) error {
 	if !taskLevels[level] {
 		return fmt.Errorf("%w: level must be never, poor, neutral or good", ErrInvalid)

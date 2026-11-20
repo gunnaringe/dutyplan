@@ -43,8 +43,8 @@ func (w world) cellsAndPools(t *testing.T) (locked []lockedIn, pools []poolIn, r
 
 func (w world) cell(t *testing.T, ev store.Event, task store.Task, c store.NewCell) {
 	t.Helper()
-	c.EventIDs, c.TaskID = []int64{ev.ID}, task.ID
-	if _, _, err := w.st.AddCells(ctx, w.org.Slug, w.plan.Slug, c); err != nil {
+	c.EventID, c.TaskID = ev.ID, task.ID
+	if _, err := w.st.AddCell(ctx, w.org.Slug, w.plan.Slug, c); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -58,7 +58,7 @@ func (w world) pool(t *testing.T, ev store.Event, task store.Task, people []stri
 	for _, g := range groups {
 		gids = append(gids, g.ID)
 	}
-	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, []int64{ev.ID}, task.ID, ids, gids); err != nil {
+	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, ev.ID, task.ID, ids, gids); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -160,8 +160,8 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
-	otherEvs, _ := a.st.AddEvents(ctx, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07", Places: map[int64]int{a.sound.ID: 1}})
+	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "Spring 2027")
+	otherEvs, _ := addWithPlaces(a.st, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07"}, map[int64]int{a.sound.ID: 1})
 	otherEv := otherEvs[0]
 	a.cell(t, a.events[0], a.sound, store.NewCell{PersonID: a.people["Aslaug"].ID})
 	b.cell(t, b.events[0], b.sound, store.NewCell{PersonID: b.people["Aslaug"].ID})
@@ -169,7 +169,7 @@ func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	if _, err := a.st.GetPlan(ctx, a.org.Slug, other.Slug); err != nil {
 		t.Fatal(err)
 	}
-	a.st.AddCells(ctx, a.org.Slug, other.Slug, store.NewCell{EventIDs: []int64{otherEv.ID}, TaskID: a.sound.ID, PersonID: a.people["Birger"].ID})
+	a.st.AddCell(ctx, a.org.Slug, other.Slug, store.NewCell{EventID: otherEv.ID, TaskID: a.sound.ID, PersonID: a.people["Birger"].ID})
 
 	locked, pools, raw, _, _ := a.cellsAndPools(t)
 	if len(locked) != 1 || locked[0].Person != pid(a.people["Aslaug"].ID) || len(pools) != 0 {

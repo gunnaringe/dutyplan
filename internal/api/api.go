@@ -187,7 +187,6 @@ func (s *server) listOrgs(w http.ResponseWriter, r *http.Request) {
 
 type nameBody struct {
 	Name string `json:"name"`
-	Slug string `json:"slug"`
 }
 
 func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +194,7 @@ func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	o, err := s.st.CreateOrg(r.Context(), b.Name, b.Slug)
+	o, err := s.st.CreateOrg(r.Context(), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -226,7 +225,7 @@ func (s *server) createPlan(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	p, err := s.st.CreatePlan(r.Context(), r.PathValue("org"), b.Name, b.Slug)
+	p, err := s.st.CreatePlan(r.Context(), r.PathValue("org"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return

@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
@@ -18,17 +17,17 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	if !sound.Planned {
 		t.Error("tasks are planned by default")
 	}
-	var bulk struct {
-		Created []store.Task `json:"created"`
-		Skipped []string     `json:"skipped"`
+	var camera store.Task
+	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Camera"}).json(&camera)
+	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}); r.code != 409 {
+		t.Errorf("a second task with the same name: %d %s", r.code, r.body)
 	}
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks/bulk", map[string]any{"names": "Sound\nCamera\nCoffee\n"}).json(&bulk)
-	if len(bulk.Created) != 2 || len(bulk.Skipped) != 1 {
-		t.Errorf("bulk tasks: %+v", bulk)
+	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Coffee", "planned": false}); r.code != 400 {
+		t.Errorf("a new task is always planned; the page switches it off afterwards: %d %s", r.code, r.body)
 	}
 	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), map[string]any{"planned": false})
 
-	e.mustDo(204, "PUT", "/api/orgs/org-a/combinations", map[string]any{"a": bulk.Created[0].ID, "b": sound.ID, "level": "cannot"})
+	e.mustDo(204, "PUT", "/api/orgs/org-a/combinations", map[string]any{"a": camera.ID, "b": sound.ID, "level": "cannot"})
 	var combos []store.Combination
 	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
 	if len(combos) != 1 || combos[0].A > combos[0].B {
@@ -36,12 +35,15 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	}
 
 	// events: one with places, a second on the same date, then copies of the first every week
-	camera := bulk.Created[0]
 	events := "/api/orgs/org-a/plans/autumn-2026/events"
 	var evs []store.Event
-	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09", "start_time": "11:00",
-		"places": map[string]int{itoa(sound.ID): 1, itoa(camera.ID): 3}}).json(&evs)
+	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09", "start_time": "11:00"}).json(&evs)
 	d := evs[0]
+	e.mustDo(204, "PUT", fmt.Sprintf("%s/%d/places/%d", events, d.ID, sound.ID), map[string]int{"slots": 1})
+	e.mustDo(204, "PUT", fmt.Sprintf("%s/%d/places/%d", events, d.ID, camera.ID), map[string]int{"slots": 3})
+	if r := e.do("POST", events, map[string]any{"date": "2026-08-09", "places": map[string]int{itoa(sound.ID): 1}}); r.code != 400 {
+		t.Errorf("places are set per cell, not with the new event: %d %s", r.code, r.body)
+	}
 	e.mustDo(201, "POST", events, map[string]any{"date": "2026-08-09"}).json(&evs)
 	if second := evs[0]; second.ID == d.ID || second.Date != d.Date {
 		t.Errorf("two events on one date: %+v / %+v", d, second)
@@ -94,7 +96,7 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	if got, want := placesOf(d.ID), fmt.Sprintf("[%d:1]", sound.ID); got != want {
 		t.Errorf("the places of a deleted task go: %s, want %s", got, want)
 	}
-	e.mustDo(201, "POST", "/api/orgs/org-a/plans/autumn-2026/cells", map[string]any{"events": []int64{d.ID}, "task": sound.ID, "label": "Outside guest"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/autumn-2026/cells", map[string]any{"event": d.ID, "task": sound.ID, "label": "Outside guest"})
 	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), nil); r.code != 409 {
 		t.Errorf("task in use: %d %s", r.code, r.body)
 	}
@@ -120,7 +122,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 			t.Errorf("%s %s = %d %s, want 404", method, path, r.code, r.body)
 		}
 	}
-	notFound("POST", "/api/orgs/org-b/plans/autumn-2026/events", map[string]any{"date": "2026-08-09", "places": map[string]int{itoa(taskA.ID): 1}})
+	notFound("PUT", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d/places/%d", dateA.ID, taskA.ID), map[string]int{"slots": 1})
 	notFound("POST", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d/copy", dateA.ID), map[string]any{"dates": []string{"2026-08-16"}})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
@@ -153,10 +155,10 @@ func TestSetupWritesNeedValidInput(t *testing.T) {
 	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "morgen"}); r.code != 400 {
 		t.Errorf("bad date: %d", r.code)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", map[string]any{"names": strings.Repeat("a\n", 3) + " "}); r.code != 201 {
-		t.Errorf("duplicates in a paste are folded, not an error: %d %s", r.code, r.body)
+	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "  "}); r.code != 400 {
+		t.Errorf("a blank task name: %d", r.code)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks/bulk", map[string]any{"names": "  \n"}); r.code != 400 {
-		t.Errorf("empty paste: %d", r.code)
+	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "2026-08-09", "description": "x"}); r.code != 400 {
+		t.Errorf("a description is set by editing the event, not with the new one: %d %s", r.code, r.body)
 	}
 }

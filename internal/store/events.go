@@ -175,14 +175,12 @@ func repeatWeekly(dates []string, until string) ([]string, error) {
 }
 
 // NewEvents is what AddEvents takes: a date (and with Until the same weekday every week up to and including that date),
-// optionally a time of day and a description, and the places for the tasks the events need (task -> places).
+// and optionally a time of day. The places, the details and the description are set afterwards, or come with a copy.
 type NewEvents struct {
-	Date        string        `json:"date"`
-	Until       string        `json:"until"`
-	StartTime   string        `json:"start_time"`
-	EndTime     string        `json:"end_time"`
-	Description string        `json:"description"`
-	Places      map[int64]int `json:"places"`
+	Date      string `json:"date"`
+	Until     string `json:"until"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
 }
 
 // AddEvent adds one event on a date, with nothing else.
@@ -204,15 +202,6 @@ func (s *Store) AddEvents(ctx context.Context, orgSlug, planSlug string, in NewE
 	if err != nil {
 		return nil, err
 	}
-	desc, err := cleanDescription(in.Description)
-	if err != nil {
-		return nil, err
-	}
-	for _, n := range in.Places {
-		if n < 1 || n > maxSlots {
-			return nil, Invalid("places_invalid", map[string]any{"max": maxSlots}, "places must be 1-%d", maxSlots)
-		}
-	}
 	var out []Event
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		out = nil
@@ -224,20 +213,10 @@ func (s *Store) AddEvents(ctx context.Context, orgSlug, planSlug string, in NewE
 		if err != nil {
 			return err
 		}
-		for task := range in.Places {
-			if err := inOrg(ctx, tx, "task", oid, task); err != nil {
-				return err
-			}
-		}
 		for _, d := range dates {
-			e, err := s.insertEvent(ctx, tx, oid, pid, Event{Date: d, StartTime: start, EndTime: end, Description: desc})
+			e, err := s.insertEvent(ctx, tx, oid, pid, Event{Date: d, StartTime: start, EndTime: end})
 			if err != nil {
 				return err
-			}
-			for task, n := range in.Places {
-				if err := setPlaces(ctx, tx, oid, pid, e.ID, task, n); err != nil {
-					return err
-				}
 			}
 			out = append(out, e)
 		}

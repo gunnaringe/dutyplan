@@ -17,21 +17,6 @@ func (s *server) runsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/runs/{id}", s.getRun)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/runs/{id}/pin", s.pinRun(true))
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/runs/{id}/pin", s.pinRun(false))
-	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/people/{id}/assignments", s.myAssignments)
-}
-
-// myAssignments: «My assignments», from the plan's pinned run, or else its newest finished one. A person of another organisation is not found.
-func (s *server) myAssignments(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	v, err := s.planner.Mine(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, i18n.Parse(r.URL.Query().Get("lang")))
-	if err != nil {
-		s.writeRunErr(w, err)
-		return
-	}
-	writeJSON(w, 200, v)
 }
 
 func (s *server) writeRunErr(w http.ResponseWriter, err error) {
@@ -48,12 +33,11 @@ func (s *server) writeRunErr(w http.ResponseWriter, err error) {
 func (s *server) startRun(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		TimeLimit int `json:"time_limit"` // seconds; 0 = the default
-		Seed      int `json:"seed"`       // 0 = the next one, so «try again» gives another plan
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	id, err := s.planner.Start(r.Context(), r.PathValue("org"), r.PathValue("plan"), planner.Params{TimeLimit: b.TimeLimit, Seed: b.Seed})
+	id, err := s.planner.Start(r.Context(), r.PathValue("org"), r.PathValue("plan"), planner.Params{TimeLimit: b.TimeLimit})
 	if err != nil {
 		s.writeRunErr(w, err)
 		return

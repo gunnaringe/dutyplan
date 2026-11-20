@@ -30,13 +30,13 @@ func newTableWorld(t *testing.T) tableWorld {
 	s := open(t)
 	w := tableWorld{s: s, org: mustOrg(t, s, "Club"), otherOrg: mustOrg(t, s, "Elsewhere")}
 	var err error
-	w.sound, err = s.CreateTask(ctx, w.org.Slug, "Sound", true)
+	w.sound, err = s.CreateTask(ctx, w.org.Slug, "Sound")
 	must(err)
-	w.camera, err = s.CreateTask(ctx, w.org.Slug, "Camera", true)
+	w.camera, err = s.CreateTask(ctx, w.org.Slug, "Camera")
 	must(err)
-	w.plan, err = s.CreatePlan(ctx, w.org.Slug, "Spring", "")
+	w.plan, err = s.CreatePlan(ctx, w.org.Slug, "Spring")
 	must(err)
-	w.other, err = s.CreatePlan(ctx, w.org.Slug, "Summer", "")
+	w.other, err = s.CreatePlan(ctx, w.org.Slug, "Summer")
 	must(err)
 	w.ev, err = s.AddEvent(ctx, w.org.Slug, w.plan.Slug, "2026-08-09")
 	must(err)
@@ -45,9 +45,9 @@ func newTableWorld(t *testing.T) tableWorld {
 	w.otherEv, err = s.AddEvent(ctx, w.org.Slug, w.other.Slug, "2026-08-23")
 	must(err)
 
-	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, "Doors", true)
+	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, "Doors")
 	must(err)
-	w.away, err = s.CreatePlan(ctx, w.otherOrg.Slug, "Spring", "")
+	w.away, err = s.CreatePlan(ctx, w.otherOrg.Slug, "Spring")
 	must(err)
 	w.awayEv, err = s.AddEvent(ctx, w.otherOrg.Slug, w.away.Slug, "2026-08-09")
 	must(err)
@@ -153,7 +153,7 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
 	w := newTableWorld(t)
 	s, org, plan := w.s, w.org.Slug, w.plan.Slug
-	extra, err := s.CreateTask(ctx, org, "Coffee", true)
+	extra, err := s.CreateTask(ctx, org, "Coffee")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,11 +440,11 @@ func TestAnswersForTheTable(t *testing.T) {
 func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	w := newTableWorld(t)
 	s, org := w.s, w.org.Slug
-	coffee, err := s.CreateTask(ctx, org, "Coffee", true)
+	coffee, err := s.CreateTask(ctx, org, "Coffee")
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignToo, err := s.CreateTask(ctx, w.otherOrg.Slug, "Ticket", true)
+	foreignToo, err := s.CreateTask(ctx, w.otherOrg.Slug, "Ticket")
 	if err != nil {
 		t.Fatal(err)
 	}

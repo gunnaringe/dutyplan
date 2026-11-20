@@ -4,12 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"sort"
 	"strings"
 )
 
-const maxEventsPerWrite = 400
+// maxInPool is how many people and groups a selection can name.
+const maxInPool = 400
 
 // ManualCell is a fixed place: a person, a group or a text for one task on one event. The planner never moves it, and it
 // counts as a filled place (Fills places for a group or a text). Locked tells how it came about: false = set by hand,
@@ -25,15 +24,15 @@ type ManualCell struct {
 	Locked   bool   `json:"locked"`
 }
 
-// NewCell is a request for manual cells: the same thing on every listed event. Exactly one of PersonID, GroupID, Label.
+// NewCell is a request for a manual cell on one event. Exactly one of PersonID, GroupID, Label.
 type NewCell struct {
-	EventIDs []int64 `json:"events"`
-	TaskID   int64   `json:"task"`
-	PersonID int64   `json:"person"`
-	GroupID  int64   `json:"group"`
-	Label    string  `json:"label"`
-	Fills    int     `json:"fills"`  // places a group or a text fills (default 1); a person always fills one
-	Locked   bool    `json:"locked"` // a planner's name that is locked (a person or a group, never a text)
+	EventID  int64  `json:"event"`
+	TaskID   int64  `json:"task"`
+	PersonID int64  `json:"person"`
+	GroupID  int64  `json:"group"`
+	Label    string `json:"label"`
+	Fills    int    `json:"fills"`  // places a group or a text fills (default 1); a person always fills one
+	Locked   bool   `json:"locked"` // a planner's name that is locked (a person or a group, never a text)
 }
 
 // Pool is a selection: only these people and groups can be chosen for the task on the event.
@@ -46,8 +45,8 @@ type Pool struct {
 
 // distinct drops repeated ids and keeps the order; it refuses a list that is too long.
 func distinct(ids []int64) ([]int64, error) {
-	if len(ids) > maxEventsPerWrite {
-		return nil, Invalid("too_many_events", map[string]any{"max": maxEventsPerWrite}, "at most %d events at a time", maxEventsPerWrite)
+	if len(ids) > maxInPool {
+		return nil, Invalid("pool_too_large", map[string]any{"max": maxInPool}, "at most %d people and groups in a selection", maxInPool)
 	}
 	seen := map[int64]bool{}
 	out := make([]int64, 0, len(ids))
@@ -58,20 +57,6 @@ func distinct(ids []int64) ([]int64, error) {
 		}
 	}
 	return out, nil
-}
-
-// eventsOfPlan checks that every event belongs to this plan (anything else is «not found», and nothing is written)
-// and returns their dates for the log.
-func eventsOfPlan(ctx context.Context, q dbq, oid, pid int64, ids []int64) ([]string, error) {
-	dates := make([]string, 0, len(ids))
-	for _, id := range ids {
-		e, err := getEvent(ctx, q, oid, pid, id)
-		if err != nil {
-			return nil, err
-		}
-		dates = append(dates, e.Date)
-	}
-	return dates, nil
 }
 
 func listCells(ctx context.Context, q dbq, oid, pid int64) ([]ManualCell, error) {
@@ -111,9 +96,9 @@ func (s *Store) ListCells(ctx context.Context, orgSlug, planSlug string) ([]Manu
 	return listCells(ctx, s.db, oid, pid)
 }
 
-// AddCells writes the same manual cell on every listed event, all or nothing. An event that already has it is skipped
-// (and counted); if nothing new would be written, that is a conflict. A person must be active.
-func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCell) (created []ManualCell, skipped int, err error) {
+// AddCell writes a manual cell on one event of the plan. The same cell twice is a conflict. A person must be active.
+func (s *Store) AddCell(ctx context.Context, orgSlug, planSlug string, in NewCell) (ManualCell, error) {
+	var out ManualCell
 	kinds := 0
 	if in.PersonID != 0 {
 		kinds++
@@ -124,32 +109,25 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCe
 	label := strings.TrimSpace(in.Label)
 	if label != "" {
 		kinds++
+		var err error
 		if label, err = cleanName(label, "text"); err != nil {
-			return nil, 0, err
+			return out, err
 		}
 	}
 	if kinds != 1 {
-		return nil, 0, Invalid("cell_kind", nil, "give exactly one of person, group or text")
+		return out, Invalid("cell_kind", nil, "give exactly one of person, group or text")
 	}
 	if in.Locked && label != "" {
-		return nil, 0, Invalid("lock_text", nil, "only a person or a group can be locked; a text is set by hand")
+		return out, Invalid("lock_text", nil, "only a person or a group can be locked; a text is set by hand")
 	}
 	fills := in.Fills
 	if fills == 0 {
 		fills = 1
 	}
 	if fills < 1 || fills > 50 || (in.PersonID != 0 && fills != 1) {
-		return nil, 0, Invalid("cell_fills", nil, "places must be 1-50 (a person fills one)")
+		return out, Invalid("cell_fills", nil, "places must be 1-50 (a person fills one)")
 	}
-	events, err := distinct(in.EventIDs)
-	if err != nil {
-		return nil, 0, err
-	}
-	if len(events) == 0 {
-		return nil, 0, Invalid("choose_events", nil, "choose at least one event")
-	}
-	err = s.write(ctx, func(tx *sql.Tx) error {
-		created, skipped = nil, 0
+	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
 			return err
@@ -187,49 +165,32 @@ func (s *Store) AddCells(ctx context.Context, orgSlug, planSlug string, in NewCe
 		default:
 			what = label
 		}
-		if _, err := eventsOfPlan(ctx, tx, oid, pid, events); err != nil {
+		if _, err := getEvent(ctx, tx, oid, pid, in.EventID); err != nil {
 			return err
 		}
 		var text any
 		if label != "" {
 			text = label
 		}
-		for _, ev := range events {
-			res, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, locked, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, oid, pid, ev, in.TaskID, person, group, text, fills, in.Locked, s.stamp())
-			if isUnique(err) {
-				skipped++
-				continue
-			}
-			if err != nil {
-				return err
-			}
-			c := ManualCell{EventID: ev, TaskID: in.TaskID, Label: label, Fills: fills, Locked: in.Locked}
-			c.ID, _ = res.LastInsertId()
-			if in.PersonID != 0 {
-				c.PersonID = &in.PersonID
-			}
-			if in.GroupID != 0 {
-				c.GroupID = &in.GroupID
-			}
-			created = append(created, c)
-		}
-		if len(created) == 0 {
+		res, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, locked, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, oid, pid, in.EventID, in.TaskID, person, group, text, fills, in.Locked, s.stamp())
+		if isUnique(err) {
 			return Conflict("cell_exists", nil, "that manual cell already exists")
+		}
+		if err != nil {
+			return err
+		}
+		out = ManualCell{EventID: in.EventID, TaskID: in.TaskID, Label: label, Fills: fills, Locked: in.Locked}
+		out.ID, _ = res.LastInsertId()
+		if in.PersonID != 0 {
+			out.PersonID = &in.PersonID
+		}
+		if in.GroupID != 0 {
+			out.GroupID = &in.GroupID
 		}
 		return nil
 	})
-	if err != nil {
-		return nil, 0, err
-	}
-	return created, skipped, nil
-}
-
-func datesText(dates []string) string {
-	if len(dates) <= 3 {
-		return strings.Join(dates, ", ")
-	}
-	return fmt.Sprintf("%d events (%s ...)", len(dates), strings.Join(dates[:3], ", "))
+	return out, err
 }
 
 // DeleteCell removes one manual cell of this plan. The planner may then choose for the place again.
@@ -306,17 +267,10 @@ func (s *Store) ListPools(ctx context.Context, orgSlug, planSlug string) ([]Pool
 	return listPools(ctx, s.db, oid, pid)
 }
 
-// SetPool replaces the selection for one task on every listed event, all or nothing; no people and no groups removes
-// it. Only a task the planner distributes can have one, and a person in it must be active.
-func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventIDs []int64, taskID int64, people, groups []int64) error {
-	events, err := distinct(eventIDs)
-	if err != nil {
-		return err
-	}
-	if len(events) == 0 {
-		return Invalid("choose_events", nil, "choose at least one event")
-	}
-	people, err = distinct(people)
+// SetPool replaces the selection for one task on one event; no people and no groups removes it. Only a task the planner
+// distributes can have one, and a person in it must be active.
+func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventID, taskID int64, people, groups []int64) error {
+	people, err := distinct(people)
 	if err != nil {
 		return err
 	}
@@ -343,7 +297,6 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventIDs 
 		if !planned {
 			return Invalid("task_not_distributed", nil, "the planner does not distribute %q, so there is nothing to select for", taskName)
 		}
-		var names []string
 		for _, p := range people {
 			var n string
 			var active bool
@@ -355,7 +308,6 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventIDs 
 			if !active {
 				return Invalid("person_inactive", map[string]any{"name": n}, "%s is not active", n)
 			}
-			names = append(names, n)
 		}
 		for _, g := range groups {
 			var n string
@@ -364,29 +316,22 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventIDs 
 			} else if err != nil {
 				return err
 			}
-			names = append(names, n)
 		}
-		if _, err := eventsOfPlan(ctx, tx, oid, pid, events); err != nil {
+		if _, err := getEvent(ctx, tx, oid, pid, eventID); err != nil {
 			return err
 		}
-		for _, ev := range events {
-			if _, err := tx.ExecContext(ctx, `DELETE FROM pool_member WHERE org_id = ? AND plan_id = ? AND event_id = ? AND task_id = ?`, oid, pid, ev, taskID); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM pool_member WHERE org_id = ? AND plan_id = ? AND event_id = ? AND task_id = ?`, oid, pid, eventID, taskID); err != nil {
+			return err
+		}
+		for _, p := range people {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, person_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, eventID, taskID, p); err != nil {
 				return err
 			}
-			for _, p := range people {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, person_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, ev, taskID, p); err != nil {
-					return err
-				}
-			}
-			for _, g := range groups {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, group_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, ev, taskID, g); err != nil {
-					return err
-				}
-			}
 		}
-		sort.Strings(names)
-		if len(names) == 0 {
-			return nil
+		for _, g := range groups {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO pool_member (org_id, plan_id, event_id, task_id, group_id) VALUES (?, ?, ?, ?, ?)`, oid, pid, eventID, taskID, g); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

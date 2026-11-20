@@ -51,19 +51,22 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 			t.Fatal(err)
 		}
 	}
-	w.org, err = st.CreateOrg(ctx, orgName, "")
+	w.org, err = st.CreateOrg(ctx, orgName)
 	must(err)
-	w.singing, err = st.CreateTask(ctx, w.org.Slug, "Singing", false)
+	w.singing, err = st.CreateTask(ctx, w.org.Slug, "Singing")
 	must(err)
-	w.sound, err = st.CreateTask(ctx, w.org.Slug, "Sound", true)
+	off := false
+	w.singing, err = st.UpdateTask(ctx, w.org.Slug, w.singing.ID, store.TaskPatch{Planned: &off})
 	must(err)
-	w.camera, err = st.CreateTask(ctx, w.org.Slug, "Camera", true)
+	w.sound, err = st.CreateTask(ctx, w.org.Slug, "Sound")
+	must(err)
+	w.camera, err = st.CreateTask(ctx, w.org.Slug, "Camera")
 	must(err)
 	must(st.SetCombination(ctx, w.org.Slug, w.sound.ID, w.camera.ID, "cannot"))
-	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "Autumn 2026", "")
+	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "Autumn 2026")
 	must(err)
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
-		evs, err := st.AddEvents(ctx, w.org.Slug, w.plan.Slug, store.NewEvents{Date: d, Places: map[int64]int{w.sound.ID: 1, w.camera.ID: 1, w.singing.ID: 1}})
+		evs, err := addWithPlaces(st, w.org.Slug, w.plan.Slug, store.NewEvents{Date: d}, map[int64]int{w.sound.ID: 1, w.camera.ID: 1, w.singing.ID: 1})
 		must(err)
 		w.events = append(w.events, evs[0])
 	}
@@ -493,7 +496,7 @@ func TestOnlyOneRunAtATimeAndSensibleRefusals(t *testing.T) {
 	if _, err := New(w.st, nil, 1, nil).Start(ctx, w.org.Slug, w.plan.Slug, Params{}); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("no solver: %v", err)
 	}
-	empty, _ := w.st.CreatePlan(ctx, w.org.Slug, "Tom plan", "")
+	empty, _ := w.st.CreatePlan(ctx, w.org.Slug, "Tom plan")
 	if _, err := s.Start(ctx, w.org.Slug, empty.Slug, Params{TimeLimit: 5}); !errors.Is(err, ErrNothingToPlan) || !errors.Is(err, store.ErrInvalid) {
 		t.Errorf("a plan without events: %v", err)
 	}
@@ -648,8 +651,8 @@ func TestEmptyListsAreSentAsListsNeverAsNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	org, _ := st.CreateOrg(ctx, "Tom", "")
-	plan, _ := st.CreatePlan(ctx, org.Slug, "Plan", "")
+	org, _ := st.CreateOrg(ctx, "Tom")
+	plan, _ := st.CreatePlan(ctx, org.Slug, "Plan")
 	d, err := st.GetPlanningData(ctx, org.Slug, plan.Slug)
 	if err != nil {
 		t.Fatal(err)
@@ -719,4 +722,31 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	if again, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id); again.Weak[0] != en.Weak[0] {
 		t.Errorf("English changed: %q", again.Weak)
 	}
+}
+
+// addWithPlaces adds the events and gives each the places (task -> places), the way the page does it.
+func addWithPlaces(st *store.Store, org, plan string, in store.NewEvents, places map[int64]int) ([]store.Event, error) {
+	evs, err := st.AddEvents(context.Background(), org, plan, in)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range evs {
+		for task, n := range places {
+			if err := st.SetEventPlaces(context.Background(), org, plan, e.ID, task, n); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return evs, nil
+}
+
+// runWith makes a run whose planner answers with the given output.
+func (w world) runWith(t *testing.T, answer []byte) *Service {
+	t.Helper()
+	s := newService(w, func(context.Context, []byte) ([]byte, error) { return answer, nil })
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s)
+	return s
 }

@@ -229,12 +229,11 @@ func Slugify(name string) string {
 	return s
 }
 
-func cleanSlug(slug, name string) (string, error) {
-	if slug == "" {
-		slug = Slugify(name)
-	}
-	if len(slug) < 2 || len(slug) > 40 || slug != Slugify(slug) {
-		return "", Invalid("slug_invalid", nil, "slug must be 2-40 characters of a-z, 0-9 and hyphens")
+// slugFor makes the address of an organisation or a plan from its name. A rename never changes it.
+func slugFor(name string) (string, error) {
+	slug := Slugify(name)
+	if len(slug) < 2 {
+		return "", Invalid("slug_invalid", nil, "the name needs at least two letters or digits (a-z, 0-9) for the address")
 	}
 	return slug, nil
 }
@@ -251,12 +250,13 @@ type Org struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func (s *Store) CreateOrg(ctx context.Context, name, slug string) (Org, error) {
+func (s *Store) CreateOrg(ctx context.Context, name string) (Org, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Org{}, err
 	}
-	if slug, err = cleanSlug(slug, name); err != nil {
+	slug, err := slugFor(name)
+	if err != nil {
 		return Org{}, err
 	}
 	o := Org{Slug: slug, Name: name, CreatedAt: s.stamp()}
@@ -321,12 +321,13 @@ type Plan struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func (s *Store) CreatePlan(ctx context.Context, orgSlug, name, slug string) (Plan, error) {
+func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Plan{}, err
 	}
-	if slug, err = cleanSlug(slug, name); err != nil {
+	slug, err := slugFor(name)
+	if err != nil {
 		return Plan{}, err
 	}
 	p := Plan{Slug: slug, Name: name, CreatedAt: s.stamp()}

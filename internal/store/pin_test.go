@@ -96,9 +96,9 @@ func TestOnlyOneRunPerPlanCanBePinnedAtTheDatabase(t *testing.T) {
 func TestPinningStaysInsideThePlanAndOrganisation(t *testing.T) {
 	a := newPrefEnv(t)
 	idA := finishedRun(t, a, 1)
-	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027", "")
+	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027")
 	b := mustOrg(t, a.s, "Org B")
-	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 
 	for name, call := range map[string]func() error{
 		"through another plan": func() error { return a.s.PinRun(ctx, a.org.Slug, other.Slug, idA, true) },

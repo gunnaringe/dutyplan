@@ -82,8 +82,11 @@ const { spawn } = require('child_process');
     await page.goto(base + '/o/does-not-exist');
     await h1is(page, 'Page not found');
     errors.length = before;
-    await page.goto(base + '/o/sports-club/setup');  // the setup page is gone: the organisation page instead
-    await h1is(page, 'Sports Club');
+    for (const gone of ['/o/sports-club/setup', '/o/sports-club/p/autumn-2026/me/1']) {  // no setup page and no personal links
+      await page.goto(base + gone);
+      await h1is(page, 'Page not found');
+    }
+    errors.length = before;
 
     // --- the plan page: tasks, details rows, events ---
     const planUrl = '/o/sports-club/p/autumn-2026';
@@ -171,11 +174,9 @@ const { spawn } = require('child_process');
     await takes('Kari Test', [['Sound', 'good'], ['Video', 'neutral']]);
     await takes('Ola Sample', [['Sound', 'good']]);
     await takes('Jon Demo', [['Sound', 'neutral'], ['Video', 'good']]);
-    ok((await page.innerText('tr[data-person] >> nth=0')).includes('Sound, Video'), 'the row shows the tasks a person takes');
+    ok((await page.innerText('button[aria-label="Open Kari Test"]')).includes('Sound, Video'), 'the row shows the tasks a person takes');
     await page.click('button[aria-label="Open Kari Test"]');
-    await dialog.getByRole('button', { name: 'Copy' }).click();
-    await msgHas(page, 'The link was copied.');
-    const kariUrl = new URL(await dialog.locator('input[aria-label="Personal link"]').inputValue()).pathname;
+    ok((await dialog.locator('input[readonly]').count()) === 0, 'the person dialog has no personal link');
     await closeDialog();
 
     const answer = (person, e) => page.locator(`button.ans[aria-label^="${person}, ${e}:"]`);
@@ -267,15 +268,6 @@ const { spawn } = require('child_process');
     await dialog.getByRole('button', { name: 'Delete the event' }).click();
     await until(page, () => document.querySelectorAll('.dp-table thead th[scope=col]:not(.addcol)').length === 3, null, 'the event is deleted');
 
-    // a personal link marks the person's row; an unknown one is a page that does not exist
-    await page.goto(base + kariUrl);
-    await page.waitForSelector('tr.me');
-    ok((await page.innerText('tr.me th')).includes('Kari Test'), 'the personal link marks Kari’s row');
-    before = errors.length;
-    await page.goto(base + planUrl + '/me/9999');
-    await h1is(page, 'Page not found');
-    errors.length = before;
-
     // --- the organisation: groups, a plan to delete, rename ---
     await page.goto(base + '/o/sports-club');
     await h1is(page, 'Sports Club');
@@ -309,7 +301,7 @@ const { spawn } = require('child_process');
 
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---
     await page.setViewportSize({ width: 390, height: 844 });
-    for (const url of ['/o/sports-club', planUrl, kariUrl]) {
+    for (const url of ['/o/sports-club', planUrl]) {
       await page.goto(base + url);
       await page.waitForSelector('h1');
       await page.waitForTimeout(150);
@@ -318,7 +310,7 @@ const { spawn } = require('child_process');
     }
     const stuck = await page.evaluate(() => {
       const box = document.querySelector('.grid-scroll');
-      const th = document.querySelector('tr[data-person] th');
+      const th = document.querySelector('button[aria-label="Open Kari Test"]').closest('th');
       const x0 = th.getBoundingClientRect().left;
       box.scrollLeft = 300;
       return [box.scrollLeft > 0, Math.abs(th.getBoundingClientRect().left - x0) < 1];

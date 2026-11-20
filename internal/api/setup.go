@@ -12,7 +12,6 @@ func (s *server) setupRoutes(mux *http.ServeMux) {
 	s.prefsRoutes(mux)
 	mux.HandleFunc("GET /api/orgs/{org}/tasks", s.listTasks)
 	mux.HandleFunc("POST /api/orgs/{org}/tasks", s.createTask)
-	mux.HandleFunc("POST /api/orgs/{org}/tasks/bulk", s.createTasks)
 	mux.HandleFunc("PATCH /api/orgs/{org}/tasks/{id}", s.updateTask)
 	mux.HandleFunc("DELETE /api/orgs/{org}/tasks/{id}", s.deleteTask)
 
@@ -57,40 +56,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Name    string `json:"name"`
-		Planned *bool  `json:"planned"`
+		Name string `json:"name"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), b.Name, b.Planned == nil || *b.Planned)
+	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
 	writeJSON(w, 201, t)
-}
-
-func (s *server) createTasks(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Names   string `json:"names"` // one per line
-		Planned *bool  `json:"planned"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	created, skipped, err := s.st.CreateTasks(r.Context(), r.PathValue("org"), b.Names, b.Planned == nil || *b.Planned)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	if created == nil {
-		created = []store.Task{}
-	}
-	if skipped == nil {
-		skipped = []string{}
-	}
-	writeJSON(w, 201, map[string]any{"created": created, "skipped": skipped})
 }
 
 func (s *server) updateTask(w http.ResponseWriter, r *http.Request) {

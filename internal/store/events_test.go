@@ -10,7 +10,7 @@ func setup(t *testing.T) (*Store, Org, Plan) {
 	t.Helper()
 	s := open(t)
 	o := mustOrg(t, s, "Club")
-	p, err := s.CreatePlan(ctx, o.Slug, "Autumn 2026", "")
+	p, err := s.CreatePlan(ctx, o.Slug, "Autumn 2026")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 	}
 
 	// The event belongs to its plan: through another plan's slug it does not exist.
-	p2, _ := s.CreatePlan(ctx, o.Slug, "Spring 2027", "")
+	p2, _ := s.CreatePlan(ctx, o.Slug, "Spring 2027")
 	if _, err := s.UpdateEvent(ctx, o.Slug, p2.Slug, d.ID, EventPatch{Description: ptr("x")}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("event through the wrong plan: %v", err)
 	}
@@ -86,17 +86,13 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 
 func TestAddingEveryWeekUntilADate(t *testing.T) {
 	s, o, p := setup(t)
-	sound, _ := s.CreateTask(ctx, o.Slug, "Sound", true)
-	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", Until: "2026-09-06", StartTime: "11:00", Places: map[int64]int{sound.ID: 2}})
+	sound, _ := s.CreateTask(ctx, o.Slug, "Sound")
+	evs, err := addWithPlaces(ctx, s, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", Until: "2026-09-06", StartTime: "11:00"}, map[int64]int{sound.ID: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := dates(evs); got != "[2026-08-09 2026-08-16 2026-08-23 2026-08-30 2026-09-06]" {
 		t.Errorf("Sundays 9.8 - 6.9: %s", got)
-	}
-	places, _ := s.ListEventPlaces(ctx, o.Slug, p.Slug)
-	if len(places) != 5 || places[0].Slots != 2 || places[0].TaskID != sound.ID {
-		t.Errorf("every new event gets the places: %+v", places)
 	}
 	for _, e := range evs {
 		if e.StartTime != "11:00" {
@@ -106,26 +102,15 @@ func TestAddingEveryWeekUntilADate(t *testing.T) {
 	if evs, _ := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", Until: "2026-08-15"}); dates(evs) != "[2026-08-09]" {
 		t.Errorf("an until before the next week gives one event: %s", dates(evs))
 	}
-	other := mustOrg(t, s, "Other")
-	foreign, _ := s.CreateTask(ctx, other.Slug, "Sound", true)
 	for name, in := range map[string]NewEvents{
 		"until before the date": {Date: "2026-09-01", Until: "2026-08-01"},
 		"too long":              {Date: "2026-01-01", Until: "2027-06-01"},
 		"bad until":             {Date: "2026-08-01", Until: "2026-13-01"},
-		"places 0":              {Date: "2026-08-01", Places: map[int64]int{sound.ID: 0}},
-		"places 51":             {Date: "2026-08-01", Places: map[int64]int{sound.ID: 51}},
 		"end before start":      {Date: "2026-08-01", StartTime: "12:00", EndTime: "11:00"},
 	} {
 		if _, err := s.AddEvents(ctx, o.Slug, p.Slug, in); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)
 		}
-	}
-	before, _ := s.ListEvents(ctx, o.Slug, p.Slug)
-	if _, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-10-04", Until: "2026-10-25", Places: map[int64]int{foreign.ID: 1}}); !errors.Is(err, ErrNotFound) {
-		t.Errorf("another organisation's task: %v", err)
-	}
-	if after, _ := s.ListEvents(ctx, o.Slug, p.Slug); len(after) != len(before) {
-		t.Errorf("a refused add stores nothing: %d -> %d", len(before), len(after))
 	}
 }
 
@@ -151,27 +136,30 @@ func TestRepeatingWeeklyGivesEachDateOnceAndHasLimits(t *testing.T) {
 
 func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 	s, o, p := setup(t)
-	sound, _ := s.CreateTask(ctx, o.Slug, "Sound", true)
-	doors, _ := s.CreateTask(ctx, o.Slug, "Doors", true)
+	sound, _ := s.CreateTask(ctx, o.Slug, "Sound")
+	doors, _ := s.CreateTask(ctx, o.Slug, "Doors")
 	kari, _ := s.CreatePerson(ctx, o.Slug, "Kari Test")
 	ola, _ := s.CreatePerson(ctx, o.Slug, "Ola Sample")
-	srcs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-12-19", StartTime: "18:30", EndTime: "22:00", Description: "Doors open at 18:00",
-		Places: map[int64]int{sound.ID: 1, doors.ID: 3}})
+	srcs, err := addWithPlaces(ctx, s, o.Slug, p.Slug, NewEvents{Date: "2026-12-19", StartTime: "18:30", EndTime: "22:00"}, map[int64]int{sound.ID: 1, doors.ID: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := srcs[0]
+	desc := "Doors open at 18:00"
+	src, err := s.UpdateEvent(ctx, o.Slug, p.Slug, srcs[0].ID, EventPatch{Description: &desc})
+	if err != nil {
+		t.Fatal(err)
+	}
 	note, _ := s.AddField(ctx, o.Slug, p.Slug, "Note")
 	if err := s.SetFieldValue(ctx, o.Slug, p.Slug, src.ID, note.ID, "Christmas gala"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.AddCells(ctx, o.Slug, p.Slug, NewCell{EventIDs: []int64{src.ID}, TaskID: doors.ID, Label: "Outside guest"}); err != nil {
+	if _, err := s.AddCell(ctx, o.Slug, p.Slug, NewCell{EventID: src.ID, TaskID: doors.ID, Label: "Outside guest"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.AddCells(ctx, o.Slug, p.Slug, NewCell{EventIDs: []int64{src.ID}, TaskID: doors.ID, PersonID: kari.ID}); err != nil {
+	if _, err := s.AddCell(ctx, o.Slug, p.Slug, NewCell{EventID: src.ID, TaskID: doors.ID, PersonID: kari.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.AddCells(ctx, o.Slug, p.Slug, NewCell{EventIDs: []int64{src.ID}, TaskID: sound.ID, PersonID: ola.ID, Locked: true}); err != nil {
+	if _, err := s.AddCell(ctx, o.Slug, p.Slug, NewCell{EventID: src.ID, TaskID: sound.ID, PersonID: ola.ID, Locked: true}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetAvailability(ctx, o.Slug, p.Slug, kari.ID, map[int64]string{src.ID: "good"}); err != nil {
@@ -246,7 +234,7 @@ func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 		}
 	}
 
-	p2, _ := s.CreatePlan(ctx, o.Slug, "Spring 2027", "")
+	p2, _ := s.CreatePlan(ctx, o.Slug, "Spring 2027")
 	if _, err := s.CopyEvent(ctx, o.Slug, p2.Slug, src.ID, everything); !errors.Is(err, ErrNotFound) {
 		t.Errorf("an event of another plan: %v", err)
 	}
@@ -266,8 +254,8 @@ func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 func TestSamePlanSlugInTwoOrganisations(t *testing.T) {
 	s := open(t)
 	a, b := mustOrg(t, s, "Org A"), mustOrg(t, s, "Org B")
-	pa, _ := s.CreatePlan(ctx, a.Slug, "Autumn 2026", "")
-	pb, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026", "")
+	pa, _ := s.CreatePlan(ctx, a.Slug, "Autumn 2026")
+	pb, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 	if pa.Slug != pb.Slug {
 		t.Fatal("test needs equal slugs")
 	}

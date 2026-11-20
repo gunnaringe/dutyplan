@@ -83,12 +83,9 @@ type CellGroup struct {
 	Fills   int      `json:"fills"`
 	Weak    bool     `json:"weak"` // a member said «poor» for the event or the task
 	Locked  bool     `json:"locked"`
-	// The members by id (Members has their names), and those of them who said «poor»: «mine oppdrag» needs them per person.
-	MemberIDs []int64 `json:"member_ids"`
-	WeakIDs   []int64 `json:"weak_member_ids"`
 }
 
-// CellText is a manual cell with free text («Gjest utenfra»).
+// CellText is a manual cell with free text («Outside guest»).
 type CellText struct {
 	Text  string `json:"text"`
 	Fills int    `json:"fills"`
@@ -254,12 +251,10 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return cells[k]
 	}
-	weakMembers := map[[3]string][]int64{} // (event, task, group): the members who have a «poor»
+	weakGroup := map[[3]string]bool{} // (event, task, group): a member has a «poor»
 	for _, c := range out.Concessions {
 		if c.Group != "" {
-			who, _ := parseID(c.Person, "p")
-			k := [3]string{c.Date, c.Task, c.Group}
-			weakMembers[k] = append(weakMembers[k], who)
+			weakGroup[[3]string{c.Date, c.Task, c.Group}] = true
 		}
 	}
 	for _, a := range out.Assignments {
@@ -271,13 +266,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	for _, g := range out.GroupAssignments {
 		id, _ := parseID(g.Group, "g")
 		c := cell(g.Date, g.Task)
-		ids := make([]int64, 0, len(g.Members))
-		for _, mem := range g.Members {
-			who, _ := parseID(mem, "p")
-			ids = append(ids, who)
-		}
-		weak := weakMembers[[3]string{g.Date, g.Task, g.Group}]
-		c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(g.Group), Members: memberNames(g.Members), Fills: g.Fills, Weak: len(weak) > 0, MemberIDs: ids, WeakIDs: nonNilIDs(weak)})
+		c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(g.Group), Members: memberNames(g.Members), Fills: g.Fills, Weak: weakGroup[[3]string{g.Date, g.Task, g.Group}]})
 	}
 	for _, m := range out.Manual {
 		c := cell(m.Date, m.Task)
@@ -288,14 +277,11 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		if m.Group != "" {
 			id, _ := parseID(m.Group, "g")
 			var members []string
-			ids := []int64{}
 			for _, mem := range groups[m.Group].Members {
 				members = append(members, personName(pid(mem)))
-				ids = append(ids, mem)
 			}
 			sort.Strings(members)
-			weak := weakMembers[[3]string{m.Date, m.Task, m.Group}]
-			c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(m.Group), Members: members, Fills: fills, Weak: len(weak) > 0, Locked: true, MemberIDs: ids, WeakIDs: nonNilIDs(weak)})
+			c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(m.Group), Members: members, Fills: fills, Weak: weakGroup[[3]string{m.Date, m.Task, m.Group}], Locked: true})
 		} else {
 			c.texts = append(c.texts, CellText{Text: m.Label, Fills: fills})
 		}
@@ -390,12 +376,6 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	return v, nil
 }
 
-func nonNilIDs(x []int64) []int64 {
-	if x == nil {
-		return []int64{}
-	}
-	return x
-}
 func nonNil(x []CellPerson) []CellPerson {
 	if x == nil {
 		return []CellPerson{}

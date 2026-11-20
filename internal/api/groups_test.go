@@ -16,7 +16,8 @@ func TestGroupsOverHTTP(t *testing.T) {
 	var sound, lydB, sang store.Task
 	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&sound)
 	e.mustDo(201, "POST", "/api/orgs/org-b/tasks", map[string]any{"name": "Sound"}).json(&lydB)
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Singing", "planned": false}).json(&sang)
+	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Singing"}).json(&sang)
+	e.mustDo(200, "PATCH", "/api/orgs/org-a/tasks/"+itoa(sang.ID), map[string]any{"planned": false})
 
 	var g store.Group
 	e.mustDo(201, "POST", "/api/orgs/org-a/groups", map[string]string{"name": "Choir"}).json(&g)

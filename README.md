@@ -46,10 +46,9 @@ page says if a rule was broken (it should never be).
 
 **Everyone answers in the same table.** Under *Availability* each event has a count of the answers, and each person a row. Click
 a cell for ✓ *yes*, again for ? *maybe*, again for ✗ *no*, and once more to clear it; an empty cell is not answered and counts as
-neutral. Each person has a link of their own that opens the table with their row marked.
+neutral.
 
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
-![The table opened from a personal link, with the person's row marked](docs/img/13-personal-link.png)
 
 **It says why.** Click a place in the draft and you see what is set by hand and what came from the planner, can set a place by
 hand, and can say that the planner picks only from some people (*their own sound engineer*, without any special rule). When a
@@ -59,11 +58,10 @@ Weak spots the planner had to accept are listed as *compromises*.
 ![A place in the draft: why it is not filled, setting it by hand, and whom the planner picks from](docs/img/10-place.png)
 
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
-and whether the planner fills it. The name of a person opens the tasks they take part in and how willingly, and their personal
-link. A date opens the event's times, details and description.
+and whether the planner fills it. The name of a person opens the tasks they take part in and how willingly. A date opens the event's times, details and description.
 
 ![A task: what it can be combined with](docs/img/06-task.png)
-![A person: the tasks they take part in, and their personal link](docs/img/09-person.png)
+![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)
 ![An event: times, details and description](docs/img/07-event.png)
 
 **Events are easy to copy.** ⧉ on an event copies it to other dates, or every week until a date, with the times, the details,
@@ -79,7 +77,7 @@ proposal are configuration per plan, under ⚙ *Plan settings*, with defaults th
 ![The distribution: turns against the fair share](docs/img/12-distribution.png)
 
 **Every draft is kept, and one is the current plan.** Try again and compare. **Pin** a draft as the plan's current plan: the
-page opens with it, also from a personal link; with nothing pinned it opens with the newest. The earlier drafts are under ⚙,
+page opens with it; with nothing pinned it opens with the newest. The earlier drafts are under ⚙,
 with the weighting and the plan's name.
 
 ![Plan settings: the name, the weighting and the earlier drafts](docs/img/11-settings.png)
@@ -103,8 +101,7 @@ server starts when you make a draft. **No login**: read the warning below before
 
 1. An **organisation** holds everything that is shared: people, tasks, groups and which tasks can be combined.
 2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**, shown as one table.
-3. Everyone answers in the plan's table. Each person's link (`/o/<organisation>/p/<plan>/me/<id>`; send it to them) opens the
-   table with their row marked.
+3. Everyone answers in the plan's table (there are no user accounts: a person is a row, and anyone with the address can fill it in).
 4. **Make a draft** runs the planner. Set places by hand, lock names, choose whom the planner picks from, change the weighting,
    and try again.
 5. Each draft is kept. **Pin** the one you want to use.

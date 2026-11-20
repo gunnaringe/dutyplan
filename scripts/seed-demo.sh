@@ -13,14 +13,16 @@ api() { # api <method> <path> <json>
 }
 trap 'rm -f /tmp/seed-body.$$' EXIT
 
-code=$(api POST /api/orgs '{"name":"Test","slug":"test"}' || true)
+code=$(api POST /api/orgs '{"name":"Test"}' || true)
 case "$code" in
   201|409) ;;  # 409: exists already
   000|"") echo "seed: cannot reach $url (start the app first: mise run app:run)"; exit 1 ;;
   *) echo "seed: the organisation was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1 ;;
 esac
-code=$(api POST /api/orgs/test/tasks/bulk '{"names":"Singing\nSound\nVideo"}')
-[ "$code" = 201 ] || { echo "seed: the tasks were refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
+for name in Singing Sound Video; do
+  code=$(api POST /api/orgs/test/tasks "{\"name\":\"$name\"}")
+  case "$code" in 201|409) ;; *) echo "seed: the task $name was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1 ;; esac
+done
 
 tasks=$(curl -s "$url/api/orgs/test/tasks")
 id() { printf '%s' "$tasks" | sed -n "s/.*\"id\":\([0-9]*\),\"name\":\"$1\".*/\1/p"; }
@@ -42,8 +44,17 @@ done
 code=$(api POST /api/orgs/test/plans '{"name":"Autumn 2026"}')
 case "$code" in 201|409) ;; *) echo "seed: the plan was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1 ;; esac
 if [ "$(curl -s "$url/api/orgs/test/plans/autumn-2026/events")" = "[]" ]; then
-  code=$(api POST /api/orgs/test/plans/autumn-2026/events "{\"date\":\"2026-08-02\",\"until\":\"2026-12-20\",\"places\":{\"$singing\":1,\"$sound\":1,\"$video\":1}}")
-  [ "$code" = 201 ] || { echo "seed: the events were refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
+  # the first Sunday with one place for each task, then copies of it every week
+  events=/api/orgs/test/plans/autumn-2026/events
+  code=$(api POST $events '{"date":"2026-08-02"}')
+  [ "$code" = 201 ] || { echo "seed: the event was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
+  first=$(sed -n 's/^\[{"id":\([0-9]*\),.*/\1/p' /tmp/seed-body.$$)
+  for task in "$singing" "$sound" "$video"; do
+    code=$(api PUT "$events/$first/places/$task" '{"slots":1}')
+    [ "$code" = 204 ] || { echo "seed: the places were refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
+  done
+  code=$(api POST "$events/$first/copy" '{"dates":["2026-08-09"],"until":"2026-12-20","times":true,"places":true}')
+  [ "$code" = 201 ] || { echo "seed: the copies were refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
 fi
 code=$(api POST /api/orgs/test/plans/autumn-2026/fields '{"name":"Note"}')
 case "$code" in 201|409) ;; *) echo "seed: the details row was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1 ;; esac

@@ -7,10 +7,8 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// prefsRoutes: what a person answers about themselves. No login: the page is reached by the person's id, and the
-// answers go through the store like everything else.
+// prefsRoutes: the tasks a person takes part in, and their answers per event (set in the plan's table).
 func (s *server) prefsRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/people/{id}/me", s.getMe)
 	mux.HandleFunc("PUT /api/orgs/{org}/people/{id}/tasks/{task}", s.setPersonTask)
 	mux.HandleFunc("DELETE /api/orgs/{org}/people/{id}/tasks/{task}", s.removePersonTask)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/people/{id}/availability", s.setAvailability)
@@ -27,19 +25,6 @@ func (s *server) personAndTask(w http.ResponseWriter, r *http.Request) (int64, i
 		return 0, 0, false
 	}
 	return pid, tid, true
-}
-
-func (s *server) getMe(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	me, err := s.st.GetMe(r.Context(), r.PathValue("org"), r.PathValue("plan"), id)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, me)
 }
 
 func (s *server) setPersonTask(w http.ResponseWriter, r *http.Request) {

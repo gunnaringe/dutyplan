@@ -52,7 +52,7 @@ func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 	}
 }
 
-func TestEventsOnTheSameDateAreShownInTimeOrderInThePlanAndInMine(t *testing.T) {
+func TestEventsOnTheSameDateAreShownInTimeOrderInThePlan(t *testing.T) {
 	w := newWorld(t, "Club")
 	// a second event on the first date, made later but earlier in the day, and the first one gets a later time
 	late := w.events[0]
@@ -96,22 +96,5 @@ func TestEventsOnTheSameDateAreShownInTimeOrderInThePlanAndInMine(t *testing.T) 
 		if a.Date > b.Date {
 			t.Errorf("dates out of order: %s then %s", a.Date, b.Date)
 		}
-	}
-	// «My assignments» carries the time of the event
-	m, err := s.Mine(ctx, w.org.Slug, w.plan.Slug, w.people["Aslaug"].ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var seen bool
-	for _, a := range m.Assignments {
-		if a.EventID == late.ID {
-			seen = true
-			if a.StartTime != "19:00" {
-				t.Errorf("the assignment carries the start time: %+v", a)
-			}
-		}
-	}
-	if !seen {
-		t.Errorf("Aslaug has no assignment on the late event: %+v", m.Assignments)
 	}
 }

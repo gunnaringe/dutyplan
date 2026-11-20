@@ -17,12 +17,15 @@ func addTimed(t *testing.T, s *Store, o Org, p Plan, date, start, end string) Ev
 
 func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
 	s, o, p := setup(t)
-	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: " 11:00 ", EndTime: "12:30",
-		Description: "  Bring the banner.\r\nDoors open at 10:30.\tThanks!  "})
+	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: " 11:00 ", EndTime: "12:30"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := evs[0]
+	raw := "  Bring the banner.\r\nDoors open at 10:30.\tThanks!  "
+	e, err := s.UpdateEvent(ctx, o.Slug, p.Slug, evs[0].ID, EventPatch{Description: &raw})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if e.StartTime != "11:00" || e.EndTime != "12:30" || e.Description != "Bring the banner.\nDoors open at 10:30.\tThanks!" {
 		t.Errorf("added: %+v", e)
 	}
@@ -47,8 +50,15 @@ func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
 
 func TestRefusedTimesAndDescriptions(t *testing.T) {
 	s, o, p := setup(t)
+	// times come with a new event; a description is set on an existing one (in another plan, so this one stays empty)
+	other, _ := s.CreatePlan(ctx, o.Slug, "Other")
+	base, _ := s.AddEvent(ctx, o.Slug, other.Slug, "2026-08-02")
 	add := func(start, end, desc string) error {
-		_, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: start, EndTime: end, Description: desc})
+		if desc != "" {
+			_, err := s.UpdateEvent(ctx, o.Slug, other.Slug, base.ID, EventPatch{Description: &desc})
+			return err
+		}
+		_, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: start, EndTime: end})
 		return err
 	}
 	for name, c := range map[string]struct{ start, end, desc, code string }{
@@ -153,17 +163,8 @@ func TestEventsOfADateComeInTimeOrderAndTheRestInCreationOrder(t *testing.T) {
 	if got := ids(evs); !equalIDs(got, want) {
 		t.Errorf("list: %v, want %v", got, want)
 	}
-	person, _ := s.CreatePerson(ctx, o.Slug, "Kari Test")
-	me, err := s.GetMe(ctx, o.Slug, p.Slug, person.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var meIDs []int64
-	for _, e := range me.Events {
-		meIDs = append(meIDs, e.EventID)
-	}
-	if !equalIDs(meIDs, want) || me.Events[1].StartTime != "09:30" || me.Events[1].EndTime != "10:30" {
-		t.Errorf("a person's page: %v %+v", meIDs, me.Events[1])
+	if evs[1].StartTime != "09:30" || evs[1].EndTime != "10:30" {
+		t.Errorf("the times come with the list: %+v", evs[1])
 	}
 	// the planner gets the events in the order of date and creation, so setting a time never changes the input of a run
 	data, err := s.GetPlanningData(ctx, o.Slug, p.Slug)

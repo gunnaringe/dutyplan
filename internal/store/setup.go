@@ -53,12 +53,13 @@ type Task struct {
 	Planned bool   `json:"planned"`
 }
 
-func (s *Store) CreateTask(ctx context.Context, orgSlug, name string, planned bool) (Task, error) {
+// CreateTask adds a task the planner distributes (switch that off with UpdateTask).
+func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Task{}, err
 	}
-	t := Task{Name: name, Planned: planned}
+	t := Task{Name: name, Planned: true}
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -75,50 +76,6 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string, planned bo
 		return nil
 	})
 	return t, err
-}
-
-// CreateTasks adds many tasks in one go (pasted from a sheet, one name per line). Names that already exist are
-// skipped and reported; blank lines are ignored.
-func (s *Store) CreateTasks(ctx context.Context, orgSlug, lines string, planned bool) (created []Task, skipped []string, err error) {
-	var names []string
-	seen := map[string]bool{}
-	for _, l := range strings.Split(lines, "\n") {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		n, err := cleanName(l, "name")
-		if err != nil {
-			return nil, nil, err
-		}
-		if !seen[strings.ToLower(n)] {
-			seen[strings.ToLower(n)] = true
-			names = append(names, n)
-		}
-	}
-	if len(names) == 0 || len(names) > 200 {
-		return nil, nil, Invalid("tasks_bulk_count", nil, "give 1-200 task names, one per line")
-	}
-	err = s.write(ctx, func(tx *sql.Tx) error {
-		created, skipped = nil, nil
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		for _, n := range names {
-			res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (org_id, name) DO NOTHING`, oid, n, planned, s.stamp())
-			if err != nil {
-				return err
-			}
-			if k, _ := res.RowsAffected(); k == 0 {
-				skipped = append(skipped, n)
-				continue
-			}
-			id, _ := res.LastInsertId()
-			created = append(created, Task{ID: id, Name: n, Planned: planned})
-		}
-		return nil
-	})
-	return created, skipped, err
 }
 
 func (s *Store) ListTasks(ctx context.Context, orgSlug string) ([]Task, error) {

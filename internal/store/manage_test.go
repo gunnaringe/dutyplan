@@ -34,9 +34,9 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		r.people = append(r.people, p)
 	}
 	var err error
-	r.sound, err = s.CreateTask(ctx, slug, "Sound", true)
+	r.sound, err = s.CreateTask(ctx, slug, "Sound")
 	must(err)
-	r.camera, err = s.CreateTask(ctx, slug, "Camera", true)
+	r.camera, err = s.CreateTask(ctx, slug, "Camera")
 	must(err)
 	must(s.SetCombination(ctx, slug, r.sound.ID, r.camera.ID, "cannot"))
 	r.group, err = s.CreateGroup(ctx, slug, "Choir")
@@ -47,25 +47,25 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	must(err)
 	must(s.SetPersonTask(ctx, slug, r.people[0].ID, r.sound.ID, "good"))
 
-	r.plan, err = s.CreatePlan(ctx, slug, planName, "")
+	r.plan, err = s.CreatePlan(ctx, slug, planName)
 	must(err)
-	r.other, err = s.CreatePlan(ctx, slug, "Other plan", "")
+	r.other, err = s.CreatePlan(ctx, slug, "Other plan")
 	must(err)
 	for i, p := range []Plan{r.plan, r.other} {
 		var evs []Event
 		for _, d := range []string{"2026-08-09", "2026-08-16"} {
-			ev, err := s.AddEvents(ctx, slug, p.Slug, NewEvents{Date: d, Places: map[int64]int{r.sound.ID: 1, r.camera.ID: 1}})
+			ev, err := addWithPlaces(ctx, s, slug, p.Slug, NewEvents{Date: d}, map[int64]int{r.sound.ID: 1, r.camera.ID: 1})
 			must(err)
 			evs = append(evs, ev[0])
 		}
 		must(s.SetAvailability(ctx, slug, p.Slug, r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
-		_, _, err = s.AddCells(ctx, slug, p.Slug, NewCell{EventIDs: []int64{evs[0].ID}, TaskID: r.sound.ID, PersonID: r.people[1].ID})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[0].ID, TaskID: r.sound.ID, PersonID: r.people[1].ID})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
 		must(err)
-		must(s.SetPool(ctx, slug, p.Slug, []int64{evs[0].ID}, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
+		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
 		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, 2))
 		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
@@ -188,9 +188,9 @@ func TestRenamingChangesTheNameAndKeepsTheAddress(t *testing.T) {
 	if got, _ := s.GetOrg(ctx, b.org.Slug); got.Name != "Club B" {
 		t.Errorf("renaming A changed B: %+v", got)
 	}
-	// the personal links and the people stay the same
-	if me, err := s.GetMe(ctx, a.org.Slug, a.plan.Slug, a.people[0].ID); err != nil || me.Person.Name != "Kari Test" {
-		t.Errorf("a personal page after the rename: %v", err)
+	// the people stay the same
+	if people, err := s.ListPeople(ctx, a.org.Slug); err != nil || len(people) == 0 || people[0].ID != a.people[0].ID {
+		t.Errorf("the people after the rename: %+v %v", people, err)
 	}
 
 	for name, err := range map[string]error{
@@ -288,7 +288,7 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 		t.Errorf("the other organisation's plan with the same address: %+v %v", got, err)
 	}
 	// the address can be used again, and the new plan starts empty
-	again, err := s.CreatePlan(ctx, a.org.Slug, "Autumn 2026", "")
+	again, err := s.CreatePlan(ctx, a.org.Slug, "Autumn 2026")
 	if err != nil || again.Slug != a.plan.Slug {
 		t.Fatalf("a new plan on the same address: %+v %v", again, err)
 	}
@@ -382,7 +382,7 @@ func TestDeletingAnOrganisationNeedsNoPlansAndTheAddressAndTakesAllOfIt(t *testi
 		t.Errorf("organisations: %+v", orgs)
 	}
 	// the address is free again
-	if again, err := s.CreateOrg(ctx, "Club A", ""); err != nil || again.Slug != a.org.Slug {
+	if again, err := s.CreateOrg(ctx, "Club A"); err != nil || again.Slug != a.org.Slug {
 		t.Errorf("a new organisation on the same address: %+v %v", again, err)
 	}
 }

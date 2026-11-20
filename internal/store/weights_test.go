@@ -37,11 +37,11 @@ func weightsWorld(t *testing.T) (*Store, Org, Plan, Plan) {
 	t.Helper()
 	s := open(t)
 	o := mustOrg(t, s, "Club")
-	p1, err := s.CreatePlan(ctx, o.Slug, "Autumn 2026", "")
+	p1, err := s.CreatePlan(ctx, o.Slug, "Autumn 2026")
 	if err != nil {
 		t.Fatal(err)
 	}
-	p2, err := s.CreatePlan(ctx, o.Slug, "Spring 2027", "")
+	p2, err := s.CreatePlan(ctx, o.Slug, "Spring 2027")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func TestWeightRefusals(t *testing.T) {
 func TestWeightsBelongToTheirPlanAndOrganisation(t *testing.T) {
 	s, a, pa, _ := weightsWorld(t)
 	b := mustOrg(t, s, "Annen")
-	pb, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026", "") // the same plan slug in another organisation
+	pb, _ := s.CreatePlan(ctx, b.Slug, "Autumn 2026") // the same plan slug in another organisation
 	if pa.Slug != pb.Slug {
 		t.Fatal("test needs equal slugs")
 	}

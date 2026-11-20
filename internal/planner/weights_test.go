@@ -113,16 +113,16 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	org, err := st.CreateOrg(ctx, "Club", "")
+	org, err := st.CreateOrg(ctx, "Club")
 	must(err)
-	camera, err := st.CreateTask(ctx, org.Slug, "Camera", true)
+	camera, err := st.CreateTask(ctx, org.Slug, "Camera")
 	must(err)
-	sound, err := st.CreateTask(ctx, org.Slug, "Sound", true)
+	sound, err := st.CreateTask(ctx, org.Slug, "Sound")
 	must(err)
-	plan, err := st.CreatePlan(ctx, org.Slug, "Autumn 2026", "")
+	plan, err := st.CreatePlan(ctx, org.Slug, "Autumn 2026")
 	must(err)
 	for _, d := range []string{"2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"} {
-		_, err = st.AddEvents(ctx, org.Slug, plan.Slug, store.NewEvents{Date: d, Places: map[int64]int{camera.ID: 1, sound.ID: 1}})
+		_, err = addWithPlaces(st, org.Slug, plan.Slug, store.NewEvents{Date: d}, map[int64]int{camera.ID: 1, sound.ID: 1})
 		must(err)
 	}
 	for name, tasks := range map[string][]store.Task{"a": {camera}, "b": {camera, sound}, "c": {sound}} {
