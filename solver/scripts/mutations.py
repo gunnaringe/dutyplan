@@ -53,6 +53,10 @@ PY_MUTATIONS: list[tuple[str, str, str]] = [
 
 # The Go app: (name, file from the repo root, pattern, replacement). The tenant guards first: they matter most not to lose.
 GO_MUTATIONS: list[tuple[str, str, str, str]] = [
+    # the page's assets are versioned, so no cache can pair a new page with an old script (2026-11-20)
+    ("the page links its assets without a version", "internal/api/api.go", 'page = strings.ReplaceAll(page, `"/`+a+`"`, `"/`+a+`?v=`+s.version[a]+`"`)', "page, _ = strings.Clone(page), a"),
+    ("an asset with an old version may be cached", "internal/api/api.go", 'if v := r.URL.Query().Get("v"); v != "" && v == s.version[name] {', 'if v := r.URL.Query().Get("v"); v != "" {'),
+    ("an asset without a version may be cached", "internal/api/api.go", 'if v := r.URL.Query().Get("v"); v != "" && v == s.version[name] {', 'if v := r.URL.Query().Get("v"); v == s.version[name] {'),
     ("tenant: a person is updated without the org guard", "internal/store/store.go", "FROM person WHERE id = ? AND org_id = ?`, id, oid)", "FROM person WHERE id = ? AND ? > 0`, id, oid)"),
     ("tenant: a plan is fetched without the org", "internal/store/store.go", "WHERE o.slug = ? AND p.slug = ?", "WHERE ? != '' AND p.slug = ?"),
     ("tenant: people are listed without the org", "internal/store/store.go", "WHERE p.org_id = ? ORDER BY x.position", "WHERE ? > 0 ORDER BY x.position"),
