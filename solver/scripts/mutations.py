@@ -54,13 +54,16 @@ PY_MUTATIONS: list[tuple[str, str, str]] = [
 # The Go app: (name, file from the repo root, pattern, replacement). The tenant guards first: they matter most not to lose.
 GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     # the stream: every write that went through, and the end of a run, is announced to the organisation's open pages (2026-11-20)
-    ("live: a write is not announced", "internal/api/stream.go", "s.hub.publish(org, r.Header.Get(clientHeader))", "_ = org"),
+    ("live: a write is not announced", "internal/api/stream.go", "s.hub.publish(org, change{Origin: r.Header.Get(clientHeader), Method: r.Method, Path: strings.TrimPrefix(r.URL.Path, \"/api\")})", "_ = org"),
+    ("live: the path of a change is dropped", "internal/api/stream.go", "Path: strings.TrimPrefix(r.URL.Path, \"/api\")})", "Path: \"\"})"),
+    ("live: two different changes keep one's path", "internal/api/stream.go", "m.Method, m.Path = \"\", \"\"", "_ = old"),
+    ("live: the end of a run names no plan", "internal/api/api.go", "Path: \"/orgs/\" + org + \"/plans/\" + plan + \"/runs\"", "Path: \"/orgs/\" + org + \"/plans/\" + \"/runs\""),
     ("live: a refused write is announced", "internal/api/stream.go", "if sw.status != 0 && sw.status < 400 {", "if true {"),
     ("live: reading is announced", "internal/api/stream.go", "if org == \"\" || r.Method == http.MethodGet || r.Method == http.MethodHead {", "if org == \"\" {"),
     ("live: a stream hears another organisation", "internal/api/stream.go", "ch, cancel, ok := s.hub.subscribe(org)", "ch, cancel, ok := s.hub.subscribe(\"org-a\")"),
-    ("live: the origin of a change is dropped", "internal/api/stream.go", "c := change{Origin: origin}", "c := change{}"),
-    ("live: two tabs' changes keep the first's origin", "internal/api/stream.go", "c.Origin = \"\"", "_ = old"),
-    ("live: the end of a run is not announced", "internal/planner/service.go", "fn(orgSlug)", "_ = fn"),
+    ("live: the origin of a change is dropped", "internal/api/stream.go", "change{Origin: r.Header.Get(clientHeader),", "change{Origin: \"\","),
+    ("live: two tabs' changes keep the first's origin", "internal/api/stream.go", "m.Origin = \"\"", "_ = old"),
+    ("live: the end of a run is not announced", "internal/planner/service.go", "fn(orgSlug, planSlug)", "_ = fn"),
     ("live: the streams stay open at shutdown", "internal/api/stream.go", "close(h.done)", "_ = h.done"),
     ("live: the server's write timeout cuts the stream", "internal/api/stream.go", "_ = rc.SetWriteDeadline(time.Time{})", "_ = rc"),
     ("live: the stream is never pinged", "internal/api/stream.go", "if !send(\": ping\\n\\n\") {", "if false {"),

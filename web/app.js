@@ -58,8 +58,68 @@ async function api(method, path, body) {
   if (method !== 'GET') headers['X-Dutyplan-Client'] = CLIENT;  // the stream tells this tab's own changes apart
   const res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
+  if (method !== 'GET') forget(method, path.split('?')[0]);  // also when refused: what is shown may be out of date
   if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { kind: data.error, apiCode: data.code, params: data.params, status: res.status });
   return data;
+}
+
+// ---- what has been fetched ------------------------------------------------------------------------------------------
+// The page keeps what it has fetched (GET path -> the answer), and a redraw takes it from here. A write (this tab's, or one
+// the stream announces) forgets only what it can have changed, so a click fetches one or two things again, not everything.
+const fetched = new Map();
+function get(path) {
+  if (!fetched.has(path)) {
+    const p = api('GET', path);
+    fetched.set(path, p);
+    p.catch(() => { if (fetched.get(path) === p) fetched.delete(path); });
+  }
+  return fetched.get(path);
+}
+// What a fetched path holds: '/orgs' → orgs, '/orgs/x' → org, '/orgs/x/people' → people, '/orgs/x/plans/y' → plan,
+// '/orgs/x/plans/y/runs/7' → runs, '/health' → health.
+function kindOf(path) {
+  const p = path.split('/').filter(Boolean);
+  if (p[0] !== 'orgs') return p[0];
+  if (p.length === 1) return 'orgs';
+  if (p.length === 2) return 'org';
+  if (p[2] === 'plans' && p.length >= 4) return p.length === 4 ? 'plan' : p[4];
+  return p[2];
+}
+// What a write can have changed, as kinds of fetched paths. null = anything (when unsure, everything is fetched again).
+// Every change to the data can make a draft out of date, so the runs are always fetched again (they say «stale»).
+function changedBy(method, path) {
+  const p = path.split('/').filter(Boolean);
+  if (p[0] !== 'orgs' || p.length < 2) return p[0] === 'orgs' ? ['orgs'] : null;
+  const rest = p.slice(2);
+  const with_ = (...kinds) => ['runs', ...kinds];
+  if (!rest.length) return null;  // the organisation renamed or deleted
+  if (rest[0] === 'plans') {
+    if (rest.length === 1) return ['plans'];
+    if (rest.length === 2) return method === 'DELETE' ? null : ['plan', 'plans'];  // a new plan may get the address again
+    const x = rest[2];
+    if (x === 'events') {
+      if (rest.includes('places')) return with_('places');
+      if (rest.includes('fields')) return ['fields'];
+      return with_('events', 'places', 'fields', 'cells', 'pools', 'answers');
+    }
+    if (x === 'tasks') return with_('places');  // Fill row
+    if (x === 'people') return with_('answers');  // availability
+    if (['fields', 'cells', 'pools', 'weights', 'runs'].includes(x)) return x === 'fields' ? ['fields'] : with_(x);
+    return null;
+  }
+  if (rest[0] === 'people') return rest[2] === 'tasks' ? with_('answers') : with_('people');
+  if (rest[0] === 'combinations') return with_('combinations');
+  if (rest[0] === 'sections') return ['sections', 'people'];
+  return null;  // tasks and anything else: everything
+}
+// forget drops what a write can have changed; with no path, everything.
+function forget(method, path) {
+  const kinds = path ? changedBy(method, path) : null;
+  const org = path && path.startsWith('/orgs/') ? '/orgs/' + path.split('/')[2] : '';
+  for (const key of [...fetched.keys()]) {
+    if (!kinds) { if (!org || key.startsWith(org + '/') || key === org || key === '/orgs') fetched.delete(key); continue; }
+    if (kinds.includes(kindOf(key)) && (key === '/orgs' || !org || key === org || key.startsWith(org + '/'))) fetched.delete(key);
+  }
 }
 
 // The text for a refused request, in the page's language: from the error code and its parameters when the server sent
@@ -133,11 +193,11 @@ function route() {
 }
 
 async function renderHeader(r) {
-  const orgs = await api('GET', '/orgs');
+  const orgs = await get('/orgs');
   const select = h('select', { 'aria-label': t('header.org'), onchange: (e) => go(e.target.value === '' ? '/?switch' : '/o/' + enc(e.target.value)) },
     h('option', { value: '' }, r.org ? t('header.switch_org') : t('header.choose_org')),
     orgs.map((o) => h('option', { value: o.slug, selected: o.slug === r.org }, o.name)));
-  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); render(); } },
+  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); fetched.clear(); render(); } },
     LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
   document.getElementById('top').replaceChildren(
     link('/?switch', t('brand'), { class: 'brand' }),
@@ -238,7 +298,7 @@ function enterMovesOn(input) {
 // ---- the start page and the organisation ----------------------------------------------------------------------------
 
 async function pageHome() {
-  const orgs = await api('GET', '/orgs');
+  const orgs = await get('/orgs');
   const last = store.get('org');
   if (last && !location.search.includes('switch') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
   const name = h('input', { type: 'text', placeholder: t('home.name_placeholder'), maxlength: '80', required: true, 'aria-label': t('home.name_placeholder') });
@@ -258,7 +318,7 @@ async function pageHome() {
 // organisation, so every plan has them.
 async function pageOrg(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const plans = await api('GET', base + '/plans');
+  const plans = await get(base + '/plans');
 
   // Rename (the address stays) or delete. Deleting needs the organisation to have no plans, and its name typed in.
   function orgDialog() {
@@ -441,14 +501,14 @@ async function pagePlan(r, org, people) {
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections] = await Promise.all([
-    api('GET', pbase), api('GET', epath), api('GET', base + '/tasks'), api('GET', base + '/combinations'),
-    api('GET', pbase + '/fields'), api('GET', pbase + '/answers'), api('GET', pbase + '/places'), api('GET', pbase + '/cells'),
-    api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', '/health'), api('GET', pbase + '/runs'), api('GET', base + '/sections')]);
+    get(pbase), get(epath), get(base + '/tasks'), get(base + '/combinations'),
+    get(pbase + '/fields'), get(pbase + '/answers'), get(pbase + '/places'), get(pbase + '/cells'),
+    get(pbase + '/pools'), get(pbase + '/weights'), get('/health'), get(pbase + '/runs'), get(base + '/sections')]);
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest.
   const pinned = runs.find((x) => x.pinned);
   const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : pinned ? pinned.id : runs.length ? runs[0].id : null;
-  const view = shownId ? await api('GET', `${pbase}/runs/${shownId}`) : null;
+  const view = shownId ? await get(`${pbase}/runs/${shownId}`) : null;
   const done = !!view && view.run.status === 'done';
 
   const label = (ev) => fmtShortDate(ev.date) + (ev.start_time ? ' ' + ev.start_time : '');
@@ -505,7 +565,7 @@ async function pagePlan(r, org, people) {
     try {
       const latest = await api('GET', runsPath + '/latest');
       if (latest.run.status === 'running') setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000);  // the stream says when it ends
-      else { planState.runId = latest.run.id; render(); }
+      else { planState.runId = latest.run.id; forget('RUN', runsPath); render(); }
     } catch (e) { say(errorText(e), 'err'); }
   };
   {
@@ -1156,7 +1216,7 @@ async function render() {
     let people = [];
     let org = null;
     if (r.org) {
-      [org, people] = await Promise.all([api('GET', '/orgs/' + enc(r.org)), api('GET', `/orgs/${enc(r.org)}/people`)]);
+      [org, people] = await Promise.all([get('/orgs/' + enc(r.org)), get(`/orgs/${enc(r.org)}/people`)]);
       store.set('org', r.org);
     }
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });
@@ -1190,7 +1250,7 @@ let live = null;  // { org, es }
 let liveTimer = 0;
 function follow(org) {
   if (live && live.org === org) return;
-  if (live) live.es.close();
+  if (live) { live.es.close(); fetched.clear(); }  // nothing told this tab about the other organisation's changes
   live = null;
   if (!org || typeof EventSource === 'undefined') return;
   const es = new EventSource(`/api/orgs/${enc(org)}/stream`);
@@ -1199,7 +1259,9 @@ function follow(org) {
   es.addEventListener('message', (e) => {
     let c = {};
     try { c = JSON.parse(e.data); } catch (err) { /* a change all the same */ }
-    if (c.origin !== CLIENT) liveRefresh();
+    if (c.origin === CLIENT) return;  // this tab's own write: it has forgotten and redrawn already
+    forget(c.method || '', c.path || '');
+    liveRefresh();
   });
   es.addEventListener('error', () => {
     broken = true;
@@ -1207,12 +1269,12 @@ function follow(org) {
     if (++fails < 5 || !live || live.es !== es) return;
     es.close();
     live = null;
-    const retry = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', onShow); if (!live) { follow(org); liveRefresh(); } };
+    const retry = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', onShow); if (!live) { fetched.clear(); follow(org); liveRefresh(); } };
     const onShow = () => { if (document.visibilityState === 'visible') retry(); };
     const timer = setTimeout(retry, 60000);
     document.addEventListener('visibilitychange', onShow);
   });
-  es.addEventListener('open', () => { if (broken) liveRefresh(); broken = false; fails = 0; });  // back after a break: changes may be missed
+  es.addEventListener('open', () => { if (broken) { fetched.clear(); liveRefresh(); } broken = false; fails = 0; });  // back after a break: changes may be missed
   live = { org, es };
 }
 const typing = () => {

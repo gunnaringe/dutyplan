@@ -264,6 +264,21 @@ const { spawn } = require('child_process');
       ok((await dialog.locator('input[type=checkbox]').count()) === 0, 'the person dialog has no «can be proposed» box any more');
       await closeDialog();
     }
+    // A change in a dialog fetches again only what it can have changed: a person's task → their answers and the drafts.
+    {
+      const gets = [];
+      const seen = (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) gets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); };
+      await page.click('button[aria-label="Open Kari Test"]');
+      const btn = () => dialog.locator('button.cyc[aria-label^="Video for Kari Test:"]');
+      const was = await btn().getAttribute('data-level');
+      await reopens(() => btn().click(), 'the person dialog is drawn again');  // (what earlier changes left out of date is fetched here)
+      page.on('request', seen);
+      await reopens(() => btn().click(), 'the person dialog is drawn again');
+      page.off('request', seen);
+      ok(gets.length > 0 && gets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'a task level fetches only the answers and the drafts again: ' + gets.join(', '));
+      while ((await btn().getAttribute('data-level')) !== was) await reopens(() => btn().click(), 'and back');
+      await closeDialog();
+    }
     // ⓘ: the explanation in a dialog, not on the page
     await page.click('button[aria-label="About Availability"]');
     ok((await dialog.innerText()).includes('One row per person'), 'the ⓘ explains the section');
@@ -282,9 +297,12 @@ const { spawn } = require('child_process');
       await grid.evaluate((g) => { g.scrollLeft = 60; });
       const before = await grid.evaluate((g) => g.scrollLeft);
       ok(before > 0, 'the table scrolls sideways in the test');
+      const otherGets = [];
+      other.on('request', (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) otherGets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); });
       await answer('Jon Demo', ev[2]).click();
       await until(other, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Jon Demo, ' + ev[2], 'the other tab shows the answer by itself');
       ok(await other.evaluate(() => window.notReloaded === true), 'without a reload');
+      ok(otherGets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'the other tab fetches only the answers and the drafts: ' + otherGets.join(', '));
       ok((await grid.evaluate((g) => g.scrollLeft)) === before, 'and stays where it was sideways');
       await otherContext.close();
     }

@@ -97,10 +97,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **The weights are configuration per plan** (2026-11-09): `store.WeightSpecs` (default and limits), stored as what differs from the default, and part of the hash. The defaults must be copies of
   the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/app.js`.
 
-- **Live and without flicker** (2026-11-20, the user's choice: "no loading or flickering", "webhooks for all state"). Every write that went
+- **Live and without flicker** (2026-11-20, the user's choice: "no loading or flickering", "webhooks for all state", where they meant WebSockets;
+  Server-Sent Events kept at their choice ("Behold, men lag mer effektivt"), since the page only needs the push). Every write that went
   through, and the end of a planning run, is announced on the organisation's stream (`GET /api/orgs/{org}/stream`, Server-Sent Events,
-  `internal/api/stream.go`; no data on it, only the origin tab from `X-Dutyplan-Client`). The page (`follow()` in `web/app.js`) then
-  fetches again and redraws in place: scroll (also sideways), focus and open dialogs are kept, a dialog's contents are swapped
+  `internal/api/stream.go`; the method and path of the write and the origin tab from `X-Dutyplan-Client`, no data). The page (`follow()` in `web/app.js`)
+  keeps what it has fetched (`get()`), forgets only what the write can have changed (`changedBy()`: a new write route needs a line there,
+  else everything is fetched again) and redraws in place: scroll (also sideways), focus and open dialogs are kept, a dialog's contents are swapped
   (`keyed()`/`reopened()`, never closed and opened again), and a redraw waits while a text field is being typed in. Clicks on answers,
   levels and ⚡ show at once and go back if the server refuses. Hosting will be behind Cloudflare: the stream pings every 25 s (its idle
   limit is 100 s) and has no write timeout; after 5 failed reconnects in a row (an expired sign-in in front) the page stops and tries again when the tab is shown or after a minute. Do not add polling or full reloads back.
@@ -132,7 +134,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   Used once so far: the group mutations, when groups were removed (2026-11-20, issue #9).
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 244 with the live stream.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 247 with the live stream.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

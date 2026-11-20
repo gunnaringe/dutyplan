@@ -40,7 +40,9 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) *
 		pl = planner.New(st, nil, 1, log)
 	}
 	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub()}
-	pl.OnFinish(func(org string) { s.hub.publish(org, "") })
+	pl.OnFinish(func(org, plan string) {
+		s.hub.publish(org, change{Method: "RUN", Path: "/orgs/" + org + "/plans/" + plan + "/runs"})
+	})
 	for _, name := range assets {
 		if static == nil {
 			break

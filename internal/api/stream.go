@@ -9,9 +9,10 @@ import (
 )
 
 // The page keeps one stream open per organisation (GET /api/orgs/{org}/stream, Server-Sent Events). After every write that
-// went through, and when a planning run ends, the stream says «something changed»; the page then fetches what it shows
-// again and redraws without a reload. The message carries only the id of the browser tab that made the change (from the
-// X-Dutyplan-Client header), so that tab, which has already redrawn, can skip it. No data goes over the stream.
+// went through, and when a planning run ends, the stream says what changed: the method and path of the write (a run's end is
+// «RUN» on the plan's runs). The page fetches again only what that write can have changed, and redraws without a reload. The
+// message also carries the id of the browser tab that made the change (from the X-Dutyplan-Client header), so that tab,
+// which has already redrawn, can skip it. No data goes over the stream.
 
 // clientHeader names the tab that sends a write. It is only an echo for the stream, never trusted for anything else.
 const clientHeader = "X-Dutyplan-Client"
@@ -22,8 +23,11 @@ var pingEvery = 25 * time.Second
 // maxStreams caps the open streams of the whole server, so open connections cannot use up its file handles.
 const maxStreams = 1000
 
+// change is one message. An empty Path means «anything may have changed» (messages that were merged).
 type change struct {
 	Origin string `json:"origin,omitempty"`
+	Method string `json:"method,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 type hub struct {
@@ -64,25 +68,28 @@ func (h *hub) subscribe(org string) (ch chan change, cancel func(), ok bool) {
 	}, true
 }
 
-// publish tells every stream on the organisation that something changed. It never blocks: a stream that has not sent the
-// last message yet keeps that one (the page fetches everything anyway), but with no origin, since the change is no longer
-// only the one tab's.
-func (h *hub) publish(org, origin string) {
+// publish tells every stream on the organisation what changed. It never blocks: when a stream has not sent the last message
+// yet, the two are merged into one that says «anything may have changed» (no path), and keeps the origin only if both
+// came from the same tab.
+func (h *hub) publish(org string, c change) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for ch := range h.subs[org] {
-		c := change{Origin: origin}
 		select {
 		case ch <- c:
 		default:
+			m := c
 			select {
 			case old := <-ch:
-				if old.Origin != origin {
-					c.Origin = ""
+				if old != c {
+					m.Method, m.Path = "", ""
+				}
+				if old.Origin != c.Origin {
+					m.Origin = ""
 				}
 			default:
 			}
-			ch <- c
+			ch <- m
 		}
 	}
 }
@@ -137,7 +144,7 @@ func (s *server) notifying(next http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
 		if sw.status != 0 && sw.status < 400 {
-			s.hub.publish(org, r.Header.Get(clientHeader))
+			s.hub.publish(org, change{Origin: r.Header.Get(clientHeader), Method: r.Method, Path: strings.TrimPrefix(r.URL.Path, "/api")})
 		}
 	})
 }

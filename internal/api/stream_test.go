@@ -72,8 +72,8 @@ func TestAWriteIsAnnouncedOnTheStreamOfItsOrganisationOnly(t *testing.T) {
 	}
 	var c change
 	m := next(a, 2*time.Second)
-	if json.Unmarshal([]byte(m), &c) != nil || c.Origin != "tab-1" {
-		t.Fatalf("org A's stream got %q, want the change with its origin", m)
+	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Origin: "tab-1", Method: "POST", Path: "/orgs/org-a/people"}) {
+		t.Fatalf("org A's stream got %q, want the change with its origin, method and path", m)
 	}
 	if m := next(b, 200*time.Millisecond); m != "" {
 		t.Fatalf("org B's stream got %q for a change in org A", m)
@@ -110,8 +110,8 @@ func TestTheEndOfARunIsAnnounced(t *testing.T) {
 	e.wait()
 	var c change
 	m := next(s, 2*time.Second)
-	if json.Unmarshal([]byte(m), &c) != nil || c.Origin != "" {
-		t.Fatalf("the end of the run: got %q, want a change without an origin", m)
+	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Method: "RUN", Path: "/orgs/" + org + "/plans/" + plan + "/runs"}) {
+		t.Fatalf("the end of the run: got %q, want the plan's runs, without an origin", m)
 	}
 	var latest struct {
 		Run struct {
@@ -148,15 +148,22 @@ func TestAPublishNeverBlocksAndMergesOrigins(t *testing.T) {
 		t.Fatal("subscribe")
 	}
 	defer cancel()
-	h.publish("o", "tab-1")
-	h.publish("o", "tab-2") // the stream has not sent the first yet
+	a := change{Origin: "tab-1", Method: "PUT", Path: "/orgs/o/plans/p/cells"}
+	b := change{Origin: "tab-2", Method: "PUT", Path: "/orgs/o/plans/p/cells"}
+	h.publish("o", a)
+	h.publish("o", b) // the stream has not sent the first yet
 	if c := <-ch; c.Origin != "" {
 		t.Fatalf("two tabs' changes kept origin %q; the first tab would skip the second's", c.Origin)
 	}
-	h.publish("o", "tab-1")
-	h.publish("o", "tab-1")
-	if c := <-ch; c.Origin != "tab-1" {
-		t.Fatalf("one tab's changes lost their origin: %q", c.Origin)
+	h.publish("o", a)
+	h.publish("o", change{Origin: "tab-1", Method: "PUT", Path: "/orgs/o/plans/p/pools"})
+	if c := <-ch; c != (change{Origin: "tab-1"}) {
+		t.Fatalf("two different changes merged into %+v, want one without a path (anything may have changed), from tab-1", c)
+	}
+	h.publish("o", a)
+	h.publish("o", a)
+	if c := <-ch; c != a {
+		t.Fatalf("the same change twice became %+v", c)
 	}
 }
 

@@ -36,7 +36,7 @@ type Service struct {
 
 	mu       sync.Mutex
 	running  bool
-	onFinish []func(org string)
+	onFinish []func(org, plan string)
 	wg       sync.WaitGroup
 }
 
@@ -50,8 +50,9 @@ func New(st *store.Store, solver Solver, workers int, log *slog.Logger) *Service
 
 func (s *Service) Available() bool { return s.solver != nil }
 
-// OnFinish calls fn with the organisation's slug each time a run has ended and its result is stored (done or failed).
-func (s *Service) OnFinish(fn func(org string)) {
+// OnFinish calls fn with the organisation's and the plan's slugs each time a run has ended and its result is stored (done or
+// failed).
+func (s *Service) OnFinish(fn func(org, plan string)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onFinish = append(s.onFinish, fn)
@@ -114,7 +115,7 @@ func (s *Service) Start(ctx context.Context, orgSlug, planSlug string, p Params)
 		fns := s.onFinish
 		s.mu.Unlock()
 		for _, fn := range fns {
-			fn(orgSlug)
+			fn(orgSlug, planSlug)
 		}
 	}()
 	return id, nil
