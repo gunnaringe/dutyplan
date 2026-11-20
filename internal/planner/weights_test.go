@@ -160,3 +160,22 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 		t.Errorf("an equal share of each task, chosen on the plan: %s", got)
 	}
 }
+
+// The order of the tasks is only where they stand in the table: moving one gives the planner the same input.
+func TestTheTaskOrderIsNotPartOfTheInput(t *testing.T) {
+	w := newWorld(t, "Club")
+	raw0, h0, _, err := BuildInput(w.data(t), Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.st.MoveTask(ctx, w.org.Slug, w.camera.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	raw1, h1, _, err := BuildInput(w.data(t), Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h0 || string(raw1) != string(raw0) {
+		t.Error("moving a task in the table changed the planner's input")
+	}
+}

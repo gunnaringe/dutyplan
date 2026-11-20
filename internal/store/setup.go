@@ -65,7 +65,11 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, err
 		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, created_at) VALUES (?, ?, ?, ?)`, oid, t.Name, t.Planned, s.stamp())
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE org_id = ?`, oid).Scan(&n); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, position, created_at) VALUES (?, ?, ?, ?, ?)`, oid, t.Name, t.Planned, n, s.stamp())
 		if isUnique(err) {
 			return exists("task", t.Name)
 		}
@@ -78,12 +82,13 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, err
 	return t, err
 }
 
+// ListTasks gives the organisation's tasks in their order (MoveTask), the same in every plan's table.
 func (s *Store) ListTasks(ctx context.Context, orgSlug string) ([]Task, error) {
 	oid, err := orgID(ctx, s.db, orgSlug)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, planned FROM task WHERE org_id = ? ORDER BY name COLLATE NOCASE`, oid)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, planned FROM task WHERE org_id = ? ORDER BY position, id`, oid)
 	if err != nil {
 		return nil, err
 	}
@@ -170,8 +175,55 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 		} else if err != nil {
 			return err
 		}
-		return nil
+		return renumberTasks(ctx, tx, oid, 0, 0)
 	})
+}
+
+// MoveTask puts a task at a position in the table (0 = the top; past the end = the bottom) and renumbers the others. The
+// order is the organisation's, so it is the same in every plan; the planner does not see it.
+func (s *Store) MoveTask(ctx context.Context, orgSlug string, id int64, position int) error {
+	if position < 0 {
+		return Invalid("position_invalid", nil, "the position must be 0 or more")
+	}
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		if err := inOrg(ctx, tx, "task", oid, id); err != nil {
+			return err
+		}
+		return renumberTasks(ctx, tx, oid, id, position)
+	})
+}
+
+// renumberTasks gives the organisation's tasks the positions 0, 1, ... in their order, with the task moved (if any) at position.
+func renumberTasks(ctx context.Context, tx *sql.Tx, oid, moved int64, position int) error {
+	var order []int64
+	if err := scanAll(ctx, tx, `SELECT id FROM task WHERE org_id = ? AND id <> ? ORDER BY position, id`, []any{oid, moved},
+		func(r *sql.Rows) error {
+			var id int64
+			err := r.Scan(&id)
+			order = append(order, id)
+			return err
+		}); err != nil {
+		return err
+	}
+	if moved != 0 {
+		order = insertAt(order, moved, position)
+	}
+	for i, id := range order {
+		if _, err := tx.ExecContext(ctx, `UPDATE task SET position = ? WHERE id = ? AND org_id = ?`, i, id, oid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// insertAt puts id into order at position (past the end = last).
+func insertAt(order []int64, id int64, position int) []int64 {
+	position = min(position, len(order))
+	return append(order[:position], append([]int64{id}, order[position:]...)...)
 }
 
 // ---- task combinations ---------------------------------------------------------------------------------------

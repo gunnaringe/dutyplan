@@ -80,6 +80,46 @@ func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, ev
 	})
 }
 
+// SetTaskPlaces sets the places for a task on every event of the plan («Fill row»); 0 takes the task off them all.
+func (s *Store) SetTaskPlaces(ctx context.Context, orgSlug, planSlug string, taskID int64, slots int) error {
+	if slots < 0 || slots > maxSlots {
+		return Invalid("places_invalid", map[string]any{"max": maxSlots}, "places must be 0-%d", maxSlots)
+	}
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		pid, err := planID(ctx, tx, oid, planSlug)
+		if err != nil {
+			return err
+		}
+		if err := inOrg(ctx, tx, "task", oid, taskID); err != nil {
+			return err
+		}
+		var events []int64
+		if err := scanAll(ctx, tx, `SELECT e.id FROM event e LEFT JOIN event_task x ON x.event_id = e.id AND x.task_id = ?
+			WHERE e.org_id = ? AND e.plan_id = ? AND COALESCE(x.slots, 0) <> ? ORDER BY e.id`, []any{taskID, oid, pid, slots},
+			func(r *sql.Rows) error {
+				var id int64
+				err := r.Scan(&id)
+				events = append(events, id)
+				return err
+			}); err != nil {
+			return err
+		}
+		if len(events) == 0 {
+			return errNothingToChange()
+		}
+		for _, ev := range events {
+			if err := setPlaces(ctx, tx, oid, pid, ev, taskID, slots); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // setPlaces writes the places of a task on an event that is known to be in the plan; 0 removes the row.
 func setPlaces(ctx context.Context, tx *sql.Tx, oid, pid, eventID, taskID int64, slots int) error {
 	var err error
@@ -251,8 +291,7 @@ func renumberFields(ctx context.Context, tx *sql.Tx, oid, pid, moved int64, posi
 		return err
 	}
 	if moved != 0 {
-		position = min(position, len(order))
-		order = append(order[:position], append([]int64{moved}, order[position:]...)...)
+		order = insertAt(order, moved, position)
 	}
 	for i, id := range order {
 		if _, err := tx.ExecContext(ctx, `UPDATE plan_field SET position = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, i, id, oid, pid); err != nil {

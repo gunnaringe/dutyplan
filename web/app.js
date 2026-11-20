@@ -646,17 +646,36 @@ async function pagePlan(r, org, people) {
       b.disabled = true;
       if (await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: next }))) changed(); else b.disabled = false;
     }))));
+    // Where the task stands in the table (also for those who cannot drag, such as on a phone).
+    const now = tasks.findIndex((x) => x.id === tk.id);
+    const where = h('select', { 'aria-label': t('task.where') }, h('option', { value: '0', selected: now === 0 }, t('field.at_top')),
+      others.map((x, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: x.name }))));
+    where.addEventListener('change', async () => {
+      if (await write(() => api('PUT', `${base}/tasks/${tk.id}/position`, { position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
+    });
+    // Fill row: the same number of places on every event of this plan; empty takes the task off them all.
+    const fillN = h('input', { type: 'number', min: '0', max: '50', inputmode: 'numeric', 'aria-label': t('task.fill_aria', { name: tk.name }) });
+    const fillForm = h('form', { class: 'row', onsubmit: async (e) => {
+      e.preventDefault();
+      const raw = fillN.value.trim();
+      const n = raw === '' ? 0 : parseInt(raw, 10);
+      if (Number.isNaN(n)) return;
+      if (await write(() => api('PUT', `${pbase}/tasks/${tk.id}/places`, { slots: n }))) changed();
+    } }, fillN, h('button', { type: 'submit' }, t('task.fill')));
     dlg = modal(tk.name,
       h('p', { class: 'muted small' }, t('task.org_wide', { org: org.name })),
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== tk.name && await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
+      others.length ? field(t('task.where'), where) : '',
       h('label', { class: 'check' }, planned, ' ' + t('task.planned'), h('span', { class: 'muted small' }, ' ' + t('task.planned_off'))),
       h('h3', {}, t('task.combine')),
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
       pairRows.length ? [h('p', { class: 'muted small' }, t('task.combine_hint')), h('table', { class: 'mini' }, h('tbody', {}, pairRows))] : '',
-      h('p', { class: 'muted small' }, t('task.places_in_table')),
+      h('h3', {}, t('task.fill_title')),
+      h('p', { class: 'muted small' }, t('task.fill_hint', { plan: plan.name })),
+      fillForm,
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
         if (await write(async () => { confirmed(t('task.delete_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
       } }, t('task.delete')), closeBtn()));
@@ -811,26 +830,32 @@ async function pagePlan(r, org, people) {
     });
     return h('td', { class: 'text' }, input);
   };
-  // Details rows: ⋮⋮ drags a row to another place, ✎ opens it.
+  // ⋮⋮ drags a row to another place among its own kind (details rows, tasks); move(item, position) saves it.
   let dragged = null;
-  const fieldRow = (f, i) => {
-    const grip = h('span', { class: 'grip', draggable: 'true', title: t('field.drag'), 'aria-hidden': 'true' }, '⋮⋮');
-    const row = h('tr', { class: 'field-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, grip, h('span', { class: 'nm' }, f.name),
-      h('button', { type: 'button', class: 'edit', 'aria-label': t('field.edit_aria', { name: f.name }), onclick: () => fieldDialog(f) }, '✎'))),
-    events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.add_value', { name: f.name.toLowerCase() }), t('table.value_aria', { name: f.name, label: label(ev) }),
-      async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); })), filler());
-    grip.addEventListener('dragstart', (e) => { dragged = f; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', f.name); });
-    grip.addEventListener('dragend', () => { dragged = null; });
-    row.addEventListener('dragover', (e) => { if (dragged && dragged.id !== f.id) { e.preventDefault(); row.classList.add('drop'); } });
+  const grip = (title) => h('span', { class: 'grip', draggable: 'true', title, 'aria-hidden': 'true' }, '⋮⋮');
+  const dragRow = (row, handle, kind, item, i, move) => {
+    const mine = () => dragged && dragged.kind === kind && dragged.item.id !== item.id;
+    handle.addEventListener('dragstart', (e) => { dragged = { kind, item }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.name); });
+    handle.addEventListener('dragend', () => { dragged = null; });
+    row.addEventListener('dragover', (e) => { if (mine()) { e.preventDefault(); row.classList.add('drop'); } });
     row.addEventListener('dragleave', () => row.classList.remove('drop'));
     row.addEventListener('drop', async (e) => {
       e.preventDefault();
       row.classList.remove('drop');
-      const d = dragged;
+      const d = mine() ? dragged.item : null;
       dragged = null;
-      if (d && d.id !== f.id && await write(() => api('PUT', `${pbase}/fields/${d.id}/position`, { position: i }))) render();
+      if (d && await write(() => move(d, i))) render();
     });
     return row;
+  };
+  // Details rows: ⋮⋮ drags a row to another place, ✎ opens it.
+  const fieldRow = (f, i) => {
+    const g = grip(t('field.drag'));
+    const row = h('tr', { class: 'field-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('span', { class: 'nm' }, f.name),
+      h('button', { type: 'button', class: 'edit', 'aria-label': t('field.edit_aria', { name: f.name }), onclick: () => fieldDialog(f) }, '✎'))),
+    events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.add_value', { name: f.name.toLowerCase() }), t('table.value_aria', { name: f.name, label: label(ev) }),
+      async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); })), filler());
+    return dragRow(row, g, 'field', f, i, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
   };
 
   // The draft's cells, so a change of places can redraw the cell below without redrawing the page.
@@ -862,8 +887,15 @@ async function pagePlan(r, org, people) {
     paint();
     return h('td', { class: 'places' }, input);
   };
-  const taskHead = (tk) => h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) },
-    tk.name, tk.planned ? '' : h('span', { class: 'sub' }, t('table.by_hand'))));
+  // Tasks: ⋮⋮ drags a task to another row (the organisation's order, the same in every plan); the name opens it.
+  const taskRow = (tk, i) => {
+    const g = grip(t('task.drag'));
+    const row = h('tr', { class: 'task-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g,
+      h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) },
+        tk.name, tk.planned ? '' : h('span', { class: 'sub' }, t('table.by_hand'))))),
+    events.map((ev) => placesCell(tk, ev)), filler());
+    return dragRow(row, g, 'task', tk, i, (d, pos) => api('PUT', `${base}/tasks/${d.id}/position`, { position: pos }));
+  };
 
   // Availability: one click on a cell moves the answer on; the count above each event follows.
   const countCells = {};
@@ -915,7 +947,7 @@ async function pagePlan(r, org, people) {
       fields.fields.map(fieldRow),
       addLine(addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))),
       sect(t('table.tasks'), t('table.tasks_hint')),
-      tasks.map((tk) => h('tr', {}, taskHead(tk), events.map((ev) => placesCell(tk, ev)), filler())),
+      tasks.map(taskRow),
       addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name }))),
       h('tr', { class: 'sect draft' }, h('th', { scope: 'row' }, t('draft.title')), h('td', { colspan: String(cols + 1) }, bar)),
       tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler())),

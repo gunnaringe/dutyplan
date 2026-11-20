@@ -108,13 +108,13 @@ func count(t *testing.T, s *Store, query string, args ...any) int {
 func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	e := newPrefEnv(t)
 	me := e.me(t)
-	if len(me.Tasks) != 2 || me.Tasks[0].Name != "Camera" || me.Tasks[0].Level != "" || me.Tasks[1].Name != "Sound" {
+	if len(me.Tasks) != 2 || me.Tasks[0].Name != "Sound" || me.Tasks[0].Level != "" || me.Tasks[1].Name != "Camera" {
 		t.Fatalf("only the planner's tasks are offered, none chosen yet: %+v", me.Tasks)
 	}
 	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good"); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.me(t).Tasks[1]; got.Level != "good" {
+	if got := e.me(t).Tasks[0]; got.Level != "good" {
 		t.Errorf("Sound = %+v", got)
 	}
 	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good"); !errors.Is(err, ErrInvalid) {
@@ -140,7 +140,7 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("removing what is not chosen: %v", err)
 	}
-	if got := e.me(t).Tasks[1].Level; got != "" {
+	if got := e.me(t).Tasks[0].Level; got != "" {
 		t.Errorf("removed: %q", got)
 	}
 }
@@ -291,7 +291,7 @@ func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, other.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "poor"})
 	mine := e.me(t)
 	theirs := viewOf(t, e.s, e.org.Slug, e.plan.Slug, other.ID)
-	if mine.Tasks[1].Level != "good" || theirs.Tasks[1].Level != "poor" {
+	if mine.Tasks[0].Level != "good" || theirs.Tasks[0].Level != "poor" {
 		t.Errorf("task answers: %+v / %+v", mine.Tasks, theirs.Tasks)
 	}
 	if mine.Events[0].Level != "good" || mine.Events[1].Level != "" || theirs.Events[0].Level != "never" || theirs.Events[1].Level != "poor" {

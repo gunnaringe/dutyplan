@@ -40,6 +40,7 @@ CREATE TABLE task (
     org_id     INTEGER NOT NULL REFERENCES organization(id),
     name       TEXT NOT NULL,
     planned    INTEGER NOT NULL DEFAULT 1 CHECK (planned IN (0, 1)),  -- 0: only for manual cells and combinations
+    position   INTEGER NOT NULL,  -- the order in the table (0, 1, ... from the top), the same in every plan
     created_at TEXT NOT NULL,
     UNIQUE (org_id, name),
     UNIQUE (org_id, id)
