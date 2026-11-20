@@ -1,7 +1,7 @@
 # Dutyplan: plan
 
 Working title (*Tjenesteplan* in Norwegian). Status 2026-11-09: **the planner (`solver/`) is connected to the app; phases 1–5 are built (see *Phases*), plus run history with a
-pinned current plan, renaming and deleting, and an English/Norwegian page. Deployment is postponed. Private GitHub repo `gunnaringe/dutyplan`.**
+pinned current plan, renaming and deleting, and an English/Norwegian page. A first test runs on kate. Public GitHub repo `gunnaringe/dutyplan` (since 2026-11-20), with CI and a published image.**
 First use and test data: a church's rota for autumn 2026 (invented names in the repo). The tool is general; see *General*.
 
 ## Goal
@@ -252,8 +252,8 @@ The first version has no login, no personal links and no roles. The consequences
 5d. **Simpler, from the sketches (done 2026-11-19)**: the change log, the declared name and the day types removed; each event has its own places, events are copied, details
     rows can be moved; the table got the draft allocation section and dialogs for the rest (see *The table*); the setup page became the organisation page. One schema file.
 6. **Deployment on kate (first test 2026-11-20)**: one image with the server and the planner (`Dockerfile`, `mise run app:image`), behind kate's Pocket ID
-    forward-auth at dutyplan.haxxor.xyz (manifests in `clusters/kate/dutyplan/`). Not in a registry yet: the image is built locally and imported into the node.
-    *Still to do:* a registry and automatic rollout, and a backup of the SQLite file.
+    forward-auth at dutyplan.haxxor.xyz (manifests in `clusters/kate/dutyplan/`). Since 2026-11-20 CI publishes the image as `ghcr.io/gunnaringe/dutyplan` (amd64 + arm64), but kate still runs one built locally and imported into the node.
+    *Still to do:* kate on the published image with automatic rollout, and a backup of the SQLite file.
 
 **Pilot**: first two or three tasks with manual cells and selections, then the rest of the tasks.
 

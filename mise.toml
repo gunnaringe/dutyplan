@@ -1,5 +1,5 @@
 # All tools and commands go through mise. Do not run python/uv/pytest/go directly.
-#   mise install      the tools (python, uv, go) in exact versions (below)
+#   mise install      the tools (python, uv, go, node) in exact versions (below)
 #   mise run up       setup + build + start the app (a new database gets the demo organisation)
 #   mise run setup    the Python packages (ortools, pytest) from solver/uv.lock; go fetches the Go packages itself
 #   mise tasks        all tasks
@@ -9,6 +9,7 @@ min_version = "2026.10.0"
 python = "3.12.15"
 uv = "0.13.5"
 go = "1.26.10"
+node = "24.22.3"  # the browser check and the README pictures (scripts/*.js)
 
 [env]
 # uv must use mise's Python and the lock file, never download a Python of its own or change the lock on its own.
