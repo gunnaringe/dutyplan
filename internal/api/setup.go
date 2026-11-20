@@ -94,8 +94,6 @@ func (s *server) deleteTask(w http.ResponseWriter, r *http.Request) {
 	noContent(w, s.st.DeleteTask(r.Context(), r.PathValue("org"), id), s)
 }
 
-// ---- day types -----------------------------------------------------------------------------------------------
-
 // ---- combinations --------------------------------------------------------------------------------------------
 
 func (s *server) listCombinations(w http.ResponseWriter, r *http.Request) {

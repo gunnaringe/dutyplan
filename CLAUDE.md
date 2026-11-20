@@ -13,7 +13,7 @@ Since 2026-11-20 the API covers only what the page uses: no personal links, no �
 events at once, and no places or description when an event is created (adding weekly with `until`, copying and the availability map stay: the page uses them).
 Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not start on it unless asked.
 
-Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the input from the database,
+Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
 starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
 `web/` (index.html, i18n.js, app.js, style.css, embedded in the binary), `solver/` (Python/CP-SAT), `scripts/` (smoke test, browser check).
 
@@ -37,6 +37,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
   `UV_LOCKED=1` otherwise blocks changes to `uv.lock`.
 
 ## Design rules from the user (do not break without asking)
+
+- **End to end first** (2026-11-20): make what exists work end to end before adding features. No individual user management (confirmed 2026-11-20).
+- **No users yet, so no migrations** (2026-11-20): change `internal/store/migrations/001_schema.sql` in place; an old database is refused at startup
+  and is simply deleted. No upgrade code and no backward compatibility until the user says the app is live.
 
 - **Organisation → plans.** Everything belongs to an organisation; an organisation has several plans (for example «Autumn 2026»). The organisation is in the address
   (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), the server has no «current organisation». Every lookup is scoped by the organisation, and

@@ -15,7 +15,7 @@ import (
 var (
 	ErrBusy          = errors.New("a planning run is already in progress; wait for it to finish")
 	ErrUnavailable   = errors.New("the planner is not set up on this server")
-	ErrNothingToPlan = store.Invalid("nothing_to_plan", nil, "nothing to plan: add events, day types with tasks and people first")
+	ErrNothingToPlan = store.Invalid("nothing_to_plan", nil, "nothing to plan: add events with places, and people who take the tasks")
 )
 
 const (

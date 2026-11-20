@@ -180,8 +180,9 @@ found the best plan or runs out of time, and the draft says which.
 
 ## Data and backups
 
-All data is one SQLite file (plus the `-wal`/`-shm` files while the server runs). The schema is upgraded automatically at
-startup by forward-only migrations, so **take a backup before upgrading**. A consistent copy of a running server:
+All data is one SQLite file (plus the `-wal`/`-shm` files while the server runs). The program is not released yet: the schema is
+one file that is still changing, and a database made by another version is refused at startup (start with a new file). A
+consistent copy of a running server:
 
 ```sh
 sqlite3 dutyplan.db ".backup 'dutyplan-backup.db'"
@@ -207,7 +208,7 @@ Everything goes through mise; `mise tasks` lists the tasks.
 | `mise run app:shots` | makes the pictures in `docs/img` from the real app on invented data (about 30 s); run it again when the page changes visibly |
 | `mise run verify` | tests, mutations and the smoke test: everything that must be green before a commit |
 
-Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the planner's
+Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the planner's
 input from the database, runs it, turns the answer into a view), `internal/api` (JSON API), `internal/i18n` (server texts),
 `web/` (the page: plain JavaScript, no build step), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
 rules and conventions for anyone (or any assistant) working on the code; `PLAN.md` has the design notes.
