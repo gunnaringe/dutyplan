@@ -9,7 +9,8 @@ Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + v
 their own places, details rows, answers, drafts (runs) with set-by-hand places, locks and selections, a pinned current plan, rename and delete, a page in English and
 Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan** (details, tasks with places, the draft allocation, availability), dialogs for the rest,
 and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
-Since 2026-11-20 the API covers only what the page uses (no personal links, no «My assignments», no bulk or batch writes).
+Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
+events at once, and no places or description when an event is created (adding weekly with `until`, copying and the availability map stay: the page uses them).
 Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not start on it unless asked.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, migrations, all data access), `internal/planner` (builds the input from the database,
