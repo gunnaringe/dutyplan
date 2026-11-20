@@ -135,9 +135,9 @@ func TestKeysUsedByThePageExist(t *testing.T) {
 			t.Errorf("combo.%s is missing", k)
 		}
 	}
-	for d := 1; d <= 7; d++ {
-		if _, ok := c["en"]["week."+string(rune('0'+d))]; !ok {
-			t.Errorf("week.%d is missing", d)
+	for _, k := range []string{"none", "good", "poor", "never"} { // the answer in a cell of the table
+		if _, ok := c["en"]["answer."+k]; !ok {
+			t.Errorf("answer.%s is missing", k)
 		}
 	}
 	for _, l := range []string{"en", "nb"} {

@@ -6,27 +6,31 @@ import (
 	"testing"
 )
 
-func addTimed(t *testing.T, s *Store, o Org, p Plan, dt DayType, date, start, end, note string) Event {
+func addTimed(t *testing.T, s *Store, o Org, p Plan, date, start, end string) Event {
 	t.Helper()
-	e, err := s.AddEventFull(ctx, o.Slug, p.Slug, "Ola", NewEvent{Date: date, DayTypeID: dt.ID, Note: note, StartTime: start, EndTime: end})
+	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: date, StartTime: start, EndTime: end})
 	if err != nil {
 		t.Fatalf("%s %s-%s: %v", date, start, end, err)
 	}
-	return e
+	return evs[0]
 }
 
 func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
-	s, o, p, dt := setup(t)
-	e, err := s.AddEventFull(ctx, o.Slug, p.Slug, "Ola", NewEvent{Date: "2026-08-09", DayTypeID: dt.ID, Note: "main hall", StartTime: " 11:00 ", EndTime: "12:30",
-		Description: "  Bring the banner.\r\nDoors open at 10:30.\tThanks!  "})
+	s, o, p := setup(t)
+	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: " 11:00 ", EndTime: "12:30"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.StartTime != "11:00" || e.EndTime != "12:30" || e.Description != "Bring the banner.\nDoors open at 10:30.\tThanks!" || e.Note != "main hall" {
+	raw := "  Bring the banner.\r\nDoors open at 10:30.\tThanks!  "
+	e, err := s.UpdateEvent(ctx, o.Slug, p.Slug, evs[0].ID, EventPatch{Description: &raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.StartTime != "11:00" || e.EndTime != "12:30" || e.Description != "Bring the banner.\nDoors open at 10:30.\tThanks!" {
 		t.Errorf("added: %+v", e)
 	}
 	// without times it is as before
-	plain, err := s.AddEvent(ctx, o.Slug, p.Slug, "Ola", "2026-08-16", dt.ID, "")
+	plain, err := s.AddEvent(ctx, o.Slug, p.Slug, "2026-08-16")
 	if err != nil || plain.StartTime != "" || plain.EndTime != "" || plain.Description != "" {
 		t.Errorf("plain: %+v %v", plain, err)
 	}
@@ -35,28 +39,26 @@ func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
 	if len(got) != 2 || got[0].StartTime != "11:00" || got[0].EndTime != "12:30" || got[0].Description != e.Description {
 		t.Errorf("listed: %+v", got)
 	}
-	startOnly := addTimed(t, s, o, p, dt, "2026-08-23", "09:05", "", "")
+	startOnly := addTimed(t, s, o, p, "2026-08-23", "09:05", "")
 	if startOnly.StartTime != "09:05" || startOnly.EndTime != "" {
 		t.Errorf("start only: %+v", startOnly)
 	}
 	for _, tm := range []string{"00:00", "23:59"} {
-		addTimed(t, s, o, p, dt, "2026-08-30", tm, "", "")
-	}
-	var found bool
-	for _, l := range mustLog(t, s, o.Slug, p.Slug) {
-		if l.Action == "event.add" && l.Detail == "2026-08-09 11:00 Service" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("the log says when the event is: %+v", mustLog(t, s, o.Slug, p.Slug))
+		addTimed(t, s, o, p, "2026-08-30", tm, "")
 	}
 }
 
 func TestRefusedTimesAndDescriptions(t *testing.T) {
-	s, o, p, dt := setup(t)
+	s, o, p := setup(t)
+	// times come with a new event; a description is set on an existing one (in another plan, so this one stays empty)
+	other, _ := s.CreatePlan(ctx, o.Slug, "Other")
+	base, _ := s.AddEvent(ctx, o.Slug, other.Slug, "2026-08-02")
 	add := func(start, end, desc string) error {
-		_, err := s.AddEventFull(ctx, o.Slug, p.Slug, "Ola", NewEvent{Date: "2026-08-09", DayTypeID: dt.ID, StartTime: start, EndTime: end, Description: desc})
+		if desc != "" {
+			_, err := s.UpdateEvent(ctx, o.Slug, other.Slug, base.ID, EventPatch{Description: &desc})
+			return err
+		}
+		_, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: start, EndTime: end})
 		return err
 	}
 	for name, c := range map[string]struct{ start, end, desc, code string }{
@@ -97,10 +99,10 @@ func TestRefusedTimesAndDescriptions(t *testing.T) {
 }
 
 func TestUpdatingTimesAndDescription(t *testing.T) {
-	s, o, p, dt := setup(t)
-	e := addTimed(t, s, o, p, dt, "2026-08-09", "", "", "")
+	s, o, p := setup(t)
+	e := addTimed(t, s, o, p, "2026-08-09", "", "")
 	str := func(v string) *string { return &v }
-	up := func(patch EventPatch) (Event, error) { return s.UpdateEvent(ctx, o.Slug, p.Slug, "Eva", e.ID, patch) }
+	up := func(patch EventPatch) (Event, error) { return s.UpdateEvent(ctx, o.Slug, p.Slug, e.ID, patch) }
 
 	got, err := up(EventPatch{StartTime: str("11:00")})
 	if err != nil || got.StartTime != "11:00" || got.EndTime != "" {
@@ -136,29 +138,20 @@ func TestUpdatingTimesAndDescription(t *testing.T) {
 	if got, err = up(EventPatch{Description: str("")}); err != nil || got.Description != "" {
 		t.Fatalf("clear the description: %+v %v", got, err)
 	}
-	// a note change leaves the time alone and the other way round
+	// a description change leaves the time alone
 	up(EventPatch{StartTime: str("09:00")})
-	if got, err = up(EventPatch{Note: str("hall")}); err != nil || got.StartTime != "09:00" || got.Note != "hall" {
-		t.Errorf("note keeps the time: %+v %v", got, err)
-	}
-	var details []string
-	for _, l := range mustLog(t, s, o.Slug, p.Slug) {
-		if l.Action == "event.update" {
-			details = append(details, l.Detail)
-		}
-	}
-	if got := strings.Join(details, "|"); got != "2026-08-09: note|2026-08-09: time|2026-08-09: description|2026-08-09: description|2026-08-09: time|2026-08-09: time|2026-08-09: time|2026-08-09: time" {
-		t.Errorf("the log says what changed: %s", got)
+	if got, err = up(EventPatch{Description: str("hall")}); err != nil || got.StartTime != "09:00" || got.Description != "hall" {
+		t.Errorf("the description keeps the time: %+v %v", got, err)
 	}
 }
 
 func TestEventsOfADateComeInTimeOrderAndTheRestInCreationOrder(t *testing.T) {
-	s, o, p, dt := setup(t)
-	untimed1 := addTimed(t, s, o, p, dt, "2026-08-09", "", "", "first without time")
-	evening := addTimed(t, s, o, p, dt, "2026-08-09", "19:00", "", "evening")
-	untimed2 := addTimed(t, s, o, p, dt, "2026-08-09", "", "", "second without time")
-	morning := addTimed(t, s, o, p, dt, "2026-08-09", "09:30", "10:30", "morning")
-	earlier := addTimed(t, s, o, p, dt, "2026-08-02", "23:00", "", "the week before")
+	s, o, p := setup(t)
+	untimed1 := addTimed(t, s, o, p, "2026-08-09", "", "")
+	evening := addTimed(t, s, o, p, "2026-08-09", "19:00", "")
+	untimed2 := addTimed(t, s, o, p, "2026-08-09", "", "")
+	morning := addTimed(t, s, o, p, "2026-08-09", "09:30", "10:30")
+	earlier := addTimed(t, s, o, p, "2026-08-02", "23:00", "")
 	want := []int64{earlier.ID, morning.ID, evening.ID, untimed1.ID, untimed2.ID}
 	ids := func(evs []Event) (out []int64) {
 		for _, e := range evs {
@@ -170,17 +163,8 @@ func TestEventsOfADateComeInTimeOrderAndTheRestInCreationOrder(t *testing.T) {
 	if got := ids(evs); !equalIDs(got, want) {
 		t.Errorf("list: %v, want %v", got, want)
 	}
-	person, _ := s.CreatePerson(ctx, o.Slug, "Ola", "Kari Test")
-	me, err := s.GetMe(ctx, o.Slug, p.Slug, person.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var meIDs []int64
-	for _, e := range me.Events {
-		meIDs = append(meIDs, e.EventID)
-	}
-	if !equalIDs(meIDs, want) || me.Events[1].StartTime != "09:30" || me.Events[1].EndTime != "10:30" {
-		t.Errorf("a person's page: %v %+v", meIDs, me.Events[1])
+	if evs[1].StartTime != "09:30" || evs[1].EndTime != "10:30" {
+		t.Errorf("the times come with the list: %+v", evs[1])
 	}
 	// the planner gets the events in the order of date and creation, so setting a time never changes the input of a run
 	data, err := s.GetPlanningData(ctx, o.Slug, p.Slug)
@@ -205,60 +189,4 @@ func equalIDs(a, b []int64) bool {
 		}
 	}
 	return true
-}
-
-func TestBulkAddWithATimeOfDay(t *testing.T) {
-	s, o, p, dt := setup(t)
-	created, skipped, err := s.AddEventsBulkTimed(ctx, o.Slug, p.Slug, "Ola", "2026-08-01", "2026-08-31", []int{7}, dt.ID, "11:00", "12:30")
-	if err != nil || len(created) != 5 || len(skipped) != 0 {
-		t.Fatalf("bulk: %d created, %v skipped, %v", len(created), skipped, err)
-	}
-	for _, e := range created {
-		if e.StartTime != "11:00" || e.EndTime != "12:30" {
-			t.Errorf("every event gets the times: %+v", e)
-		}
-	}
-	// the same again adds nothing; another start time on the same days is another event; none at all is another too
-	if c, sk, _ := s.AddEventsBulkTimed(ctx, o.Slug, p.Slug, "Ola", "2026-08-01", "2026-08-31", []int{7}, dt.ID, "11:00", "12:30"); len(c) != 0 || len(sk) != 5 {
-		t.Errorf("repeating: %d created, %d skipped", len(c), len(sk))
-	}
-	if c, _, _ := s.AddEventsBulkTimed(ctx, o.Slug, p.Slug, "Ola", "2026-08-01", "2026-08-31", []int{7}, dt.ID, "18:00", ""); len(c) != 5 {
-		t.Errorf("an evening on the same days: %d created", len(c))
-	}
-	if c, _, _ := s.AddEventsBulk(ctx, o.Slug, p.Slug, "Ola", "2026-08-01", "2026-08-31", []int{7}, dt.ID); len(c) != 5 {
-		t.Errorf("without a time it is yet another event on those days: %d created", len(c))
-	}
-	for name, c := range map[string]struct{ start, end, code string }{
-		"bad start": {"25:00", "", "start_time_invalid"}, "end without start": {"", "12:00", "end_without_start"}, "end first": {"12:00", "10:00", "end_not_after_start"},
-	} {
-		before, _ := s.ListEvents(ctx, o.Slug, p.Slug)
-		if _, _, err := s.AddEventsBulkTimed(ctx, o.Slug, p.Slug, "Ola", "2026-09-01", "2026-09-30", []int{7}, dt.ID, c.start, c.end); !codeIs(err, c.code) {
-			t.Errorf("%s: %v", name, err)
-		}
-		if after, _ := s.ListEvents(ctx, o.Slug, p.Slug); len(after) != len(before) {
-			t.Errorf("%s: a refused bulk add stored events", name)
-		}
-	}
-}
-
-func TestMigrationGivesOldEventsNoTimeAndNoDescription(t *testing.T) {
-	path := t.TempDir() + "/old.db"
-	databaseAtVersion8(t, path)
-	s, err := Open(path) // applies the migrations after 8 to the old database
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
-	evs, err := s.ListEvents(ctx, "org", "a")
-	if err != nil || len(evs) != 2 {
-		t.Fatalf("old events: %+v %v", evs, err)
-	}
-	for _, e := range evs {
-		if e.StartTime != "" || e.EndTime != "" || e.Description != "" {
-			t.Errorf("an old event has no time or description: %+v", e)
-		}
-	}
-	if n := count(t, s, `SELECT COUNT(*) FROM event WHERE start_time = '' AND end_time = '' AND description = ''`); n != 2 {
-		t.Errorf("rows: %d", n)
-	}
 }

@@ -43,8 +43,8 @@ func (w world) cellsAndPools(t *testing.T) (locked []lockedIn, pools []poolIn, r
 
 func (w world) cell(t *testing.T, ev store.Event, task store.Task, c store.NewCell) {
 	t.Helper()
-	c.EventIDs, c.TaskID = []int64{ev.ID}, task.ID
-	if _, _, err := w.st.AddCells(ctx, w.org.Slug, w.plan.Slug, "T", c); err != nil {
+	c.EventID, c.TaskID = ev.ID, task.ID
+	if _, err := w.st.AddCell(ctx, w.org.Slug, w.plan.Slug, c); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -58,7 +58,7 @@ func (w world) pool(t *testing.T, ev store.Event, task store.Task, people []stri
 	for _, g := range groups {
 		gids = append(gids, g.ID)
 	}
-	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, "T", []int64{ev.ID}, task.ID, ids, gids); err != nil {
+	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, ev.ID, task.ID, ids, gids); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -113,7 +113,7 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 	off := false
 	deactivate := func(names ...string) {
 		for _, n := range names {
-			w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people[n].ID, store.PersonPatch{Active: &off})
+			w.st.UpdatePerson(ctx, w.org.Slug, w.people[n].ID, store.PersonPatch{Active: &off})
 		}
 	}
 
@@ -160,15 +160,16 @@ func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
 func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "T", "Spring 2027", "")
-	otherEv, _ := a.st.AddEvent(ctx, a.org.Slug, other.Slug, "T", "2027-02-07", a.dt.ID, "")
+	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "Spring 2027")
+	otherEvs, _ := addWithPlaces(a.st, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07"}, map[int64]int{a.sound.ID: 1})
+	otherEv := otherEvs[0]
 	a.cell(t, a.events[0], a.sound, store.NewCell{PersonID: a.people["Aslaug"].ID})
 	b.cell(t, b.events[0], b.sound, store.NewCell{PersonID: b.people["Aslaug"].ID})
 	b.pool(t, b.events[0], b.sound, []string{"Birger"})
 	if _, err := a.st.GetPlan(ctx, a.org.Slug, other.Slug); err != nil {
 		t.Fatal(err)
 	}
-	a.st.AddCells(ctx, a.org.Slug, other.Slug, "T", store.NewCell{EventIDs: []int64{otherEv.ID}, TaskID: a.sound.ID, PersonID: a.people["Birger"].ID})
+	a.st.AddCell(ctx, a.org.Slug, other.Slug, store.NewCell{EventID: otherEv.ID, TaskID: a.sound.ID, PersonID: a.people["Birger"].ID})
 
 	locked, pools, raw, _, _ := a.cellsAndPools(t)
 	if len(locked) != 1 || locked[0].Person != pid(a.people["Aslaug"].ID) || len(pools) != 0 {
@@ -189,10 +190,10 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	for _, n := range []string{"Dina", "Embla"} { // without the rule, Dina and Embla could take Sound too
-		w.st.SetPersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.sound.ID, "good")
+		w.st.SetPersonTask(ctx, w.org.Slug, w.people[n].ID, w.sound.ID, "good")
 	}
-	w.st.SetCombination(ctx, w.org.Slug, "T", w.singing.ID, w.sound.ID, "cannot")
-	w.st.SetCombination(ctx, w.org.Slug, "T", w.singing.ID, w.camera.ID, "cannot")
+	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.sound.ID, "cannot")
+	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.camera.ID, "cannot")
 	choir := w.group(t, "Choir", []string{"Dina", "Embla"})
 	ev := w.events[3]
 	w.cell(t, ev, w.singing, store.NewCell{GroupID: choir.ID})
@@ -200,7 +201,7 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 
 	s := New(w.st, solver, 1, nopLogger())
 	run := func() RunView {
-		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5, Seed: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -261,7 +262,7 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 
 	// nobody in the selection can: the place stays empty and the explanation names the selection and the reason
 	for _, n := range []string{"Aslaug", "Cecilie"} {
-		w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "T", w.people[n].ID, map[int64]string{ev.ID: "never"})
+		w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people[n].ID, map[int64]string{ev.ID: "never"})
 	}
 	v = run()
 	sound = cellOf(v, ev, w.sound)

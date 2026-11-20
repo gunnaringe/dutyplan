@@ -25,13 +25,12 @@ type world struct {
 	org                    store.Org
 	plan                   store.Plan
 	singing, sound, camera store.Task
-	dt                     store.DayType
 	events                 []store.Event
 	people                 map[string]store.Person
 }
 
-// newWorld: one organisation, three tasks (Singing is manual-only), a day type with one place each, a plan with
-// four Sundays and six people who have chosen tasks and marked a few dates.
+// newWorld: one organisation, three tasks (Singing is manual-only), a plan with four Sundays that have one place for each
+// task, and six people who have chosen tasks and marked a few dates.
 func newWorld(t *testing.T, orgName string) world {
 	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
@@ -52,33 +51,32 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 			t.Fatal(err)
 		}
 	}
-	w.org, err = st.CreateOrg(ctx, "T", orgName, "")
+	w.org, err = st.CreateOrg(ctx, orgName)
 	must(err)
-	w.singing, err = st.CreateTask(ctx, w.org.Slug, "T", "Singing", false)
+	w.singing, err = st.CreateTask(ctx, w.org.Slug, "Singing")
 	must(err)
-	w.sound, err = st.CreateTask(ctx, w.org.Slug, "T", "Sound", true)
+	off := false
+	w.singing, err = st.UpdateTask(ctx, w.org.Slug, w.singing.ID, store.TaskPatch{Planned: &off})
 	must(err)
-	w.camera, err = st.CreateTask(ctx, w.org.Slug, "T", "Camera", true)
+	w.sound, err = st.CreateTask(ctx, w.org.Slug, "Sound")
 	must(err)
-	must(st.SetCombination(ctx, w.org.Slug, "T", w.sound.ID, w.camera.ID, "cannot"))
-	w.dt, err = st.CreateDayType(ctx, w.org.Slug, "T", "Service")
+	w.camera, err = st.CreateTask(ctx, w.org.Slug, "Camera")
 	must(err)
-	_, err = st.SetDayTypeTasks(ctx, w.org.Slug, "T", w.dt.ID, []store.DayTypeTask{{TaskID: w.sound.ID, Slots: 1}, {TaskID: w.camera.ID, Slots: 1}, {TaskID: w.singing.ID, Slots: 1}})
-	must(err)
-	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "T", "Autumn 2026", "")
+	must(st.SetCombination(ctx, w.org.Slug, w.sound.ID, w.camera.ID, "cannot"))
+	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "Autumn 2026")
 	must(err)
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
-		ev, err := st.AddEvent(ctx, w.org.Slug, w.plan.Slug, "T", d, w.dt.ID, "")
+		evs, err := addWithPlaces(st, w.org.Slug, w.plan.Slug, store.NewEvents{Date: d}, map[int64]int{w.sound.ID: 1, w.camera.ID: 1, w.singing.ID: 1})
 		must(err)
-		w.events = append(w.events, ev)
+		w.events = append(w.events, evs[0])
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie", "Dina", "Embla", "Frode"} {
-		p, err := st.CreatePerson(ctx, w.org.Slug, "T", n)
+		p, err := st.CreatePerson(ctx, w.org.Slug, n)
 		must(err)
 		w.people[n] = p
 	}
 	choose := func(person string, task store.Task, level string) {
-		must(st.SetPersonTask(ctx, w.org.Slug, person, w.people[person].ID, task.ID, level))
+		must(st.SetPersonTask(ctx, w.org.Slug, w.people[person].ID, task.ID, level))
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
 		choose(n, w.sound, "neutral")
@@ -87,8 +85,8 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 		choose(n, w.camera, "neutral")
 	}
 	choose("Frode", w.sound, "never") // takes part but never wants it
-	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Aslaug", w.people["Aslaug"].ID, map[int64]string{w.events[0].ID: "never"}))
-	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Dina", w.people["Dina"].ID, map[int64]string{w.events[1].ID: "never", w.events[2].ID: "good"}))
+	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Aslaug"].ID, map[int64]string{w.events[0].ID: "never"}))
+	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Dina"].ID, map[int64]string{w.events[1].ID: "never", w.events[2].ID: "good"}))
 	return w
 }
 
@@ -104,9 +102,9 @@ func (w world) data(t *testing.T) store.PlanningData {
 func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	w := newWorld(t, "Club")
 	off := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
 	gone := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Frode"].ID, store.PersonPatch{Active: &gone})
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Frode"].ID, store.PersonPatch{Active: &gone})
 	input, hash, snap, err := BuildInput(w.data(t), Params{TimeLimit: 7, Seed: 3, Workers: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -153,11 +151,11 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if tasks[tid(w.singing.ID)] || !tasks[tid(w.sound.ID)] {
 		t.Errorf("planned flags: %v", tasks)
 	}
-	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[did(w.dt.ID)].(map[string]any)) != 3 {
-		t.Errorf("events and day type: %v %v", in["dates"], in["day_type_tasks"])
+	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[eid(w.events[0].ID)].(map[string]any)) != 3 {
+		t.Errorf("events and their places: %v %v", in["dates"], in["day_type_tasks"])
 	}
 	// the snapshot names every task (with its planned flag) and the active people
-	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Slots[w.dt.ID][w.singing.ID] != 0 || snap.Slots[w.dt.ID][w.sound.ID] != 1 {
+	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Places[w.events[0].ID][w.singing.ID] != 0 || snap.Places[w.events[0].ID][w.sound.ID] != 1 {
 		t.Errorf("snapshot: %+v", snap)
 	}
 	// deterministic, and the hash ignores seed and time limit but not the data
@@ -166,7 +164,7 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if string(again) != string(input) || hash != hash2 || hash != hash3 {
 		t.Error("the input must be deterministic and the hash independent of the knobs")
 	}
-	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Birger", w.people["Birger"].ID, map[int64]string{w.events[3].ID: "poor"})
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Birger"].ID, map[int64]string{w.events[3].ID: "poor"})
 	if _, hash4, _, _ := BuildInput(w.data(t), Params{}); hash4 == hash {
 		t.Error("a change in the data must change the hash")
 	}
@@ -357,7 +355,7 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 	w := newWorld(t, "Club")
 	var sent []byte
 	s := newService(w, func(_ context.Context, input []byte) ([]byte, error) { sent = input; return cannedAnswer(w), nil })
-	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,14 +400,14 @@ func TestRunProducesAViewWithNamesExplanationsAndCompromises(t *testing.T) {
 	}
 
 	// the names are the ones from the start of the run; the run is stale once the data changes
-	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, "Aslaug", w.people["Aslaug"].ID, map[int64]string{w.events[3].ID: "never"})
+	w.st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Aslaug"].ID, map[int64]string{w.events[3].ID: "never"})
 	if v, _ = s.View(ctx, w.org.Slug, w.plan.Slug, id); !v.Run.Stale {
 		t.Error("a change after the run makes it stale")
 	}
 	// a second run counts the seed up
 	var seed2 []byte
 	s2 := newService(w, func(_ context.Context, input []byte) ([]byte, error) { seed2 = input; return cannedAnswer(w), nil })
-	s2.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	s2.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, s2)
 	json.Unmarshal(seed2, &in)
 	if in.Params.Seed != 2 {
@@ -429,7 +427,7 @@ func TestTheIndependentCheckIsReportedWhetherItFoundBreachesOrNeverRan(t *testin
 		"unchecked": {`{"status":"OPTIMAL","assignments":[],"unfilled":[],"load":{}}`, false, nil},
 	} {
 		s := newService(w, func(context.Context, []byte) ([]byte, error) { return []byte(c.answer), nil })
-		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -458,7 +456,7 @@ func TestRunFailuresAreStoredWithAReason(t *testing.T) {
 	} {
 		s := newService(w, c.reply)
 		s.timeoutOverride = 100 * time.Millisecond
-		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 		if err != nil {
 			t.Fatal(name, err)
 		}
@@ -474,35 +472,32 @@ func TestOnlyOneRunAtATimeAndSensibleRefusals(t *testing.T) {
 	w := newWorld(t, "Club")
 	release := make(chan struct{})
 	s := newService(w, func(_ context.Context, _ []byte) ([]byte, error) { <-release; return cannedAnswer(w), nil })
-	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5}); err != nil {
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5}); !errors.Is(err, ErrBusy) {
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); !errors.Is(err, ErrBusy) {
 		t.Errorf("a second run while one is going: %v", err)
 	}
 	close(release)
 	waitDone(t, s)
-	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{TimeLimit: 5}); err != nil {
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); err != nil {
 		t.Errorf("after the first finished: %v", err)
 	}
 	waitDone(t, s)
 
 	for name, p := range map[string]Params{"too short": {TimeLimit: 1}, "too long": {TimeLimit: 1000}} {
-		if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Ola", p); !errors.Is(err, store.ErrInvalid) {
+		if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, p); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "", Params{TimeLimit: 5}); !errors.Is(err, store.ErrActor) {
-		t.Errorf("without an actor: %v", err)
-	}
-	if _, err := s.Start(ctx, w.org.Slug, "nope", "Ola", Params{TimeLimit: 5}); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Start(ctx, w.org.Slug, "nope", Params{TimeLimit: 5}); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown plan: %v", err)
 	}
-	if _, err := New(w.st, nil, 1, nil).Start(ctx, w.org.Slug, w.plan.Slug, "Ola", Params{}); !errors.Is(err, ErrUnavailable) {
+	if _, err := New(w.st, nil, 1, nil).Start(ctx, w.org.Slug, w.plan.Slug, Params{}); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("no solver: %v", err)
 	}
-	empty, _ := w.st.CreatePlan(ctx, w.org.Slug, "T", "Tom plan", "")
-	if _, err := s.Start(ctx, w.org.Slug, empty.Slug, "Ola", Params{TimeLimit: 5}); !errors.Is(err, ErrNothingToPlan) || !errors.Is(err, store.ErrInvalid) {
+	empty, _ := w.st.CreatePlan(ctx, w.org.Slug, "Tom plan")
+	if _, err := s.Start(ctx, w.org.Slug, empty.Slug, Params{TimeLimit: 5}); !errors.Is(err, ErrNothingToPlan) || !errors.Is(err, store.ErrInvalid) {
 		t.Errorf("a plan without events: %v", err)
 	}
 }
@@ -511,7 +506,7 @@ func TestRunsAreInvisibleToOtherOrganisations(t *testing.T) {
 	w := newWorld(t, "Org A")
 	b := populate(t, w.st, "Org B")
 	s := newService(w, func(_ context.Context, _ []byte) ([]byte, error) { return cannedAnswer(w), nil })
-	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, s)
 	if _, err := s.View(ctx, b.org.Slug, b.plan.Slug, id); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("B views A's run: %v", err)
@@ -538,13 +533,13 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	off := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Embla"].ID, store.PersonPatch{Proposable: &off}) // Embla may not be proposed
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off}) // Embla may not be proposed
 	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Birger"].ID, store.PersonPatch{Active: &inactive}) // Birger is not planned
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Birger"].ID, store.PersonPatch{Active: &inactive}) // Birger is not planned
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	run := func() RunView {
-		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
+		id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5, Seed: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -627,10 +622,10 @@ func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 	w := newWorld(t, "Club")
 	// nobody wants Camera any more: remove the three who chose it
 	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
-		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.camera.ID)
+		w.st.RemovePersonTask(ctx, w.org.Slug, w.people[n].ID, w.camera.ID)
 	}
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	waitDone(t, s)
 	v, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id)
 	if v.Run.Status != "done" || len(v.Run.Violations) != 0 {
@@ -656,8 +651,8 @@ func TestEmptyListsAreSentAsListsNeverAsNull(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	org, _ := st.CreateOrg(ctx, "T", "Tom", "")
-	plan, _ := st.CreatePlan(ctx, org.Slug, "T", "Plan", "")
+	org, _ := st.CreateOrg(ctx, "Tom")
+	plan, _ := st.CreatePlan(ctx, org.Slug, "Plan")
 	d, err := st.GetPlanningData(ctx, org.Slug, plan.Slug)
 	if err != nil {
 		t.Fatal(err)
@@ -693,9 +688,9 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	// a manual cell for someone who is then deactivated: the run notes that it left the cell out
 	w.cell(t, w.events[2], w.sound, store.NewCell{PersonID: w.people["Cecilie"].ID})
 	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Cecilie"].ID, store.PersonPatch{Active: &inactive})
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Cecilie"].ID, store.PersonPatch{Active: &inactive})
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return cannedAnswer(w), nil })
-	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -727,4 +722,31 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	if again, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id); again.Weak[0] != en.Weak[0] {
 		t.Errorf("English changed: %q", again.Weak)
 	}
+}
+
+// addWithPlaces adds the events and gives each the places (task -> places), the way the page does it.
+func addWithPlaces(st *store.Store, org, plan string, in store.NewEvents, places map[int64]int) ([]store.Event, error) {
+	evs, err := st.AddEvents(context.Background(), org, plan, in)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range evs {
+		for task, n := range places {
+			if err := st.SetEventPlaces(context.Background(), org, plan, e.ID, task, n); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return evs, nil
+}
+
+// runWith makes a run whose planner answers with the given output.
+func (w world) runWith(t *testing.T, answer []byte) *Service {
+	t.Helper()
+	s := newService(w, func(context.Context, []byte) ([]byte, error) { return answer, nil })
+	if _, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s)
+	return s
 }

@@ -19,17 +19,17 @@ func groupWorld(t *testing.T, s *Store, orgName string) groupEnv {
 	t.Helper()
 	e := groupEnv{s: s, org: mustOrg(t, s, orgName), people: map[string]Person{}}
 	var err error
-	if e.sound, err = s.CreateTask(ctx, e.org.Slug, "Ola", "Sound", true); err != nil {
+	if e.sound, err = s.CreateTask(ctx, e.org.Slug, "Sound"); err != nil {
 		t.Fatal(err)
 	}
-	if e.camera, err = s.CreateTask(ctx, e.org.Slug, "Ola", "Camera", true); err != nil {
+	if e.camera, err = s.CreateTask(ctx, e.org.Slug, "Camera"); err != nil {
 		t.Fatal(err)
 	}
-	if e.sang, err = s.CreateTask(ctx, e.org.Slug, "Ola", "Singing", false); err != nil {
+	if e.sang, err = unplannedTask(ctx, s, e.org.Slug, "Singing"); err != nil {
 		t.Fatal(err)
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
-		p, err := s.CreatePerson(ctx, e.org.Slug, "Ola", n)
+		p, err := s.CreatePerson(ctx, e.org.Slug, n)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -40,59 +40,52 @@ func groupWorld(t *testing.T, s *Store, orgName string) groupEnv {
 
 func TestGroupLifecycle(t *testing.T) {
 	e := groupWorld(t, open(t), "Club")
-	g, err := e.s.CreateGroup(ctx, e.org.Slug, "Ola", "  Choir ")
+	g, err := e.s.CreateGroup(ctx, e.org.Slug, "  Choir ")
 	if err != nil || g.Name != "Choir" || !g.Proposable || len(g.Members) != 0 || len(g.Tasks) != 0 {
 		t.Fatalf("create: %+v %v", g, err)
 	}
-	if _, err := e.s.CreateGroup(ctx, e.org.Slug, "Ola", "Choir"); !errors.Is(err, ErrConflict) {
+	if _, err := e.s.CreateGroup(ctx, e.org.Slug, "Choir"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate name: %v", err)
 	}
 	for name, n := range map[string]string{"blank": "  ", "too long": strings.Repeat("x", 81), "control": "a\nb"} {
-		if _, err := e.s.CreateGroup(ctx, e.org.Slug, "Ola", n); !errors.Is(err, ErrInvalid) {
+		if _, err := e.s.CreateGroup(ctx, e.org.Slug, n); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := e.s.CreateGroup(ctx, e.org.Slug, "", "No actor"); !errors.Is(err, ErrActor) {
-		t.Errorf("no actor: %v", err)
-	}
 
 	off := false
-	if g, err = e.s.UpdateGroup(ctx, e.org.Slug, "Ola", g.ID, GroupPatch{Proposable: &off}); err != nil || g.Proposable {
+	if g, err = e.s.UpdateGroup(ctx, e.org.Slug, g.ID, GroupPatch{Proposable: &off}); err != nil || g.Proposable {
 		t.Fatalf("proposable off: %+v %v", g, err)
 	}
-	if _, err = e.s.UpdateGroup(ctx, e.org.Slug, "Ola", g.ID, GroupPatch{Proposable: &off}); !errors.Is(err, ErrInvalid) {
+	if _, err = e.s.UpdateGroup(ctx, e.org.Slug, g.ID, GroupPatch{Proposable: &off}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op update: %v", err)
 	}
-	if g, err = e.s.UpdateGroup(ctx, e.org.Slug, "Ola", g.ID, GroupPatch{Name: ptr("Singers")}); err != nil || g.Name != "Singers" || g.Proposable {
+	if g, err = e.s.UpdateGroup(ctx, e.org.Slug, g.ID, GroupPatch{Name: ptr("Singers")}); err != nil || g.Name != "Singers" || g.Proposable {
 		t.Fatalf("rename keeps the rest: %+v %v", g, err)
 	}
-	other, _ := e.s.CreateGroup(ctx, e.org.Slug, "Ola", "Band")
-	if _, err = e.s.UpdateGroup(ctx, e.org.Slug, "Ola", other.ID, GroupPatch{Name: ptr("Singers")}); !errors.Is(err, ErrConflict) {
+	other, _ := e.s.CreateGroup(ctx, e.org.Slug, "Band")
+	if _, err = e.s.UpdateGroup(ctx, e.org.Slug, other.ID, GroupPatch{Name: ptr("Singers")}); !errors.Is(err, ErrConflict) {
 		t.Errorf("rename to an existing name: %v", err)
 	}
 
 	a, b := e.people["Aslaug"].ID, e.people["Birger"].ID
-	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{b, a, a}); err != nil || len(g.Members) != 2 || g.Members[0] != a || g.Members[1] != b {
+	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{b, a, a}); err != nil || len(g.Members) != 2 || g.Members[0] != a || g.Members[1] != b {
 		t.Fatalf("members (deduplicated, in id order): %+v %v", g, err)
 	}
-	if _, err = e.s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{a, b}); !errors.Is(err, ErrInvalid) {
+	if _, err = e.s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{a, b}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("the same members again: %v", err)
 	}
-	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{b}); err != nil || len(g.Members) != 1 {
+	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{b}); err != nil || len(g.Members) != 1 {
 		t.Fatalf("remove one: %+v %v", g, err)
 	}
-	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, nil); err != nil || len(g.Members) != 0 {
+	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, g.ID, nil); err != nil || len(g.Members) != 0 {
 		t.Fatalf("an empty group is allowed: %+v %v", g, err)
 	}
-	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{a, b}); err != nil {
+	if g, err = e.s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{a, b}); err != nil {
 		t.Fatal(err)
 	}
-	log, _ := e.s.ListLog(ctx, e.org.Slug, "", 3)
-	if len(log) == 0 || log[0].Action != "group.members" || log[0].Detail != "Singers: +Aslaug, +Birger" {
-		t.Errorf("the log names who joined: %+v", log)
-	}
 
-	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.sound.ID, 2, "good"}, {e.camera.ID, 1, "neutral"}}); err != nil || len(g.Tasks) != 2 {
+	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, g.ID, []GroupTask{{e.sound.ID, 2, "good"}, {e.camera.ID, 1, "neutral"}}); err != nil || len(g.Tasks) != 2 {
 		t.Fatalf("tasks: %+v %v", g, err)
 	}
 	for name, ts := range map[string][]GroupTask{
@@ -103,14 +96,14 @@ func TestGroupLifecycle(t *testing.T) {
 		"the same task twice":                    {{e.sound.ID, 1, "good"}, {e.sound.ID, 2, "good"}},
 		"a task the planner does not distribute": {{e.sang.ID, 1, "good"}},
 	} {
-		if _, err := e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, ts); !errors.Is(err, ErrInvalid) {
+		if _, err := e.s.SetGroupTasks(ctx, e.org.Slug, g.ID, ts); !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)
 		}
 	}
 	if got, _ := e.s.ListGroups(ctx, e.org.Slug); len(got[1].Tasks) != 2 {
 		t.Errorf("a refused change leaves the tasks as they were: %+v", got)
 	}
-	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, nil); err != nil || len(g.Tasks) != 0 {
+	if g, err = e.s.SetGroupTasks(ctx, e.org.Slug, g.ID, nil); err != nil || len(g.Tasks) != 0 {
 		t.Fatalf("clearing the tasks: %+v %v", g, err)
 	}
 
@@ -119,7 +112,7 @@ func TestGroupLifecycle(t *testing.T) {
 	if len(list) != 2 || list[0].Name != "Band" || list[1].Name != "Singers" || len(list[1].Members) != 2 {
 		t.Errorf("list: %+v", list)
 	}
-	if err := e.s.DeleteGroup(ctx, e.org.Slug, "Ola", g.ID); err != nil {
+	if err := e.s.DeleteGroup(ctx, e.org.Slug, g.ID); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(t, e.s, `SELECT COUNT(*) FROM grp_member WHERE group_id = ?`, g.ID); n != 0 {
@@ -130,29 +123,29 @@ func TestGroupLifecycle(t *testing.T) {
 func TestGroupsNeverCrossOrganisations(t *testing.T) {
 	s := open(t)
 	a, b := groupWorld(t, s, "Org A"), groupWorld(t, s, "Org B")
-	ga, _ := s.CreateGroup(ctx, a.org.Slug, "Ola", "Singers")
-	gb, err := s.CreateGroup(ctx, b.org.Slug, "Eva", "Singers")
+	ga, _ := s.CreateGroup(ctx, a.org.Slug, "Singers")
+	gb, err := s.CreateGroup(ctx, b.org.Slug, "Singers")
 	if err != nil {
 		t.Fatalf("the same group name in two organisations: %v", err)
 	}
 	// B reaching for A's group: not found, and nothing changes
-	if _, err := s.UpdateGroup(ctx, b.org.Slug, "Eva", ga.ID, GroupPatch{Name: ptr("Kapret")}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateGroup(ctx, b.org.Slug, ga.ID, GroupPatch{Name: ptr("Kapret")}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("update through B: %v", err)
 	}
-	if _, err := s.SetGroupMembers(ctx, b.org.Slug, "Eva", ga.ID, []int64{b.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetGroupMembers(ctx, b.org.Slug, ga.ID, []int64{b.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("members through B: %v", err)
 	}
-	if _, err := s.SetGroupTasks(ctx, b.org.Slug, "Eva", ga.ID, nil); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetGroupTasks(ctx, b.org.Slug, ga.ID, nil); !errors.Is(err, ErrNotFound) {
 		t.Errorf("tasks through B: %v", err)
 	}
-	if err := s.DeleteGroup(ctx, b.org.Slug, "Eva", ga.ID); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteGroup(ctx, b.org.Slug, ga.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("delete through B: %v", err)
 	}
 	// a person or a task of the other organisation cannot be named
-	if _, err := s.SetGroupMembers(ctx, a.org.Slug, "Ola", ga.ID, []int64{b.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetGroupMembers(ctx, a.org.Slug, ga.ID, []int64{b.people["Aslaug"].ID}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another organisation's person as a member: %v", err)
 	}
-	if _, err := s.SetGroupTasks(ctx, a.org.Slug, "Ola", ga.ID, []GroupTask{{b.sound.ID, 1, "good"}}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.SetGroupTasks(ctx, a.org.Slug, ga.ID, []GroupTask{{b.sound.ID, 1, "good"}}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("another organisation's task: %v", err)
 	}
 	if la, _ := s.ListGroups(ctx, a.org.Slug); len(la) != 1 || la[0].Name != "Singers" || len(la[0].Members) != 0 {
@@ -182,21 +175,21 @@ func TestGroupsNeverCrossOrganisations(t *testing.T) {
 func TestPlanningDataCarriesTheGroups(t *testing.T) {
 	s := open(t)
 	e := groupWorld(t, s, "Club")
-	plan, _ := s.CreatePlan(ctx, e.org.Slug, "Ola", "Autumn 2026", "")
-	g, _ := s.CreateGroup(ctx, e.org.Slug, "Ola", "Singers")
-	s.SetGroupMembers(ctx, e.org.Slug, "Ola", g.ID, []int64{e.people["Aslaug"].ID})
-	s.SetGroupTasks(ctx, e.org.Slug, "Ola", g.ID, []GroupTask{{e.sound.ID, 2, "good"}})
+	plan, _ := s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
+	g, _ := s.CreateGroup(ctx, e.org.Slug, "Singers")
+	s.SetGroupMembers(ctx, e.org.Slug, g.ID, []int64{e.people["Aslaug"].ID})
+	s.SetGroupTasks(ctx, e.org.Slug, g.ID, []GroupTask{{e.sound.ID, 2, "good"}})
 	d, err := s.GetPlanningData(ctx, e.org.Slug, plan.Slug)
 	if err != nil || len(d.Groups) != 1 || fmt.Sprint(d.Groups[0].Members) != fmt.Sprint([]int64{e.people["Aslaug"].ID}) || d.Groups[0].Tasks[0].Fills != 2 {
 		t.Fatalf("%+v %v", d.Groups, err)
 	}
 	other := mustOrg(t, s, "Annen")
-	op, _ := s.CreatePlan(ctx, other.Slug, "Eva", "Autumn 2026", "")
+	op, _ := s.CreatePlan(ctx, other.Slug, "Autumn 2026")
 	if d, _ = s.GetPlanningData(ctx, other.Slug, op.Slug); len(d.Groups) != 0 {
 		t.Errorf("another organisation's planning data has none of them: %+v", d.Groups)
 	}
 	// a task in use by a group cannot be deleted
-	if err := s.DeleteTask(ctx, e.org.Slug, "Ola", e.sound.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.sound.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("deleting a task a group is proposed for: %v", err)
 	}
 }

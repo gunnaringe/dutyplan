@@ -13,7 +13,7 @@ import (
 
 func (w world) group(t *testing.T, name string, members []string, tasks ...store.GroupTask) store.Group {
 	t.Helper()
-	g, err := w.st.CreateGroup(ctx, w.org.Slug, "T", name)
+	g, err := w.st.CreateGroup(ctx, w.org.Slug, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,12 +22,12 @@ func (w world) group(t *testing.T, name string, members []string, tasks ...store
 		ids = append(ids, w.people[m].ID)
 	}
 	if len(ids) > 0 {
-		if g, err = w.st.SetGroupMembers(ctx, w.org.Slug, "T", g.ID, ids); err != nil {
+		if g, err = w.st.SetGroupMembers(ctx, w.org.Slug, g.ID, ids); err != nil {
 			t.Fatal(err)
 		}
 	}
 	if len(tasks) > 0 {
-		if g, err = w.st.SetGroupTasks(ctx, w.org.Slug, "T", g.ID, tasks); err != nil {
+		if g, err = w.st.SetGroupTasks(ctx, w.org.Slug, g.ID, tasks); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -67,7 +67,7 @@ func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 	w.group(t, "Empty", nil, store.GroupTask{TaskID: w.camera.ID, Fills: 1, Level: "neutral"}) // meant to be used, has nobody
 	w.group(t, "Rolig", nil)                                                                   // an empty group nobody asked for
 	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, "T", w.people["Dina"].ID, store.PersonPatch{Active: &inactive})
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Dina"].ID, store.PersonPatch{Active: &inactive})
 
 	in, snap, hash := w.input(t)
 	if len(in.Groups) != 1 || in.Groups[0].ID != gid(choir.ID) || !in.Groups[0].Proposable {
@@ -93,14 +93,14 @@ func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
 
 	// «can be proposed» is passed on, and changing a group makes the stored run out of date
 	off := false
-	w.st.UpdateGroup(ctx, w.org.Slug, "T", choir.ID, store.GroupPatch{Proposable: &off})
+	w.st.UpdateGroup(ctx, w.org.Slug, choir.ID, store.GroupPatch{Proposable: &off})
 	in2, _, hash2 := w.input(t)
 	if in2.Groups[0].Proposable || hash2 == hash {
 		t.Errorf("proposable=false must reach the planner and change the hash: %+v", in2.Groups)
 	}
 	// a task taken out of the planner's hands later: the solver refuses group tasks for it, so it is not sent
 	unplanned := false
-	w.st.UpdateTask(ctx, w.org.Slug, "T", w.sound.ID, store.TaskPatch{Planned: &unplanned})
+	w.st.UpdateTask(ctx, w.org.Slug, w.sound.ID, store.TaskPatch{Planned: &unplanned})
 	if in3, _, _ := w.input(t); len(in3.GroupTasks) != 0 {
 		t.Errorf("a task the planner no longer distributes: %+v", in3.GroupTasks)
 	}
@@ -156,7 +156,7 @@ func TestTheViewShowsGroupsManualCellsAndLockedPeopleWithNames(t *testing.T) {
 	w := newWorld(t, "Club")
 	choir := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.sound.ID, Fills: 1, Level: "neutral"})
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return groupAnswer(w, choir), nil })
-	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5})
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,11 +221,11 @@ func TestTheRealSolverProposesAGroupAndKeepsItsMembersOccupied(t *testing.T) {
 	w := newWorld(t, "Club")
 	// Sound: only the group can take it. Dina and Embla never chose Sound themselves; the group is set up for it.
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
-		w.st.RemovePersonTask(ctx, w.org.Slug, "T", w.people[n].ID, w.sound.ID)
+		w.st.RemovePersonTask(ctx, w.org.Slug, w.people[n].ID, w.sound.ID)
 	}
 	choir := w.group(t, "Choir", []string{"Dina", "Embla"}, store.GroupTask{TaskID: w.sound.ID, Fills: 1, Level: "good"})
 	s := New(w.st, solver, 1, nopLogger())
-	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, "Kari", Params{TimeLimit: 5, Seed: 1})
+	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5, Seed: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,17 +261,6 @@ func TestTheRealSolverProposesAGroupAndKeepsItsMembersOccupied(t *testing.T) {
 			if p.Name == "Dina" || p.Name == "Embla" {
 				t.Errorf("event %d: %s is in the group on Sound and cannot also take Camera", ev, p.Name)
 			}
-		}
-	}
-	// «mine oppdrag» agrees with the planner's own count for everyone: places of their own plus the group's, one each
-	loads := map[string]int{}
-	for _, l := range v.Load {
-		loads[l.Name] = l.Count
-	}
-	for name, person := range w.people {
-		m, err := s.Mine(ctx, w.org.Slug, w.plan.Slug, person.ID)
-		if err != nil || len(m.Assignments) != loads[name] {
-			t.Errorf("%s: %d assignments in «mine oppdrag», %d in the load (%v)", name, len(m.Assignments), loads[name], err)
 		}
 	}
 	// group work counts as one assignment per member

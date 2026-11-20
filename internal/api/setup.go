@@ -7,27 +7,20 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// setupRoutes: tasks, day types and combinations (per organisation), dates (per plan).
+// setupRoutes: tasks and combinations (per organisation), events (per plan).
 func (s *server) setupRoutes(mux *http.ServeMux) {
 	s.prefsRoutes(mux)
 	mux.HandleFunc("GET /api/orgs/{org}/tasks", s.listTasks)
 	mux.HandleFunc("POST /api/orgs/{org}/tasks", s.createTask)
-	mux.HandleFunc("POST /api/orgs/{org}/tasks/bulk", s.createTasks)
 	mux.HandleFunc("PATCH /api/orgs/{org}/tasks/{id}", s.updateTask)
 	mux.HandleFunc("DELETE /api/orgs/{org}/tasks/{id}", s.deleteTask)
-
-	mux.HandleFunc("GET /api/orgs/{org}/day-types", s.listDayTypes)
-	mux.HandleFunc("POST /api/orgs/{org}/day-types", s.createDayType)
-	mux.HandleFunc("PATCH /api/orgs/{org}/day-types/{id}", s.renameDayType)
-	mux.HandleFunc("PUT /api/orgs/{org}/day-types/{id}/tasks", s.setDayTypeTasks)
-	mux.HandleFunc("DELETE /api/orgs/{org}/day-types/{id}", s.deleteDayType)
 
 	mux.HandleFunc("GET /api/orgs/{org}/combinations", s.listCombinations)
 	mux.HandleFunc("PUT /api/orgs/{org}/combinations", s.setCombination)
 
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/events", s.listEvents)
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/events", s.addEvent)
-	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/events/bulk", s.addEventsBulk)
+	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/events/{id}/copy", s.copyEvent)
 	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}/events/{id}", s.updateEvent)
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/events/{id}", s.deleteEvent)
 }
@@ -63,40 +56,17 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Name    string `json:"name"`
-		Planned *bool  `json:"planned"`
+		Name string `json:"name"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), actor(r), b.Name, b.Planned == nil || *b.Planned)
+	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), b.Name)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
 	writeJSON(w, 201, t)
-}
-
-func (s *server) createTasks(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Names   string `json:"names"` // one per line
-		Planned *bool  `json:"planned"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	created, skipped, err := s.st.CreateTasks(r.Context(), r.PathValue("org"), actor(r), b.Names, b.Planned == nil || *b.Planned)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	if created == nil {
-		created = []store.Task{}
-	}
-	if skipped == nil {
-		skipped = []string{}
-	}
-	writeJSON(w, 201, map[string]any{"created": created, "skipped": skipped})
 }
 
 func (s *server) updateTask(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +78,7 @@ func (s *server) updateTask(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	t, err := s.st.UpdateTask(r.Context(), r.PathValue("org"), actor(r), id, p)
+	t, err := s.st.UpdateTask(r.Context(), r.PathValue("org"), id, p)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -121,79 +91,7 @@ func (s *server) deleteTask(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteTask(r.Context(), r.PathValue("org"), actor(r), id), s)
-}
-
-// ---- day types -----------------------------------------------------------------------------------------------
-
-func (s *server) listDayTypes(w http.ResponseWriter, r *http.Request) {
-	v, err := s.st.ListDayTypes(r.Context(), r.PathValue("org"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, v)
-}
-
-func (s *server) createDayType(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	d, err := s.st.CreateDayType(r.Context(), r.PathValue("org"), actor(r), b.Name)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 201, d)
-}
-
-func (s *server) renameDayType(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	var b struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	d, err := s.st.RenameDayType(r.Context(), r.PathValue("org"), actor(r), id, b.Name)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, d)
-}
-
-func (s *server) setDayTypeTasks(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	var b struct {
-		Tasks []store.DayTypeTask `json:"tasks"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	d, err := s.st.SetDayTypeTasks(r.Context(), r.PathValue("org"), actor(r), id, b.Tasks)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, d)
-}
-
-func (s *server) deleteDayType(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	noContent(w, s.st.DeleteDayType(r.Context(), r.PathValue("org"), actor(r), id), s)
+	noContent(w, s.st.DeleteTask(r.Context(), r.PathValue("org"), id), s)
 }
 
 // ---- combinations --------------------------------------------------------------------------------------------
@@ -212,10 +110,10 @@ func (s *server) setCombination(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetCombination(r.Context(), r.PathValue("org"), actor(r), b.A, b.B, b.Level), s)
+	noContent(w, s.st.SetCombination(r.Context(), r.PathValue("org"), b.A, b.B, b.Level), s)
 }
 
-// ---- dates ---------------------------------------------------------------------------------------------------
+// ---- events --------------------------------------------------------------------------------------------------
 
 func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 	v, err := s.st.ListEvents(r.Context(), r.PathValue("org"), r.PathValue("plan"))
@@ -226,51 +124,36 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, v)
 }
 
+// addEvent adds an event, or with "until" one every week up to and including that date; the answer is the list.
 func (s *server) addEvent(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Date        string `json:"date"`
-		DayTypeID   int64  `json:"day_type_id"`
-		Note        string `json:"note"`
-		StartTime   string `json:"start_time"`
-		EndTime     string `json:"end_time"`
-		Description string `json:"description"`
-	}
+	var b store.NewEvents
 	if !decode(w, r, &b) {
 		return
 	}
-	d, err := s.st.AddEventFull(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r),
-		store.NewEvent{Date: b.Date, DayTypeID: b.DayTypeID, Note: b.Note, StartTime: b.StartTime, EndTime: b.EndTime, Description: b.Description})
+	evs, err := s.st.AddEvents(r.Context(), r.PathValue("org"), r.PathValue("plan"), b)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
-	writeJSON(w, 201, d)
+	writeJSON(w, 201, evs)
 }
 
-func (s *server) addEventsBulk(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		From      string `json:"from"`
-		To        string `json:"to"`
-		Weekdays  []int  `json:"weekdays"` // ISO: 1 = Monday ... 7 = Sunday
-		DayTypeID int64  `json:"day_type_id"`
-		StartTime string `json:"start_time"` // optional, for every event added
-		EndTime   string `json:"end_time"`
+// copyEvent copies an event to other dates, with what the body says comes along (store.CopyOf).
+func (s *server) copyEvent(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.idParam(w, r)
+	if !ok {
+		return
 	}
+	var b store.CopyOf
 	if !decode(w, r, &b) {
 		return
 	}
-	created, skipped, err := s.st.AddEventsBulkTimed(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), b.From, b.To, b.Weekdays, b.DayTypeID, b.StartTime, b.EndTime)
+	evs, err := s.st.CopyEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, b)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
-	if created == nil {
-		created = []store.Event{}
-	}
-	if skipped == nil {
-		skipped = []string{}
-	}
-	writeJSON(w, 201, map[string]any{"created": created, "skipped": skipped})
+	writeJSON(w, 201, evs)
 }
 
 func (s *server) updateEvent(w http.ResponseWriter, r *http.Request) {
@@ -282,7 +165,7 @@ func (s *server) updateEvent(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &p) {
 		return
 	}
-	d, err := s.st.UpdateEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id, p)
+	d, err := s.st.UpdateEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, p)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -295,5 +178,5 @@ func (s *server) deleteEvent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	noContent(w, s.st.DeleteEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), actor(r), id), s)
+	noContent(w, s.st.DeleteEvent(r.Context(), r.PathValue("org"), r.PathValue("plan"), id), s)
 }

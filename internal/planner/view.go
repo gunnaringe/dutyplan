@@ -72,7 +72,7 @@ type CellPerson struct {
 	ID     int64  `json:"id"`
 	Name   string `json:"name"`
 	Weak   bool   `json:"weak"`   // the person said «poor» for the event or the task
-	Locked bool   `json:"locked"` // set by hand: the planner keeps it
+	Locked bool   `json:"locked"` // a manual cell when the run was made (set by hand or locked): the planner kept it
 }
 
 // CellGroup is a group in a place: proposed by the planner, or set by hand (Locked).
@@ -83,12 +83,9 @@ type CellGroup struct {
 	Fills   int      `json:"fills"`
 	Weak    bool     `json:"weak"` // a member said «poor» for the event or the task
 	Locked  bool     `json:"locked"`
-	// The members by id (Members has their names), and those of them who said «poor»: «mine oppdrag» needs them per person.
-	MemberIDs []int64 `json:"member_ids"`
-	WeakIDs   []int64 `json:"weak_member_ids"`
 }
 
-// CellText is a manual cell with free text («Gjest utenfra»).
+// CellText is a manual cell with free text («Outside guest»).
 type CellText struct {
 	Text  string `json:"text"`
 	Fills int    `json:"fills"`
@@ -96,7 +93,7 @@ type CellText struct {
 
 type Cell struct {
 	TaskID      int64        `json:"task_id"`
-	Slots       int          `json:"slots"` // filled + missing: the day type's places, or more when manual cells exceed them
+	Slots       int          `json:"slots"` // filled + missing: the event's places, or more when manual cells exceed them
 	People      []CellPerson `json:"people"`
 	Groups      []CellGroup  `json:"groups"`
 	Texts       []CellText   `json:"texts"`
@@ -105,10 +102,8 @@ type Cell struct {
 }
 
 type EventRow struct {
-	ID      int64  `json:"id"`
-	Date    string `json:"date"`
-	DayType string `json:"day_type"`
-	Note    string `json:"note"`
+	ID   int64  `json:"id"`
+	Date string `json:"date"`
 	// The time of day and the description are the event's current ones while it exists (they do not change the plan, so
 	// they do not make a run out of date), else the ones from when the run was made. Events of a date are in time order.
 	StartTime   string `json:"start_time"`
@@ -239,7 +234,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 
 	// A cell is every (event, task) the solver says something about: someone in it, a group or text in it, or places
 	// missing. Its places are what is filled plus what is missing, so a manual cell for a task the planner does not
-	// distribute (or beyond the day type's places) just works, and a day-type place of such a task shows nothing.
+	// distribute (or beyond the event's places) just works, and a place of such a task shows nothing.
 	type key struct{ ev, task string }
 	type acc struct {
 		people  []CellPerson
@@ -256,12 +251,10 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return cells[k]
 	}
-	weakMembers := map[[3]string][]int64{} // (event, task, group): the members who have a «poor»
+	weakGroup := map[[3]string]bool{} // (event, task, group): a member has a «poor»
 	for _, c := range out.Concessions {
 		if c.Group != "" {
-			who, _ := parseID(c.Person, "p")
-			k := [3]string{c.Date, c.Task, c.Group}
-			weakMembers[k] = append(weakMembers[k], who)
+			weakGroup[[3]string{c.Date, c.Task, c.Group}] = true
 		}
 	}
 	for _, a := range out.Assignments {
@@ -273,13 +266,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	for _, g := range out.GroupAssignments {
 		id, _ := parseID(g.Group, "g")
 		c := cell(g.Date, g.Task)
-		ids := make([]int64, 0, len(g.Members))
-		for _, mem := range g.Members {
-			who, _ := parseID(mem, "p")
-			ids = append(ids, who)
-		}
-		weak := weakMembers[[3]string{g.Date, g.Task, g.Group}]
-		c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(g.Group), Members: memberNames(g.Members), Fills: g.Fills, Weak: len(weak) > 0, MemberIDs: ids, WeakIDs: nonNilIDs(weak)})
+		c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(g.Group), Members: memberNames(g.Members), Fills: g.Fills, Weak: weakGroup[[3]string{g.Date, g.Task, g.Group}]})
 	}
 	for _, m := range out.Manual {
 		c := cell(m.Date, m.Task)
@@ -290,14 +277,11 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		if m.Group != "" {
 			id, _ := parseID(m.Group, "g")
 			var members []string
-			ids := []int64{}
 			for _, mem := range groups[m.Group].Members {
 				members = append(members, personName(pid(mem)))
-				ids = append(ids, mem)
 			}
 			sort.Strings(members)
-			weak := weakMembers[[3]string{m.Date, m.Task, m.Group}]
-			c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(m.Group), Members: members, Fills: fills, Weak: len(weak) > 0, Locked: true, MemberIDs: ids, WeakIDs: nonNilIDs(weak)})
+			c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(m.Group), Members: members, Fills: fills, Weak: weakGroup[[3]string{m.Date, m.Task, m.Group}], Locked: true})
 		} else {
 			c.texts = append(c.texts, CellText{Text: m.Label, Fills: fills})
 		}
@@ -323,9 +307,9 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		v.Weak = append(v.Weak, i18n.T(l, "compromise", who, taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
 	}
 
-	// A day-type place the answer says nothing about is shown as missing, never dropped silently.
+	// A place the answer says nothing about is shown as missing, never dropped silently.
 	for _, e := range snap.Events {
-		for task, n := range snap.Slots[e.DayTypeID] {
+		for task, n := range snap.SlotsFor(e) {
 			if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {
 				c := cell(eid(e.ID), tid(task))
 				c.missing, c.why = n, i18n.T(l, "explain.silent")
@@ -350,7 +334,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 	}
 	for _, e := range snap.Events {
-		row := EventRow{ID: e.ID, Date: e.Date, DayType: e.DayType, Note: e.Note, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
+		row := EventRow{ID: e.ID, Date: e.Date, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
 		if cur, ok := live[e.ID]; ok {
 			row.StartTime, row.EndTime, row.Description = cur.StartTime, cur.EndTime, cur.Description
 		}
@@ -392,12 +376,6 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	return v, nil
 }
 
-func nonNilIDs(x []int64) []int64 {
-	if x == nil {
-		return []int64{}
-	}
-	return x
-}
 func nonNil(x []CellPerson) []CellPerson {
 	if x == nil {
 		return []CellPerson{}

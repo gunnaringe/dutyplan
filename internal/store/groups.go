@@ -95,26 +95,26 @@ func groupIn(ctx context.Context, q dbq, oid, id int64) (Group, error) {
 	return Group{}, ErrNotFound
 }
 
-func (s *Store) CreateGroup(ctx context.Context, orgSlug, actor, name string) (Group, error) {
+func (s *Store) CreateGroup(ctx context.Context, orgSlug, name string) (Group, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Group{}, err
 	}
 	g := Group{Name: name, Proposable: true, Members: []int64{}, Tasks: []GroupTask{}}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO grp (org_id, name, created_at) VALUES (?, ?, ?)`, oid, name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, exists("group", name)
+			return exists("group", name)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		g.ID, _ = res.LastInsertId()
-		return logEntry{orgID: oid, action: "group.create", detail: name}, nil
+		return nil
 	})
 	return g, err
 }
@@ -125,7 +125,7 @@ type GroupPatch struct {
 	Proposable *bool   `json:"proposable"`
 }
 
-func (s *Store) UpdateGroup(ctx context.Context, orgSlug, actor string, id int64, patch GroupPatch) (Group, error) {
+func (s *Store) UpdateGroup(ctx context.Context, orgSlug string, id int64, patch GroupPatch) (Group, error) {
 	if patch.Name != nil {
 		n, err := cleanName(*patch.Name, "name")
 		if err != nil {
@@ -134,13 +134,13 @@ func (s *Store) UpdateGroup(ctx context.Context, orgSlug, actor string, id int64
 		patch.Name = &n
 	}
 	var g Group
-	err := s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if g, err = groupIn(ctx, tx, oid, id); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var changes []string
 		if patch.Name != nil && *patch.Name != g.Name {
@@ -152,41 +152,41 @@ func (s *Store) UpdateGroup(ctx context.Context, orgSlug, actor string, id int64
 			g.Proposable = *patch.Proposable
 		}
 		if len(changes) == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE grp SET name = ?, proposable = ? WHERE id = ? AND org_id = ?`, g.Name, g.Proposable, id, oid)
 		if isUnique(err) {
-			return logEntry{}, exists("group", g.Name)
+			return exists("group", g.Name)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "group.update", detail: fmt.Sprintf("#%d: %s", id, strings.Join(changes, "; "))}, nil
+		return nil
 	})
 	return g, err
 }
 
 // SetGroupMembers replaces the member list. Every person must be the organisation's own; an inactive person may be a
 // member (the planner leaves them out while they are inactive).
-func (s *Store) SetGroupMembers(ctx context.Context, orgSlug, actor string, id int64, people []int64) (Group, error) {
+func (s *Store) SetGroupMembers(ctx context.Context, orgSlug string, id int64, people []int64) (Group, error) {
 	set := map[int64]bool{}
 	for _, p := range people {
 		set[p] = true
 	}
 	var g Group
-	err := s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		old, err := groupIn(ctx, tx, oid, id)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		names := map[int64]string{}
 		for p := range set {
 			if err := inOrg(ctx, tx, "person", oid, p); err != nil {
-				return logEntry{}, err
+				return err
 			}
 		}
 		if err := scanAll(ctx, tx, `SELECT id, name FROM person WHERE org_id = ?`, []any{oid}, func(r *sql.Rows) error {
@@ -196,7 +196,7 @@ func (s *Store) SetGroupMembers(ctx context.Context, orgSlug, actor string, id i
 			names[pid] = n
 			return err
 		}); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		was := map[int64]bool{}
 		var removed, added []string
@@ -212,20 +212,20 @@ func (s *Store) SetGroupMembers(ctx context.Context, orgSlug, actor string, id i
 			}
 		}
 		if len(removed)+len(added) == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		sort.Strings(added)
 		sort.Strings(removed)
 		if _, err := tx.ExecContext(ctx, `DELETE FROM grp_member WHERE group_id = ? AND org_id = ?`, id, oid); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		for p := range set {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO grp_member (org_id, group_id, person_id) VALUES (?, ?, ?)`, oid, id, p); err != nil {
-				return logEntry{}, err
+				return err
 			}
 		}
 		if g, err = groupIn(ctx, tx, oid, id); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var parts []string
 		if len(added) > 0 {
@@ -234,14 +234,14 @@ func (s *Store) SetGroupMembers(ctx context.Context, orgSlug, actor string, id i
 		if len(removed) > 0 {
 			parts = append(parts, "-"+strings.Join(removed, ", -"))
 		}
-		return logEntry{orgID: oid, action: "group.members", detail: clip(g.Name+": "+strings.Join(parts, " "), 200)}, nil
+		return nil
 	})
 	return g, err
 }
 
 // SetGroupTasks replaces the tasks the planner may propose the group for. Only tasks the planner distributes
 // can be listed; fills 1-50; each task at most once.
-func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int64, tasks []GroupTask) (Group, error) {
+func (s *Store) SetGroupTasks(ctx context.Context, orgSlug string, id int64, tasks []GroupTask) (Group, error) {
 	seen := map[int64]bool{}
 	for _, t := range tasks {
 		if t.Fills < 1 || t.Fills > 50 {
@@ -256,59 +256,59 @@ func (s *Store) SetGroupTasks(ctx context.Context, orgSlug, actor string, id int
 		seen[t.TaskID] = true
 	}
 	var g Group
-	err := s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if _, err = groupIn(ctx, tx, oid, id); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		for _, t := range tasks {
 			var planned bool
 			err := tx.QueryRowContext(ctx, `SELECT planned FROM task WHERE id = ? AND org_id = ?`, t.TaskID, oid).Scan(&planned)
 			if errors.Is(err, sql.ErrNoRows) {
-				return logEntry{}, ErrNotFound
+				return ErrNotFound
 			}
 			if err != nil {
-				return logEntry{}, err
+				return err
 			}
 			if !planned {
-				return logEntry{}, Invalid("task_not_distributed", nil, "the planner does not distribute that task, so it cannot propose a group for it")
+				return Invalid("task_not_distributed", nil, "the planner does not distribute that task, so it cannot propose a group for it")
 			}
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM grp_task WHERE group_id = ? AND org_id = ?`, id, oid); err != nil {
-			return logEntry{}, err
+			return err
 		}
 		for _, t := range tasks {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO grp_task (org_id, group_id, task_id, fills, level) VALUES (?, ?, ?, ?, ?)`, oid, id, t.TaskID, t.Fills, t.Level); err != nil {
-				return logEntry{}, err
+				return err
 			}
 		}
 		if g, err = groupIn(ctx, tx, oid, id); err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "group.tasks", detail: fmt.Sprintf("%s: %d tasks", g.Name, len(tasks))}, nil
+		return nil
 	})
 	return g, err
 }
 
 // DeleteGroup refuses (ErrConflict) while a manual cell or a selection still names the group.
-func (s *Store) DeleteGroup(ctx context.Context, orgSlug, actor string, id int64) error {
-	return s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+func (s *Store) DeleteGroup(ctx context.Context, orgSlug string, id int64) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		g, err := groupIn(ctx, tx, oid, id)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM grp WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return logEntry{}, inUse("group", g.Name, "a manual cell or a selection")
+			return inUse("group", g.Name, "a manual cell or a selection")
 		} else if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "group.delete", detail: g.Name}, nil
+		return nil
 	})
 }

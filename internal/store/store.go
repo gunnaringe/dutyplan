@@ -29,7 +29,8 @@ var (
 	ErrNotFound = errors.New("not found")
 	ErrConflict = errors.New("already exists")
 	ErrInvalid  = errors.New("invalid")
-	ErrActor    = errors.New("actor required")
+	// ErrIncompatible: the database file was made by a version with another schema history (see migrate).
+	ErrIncompatible = errors.New("incompatible database")
 )
 
 // Coded is an error of one of the kinds above that also carries a stable code and parameters, so the web page can write
@@ -108,6 +109,33 @@ func (s *Store) migrate(ctx context.Context) error {
 		names = append(names, e.Name())
 	}
 	sort.Strings(names)
+	known := map[int]bool{}
+	for _, name := range names {
+		if v, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0]); err == nil {
+			known[v] = true
+		}
+	}
+	// The schema was squashed into one file on 2026-11-19 (nothing was live). A database made before that has versions
+	// this binary does not know, and opening it would mix two schemas: refuse it and say what to do.
+	var applied []int
+	rows, err := s.db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			rows.Close()
+			return err
+		}
+		applied = append(applied, v)
+	}
+	rows.Close()
+	for _, v := range applied {
+		if !known[v] {
+			return fmt.Errorf("%w: this database was made by an older or newer version of dutyplan (migration %d is unknown); start with a new database file", ErrIncompatible, v)
+		}
+	}
 	for _, name := range names {
 		version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
 		if err != nil {
@@ -145,53 +173,17 @@ func (s *Store) migrate(ctx context.Context) error {
 
 func (s *Store) stamp() string { return s.now().Format(time.RFC3339) }
 
-// logEntry is what a write reports about itself; the helper stores it in the same transaction.
-type logEntry struct {
-	orgID  int64
-	planID *int64
-	action string
-	detail string
-}
-
-// write is the only way to change data. It validates the actor, runs fn and records the change in change_log,
-// all in one transaction: a failed change leaves no log line, and a change never lacks one.
-func (s *Store) write(ctx context.Context, actor string, fn func(tx *sql.Tx) (logEntry, error)) error {
-	actor, err := cleanActor(actor)
-	if err != nil {
-		return err
-	}
+// write runs fn in one transaction: a change is either all there or not at all.
+func (s *Store) write(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	e, err := fn(tx)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO change_log (org_id, plan_id, actor, action, detail, at) VALUES (?, ?, ?, ?, ?, ?)`,
-		e.orgID, e.planID, actor, e.action, e.detail, s.stamp()); err != nil {
+	if err := fn(tx); err != nil {
 		return err
 	}
 	return tx.Commit()
-}
-
-// cleanActor accepts the self-declared name as sent by the client: percent-encoded UTF-8 (HTTP headers are not
-// safely UTF-8), 1-80 characters, no control characters.
-func cleanActor(raw string) (string, error) {
-	dec, err := url.PathUnescape(raw)
-	if err != nil {
-		return "", fmt.Errorf("%w: actor is not valid percent-encoding", ErrActor)
-	}
-	dec = strings.TrimSpace(dec)
-	if dec == "" {
-		return "", ErrActor
-	}
-	if utf8.RuneCountInString(dec) > 80 || !validText(dec) {
-		return "", fmt.Errorf("%w: actor must be 1-80 printable characters", ErrActor)
-	}
-	return dec, nil
 }
 
 func validText(s string) bool {
@@ -237,12 +229,11 @@ func Slugify(name string) string {
 	return s
 }
 
-func cleanSlug(slug, name string) (string, error) {
-	if slug == "" {
-		slug = Slugify(name)
-	}
-	if len(slug) < 2 || len(slug) > 40 || slug != Slugify(slug) {
-		return "", Invalid("slug_invalid", nil, "slug must be 2-40 characters of a-z, 0-9 and hyphens")
+// slugFor makes the address of an organisation or a plan from its name. A rename never changes it.
+func slugFor(name string) (string, error) {
+	slug := Slugify(name)
+	if len(slug) < 2 {
+		return "", Invalid("slug_invalid", nil, "the name needs at least two letters or digits (a-z, 0-9) for the address")
 	}
 	return slug, nil
 }
@@ -259,25 +250,25 @@ type Org struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func (s *Store) CreateOrg(ctx context.Context, actor, name, slug string) (Org, error) {
+func (s *Store) CreateOrg(ctx context.Context, name string) (Org, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Org{}, err
 	}
-	if slug, err = cleanSlug(slug, name); err != nil {
+	slug, err := slugFor(name)
+	if err != nil {
 		return Org{}, err
 	}
 	o := Org{Slug: slug, Name: name, CreatedAt: s.stamp()}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
-		res, err := tx.ExecContext(ctx, `INSERT INTO organization (slug, name, created_at) VALUES (?, ?, ?)`, o.Slug, o.Name, o.CreatedAt)
+	err = s.write(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO organization (slug, name, created_at) VALUES (?, ?, ?)`, o.Slug, o.Name, o.CreatedAt)
 		if isUnique(err) {
-			return logEntry{}, exists("organisation", o.Slug)
+			return exists("organisation", o.Slug)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		id, _ := res.LastInsertId()
-		return logEntry{orgID: id, action: "org.create", detail: o.Name}, nil
+		return nil
 	})
 	return o, err
 }
@@ -330,29 +321,29 @@ type Plan struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func (s *Store) CreatePlan(ctx context.Context, orgSlug, actor, name, slug string) (Plan, error) {
+func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Plan{}, err
 	}
-	if slug, err = cleanSlug(slug, name); err != nil {
+	slug, err := slugFor(name)
+	if err != nil {
 		return Plan{}, err
 	}
 	p := Plan{Slug: slug, Name: name, CreatedAt: s.stamp()}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
+		_, err = tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
 		if isUnique(err) {
-			return logEntry{}, exists("plan", p.Slug)
+			return exists("plan", p.Slug)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		pid, _ := res.LastInsertId()
-		return logEntry{orgID: oid, planID: &pid, action: "plan.create", detail: p.Name}, nil
+		return nil
 	})
 	return p, err
 }
@@ -398,26 +389,26 @@ type Person struct {
 	Proposable bool   `json:"proposable"`
 }
 
-func (s *Store) CreatePerson(ctx context.Context, orgSlug, actor, name string) (Person, error) {
+func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Person{}, err
 	}
 	p := Person{Name: name, Active: true, Proposable: true}
-	err = s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, created_at) VALUES (?, ?, ?)`, oid, p.Name, s.stamp())
 		if isUnique(err) {
-			return logEntry{}, exists("person", p.Name)
+			return exists("person", p.Name)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		p.ID, _ = res.LastInsertId()
-		return logEntry{orgID: oid, action: "person.create", detail: p.Name}, nil
+		return nil
 	})
 	return p, err
 }
@@ -450,7 +441,7 @@ type PersonPatch struct {
 	Proposable *bool   `json:"proposable"`
 }
 
-func (s *Store) UpdatePerson(ctx context.Context, orgSlug, actor string, id int64, patch PersonPatch) (Person, error) {
+func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patch PersonPatch) (Person, error) {
 	var p Person
 	if patch.Name != nil {
 		n, err := cleanName(*patch.Name, "name")
@@ -459,19 +450,19 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug, actor string, id int6
 		}
 		patch.Name = &n
 	}
-	err := s.write(ctx, actor, func(tx *sql.Tx) (logEntry, error) {
+	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		// The org_id in every statement is the tenancy guard: another organisation's person is simply not found.
 		err = tx.QueryRowContext(ctx, `SELECT id, name, active, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
 			Scan(&p.ID, &p.Name, &p.Active, &p.Proposable)
 		if errors.Is(err, sql.ErrNoRows) {
-			return logEntry{}, ErrNotFound
+			return ErrNotFound
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
 		var changes []string
 		if patch.Name != nil && *patch.Name != p.Name {
@@ -487,62 +478,17 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug, actor string, id int6
 			p.Proposable = *patch.Proposable
 		}
 		if len(changes) == 0 {
-			return logEntry{}, errNothingToChange()
+			return errNothingToChange()
 		}
 		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, active = ?, proposable = ? WHERE id = ? AND org_id = ?`,
 			p.Name, p.Active, p.Proposable, id, oid)
 		if isUnique(err) {
-			return logEntry{}, exists("person", p.Name)
+			return exists("person", p.Name)
 		}
 		if err != nil {
-			return logEntry{}, err
+			return err
 		}
-		return logEntry{orgID: oid, action: "person.update", detail: fmt.Sprintf("#%d: %s", id, strings.Join(changes, "; "))}, nil
+		return nil
 	})
 	return p, err
-}
-
-// ---- change log --------------------------------------------------------------------------------------------
-
-type LogEntry struct {
-	ID     int64  `json:"id"`
-	Plan   string `json:"plan,omitempty"`
-	Actor  string `json:"actor"`
-	Action string `json:"action"`
-	Detail string `json:"detail"`
-	At     string `json:"at"`
-}
-
-// ListLog returns the newest entries of one organisation, optionally for one plan only.
-func (s *Store) ListLog(ctx context.Context, orgSlug, planSlug string, limit int) ([]LogEntry, error) {
-	if limit < 1 || limit > 500 {
-		limit = 50
-	}
-	oid, err := orgID(ctx, s.db, orgSlug)
-	if err != nil {
-		return nil, err
-	}
-	q := `SELECT l.id, COALESCE(p.slug, ''), l.actor, l.action, l.detail, l.at
-	      FROM change_log l LEFT JOIN plan p ON p.id = l.plan_id WHERE l.org_id = ?`
-	args := []any{oid}
-	if planSlug != "" {
-		q += ` AND p.slug = ?`
-		args = append(args, planSlug)
-	}
-	q += ` ORDER BY l.id DESC LIMIT ?`
-	args = append(args, limit)
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []LogEntry{}
-	for rows.Next() {
-		var e LogEntry
-		if err := rows.Scan(&e.ID, &e.Plan, &e.Actor, &e.Action, &e.Detail, &e.At); err != nil {
-			return nil, err
-		}
-		out = append(out, e)
-	}
-	return out, rows.Err()
 }

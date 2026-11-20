@@ -3,7 +3,6 @@ package store
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -15,7 +14,6 @@ type rich struct {
 	plan, other   Plan
 	people        []Person
 	sound, camera Task
-	dayType       DayType
 	group         Group
 	pinned, dying int64 // runs of plan: a finished pinned run, and one that failed
 }
@@ -31,54 +29,54 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	r := rich{org: mustOrg(t, s, orgName)}
 	slug := r.org.Slug
 	for _, n := range []string{"Kari Test", "Ola Test"} {
-		p, err := s.CreatePerson(ctx, slug, "Ola", n)
+		p, err := s.CreatePerson(ctx, slug, n)
 		must(err)
 		r.people = append(r.people, p)
 	}
 	var err error
-	r.sound, err = s.CreateTask(ctx, slug, "Ola", "Sound", true)
+	r.sound, err = s.CreateTask(ctx, slug, "Sound")
 	must(err)
-	r.camera, err = s.CreateTask(ctx, slug, "Ola", "Camera", true)
+	r.camera, err = s.CreateTask(ctx, slug, "Camera")
 	must(err)
-	r.dayType, err = s.CreateDayType(ctx, slug, "Ola", "Match day")
+	must(s.SetCombination(ctx, slug, r.sound.ID, r.camera.ID, "cannot"))
+	r.group, err = s.CreateGroup(ctx, slug, "Choir")
 	must(err)
-	_, err = s.SetDayTypeTasks(ctx, slug, "Ola", r.dayType.ID, []DayTypeTask{{TaskID: r.sound.ID, Slots: 1}, {TaskID: r.camera.ID, Slots: 1}})
+	_, err = s.SetGroupMembers(ctx, slug, r.group.ID, []int64{r.people[0].ID, r.people[1].ID})
 	must(err)
-	must(s.SetCombination(ctx, slug, "Ola", r.sound.ID, r.camera.ID, "cannot"))
-	r.group, err = s.CreateGroup(ctx, slug, "Ola", "Choir")
+	_, err = s.SetGroupTasks(ctx, slug, r.group.ID, []GroupTask{{TaskID: r.camera.ID, Fills: 1, Level: "neutral"}})
 	must(err)
-	_, err = s.SetGroupMembers(ctx, slug, "Ola", r.group.ID, []int64{r.people[0].ID, r.people[1].ID})
-	must(err)
-	_, err = s.SetGroupTasks(ctx, slug, "Ola", r.group.ID, []GroupTask{{TaskID: r.camera.ID, Fills: 1, Level: "neutral"}})
-	must(err)
-	must(s.SetPersonTask(ctx, slug, "Ola", r.people[0].ID, r.sound.ID, "good"))
+	must(s.SetPersonTask(ctx, slug, r.people[0].ID, r.sound.ID, "good"))
 
-	r.plan, err = s.CreatePlan(ctx, slug, "Ola", planName, "")
+	r.plan, err = s.CreatePlan(ctx, slug, planName)
 	must(err)
-	r.other, err = s.CreatePlan(ctx, slug, "Ola", "Other plan", "")
+	r.other, err = s.CreatePlan(ctx, slug, "Other plan")
 	must(err)
 	for i, p := range []Plan{r.plan, r.other} {
 		var evs []Event
 		for _, d := range []string{"2026-08-09", "2026-08-16"} {
-			ev, err := s.AddEvent(ctx, slug, p.Slug, "Ola", d, r.dayType.ID, "")
+			ev, err := addWithPlaces(ctx, s, slug, p.Slug, NewEvents{Date: d}, map[int64]int{r.sound.ID: 1, r.camera.ID: 1})
 			must(err)
-			evs = append(evs, ev)
+			evs = append(evs, ev[0])
 		}
-		must(s.SetAvailability(ctx, slug, p.Slug, "Ola", r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[0].ID}, TaskID: r.sound.ID, PersonID: r.people[1].ID})
+		must(s.SetAvailability(ctx, slug, p.Slug, r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[0].ID, TaskID: r.sound.ID, PersonID: r.people[1].ID})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
 		must(err)
-		_, _, err = s.AddCells(ctx, slug, p.Slug, "Ola", NewCell{EventIDs: []int64{evs[1].ID}, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
 		must(err)
-		must(s.SetPool(ctx, slug, p.Slug, "Ola", []int64{evs[0].ID}, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
-		_, err = s.SetWeights(ctx, slug, p.Slug, "Ola", map[string]any{"w_fair": 12.0})
+		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
+		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, 2))
+		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
-		done, err := s.CreateRun(ctx, slug, p.Slug, "Kari", 1, 5, "h", []byte("{}"), []byte("{}"))
+		must(s.SetFieldValue(ctx, slug, p.Slug, evs[1].ID, field.ID, "Light"))
+		_, err = s.SetWeights(ctx, slug, p.Slug, map[string]any{"w_fair": 12.0})
+		must(err)
+		done, err := s.CreateRun(ctx, slug, p.Slug, 1, 5, "h", []byte("{}"), []byte("{}"))
 		must(err)
 		must(s.FinishRun(ctx, done, []byte(`{"status":"OPTIMAL"}`), ""))
-		must(s.PinRun(ctx, slug, p.Slug, "Ola", done, true))
-		bad, err := s.CreateRun(ctx, slug, p.Slug, "Kari", 2, 5, "h", []byte("{}"), []byte("{}"))
+		must(s.PinRun(ctx, slug, p.Slug, done, true))
+		bad, err := s.CreateRun(ctx, slug, p.Slug, 2, 5, "h", []byte("{}"), []byte("{}"))
 		must(err)
 		must(s.FinishRun(ctx, bad, nil, "boom"))
 		if i == 0 {
@@ -156,10 +154,10 @@ func sameCounts(t *testing.T, what string, before, after map[string]int) {
 func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	s := open(t)
 	got := func(column string) string { return strings.Join(tablesWith(t, s, column), " ") }
-	if want := "change_log event manual_cell person_event plan_run pool_member"; got("plan_id") != want {
+	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "change_log day_type day_type_task event grp grp_member grp_task manual_cell person person_event person_task plan plan_run pool_member task task_combination"
+	want := "event event_field event_task grp grp_member grp_task manual_cell person person_event person_task plan plan_field plan_run pool_member task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}
@@ -170,14 +168,14 @@ func TestRenamingChangesTheNameAndKeepsTheAddress(t *testing.T) {
 	a := makeRich(t, s, "Club A", "Autumn 2026")
 	b := makeRich(t, s, "Club B", "Autumn 2026") // same plan slug in the other organisation
 
-	o, err := s.RenameOrg(ctx, "Eva", a.org.Slug, "  Sports Club  ")
+	o, err := s.RenameOrg(ctx, a.org.Slug, "  Sports Club  ")
 	if err != nil || o.Name != "Sports Club" || o.Slug != a.org.Slug {
 		t.Fatalf("renamed organisation: %+v %v", o, err)
 	}
 	if got, err := s.GetOrg(ctx, a.org.Slug); err != nil || got.Name != "Sports Club" {
 		t.Errorf("the old address still works: %+v %v", got, err)
 	}
-	p, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, "Eva", "Fall")
+	p, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, "Fall")
 	if err != nil || p.Name != "Fall" || p.Slug != a.plan.Slug {
 		t.Fatalf("renamed plan: %+v %v", p, err)
 	}
@@ -190,23 +188,23 @@ func TestRenamingChangesTheNameAndKeepsTheAddress(t *testing.T) {
 	if got, _ := s.GetOrg(ctx, b.org.Slug); got.Name != "Club B" {
 		t.Errorf("renaming A changed B: %+v", got)
 	}
-	// the personal links and the people stay the same
-	if me, err := s.GetMe(ctx, a.org.Slug, a.plan.Slug, a.people[0].ID); err != nil || me.Person.Name != "Kari Test" {
-		t.Errorf("a personal page after the rename: %v", err)
+	// the people stay the same
+	if people, err := s.ListPeople(ctx, a.org.Slug); err != nil || len(people) == 0 || people[0].ID != a.people[0].ID {
+		t.Errorf("the people after the rename: %+v %v", people, err)
 	}
 
 	for name, err := range map[string]error{
-		"organisation to the same name": func() error { _, err := s.RenameOrg(ctx, "Eva", a.org.Slug, "Sports Club"); return err }(),
-		"plan to the same name":         func() error { _, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, "Eva", "Fall"); return err }(),
+		"organisation to the same name": func() error { _, err := s.RenameOrg(ctx, a.org.Slug, "Sports Club"); return err }(),
+		"plan to the same name":         func() error { _, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, "Fall"); return err }(),
 	} {
 		if !codeIs(err, "nothing_to_change") {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
 	for name, err := range map[string]error{
-		"empty organisation name": func() error { _, err := s.RenameOrg(ctx, "Eva", a.org.Slug, "  "); return err }(),
+		"empty organisation name": func() error { _, err := s.RenameOrg(ctx, a.org.Slug, "  "); return err }(),
 		"long plan name": func() error {
-			_, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, "Eva", strings.Repeat("x", 81))
+			_, err := s.RenamePlan(ctx, a.org.Slug, a.plan.Slug, strings.Repeat("x", 81))
 			return err
 		}(),
 	} {
@@ -214,30 +212,17 @@ func TestRenamingChangesTheNameAndKeepsTheAddress(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if _, err := s.RenameOrg(ctx, "", a.org.Slug, "X"); !errors.Is(err, ErrActor) {
-		t.Errorf("renaming needs a name: %v", err)
-	}
-	if _, err := s.RenameOrg(ctx, "Eva", "nope", "X"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RenameOrg(ctx, "nope", "X"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown organisation: %v", err)
 	}
 	for name, err := range map[string]error{
-		"unknown plan":             func() error { _, err := s.RenamePlan(ctx, a.org.Slug, "nope", "Eva", "X"); return err }(),
-		"A's plan through nobody":  func() error { _, err := s.RenamePlan(ctx, "nope", a.plan.Slug, "Eva", "X"); return err }(),
-		"B's other plan through A": func() error { _, err := s.RenamePlan(ctx, a.org.Slug, b.other.Slug+"-x", "Eva", "X"); return err }(),
+		"unknown plan":             func() error { _, err := s.RenamePlan(ctx, a.org.Slug, "nope", "X"); return err }(),
+		"A's plan through nobody":  func() error { _, err := s.RenamePlan(ctx, "nope", a.plan.Slug, "X"); return err }(),
+		"B's other plan through A": func() error { _, err := s.RenamePlan(ctx, a.org.Slug, b.other.Slug+"-x", "X"); return err }(),
 	} {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v", name, err)
 		}
-	}
-	var actions []string
-	for _, l := range mustLog(t, s, a.org.Slug, "") {
-		if strings.HasSuffix(l.Action, ".rename") {
-			actions = append(actions, l.Action+" "+l.Detail)
-		}
-	}
-	sort.Strings(actions)
-	if got, want := strings.Join(actions, "; "), `org.rename "Club A" -> "Sports Club"; plan.rename "Autumn 2026" -> "Fall"`; got != want {
-		t.Errorf("log: %s\nwant: %s", got, want)
 	}
 }
 
@@ -252,7 +237,7 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	orgB := idOf(t, s, `SELECT id FROM organization WHERE slug = ?`, b.org.Slug)
 
 	before := rowsWith(t, s, "plan_id", planID)
-	for _, table := range []string{"event", "manual_cell", "pool_member", "person_event", "plan_run", "change_log"} {
+	for _, table := range []string{"event", "manual_cell", "pool_member", "person_event", "plan_run", "event_task", "plan_field", "event_field"} {
 		if before[table] == 0 {
 			t.Fatalf("the plan must have rows in %s for this test to mean anything", table)
 		}
@@ -260,12 +245,9 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	otherBefore, planBBefore, orgBBefore := rowsWith(t, s, "plan_id", otherID), rowsWith(t, s, "plan_id", planB), rowsWith(t, s, "org_id", orgB)
 	orgABefore := rowsWith(t, s, "org_id", orgA)
 
-	if err := s.DeletePlan(ctx, a.org.Slug, a.plan.Slug, ""); !errors.Is(err, ErrActor) {
-		t.Errorf("deleting needs a name: %v", err)
-	}
 	for name, err := range map[string]error{
-		"unknown plan":         s.DeletePlan(ctx, a.org.Slug, "nope", "Eva"),
-		"unknown organisation": s.DeletePlan(ctx, "nope", a.plan.Slug, "Eva"),
+		"unknown plan":         s.DeletePlan(ctx, a.org.Slug, "nope"),
+		"unknown organisation": s.DeletePlan(ctx, "nope", a.plan.Slug),
 	} {
 		if !errors.Is(err, ErrNotFound) {
 			t.Errorf("%s: %v", name, err)
@@ -273,53 +255,29 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	}
 	sameCounts(t, "refused deletions", before, rowsWith(t, s, "plan_id", planID))
 
-	if err := s.DeletePlan(ctx, a.org.Slug, a.plan.Slug, "Eva"); err != nil {
+	if err := s.DeletePlan(ctx, a.org.Slug, a.plan.Slug); err != nil {
 		t.Fatal(err)
 	}
 	for table, n := range rowsWith(t, s, "plan_id", planID) {
-		if n != 0 && table != "change_log" {
+		if n != 0 {
 			t.Errorf("%d rows of the deleted plan are left in %s", n, table)
 		}
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM plan WHERE id = ?`, planID); n != 0 {
 		t.Error("the plan row is still there")
 	}
-	if n := count(t, s, `SELECT COUNT(*) FROM change_log WHERE plan_id = ?`, planID); n != 0 {
-		t.Errorf("%d log lines still point at the deleted plan", n)
-	}
 	sameCounts(t, "the same organisation's other plan", otherBefore, rowsWith(t, s, "plan_id", otherID))
 	sameCounts(t, "the other organisation's plan with the same address", planBBefore, rowsWith(t, s, "plan_id", planB))
 	sameCounts(t, "the other organisation", orgBBefore, rowsWith(t, s, "org_id", orgB))
-	// the organisation keeps its people, tasks, day types and groups, and its history grows by one line
+	// the organisation keeps its people, tasks and groups
 	after := rowsWith(t, s, "org_id", orgA)
-	for _, table := range []string{"person", "task", "day_type", "day_type_task", "task_combination", "grp", "grp_member", "grp_task", "person_task"} {
+	for _, table := range []string{"person", "task", "task_combination", "grp", "grp_member", "grp_task", "person_task"} {
 		if after[table] != orgABefore[table] {
 			t.Errorf("deleting a plan changed the organisation's %s: %d -> %d", table, orgABefore[table], after[table])
 		}
 	}
-	if after["change_log"] != orgABefore["change_log"]+1 {
-		t.Errorf("the history keeps every line and gets one more: %d -> %d", orgABefore["change_log"], after["change_log"])
-	}
 	noBrokenReferences(t, s)
 
-	log := mustLog(t, s, a.org.Slug, "")
-	if log[0].Action != "plan.delete" || log[0].Detail != "Autumn 2026" || log[0].Plan != "" || log[0].Actor != "Eva" {
-		t.Errorf("the deletion is the newest line: %+v", log[0])
-	}
-	var named int
-	for _, l := range log {
-		if l.Plan == "" && strings.HasPrefix(l.Detail, "Autumn 2026: ") {
-			named++
-		}
-	}
-	if named == 0 {
-		t.Error("the old lines about the plan keep the plan's name in front of the text")
-	}
-	for _, l := range mustLog(t, s, a.org.Slug, a.other.Slug) {
-		if strings.HasPrefix(l.Detail, "Autumn 2026: ") {
-			t.Errorf("the other plan's log picked up the deleted plan's lines: %+v", l)
-		}
-	}
 	if _, err := s.GetPlan(ctx, a.org.Slug, a.plan.Slug); !errors.Is(err, ErrNotFound) {
 		t.Errorf("the plan is gone: %v", err)
 	}
@@ -330,7 +288,7 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 		t.Errorf("the other organisation's plan with the same address: %+v %v", got, err)
 	}
 	// the address can be used again, and the new plan starts empty
-	again, err := s.CreatePlan(ctx, a.org.Slug, "Eva", "Autumn 2026", "")
+	again, err := s.CreatePlan(ctx, a.org.Slug, "Autumn 2026")
 	if err != nil || again.Slug != a.plan.Slug {
 		t.Fatalf("a new plan on the same address: %+v %v", again, err)
 	}
@@ -345,11 +303,11 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 func TestAPlanWithARunInProgressCannotBeDeleted(t *testing.T) {
 	s := open(t)
 	a := makeRich(t, s, "Club A", "Autumn 2026")
-	running, err := s.CreateRun(ctx, a.org.Slug, a.plan.Slug, "Kari", 9, 5, "h", []byte("{}"), []byte("{}"))
+	running, err := s.CreateRun(ctx, a.org.Slug, a.plan.Slug, 9, 5, "h", []byte("{}"), []byte("{}"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = s.DeletePlan(ctx, a.org.Slug, a.plan.Slug, "Eva")
+	err = s.DeletePlan(ctx, a.org.Slug, a.plan.Slug)
 	if !codeIs(err, "plan_busy") || !errors.Is(err, ErrConflict) {
 		t.Fatalf("a run in progress: %v", err)
 	}
@@ -363,8 +321,8 @@ func TestAPlanWithARunInProgressCannotBeDeleted(t *testing.T) {
 	if err := s.FinishRun(ctx, running, nil, "stopped"); err != nil {
 		t.Fatal(err)
 	}
-	other, _ := s.CreateRun(ctx, a.org.Slug, a.other.Slug, "Kari", 9, 5, "h", []byte("{}"), []byte("{}"))
-	if err := s.DeletePlan(ctx, a.org.Slug, a.plan.Slug, "Eva"); err != nil {
+	other, _ := s.CreateRun(ctx, a.org.Slug, a.other.Slug, 9, 5, "h", []byte("{}"), []byte("{}"))
+	if err := s.DeletePlan(ctx, a.org.Slug, a.plan.Slug); err != nil {
 		t.Errorf("a run in the other plan must not block: %v", err)
 	}
 	if _, err := s.GetRun(ctx, a.org.Slug, a.other.Slug, other); err != nil {
@@ -381,29 +339,26 @@ func TestDeletingAnOrganisationNeedsNoPlansAndTheAddressAndTakesAllOfIt(t *testi
 	bBefore := rowsWith(t, s, "org_id", orgB)
 	aBefore := rowsWith(t, s, "org_id", orgA)
 
-	if _, err := s.DeleteOrg(ctx, "", a.org.Slug, a.org.Slug); !errors.Is(err, ErrActor) {
-		t.Errorf("deleting needs a name: %v", err)
-	}
-	if _, err := s.DeleteOrg(ctx, "Eva", "nope", "nope"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.DeleteOrg(ctx, "nope", "nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown organisation: %v", err)
 	}
-	if _, err := s.DeleteOrg(ctx, "Eva", a.org.Slug, "Club A"); !codeIs(err, "confirm_mismatch") || !errors.Is(err, ErrInvalid) {
+	if _, err := s.DeleteOrg(ctx, a.org.Slug, "Club A"); !codeIs(err, "confirm_mismatch") || !errors.Is(err, ErrInvalid) {
 		t.Errorf("the confirmation is the address name, not the name: %v", err)
 	}
-	if _, err := s.DeleteOrg(ctx, "Eva", a.org.Slug, b.org.Slug); !codeIs(err, "confirm_mismatch") {
+	if _, err := s.DeleteOrg(ctx, a.org.Slug, b.org.Slug); !codeIs(err, "confirm_mismatch") {
 		t.Errorf("another organisation's address does not confirm this one: %v", err)
 	}
-	if _, err := s.DeleteOrg(ctx, "Eva", a.org.Slug, a.org.Slug); !codeIs(err, "org_has_plans") || !errors.Is(err, ErrConflict) {
+	if _, err := s.DeleteOrg(ctx, a.org.Slug, a.org.Slug); !codeIs(err, "org_has_plans") || !errors.Is(err, ErrConflict) {
 		t.Errorf("an organisation with plans: %v", err)
 	}
 	sameCounts(t, "refused deletions", aBefore, rowsWith(t, s, "org_id", orgA))
 
 	for _, p := range []Plan{a.plan, a.other} {
-		if err := s.DeletePlan(ctx, a.org.Slug, p.Slug, "Eva"); err != nil {
+		if err := s.DeletePlan(ctx, a.org.Slug, p.Slug); err != nil {
 			t.Fatal(err)
 		}
 	}
-	o, err := s.DeleteOrg(ctx, "Eva", a.org.Slug, a.org.Slug)
+	o, err := s.DeleteOrg(ctx, a.org.Slug, a.org.Slug)
 	if err != nil || o.Name != "Club A" || o.Slug != a.org.Slug {
 		t.Fatalf("deleted: %+v %v", o, err)
 	}
@@ -427,7 +382,7 @@ func TestDeletingAnOrganisationNeedsNoPlansAndTheAddressAndTakesAllOfIt(t *testi
 		t.Errorf("organisations: %+v", orgs)
 	}
 	// the address is free again
-	if again, err := s.CreateOrg(ctx, "Eva", "Club A", ""); err != nil || again.Slug != a.org.Slug {
+	if again, err := s.CreateOrg(ctx, "Club A"); err != nil || again.Slug != a.org.Slug {
 		t.Errorf("a new organisation on the same address: %+v %v", again, err)
 	}
 }
