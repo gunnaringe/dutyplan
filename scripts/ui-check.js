@@ -42,12 +42,12 @@ const { spawn } = require('child_process');
     const msgHas = (p, text) => until(p, (x) => [...document.querySelectorAll('#msg, dialog[open] [data-msg]')].some((m) => m.textContent.includes(x)), text, 'the message never contained «' + text + '»');
     const dialog = page.locator('dialog.modal');
     const closeDialog = async () => { await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' }); };
-    // A change in some dialogs draws the page again and opens the same dialog on top: wait for the new one.
+    // A change in some dialogs draws the page again, and the dialog stays open (the same element, never closed and opened
+    // again, so nothing flickers) with new contents: wait for them.
     const reopens = async (action, what) => {
-      await page.evaluate(() => document.querySelectorAll('dialog.modal').forEach((d) => { d.dataset.old = '1'; }));
+      await page.evaluate(() => document.querySelectorAll('dialog.modal[open]').forEach((d) => { d.dataset.same = '1'; d.firstElementChild.dataset.old = '1'; }));
       await action();
-      await page.waitForSelector('dialog.modal[open]:not([data-old])', { timeout: 4000 }).catch(() => { throw new Error('FAIL: ' + what); });
-      await until(page, () => !document.querySelector('dialog.modal[data-old]'), null, what);
+      await until(page, () => document.querySelector('dialog.modal[open][data-same]') && !document.querySelector('dialog.modal [data-old]'), null, what);
     };
     // addRow: a dashed line with a name and «Add»
     const addNamed = async (placeholder, name) => {
@@ -207,10 +207,10 @@ const { spawn } = require('child_process');
     ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'its people come back in their order: ' + await peopleOrder());
     const takes = async (person, list) => {
       await page.click(`button[aria-label="Open ${person}"]`);
-      // one click per step: not → bad → good
+      // one click per step: can’t → if needed → good
       for (const [task, level] of list) {
         const btn = () => dialog.locator(`button.cyc[aria-label^="${task} for ${person}:"]`);
-        ok((await btn().getAttribute('data-level')) === '', 'a task starts as not: ' + task);
+        ok((await btn().getAttribute('data-level')) === 'none', 'a task starts as can’t: ' + task);
         for (let i = 0; i < { poor: 1, good: 2 }[level]; i++) await reopens(() => btn().click(), 'the person dialog opens again');
         ok((await btn().getAttribute('data-level')) === level, 'the change is in the new dialog: ' + (await btn().getAttribute('aria-label')));
       }
@@ -234,6 +234,78 @@ const { spawn } = require('child_process');
     await answer('Jon Demo', ev[1]).click();
     await answer('Jon Demo', ev[1]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'never', 'Jon Demo, ' + ev[1], 'three clicks give ✗');
+    // An answer is shown at once and only sent: nothing is fetched again, so nothing flickers.
+    {
+      const gets = [];
+      const seen = (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) gets.push(new URL(r.url()).pathname); };
+      page.on('request', seen);
+      await answer('Ola Sample', ev[0]).click();
+      ok((await answer('Ola Sample', ev[0]).getAttribute('data-level')) === 'good', 'the answer shows at once');
+      await page.waitForTimeout(400);
+      page.off('request', seen);
+      ok(gets.length === 0, 'an answer fetches nothing again: ' + gets.join(', '));
+      await answer('Ola Sample', ev[0]).click();
+      await answer('Ola Sample', ev[0]).click();
+      await answer('Ola Sample', ev[0]).click();
+      await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'none', 'Ola Sample, ' + ev[0], 'four clicks give empty again');
+    }
+    // ⚡ by the name: whether the planner may pick the person, one click, kept
+    {
+      const auto = () => page.locator('tr.person-row:has(button[aria-label="Open Jon Demo"]) button.auto');
+      ok((await auto().getAttribute('aria-pressed')) === 'true', 'a person can be proposed from the start');
+      await auto().click();
+      ok((await auto().getAttribute('aria-pressed')) === 'false', 'one click: only by hand');
+      await page.reload();
+      await auto().waitFor();
+      ok((await auto().getAttribute('aria-pressed')) === 'false', 'the choice is kept');
+      await auto().click();
+      await until(page, () => document.querySelector('tr.person-row:has(button[aria-label="Open Jon Demo"]) button.auto').getAttribute('aria-pressed') === 'true', null, 'and back');
+      await page.click('button[aria-label="Open Jon Demo"]');
+      ok((await dialog.locator('input[type=checkbox]').count()) === 0, 'the person dialog has no «can be proposed» box any more');
+      await closeDialog();
+    }
+    // A change in a dialog fetches again only what it can have changed: a person's task → their answers and the drafts.
+    {
+      const gets = [];
+      const seen = (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) gets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); };
+      await page.click('button[aria-label="Open Kari Test"]');
+      const btn = () => dialog.locator('button.cyc[aria-label^="Video for Kari Test:"]');
+      const was = await btn().getAttribute('data-level');
+      await reopens(() => btn().click(), 'the person dialog is drawn again');  // (what earlier changes left out of date is fetched here)
+      page.on('request', seen);
+      await reopens(() => btn().click(), 'the person dialog is drawn again');
+      page.off('request', seen);
+      ok(gets.length > 0 && gets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'a task level fetches only the answers and the drafts again: ' + gets.join(', '));
+      while ((await btn().getAttribute('data-level')) !== was) await reopens(() => btn().click(), 'and back');
+      await closeDialog();
+    }
+    // ⓘ: the explanation in a dialog, not on the page
+    await page.click('button[aria-label="About Availability"]');
+    ok((await dialog.innerText()).includes('One row per person'), 'the ⓘ explains the section');
+    await closeDialog();
+    // Live: a change in another tab shows here without a reload, and the place sideways in the table is kept.
+    {
+      // another browser (its own context; CSP bypassed only so the test can make the table narrow)
+      const otherContext = await browser.newContext({ locale: 'en-GB', viewport: { width: 1280, height: 900 }, bypassCSP: true });
+      const other = await otherContext.newPage();
+      watch(other);
+      await other.goto(page.url());
+      await other.locator('button.ans').first().waitFor();
+      await other.evaluate(() => { window.notReloaded = true; });
+      const grid = other.locator('.grid-scroll.main');
+      await other.addStyleTag({ content: '.grid-scroll.main { max-width: 320px; }' });  // narrow, so it scrolls sideways
+      await grid.evaluate((g) => { g.scrollLeft = 60; });
+      const before = await grid.evaluate((g) => g.scrollLeft);
+      ok(before > 0, 'the table scrolls sideways in the test');
+      const otherGets = [];
+      other.on('request', (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) otherGets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); });
+      await answer('Jon Demo', ev[2]).click();
+      await until(other, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Jon Demo, ' + ev[2], 'the other tab shows the answer by itself');
+      ok(await other.evaluate(() => window.notReloaded === true), 'without a reload');
+      ok(otherGets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'the other tab fetches only the answers and the drafts: ' + otherGets.join(', '));
+      ok((await grid.evaluate((g) => g.scrollLeft)) === before, 'and stays where it was sideways');
+      await otherContext.close();
+    }
 
     await page.click('button[aria-label="Open the task Sound"]');
     // one click per step: a pair starts as bad → good → can't
@@ -299,7 +371,7 @@ const { spawn } = require('child_process');
     await page.reload();
     await barHas('have changed since this draft was made', 'an out-of-date draft is marked');
     // earlier drafts, under ⚙
-    await page.getByRole('button', { name: '⚙ Plan settings' }).click();
+    await page.getByRole('button', { name: 'Plan settings' }).click();
     ok((await dialog.innerText()).includes('Draft #1') && (await dialog.innerText()).includes('Current plan'), 'the earlier drafts are listed with the current plan');
     await dialog.getByRole('button', { name: 'Show draft #1' }).click();
     await barHas('Draft #1', 'an earlier draft can be shown');
@@ -336,12 +408,12 @@ const { spawn } = require('child_process');
     await h1is(page, 'Sports Club');
     await addNamed('New plan, e.g. Autumn 2026', 'Spring 2027');
     await page.waitForURL('**/p/spring-2027');
-    await page.getByRole('button', { name: '⚙ Plan settings' }).click();
+    await page.getByRole('button', { name: 'Plan settings' }).click();
     await dialog.locator('input[aria-label="Name of the plan"]').fill('Spring 2027 (draft)');
     await dialog.getByRole('button', { name: 'Rename' }).click();
     await h1is(page, 'Spring 2027 (draft)');
     ok(page.url().endsWith('/p/spring-2027'), 'a rename keeps the address');
-    await page.getByRole('button', { name: '⚙ Plan settings' }).click();
+    await page.getByRole('button', { name: 'Plan settings' }).click();
     await dialog.getByRole('button', { name: 'Delete the plan' }).click();
     await page.waitForURL('**/o/sports-club');
     await msgHas(page, 'The plan “Spring 2027 (draft)” was deleted.');

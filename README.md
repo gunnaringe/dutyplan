@@ -49,8 +49,9 @@ page says if a rule was broken (it should never be).
 ![The draft allocation: set by hand, locked, maybe, and a place that cannot be filled](docs/img/04-draft.png)
 
 **Everyone answers in the same table.** Under *Availability* each event has a count of the answers, and each person a row. Click
-a cell for ✓ *yes*, again for ? *maybe*, again for ✗ *no*, and once more to clear it; an empty cell is not answered and counts as
-neutral.
+a cell for a green thumb up (*yes*), again for a yellow ? (*maybe*), again for a red thumb down (*no*), and once more to clear it;
+an empty cell is not answered and counts as neutral. The ⚡ by a name says whether the planner may pick the person (off: only by
+hand); one click switches it.
 
 People are in the order you put them: ⋮⋮ drags a person to another row. *Sections* (for example *Guests* or *Not this term*)
 are headings with their people below; drag a person onto one, or pick it in the person's dialog. They only place people in
@@ -65,9 +66,15 @@ Weak spots the planner had to accept are listed as *compromises*.
 
 ![A place in the draft: why it is not filled, setting it by hand, and whom the planner picks from](docs/img/10-place.png)
 
+**Live, compact, and explained on request.** A click shows at once and is saved in the background; the page never reloads.
+When someone else changes the plan (or a draft is ready) the page updates by itself, kept where it was. The dates and the names
+stay in view while the table scrolls; move sideways with ‹ ›, *Next* (the next event from today), the mouse wheel over the dates,
+the arrow keys, or by dragging the table. Explanations are behind the ⓘ buttons instead of on the page.
+
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
 and whether the planner fills it: one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of
-a person opens the tasks they take part in: one click per task goes *not* → *bad* → *good*, and every task starts as *not*. A date opens the event's times, details and description.
+a person opens the tasks they take part in: one click per task goes red thumb down (*can’t*) → yellow ? (*if needed*) → green
+thumb up (*good*), and every task starts as *can’t*. A date opens the event's times, details and description.
 
 ![A task: what it can be combined with](docs/img/06-task.png)
 ![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)

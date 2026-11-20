@@ -56,8 +56,9 @@ func main() {
 		log.Error("listen", "err", err)
 		os.Exit(1)
 	}
+	handler := api.New(st, planner.New(st, solver, *workers, log), web.Files, log)
 	srv := &http.Server{
-		Handler:           api.New(st, planner.New(st, solver, *workers, log), web.Files, log),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -72,6 +73,7 @@ func main() {
 		<-stop
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		handler.CloseStreams() // the open streams would otherwise hold the shutdown up
 		srv.Shutdown(ctx)
 	}()
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {

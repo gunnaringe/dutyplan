@@ -53,6 +53,20 @@ PY_MUTATIONS: list[tuple[str, str, str]] = [
 
 # The Go app: (name, file from the repo root, pattern, replacement). The tenant guards first: they matter most not to lose.
 GO_MUTATIONS: list[tuple[str, str, str, str]] = [
+    # the stream: every write that went through, and the end of a run, is announced to the organisation's open pages (2026-11-20)
+    ("live: a write is not announced", "internal/api/stream.go", "s.hub.publish(org, change{Origin: r.Header.Get(clientHeader), Method: r.Method, Path: strings.TrimPrefix(r.URL.Path, \"/api\")})", "_ = org"),
+    ("live: the path of a change is dropped", "internal/api/stream.go", "Path: strings.TrimPrefix(r.URL.Path, \"/api\")})", "Path: \"\"})"),
+    ("live: two different changes keep one's path", "internal/api/stream.go", "m.Method, m.Path = \"\", \"\"", "_ = old"),
+    ("live: the end of a run names no plan", "internal/api/api.go", "Path: \"/orgs/\" + org + \"/plans/\" + plan + \"/runs\"", "Path: \"/orgs/\" + org + \"/plans/\" + \"/runs\""),
+    ("live: a refused write is announced", "internal/api/stream.go", "if sw.status != 0 && sw.status < 400 {", "if true {"),
+    ("live: reading is announced", "internal/api/stream.go", "if org == \"\" || r.Method == http.MethodGet || r.Method == http.MethodHead {", "if org == \"\" {"),
+    ("live: a stream hears another organisation", "internal/api/stream.go", "ch, cancel, ok := s.hub.subscribe(org)", "ch, cancel, ok := s.hub.subscribe(\"org-a\")"),
+    ("live: the origin of a change is dropped", "internal/api/stream.go", "change{Origin: r.Header.Get(clientHeader),", "change{Origin: \"\","),
+    ("live: two tabs' changes keep the first's origin", "internal/api/stream.go", "m.Origin = \"\"", "_ = old"),
+    ("live: the end of a run is not announced", "internal/planner/service.go", "fn(orgSlug, planSlug)", "_ = fn"),
+    ("live: the streams stay open at shutdown", "internal/api/stream.go", "close(h.done)", "_ = h.done"),
+    ("live: the server's write timeout cuts the stream", "internal/api/stream.go", "_ = rc.SetWriteDeadline(time.Time{})", "_ = rc"),
+    ("live: the stream is never pinged", "internal/api/stream.go", "if !send(\": ping\\n\\n\") {", "if false {"),
     # the page's assets are versioned, so no cache can pair a new page with an old script (2026-11-20)
     ("the page links its assets without a version", "internal/api/api.go", 'page = strings.ReplaceAll(page, `"/`+a+`"`, `"/`+a+`?v=`+s.version[a]+`"`)', "page, _ = strings.Clone(page), a"),
     ("an asset with an old version may be cached", "internal/api/api.go", 'if v := r.URL.Query().Get("v"); v != "" && v == s.version[name] {', 'if v := r.URL.Query().Get("v"); v != "" {'),
@@ -62,7 +76,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("tenant: people are listed without the org", "internal/store/store.go", "WHERE p.org_id = ? ORDER BY x.position", "WHERE ? > 0 ORDER BY x.position"),
     ("tenant: plans are listed without the org", "internal/store/store.go", "FROM plan WHERE org_id = ? ORDER BY id DESC", "FROM plan WHERE ? > 0 ORDER BY id DESC"),
     ("foreign keys off", "internal/store/store.go", 'q.Add("_pragma", "foreign_keys(1)")', 'q.Add("_pragma", "foreign_keys(0)")'),
-    ("cross-site writes are allowed", "internal/api/api.go", "http.NewCrossOriginProtection().Handler(recoverer(mux, log))", "recoverer(mux, log)"),
+    ("cross-site writes are allowed", "internal/api/api.go", "http.NewCrossOriginProtection().Handler(recoverer(s.notifying(mux), log))", "recoverer(s.notifying(mux), log)"),
     ("a database with unknown migrations is opened", "internal/store/store.go", "if !known[v] {", "if false {"),
     ("an organisation can be duplicated", "internal/store/migrations/001_schema.sql", "slug       TEXT NOT NULL UNIQUE,", "slug       TEXT NOT NULL,"),
     ("a plan can be duplicated in the organisation", "internal/store/migrations/001_schema.sql", "UNIQUE (org_id, slug)", "UNIQUE (id)"),

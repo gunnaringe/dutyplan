@@ -3,20 +3,23 @@
   --bg: #fbfbf8; --fg: #1d2420; --muted: #5b655f; --line: #d8ddd6; --accent: #1f6f4a; --err: #a12626; --warn: #9a5b00;
   /* set by hand (violet), the draft section (green) */
   --hand-bg: #e6defa; --hand-fg: #35246e; --draft-bg: #e3efe7; --draft-fg: #245c3c; --draft-line: #9cc5ab; --draft-row: #f6faf7;
+  /* the three levels of every choice: good (green thumb up), if needed (yellow ?), can't (red thumb down) */
+  --yes: #1d8a4a; --maybe: #b98a00; --no: #c62828;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #131715; --fg: #e8ede9; --muted: #9aa59e; --line: #2d3531; --accent: #5fc795; --err: #ff8a8a; --warn: #e0a040;
     --hand-bg: #3a2f5c; --hand-fg: #e4dcff; --draft-bg: #1d3527; --draft-fg: #9fdcb8; --draft-line: #2f5a41; --draft-row: #172019;
+    --yes: #5fd08f; --maybe: #f2c94c; --no: #ff7b7b;
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--line); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; padding: .35rem 1rem; border-bottom: 1px solid var(--line); }
 header .brand { font-weight: 700; color: var(--fg); text-decoration: none; }
 header label { color: var(--muted); font-size: .875rem; display: flex; gap: .4rem; align-items: center; }
 header .spacer { flex: 1; }
-main { max-width: 56rem; margin: 0 auto; padding: 1rem; overflow-wrap: break-word; }
+main { max-width: 56rem; margin: 0 auto; padding: .5rem 1rem 1rem; overflow-wrap: break-word; }
 h1 { font-size: 1.5rem; margin: .5rem 0 1rem; }
 h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
 a { color: var(--accent); }
@@ -46,7 +49,8 @@ th { color: var(--muted); font-weight: 600; font-size: .875rem; }
 .small { font-size: .875rem; }
 .err { color: var(--err); }
 .warn { color: var(--warn); }
-#msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; min-height: 1.5rem; }
+#msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
+#msg:empty { display: none; }
 #msg.err { color: var(--err); }
 #msg.ok { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -56,7 +60,12 @@ span.chip.poor { border-color: var(--warn); color: var(--warn); }
 span.chip.pin { border-color: var(--fg); color: var(--fg); font-weight: 600; }
 .tag { margin-left: .3rem; font-size: .75rem; color: var(--warn); border: 1px solid var(--warn); border-radius: .5rem; padding: 0 .35rem; }
 details summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center; font-weight: 600; color: var(--accent); }
-@media (pointer: coarse) { button, select, input[type=text], input[type=date], input[type=time], input[type=number] { min-height: 2.75rem; } }
+@media (pointer: coarse) {
+  button, select, input[type=text], input[type=date], input[type=time], input[type=number] { min-height: 2.75rem; }
+  .dp-table button.ans, button.cyc { min-height: 2.4rem; }
+  button.auto, button.info, button.icon { min-height: 2rem; min-width: 2rem; }
+  .dp-table td input { min-height: 2.25rem; }
+}
 /* Visible to screen readers only (the language switch has no visible label). */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
@@ -76,16 +85,27 @@ form.addrow button { padding: .05rem .55rem; font-size: .8rem; }
 
 /* ---- the plan page: one table, events across, the first column stays put ---- */
 main:has(.plan-page) { max-width: 100rem; }
-.title-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
-.title-bar h1 { margin: .25rem 0; }
-.title-bar button { margin-left: auto; }
-.grid-scroll { overflow-x: auto; margin: .5rem 0; border: 1px solid var(--line); border-radius: .4rem; }
+.title-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; }
+.title-bar h1 { margin: 0; font-size: 1.25rem; }
+.title-bar .back { color: var(--muted); text-decoration: none; }
+.title-bar .settings { margin-left: auto; }
+.sideways { display: inline-flex; gap: .25rem; align-items: center; }
+button.icon { padding: .2rem .35rem; line-height: 0; }
+.grid-scroll { overflow-x: auto; margin: .4rem 0; border: 1px solid var(--line); border-radius: .4rem; }
+/* The main table scrolls inside the window, so the dates (top) and the names (left) stay put, and the sideways scroll bar is
+   always on screen instead of under the last row. */
+.grid-scroll.main { overflow: auto; max-height: calc(100dvh - 7rem); scroll-snap-type: x proximity; scroll-padding-left: 10.5rem; overscroll-behavior-x: contain; }
+.grid-scroll.main thead th { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+.grid-scroll.main thead th[scope=col] { scroll-snap-align: start; }
+.grid-scroll.main thead th.corner { left: 0; z-index: 3; }
+.grid-scroll.dragging { cursor: grabbing; scroll-snap-type: none; user-select: none; }
+.grid-scroll:focus-visible { outline-offset: -2px; }
 table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
-.dp-table th, .dp-table td { vertical-align: top; padding: .3rem .4rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 7.5rem; }
-.dp-table th[scope=row] { position: sticky; left: 0; z-index: 1; background: var(--bg); min-width: 11rem; max-width: 15rem; color: var(--fg); font-size: .9rem; }
-.dp-table thead th { font-size: .85rem; color: var(--fg); }
+.dp-table th, .dp-table td { vertical-align: top; padding: .2rem .35rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 6.5rem; }
+.dp-table th[scope=row] { position: sticky; left: 0; z-index: 1; background: var(--bg); min-width: 10rem; max-width: 13rem; color: var(--fg); font-size: .875rem; }
+.dp-table thead th { font-size: .8rem; color: var(--fg); }
 .dp-table th.addcol, .dp-table td.addcol { min-width: 0; border-right: none; }
-.dp-table .sub { display: block; font-weight: 400; font-size: .8rem; color: var(--muted); }
+.dp-table .sub { display: block; font-weight: 400; font-size: .75rem; color: var(--muted); line-height: 1.25; }
 .dp-table .rl { display: flex; align-items: center; gap: .35rem; }
 .dp-table thead .rl .edit { margin-left: auto; }
 button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .35rem; font-size: .8rem; line-height: 1.5; }
@@ -94,9 +114,9 @@ button.edit { background: transparent; color: var(--fg); border: 1px solid var(-
 .dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
 .person-sect .nm { font-weight: 700; flex: 1; }
 .dp-table tr.person-sect th, .dp-table tr.person-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
-.dp-table tr.sect th, .dp-table tr.sect td { background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); font-size: .8rem; }
+.dp-table tr.sect th, .dp-table tr.sect td { background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); font-size: .75rem; padding-top: .1rem; padding-bottom: .1rem; vertical-align: middle; }
 .dp-table tr.sect th { text-transform: uppercase; letter-spacing: .04em; }
-.dp-table td input, .dp-table td select { width: 100%; min-width: 0; padding: .2rem .35rem; }
+.dp-table td input, .dp-table td select { width: 100%; min-width: 0; padding: .1rem .3rem; }
 /* every cell looks like a field: filled, or dashed with what goes there */
 .dp-table td.text input:placeholder-shown { border-style: dashed; font-style: italic; }
 .dp-table td.places input { width: 4rem; text-align: center; border-style: dashed; }
@@ -112,13 +132,15 @@ button.cellbtn.inline { display: inline; }
 .dp-table tr.sect.draft td { text-transform: none; letter-spacing: 0; font-size: .85rem; }
 .dp-table tr.draft-row th, .dp-table tr.draft-row td { background: var(--draft-row); }
 .dp-table tr.draft-row th { color: var(--muted); }
+.draft-bar { position: sticky; left: 0; width: max-content; max-width: calc(100vw - 3rem); }
+.draft-bar .bar-title { display: inline-flex; align-items: center; gap: .25rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .75rem; }
 .draft-bar .row-inline { margin: 0; }
 .dp-table .draft-bar select { width: auto; padding: .1rem .3rem; }
 .draft-bar button { padding: .15rem .7rem; }
 .draft-bar p, .draft-bar ul { margin: .25rem 0; }
 .draft-bar .pinned { border: 1px solid var(--accent); color: var(--accent); border-radius: .4rem; padding: 0 .5rem; font-weight: 700; white-space: nowrap; }
 .legend { margin-left: auto; display: inline-flex; gap: .75rem; align-items: center; color: var(--fg); }
-button.draftbtn { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; width: 100%; min-height: 1.8rem; background: none; border: 1px solid transparent; color: var(--fg); padding: .1rem; text-align: left; font-size: .85rem; }
+button.draftbtn { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; width: 100%; min-height: 1.5rem; background: none; border: 1px solid transparent; color: var(--fg); padding: .1rem; text-align: left; font-size: .85rem; }
 button.draftbtn:hover { border-color: var(--line); }
 .slot { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem; line-height: 1.3; }
 .slot.hand { background: var(--hand-bg); color: var(--hand-fg); font-weight: 600; border-radius: .3rem; padding: .05rem .4rem; }
@@ -127,22 +149,32 @@ button.draftbtn:hover { border-color: var(--line); }
 .slot.open { color: var(--muted); font-style: italic; }
 
 /* availability */
-.count { white-space: nowrap; }
-.count .good { color: var(--accent); }
-.count .poor { color: var(--warn); }
-.count .never { color: var(--err); }
-td.answer { text-align: center; }
-button.ans { width: 100%; min-height: 2.25rem; background: transparent; color: var(--fg); border-color: var(--line); font-weight: 700; }
-button.ans[data-level="good"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.ans[data-level="poor"] { background: var(--warn); border-color: var(--warn); color: #fff; }
-button.ans[data-level="never"] { background: transparent; border-color: var(--err); color: var(--err); }
-@media (prefers-color-scheme: dark) { button.ans[data-level="good"], button.ans[data-level="poor"] { color: #0b1a12; } }
-/* cycle(): a level that one click moves on (a person's task: not/bad/good; two tasks: can't/bad/good) */
-button.cyc { min-width: 6rem; min-height: 2.25rem; background: transparent; color: var(--muted); border-color: var(--line); font-weight: 700; }
-button.cyc[data-level="good"], button.cyc[data-level="practical"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.cyc[data-level="poor"], button.cyc[data-level="standard"] { background: var(--warn); border-color: var(--warn); color: #fff; }
-button.cyc[data-level="cannot"] { background: transparent; border-color: var(--err); color: var(--err); }
-@media (prefers-color-scheme: dark) { button.cyc[data-level="good"], button.cyc[data-level="practical"], button.cyc[data-level="poor"], button.cyc[data-level="standard"] { color: #0b1a12; } }
+.ic { display: inline-flex; vertical-align: -.15em; }
+.ic svg { width: 1.15em; height: 1.15em; }
+.ic-up { color: var(--yes); }
+.ic-maybe { color: var(--maybe); }
+.ic-down { color: var(--no); }
+.count { white-space: nowrap; vertical-align: middle; }
+.count b { display: inline-flex; align-items: center; gap: .1rem; margin-right: .45rem; font-weight: 600; color: var(--fg); }
+td.answer { text-align: center; padding: .1rem .2rem; vertical-align: middle; }
+/* An answer and a cycle() level: an icon on a light wash of its colour; empty = not answered */
+button.ans, button.cyc { display: inline-flex; justify-content: center; align-items: center; background: transparent; color: var(--fg); border-color: var(--line); padding: 0 .4rem; font-size: 1rem; }
+button.ans { width: 100%; min-height: 1.75rem; }
+button.cyc { min-width: 2.75rem; min-height: 2rem; }
+button.ans[data-level="good"], button.cyc[data-level="good"], button.cyc[data-level="practical"] { background: color-mix(in srgb, var(--yes) 16%, var(--bg)); border-color: var(--yes); }
+button.ans[data-level="poor"], button.cyc[data-level="poor"], button.cyc[data-level="standard"] { background: color-mix(in srgb, var(--maybe) 18%, var(--bg)); border-color: var(--maybe); }
+button.ans[data-level="never"], button.cyc[data-level="none"], button.cyc[data-level="cannot"] { background: color-mix(in srgb, var(--no) 12%, var(--bg)); border-color: var(--no); }
+/* ⚡ by a name: the planner may pick the person (off: faint) */
+button.auto { flex: none; margin-left: auto; background: transparent; border: 1px solid transparent; padding: .1rem; line-height: 0; color: var(--maybe); }
+button.auto[aria-pressed="false"] { color: var(--muted); opacity: .45; }
+button.auto[aria-pressed="false"] svg { fill: none; }
+button.auto[aria-pressed="true"] svg { fill: currentColor; }
+button.auto:hover { border-color: var(--line); opacity: 1; }
+.dp-table.turned thead button.auto { margin: .1rem auto 0; display: block; }
+/* ⓘ: the explanation of something, in a dialog */
+button.info { background: transparent; border: none; color: var(--muted); padding: 0 .15rem; line-height: 0; }
+button.info:hover { color: var(--accent); }
+.info-text p { margin: .25rem 0 .6rem; }
 .dp-table tr.inactive th, .dp-table tr.inactive td, .dp-table.turned .inactive { opacity: .6; }
 
 /* A phone: the availability turned (option A), events down and people across; the event column stays put, people scroll sideways. */
@@ -158,8 +190,9 @@ span.chip.task { border-color: var(--accent); color: var(--accent); }
 dialog.modal { width: min(36rem, calc(100% - 1.5rem)); max-height: calc(100% - 2rem); border: 1px solid var(--line); border-radius: .6rem; background: var(--bg); color: var(--fg); padding: 1rem; }
 dialog.modal::backdrop { background: rgb(0 0 0 / .35); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-.modal-head h2 { margin: 0; }
-dialog.modal h3 { font-size: 1rem; margin: 1rem 0 .35rem; }
+.modal-head h2 { margin: 0; flex: 1; font-size: 1.15rem; }
+.modal-head { gap: .5rem; }
+dialog.modal h3 { font-size: .95rem; margin: .75rem 0 .3rem; }
 dialog.modal h4 { font-size: .95rem; margin: .75rem 0 .2rem; }
 dialog.modal [data-msg] { margin: .25rem 0; min-height: 1.25rem; }
 dialog.modal [data-msg].err { color: var(--err); }
@@ -184,7 +217,12 @@ input.wide { width: 100%; }
 
 /* A phone: the table scrolls sideways under a narrower first column that stays put. */
 @media (max-width: 40rem) {
-  main { padding: .75rem .5rem; }
+  main { padding: .5rem .5rem; }
+  header { flex-wrap: nowrap; gap: .5rem; padding: .25rem .5rem; }
+  header .lbl, .title-bar .settings .lbl { display: none; }
+  header select { max-width: 11rem; padding: .25rem .4rem; }
+  header .spacer { display: none; }
+  .title-bar h1 { font-size: 1.1rem; }
   .dp-table th[scope=row] { min-width: 7.5rem; max-width: 9rem; }
   .dp-table th, .dp-table td { min-width: 6rem; }
   .legend { margin-left: 0; }
