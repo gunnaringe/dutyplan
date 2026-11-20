@@ -706,20 +706,29 @@ async function pagePlan(r, org, people) {
         ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
         : h('button', { type: 'button', class: 'ghost sm', 'aria-label': t('place.lock_aria', { name: x.name }),
           onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, [x.kind]: x.id, fills: x.kind === 'group' ? x.fills : 0, locked: true })) }, t('place.lock')))));
-    const kind = h('select', { 'aria-label': t('place.kind') }, [['person', t('common.person')], ['group', t('common.group')], ['text', t('common.text')]].map(([v, text]) => h('option', { value: v }, text)));
-    const personSel = h('select', { 'aria-label': t('common.person') }, people.map((p) => h('option', { value: String(p.id) }, p.name)));
-    const groupSel = h('select', { 'aria-label': t('common.group'), hidden: true }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
-    const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text'), hidden: true });
-    const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('place.fills'), hidden: true });
-    kind.addEventListener('change', () => { personSel.hidden = kind.value !== 'person'; groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; fills.hidden = kind.value === 'person'; });
+    // By hand: tick any number of people (also more than the places: the place then shows as fuller than needed), or set a
+    // group or a text that fills places.
+    const inCell = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
+    const pick = people.filter((p) => !inCell.has(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', 'aria-label': t('place.person_aria', { name: p.name }) }) }));
+    const peopleForm = pick.length ? h('form', { class: 'stack', onsubmit: async (e) => {
+      e.preventDefault();
+      const ticked = pick.filter((x) => x.box.checked);
+      if (!ticked.length) return;
+      if (await write(async () => { for (const { p } of ticked) await api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id }); })) changed();
+    } }, h('div', { class: 'chips' }, pick.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
+      h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, t('place.add_people')), h('span', { class: 'muted small' }, t('place.add_people_hint')))) : '';
+    const kind = h('select', { 'aria-label': t('place.kind') }, [['group', t('common.group')], ['text', t('common.text')]].filter(([v]) => v !== 'group' || groups.length).map(([v, text]) => h('option', { value: v }, text)));
+    const groupSel = h('select', { 'aria-label': t('common.group'), hidden: kind.value !== 'group' }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
+    const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text'), hidden: kind.value !== 'text' });
+    const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('place.fills') });
+    kind.addEventListener('change', () => { groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; });
     const setForm = h('form', { class: 'row-inline', onsubmit: async (e) => {
       e.preventDefault();
-      const body = { event: ev.id, task: tk.id };
-      if (kind.value === 'person') body.person = parseInt(personSel.value, 10);
-      else if (kind.value === 'group') { body.group = parseInt(groupSel.value, 10); body.fills = parseInt(fills.value, 10) || 1; }
-      else { body.label = textIn.value; body.fills = parseInt(fills.value, 10) || 1; }
+      const body = { event: ev.id, task: tk.id, fills: parseInt(fills.value, 10) || 1 };
+      if (kind.value === 'group') body.group = parseInt(groupSel.value, 10);
+      else body.label = textIn.value;
       if (await write(() => api('POST', pbase + '/cells', body))) changed();
-    } }, kind, personSel, groupSel, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
+    } }, kind, groupSel, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
 
     let poolPart = h('p', { class: 'muted small' }, t('place.not_planned'));
     if (tk.planned) {
@@ -739,7 +748,7 @@ async function pagePlan(r, org, people) {
       h('p', { class: 'muted small' }, tn('place.places', s.n)),
       done && s.open && s.why ? h('p', { class: 'warn small' }, t('place.why', { why: s.why })) : '',
       rows.length ? h('table', { class: 'mini' }, h('tbody', {}, rows)) : h('p', { class: 'muted small' }, t('place.nothing')),
-      h('h3', {}, t('place.set_by_hand')), setForm,
+      h('h3', {}, t('place.set_by_hand')), peopleForm, setForm,
       poolPart,
       h('p', { class: 'muted small' }, t('place.lock_hint')),
       foot(hands.length ? h('button', { type: 'button', class: 'danger', onclick: act(async () => {
