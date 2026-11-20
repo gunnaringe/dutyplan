@@ -133,9 +133,9 @@ Content-Security-Policy, but that only keeps other pages and search engines out;
 
 | What | For | Version |
 | --- | --- | --- |
-| Go | building the server | 1.26 |
-| Node | only the browser check and the pictures in `docs/img` | 24 |
-| Python with [OR-Tools](https://developers.google.com/optimization) | the planner (optional: without it everything works except **Make a draft**) | 3.12 (newer ones that OR-Tools has wheels for also work) |
+| Go | building the server | 1.27 |
+| Node | only the browser check and the pictures in `docs/img` | 26 |
+| Python with [OR-Tools](https://developers.google.com/optimization) | the planner (optional: without it everything works except **Make a draft**) | 3.14 (3.12 and newer work, as far as OR-Tools has wheels for them: not 3.15 yet) |
 | [mise](https://mise.jdx.dev) | the easy way to get both, pinned (see `mise.toml`) | recent |
 
 The database is SQLite through a pure-Go driver, so there is nothing to install for it.
@@ -165,7 +165,7 @@ Without mise:
 ```sh
 go build -o dutyplan ./cmd/dutyplan
 
-python3.12 -m venv planner-venv           # a Python that OR-Tools has wheels for
+python3.14 -m venv planner-venv           # a Python that OR-Tools has wheels for
 planner-venv/bin/pip install ./solver     # the planner and OR-Tools
 
 DUTYPLAN_SOLVER="$PWD/planner-venv/bin/python -m dutyplan_solver" ./dutyplan --db /var/lib/dutyplan/dutyplan.db
