@@ -80,7 +80,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("a database with unknown migrations is opened", "internal/store/store.go", "if !known[v] {", "if false {"),
     ("an organisation can be duplicated", "internal/store/migrations/001_schema.sql", "slug       TEXT NOT NULL UNIQUE,", "slug       TEXT NOT NULL,"),
     ("a plan can be duplicated in the organisation", "internal/store/migrations/001_schema.sql", "UNIQUE (org_id, slug)", "UNIQUE (id)"),
-    ("a person can be duplicated in the organisation", "internal/store/migrations/001_schema.sql", "UNIQUE (org_id, name)\n);\nCREATE UNIQUE INDEX person_org_id", "UNIQUE (id)\n);\nCREATE UNIQUE INDEX person_org_id"),
+    ("a person can be duplicated in the organisation", "internal/store/migrations/001_schema.sql", "    UNIQUE (org_id, name),\n    FOREIGN KEY (org_id, section_id)", "    UNIQUE (id),\n    FOREIGN KEY (org_id, section_id)"),
     ("a change without a new value is accepted", "internal/store/store.go", "if len(changes) == 0 {", "if false {"),
     # setup and dates (phase 2)
     ("tenant: a reference is checked without the org", "internal/store/setup.go", "WHERE id = ? AND org_id = ?`, id, oid).Scan(&one)", "WHERE id = ? AND ? > 0`, id, oid).Scan(&one)"),
