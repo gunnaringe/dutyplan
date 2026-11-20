@@ -50,7 +50,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
 - **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a
   field the page does not call; add it together with the page change that needs it. **No individual user management**: no personal links, no per-person pages or endpoints,
-  no accounts. A person is a row in the organisation (name, task choices, active, can be proposed) and in each plan's table.
+  no accounts. A person is a row in the organisation (name, task choices, can be proposed) and in each plan's table.
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
@@ -78,6 +78,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
   (`group_tasks`); the members are then busy, and the shared combination setting (task × task) decides what else they can have the same day.
   A **selection** (only these people/groups can be picked) covers «their own sound engineer» and the like. No skills or conditional requirements.
 - **Can be proposed** is a setting per person and per group (default yes). No = the planner never picks them; manual cells are fine.
+- **One click per setting** (2026-11-20, the user's choice): a person's task cycles *not → bad → good* (`poor`/`good`, not = no row, the start), two tasks
+  on the same event *can't → bad → good* (`cannot`/`practical`, bad = no row = impractical). *Neutral* tasks, *preferred* pairs and the plan setting
+  `default_combination` are gone. There is **no «active»** any more (removed 2026-11-20): «Can be proposed» is the only switch per person; people who
+  are not taking part are placed in a section (planned).
 - **Group work = one assignment per member** in the distribution (overall and per task).
 - **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
 - **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
@@ -91,7 +95,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
 ## Languages and texts
 
 - The repo, its docs, code, comments and tests are in **English**. The page is in English and Norwegian (bokmål); the browser's language is the default and the header has a switch.
-- **On the wire everything is English and ASCII**: levels `never|poor|neutral|good`, combinations `cannot|impractical|practical|preferred`, error kinds and codes. Texts for people are made at the edge.
+- **On the wire everything is English and ASCII**: an answer per event `never|poor|good` (blank = not answered), a person's task `poor|good` (no row = not),
+  a combination `cannot|practical` (no row = `impractical`, «bad»), a group's task `poor|neutral|good`; error kinds and codes. Texts for people are made at the edge.
 - **The page** (`web/i18n.js`): `MESSAGES = {en: {...}, nb: {...}}`, one `'key': 'text',` per line, `{placeholders}`, `.one`/`.other` for anything that counts (`tn`). Use `’` (not `'`) inside texts.
   `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key `app.js` names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
 - **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
@@ -106,7 +111,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   **The one exception** (the user's choice, 2026-11-20): a mutation may be deleted only when **the user asked for the feature it guards to be removed**, and the
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting).
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

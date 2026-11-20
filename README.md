@@ -58,7 +58,8 @@ Weak spots the planner had to accept are listed as *compromises*.
 ![A place in the draft: why it is not filled, setting it by hand, and whom the planner picks from](docs/img/10-place.png)
 
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
-and whether the planner fills it. The name of a person opens the tasks they take part in and how willingly. A date opens the event's times, details and description.
+and whether the planner fills it: one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of
+a person opens the tasks they take part in: one click per task goes *not* → *bad* → *good*, and every task starts as *not*. A date opens the event's times, details and description.
 
 ![A task: what it can be combined with](docs/img/06-task.png)
 ![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)

@@ -448,13 +448,13 @@ func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCombination(ctx, w.otherOrg.Slug, w.foreignTask.ID, foreignToo.ID, "preferred"); err != nil {
+	if err := s.SetCombination(ctx, w.otherOrg.Slug, w.foreignTask.ID, foreignToo.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetCombination(ctx, org, w.sound.ID, w.camera.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCombination(ctx, org, w.camera.ID, coffee.ID, "preferred"); err != nil {
+	if err := s.SetCombination(ctx, org, w.camera.ID, coffee.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
 	pairs := func(org string) string {
@@ -468,7 +468,7 @@ func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "cannot"); err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("[{%d %d cannot} {%d %d cannot} {%d %d preferred}]", w.sound.ID, w.camera.ID, w.sound.ID, coffee.ID, w.camera.ID, coffee.ID)
+	want := fmt.Sprintf("[{%d %d cannot} {%d %d cannot} {%d %d practical}]", w.sound.ID, w.camera.ID, w.sound.ID, coffee.ID, w.camera.ID, coffee.ID)
 	if got := pairs(org); got != want {
 		t.Errorf("cannot with anything:\n got %s\nwant %s", got, want)
 	}
@@ -478,7 +478,7 @@ func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "standard"); err != nil {
 		t.Fatal(err)
 	}
-	if got := pairs(org); got != fmt.Sprintf("[{%d %d preferred}]", w.camera.ID, coffee.ID) {
+	if got := pairs(org); got != fmt.Sprintf("[{%d %d practical}]", w.camera.ID, coffee.ID) {
 		t.Errorf("back to standard: %s", got)
 	}
 	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "sometimes"); !errors.Is(err, ErrInvalid) {
@@ -493,7 +493,7 @@ func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	if got := pairs(w.otherOrg.Slug); got != fmt.Sprintf("[{%d %d cannot}]", w.foreignTask.ID, foreignToo.ID) {
 		t.Errorf("other organisation: %s", got)
 	}
-	if got := pairs(org); got != fmt.Sprintf("[{%d %d preferred}]", w.camera.ID, coffee.ID) {
+	if got := pairs(org); got != fmt.Sprintf("[{%d %d practical}]", w.camera.ID, coffee.ID) {
 		t.Errorf("another organisation's change reached this one: %s", got)
 	}
 }

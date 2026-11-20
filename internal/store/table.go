@@ -340,7 +340,7 @@ type EventAnswer struct {
 type TaskAnswer struct {
 	PersonID int64  `json:"person_id"`
 	TaskID   int64  `json:"task_id"`
-	Level    string `json:"level"` // never | poor | neutral | good (no row = does not take part)
+	Level    string `json:"level"` // poor | good (no row = does not take part)
 }
 
 func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answers, error) {
@@ -373,10 +373,10 @@ func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answ
 }
 
 // SetTaskCombinations sets how one task combines with every other task of the organisation at once, for example «cannot be
-// combined with anything». "standard" removes the settings, so the plan's default applies again.
+// combined with anything». "standard" removes the settings, so the pairs are «bad» (impractical) again.
 func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug string, taskID int64, level string) error {
 	if level != "standard" && !combinationLevels[level] {
-		return Invalid("level_invalid", nil, "level must be cannot, impractical, practical, preferred or standard")
+		return Invalid("level_invalid", nil, "level must be cannot, practical or standard")
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)

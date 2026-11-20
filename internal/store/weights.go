@@ -14,20 +14,19 @@ import (
 // WeightSpec describes one setting of the planner's weighting: its default (the planner's own, checked against the
 // planner by a test), and the range it may be set within. Keys with a dot («w_task.good») are nested in the planner's input.
 type WeightSpec struct {
-	Key     string   `json:"key"`
-	Kind    string   `json:"kind"` // number | choice
-	Default any      `json:"default"`
-	Min     float64  `json:"min"`
-	Max     float64  `json:"max"`
-	Options []string `json:"options,omitempty"` // for a choice
+	Key     string  `json:"key"`
+	Default float64 `json:"default"`
+	Min     float64 `json:"min"`
+	Max     float64 `json:"max"`
 }
 
 func num(key string, def, min, max float64) WeightSpec {
-	return WeightSpec{Key: key, Kind: "number", Default: def, Min: min, Max: max}
+	return WeightSpec{Key: key, Default: def, Min: min, Max: max}
 }
 
 // WeightSpecs is every weight a plan may change, in the order they are shown. Not here on purpose: what an empty place
-// costs (it must come after everything else), stability and history (the app does not use them), and the neutral levels (zero).
+// costs (it must come after everything else), stability and history (the app does not use them), the neutral levels (zero),
+// and default_combination: a pair that is not set is «bad» (impractical), the planner's default.
 var WeightSpecs = []WeightSpec{
 	num("w_fair", 10, 0, 100),       // points per assignment a person is outside their share of all assignments
 	num("w_fair_range", 10, 0, 100), // ... and for the worst deviation
@@ -37,10 +36,8 @@ var WeightSpecs = []WeightSpec{
 	num("w_task.poor", -4, -100, 0), // ... or «poor»
 	num("w_date.good", 3, 0, 100),   // the same for an event
 	num("w_date.poor", -6, -100, 0),
-	num("w_combo.preferred", 6, 0, 100), // two tasks the same day that «should be combined»
-	num("w_combo.practical", 2, 0, 100),
-	num("w_combo.impractical", -5, -100, 0),
-	{Key: "default_combination", Kind: "choice", Default: "impractical", Options: []string{"cannot", "impractical", "practical", "preferred"}},
+	num("w_combo.practical", 2, 0, 100),     // two tasks the same day that are «good» together
+	num("w_combo.impractical", -5, -100, 0), // ... «bad» together (also every pair that is not set)
 }
 
 func weightSpec(key string) (WeightSpec, bool) {
@@ -61,37 +58,22 @@ func cleanWeights(in map[string]any) (map[string]any, error) {
 		if !ok {
 			return nil, Invalid("weight_unknown", map[string]any{"key": key}, "unknown weight %q", key)
 		}
-		switch spec.Kind {
-		case "choice":
-			s, isStr := raw.(string)
-			valid := false
-			for _, o := range spec.Options {
-				valid = valid || o == s
-			}
-			if !isStr || !valid {
-				return nil, Invalid("weight_choice", map[string]any{"key": key}, "%s must be one of %s", key, strings.Join(spec.Options, ", "))
-			}
-			if s != spec.Default {
-				out[key] = s
-			}
+		var v float64
+		switch x := raw.(type) {
+		case float64:
+			v = x
+		case int:
+			v = float64(x)
+		case int64:
+			v = float64(x)
 		default:
-			var v float64
-			switch x := raw.(type) {
-			case float64:
-				v = x
-			case int:
-				v = float64(x)
-			case int64:
-				v = float64(x)
-			default:
-				return nil, Invalid("weight_type", map[string]any{"key": key}, "%s must be a number", key)
-			}
-			if math.IsNaN(v) || math.IsInf(v, 0) || v < spec.Min || v > spec.Max {
-				return nil, Invalid("weight_range", map[string]any{"key": key, "min": spec.Min, "max": spec.Max}, "%s must be between %g and %g", key, spec.Min, spec.Max)
-			}
-			if v != spec.Default {
-				out[key] = v
-			}
+			return nil, Invalid("weight_type", map[string]any{"key": key}, "%s must be a number", key)
+		}
+		if math.IsNaN(v) || math.IsInf(v, 0) || v < spec.Min || v > spec.Max {
+			return nil, Invalid("weight_range", map[string]any{"key": key, "min": spec.Min, "max": spec.Max}, "%s must be between %g and %g", key, spec.Min, spec.Max)
+		}
+		if v != spec.Default {
+			out[key] = v
 		}
 	}
 	return out, nil

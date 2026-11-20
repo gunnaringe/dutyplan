@@ -39,8 +39,7 @@ var en = map[string]string{
 	"compromise.member_of":  " (as a member of %s)",
 
 	// Notes made when the run starts: things the planner was not told about
-	"note.inactive_person_cell":  "The cell for %s on %s was left out because the person is not active.",
-	"note.group_cell_no_members": "The cell for the group «%s» on %s was left out because the group has no active members.",
-	"note.group_no_members":      "The group «%s» has no active members and takes no part in the planning.",
-	"note.empty_selection":       "The selection for %s has no active people or groups, so nobody can be chosen.",
+	"note.group_cell_no_members": "The cell for the group «%s» on %s was left out because the group has no members.",
+	"note.group_no_members":      "The group «%s» has no members and takes no part in the planning.",
+	"note.empty_selection":       "The selection for %s has no people or groups, so nobody can be chosen.",
 }

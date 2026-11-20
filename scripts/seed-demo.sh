@@ -1,6 +1,6 @@
 #!/bin/sh
 # Test data for a running app: the organisation «Test» with
-#   - the tasks Singing, Sound and Video, and the combinations Sound + Video = impractical (should not),
+#   - the tasks Singing, Sound and Video, and the combinations Sound + Video not set (bad, the default),
 #     Sound + Singing and Video + Singing = cannot be combined,
 #   - eight people (invented names) who have chosen what they can do,
 #   - the plan «Autumn 2026» with an event every Sunday from 2 August to 20 December (21 of them), each needing
@@ -32,7 +32,7 @@ combo() { # combo <task> <task> <level>
   code=$(api PUT /api/orgs/test/combinations "{\"a\":$1,\"b\":$2,\"level\":\"$3\"}")
   [ "$code" = 204 ] || { echo "seed: the combination was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }
 }
-combo "$sound" "$video" impractical
+# Sound + Video is not set: «bad» (impractical), the default
 combo "$sound" "$singing" cannot
 combo "$video" "$singing" cannot
 
@@ -67,13 +67,13 @@ choose() { # choose <person> <task id> <level>
   code=$(api PUT "/api/orgs/test/people/$id/tasks/$2" "{\"level\":\"$3\"}")
   [ "$code" = 204 ] || grep -q 'nothing to change' /tmp/seed-body.$$ || { echo "seed: the answer for $1 was refused ($code): $(cat /tmp/seed-body.$$)"; exit 1; }  # an unchanged answer is not an error
 }
-choose "Kari Test" "$sound" neutral;      choose "Kari Test" "$video" good
-choose "Ola Sample" "$sound" good;        choose "Ola Sample" "$singing" neutral
-choose "Mona Example" "$sound" neutral;  choose "Mona Example" "$singing" good
-choose "Pia Demo" "$video" neutral
-choose "Ingrid Sample" "$video" neutral; choose "Ingrid Sample" "$singing" good
-choose "Njål Example" "$singing" neutral; choose "Njål Example" "$sound" poor
-choose "Sunniva Test" "$singing" neutral;  choose "Sunniva Test" "$video" good
-choose "Jon Demo" "$sound" neutral;       choose "Jon Demo" "$singing" good
+choose "Kari Test" "$sound" good;      choose "Kari Test" "$video" good
+choose "Ola Sample" "$sound" good;        choose "Ola Sample" "$singing" good
+choose "Mona Example" "$sound" good;  choose "Mona Example" "$singing" good
+choose "Pia Demo" "$video" good
+choose "Ingrid Sample" "$video" good; choose "Ingrid Sample" "$singing" good
+choose "Njål Example" "$singing" good; choose "Njål Example" "$sound" poor
+choose "Sunniva Test" "$singing" good;  choose "Sunniva Test" "$video" good
+choose "Jon Demo" "$sound" good;       choose "Jon Demo" "$singing" good
 
-echo "seed: ok. $url/o/test: Singing, Sound, Video (Sound+Video impractical, both cannot with Singing), 8 people with task choices, plan Autumn 2026 with 21 Sundays (press «Make a draft»)"
+echo "seed: ok. $url/o/test: Singing, Sound, Video (Sound+Video bad, both cannot with Singing), 8 people with task choices, plan Autumn 2026 with 21 Sundays (press «Make a draft»)"

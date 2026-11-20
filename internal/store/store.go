@@ -385,7 +385,6 @@ func (s *Store) GetPlan(ctx context.Context, orgSlug, planSlug string) (Plan, er
 type Person struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
-	Active     bool   `json:"active"`
 	Proposable bool   `json:"proposable"`
 }
 
@@ -394,7 +393,7 @@ func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person,
 	if err != nil {
 		return Person{}, err
 	}
-	p := Person{Name: name, Active: true, Proposable: true}
+	p := Person{Name: name, Proposable: true}
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -418,7 +417,7 @@ func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, active, proposable FROM person WHERE org_id = ? ORDER BY name COLLATE NOCASE`, oid)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, proposable FROM person WHERE org_id = ? ORDER BY name COLLATE NOCASE`, oid)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +425,7 @@ func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error
 	out := []Person{}
 	for rows.Next() {
 		var p Person
-		if err := rows.Scan(&p.ID, &p.Name, &p.Active, &p.Proposable); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Proposable); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -437,7 +436,6 @@ func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error
 // PersonPatch changes only the fields that are set.
 type PersonPatch struct {
 	Name       *string `json:"name"`
-	Active     *bool   `json:"active"`
 	Proposable *bool   `json:"proposable"`
 }
 
@@ -456,8 +454,8 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 			return err
 		}
 		// The org_id in every statement is the tenancy guard: another organisation's person is simply not found.
-		err = tx.QueryRowContext(ctx, `SELECT id, name, active, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
-			Scan(&p.ID, &p.Name, &p.Active, &p.Proposable)
+		err = tx.QueryRowContext(ctx, `SELECT id, name, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
+			Scan(&p.ID, &p.Name, &p.Proposable)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -469,10 +467,6 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 			changes = append(changes, fmt.Sprintf("name %q -> %q", p.Name, *patch.Name))
 			p.Name = *patch.Name
 		}
-		if patch.Active != nil && *patch.Active != p.Active {
-			changes = append(changes, fmt.Sprintf("active %t -> %t", p.Active, *patch.Active))
-			p.Active = *patch.Active
-		}
 		if patch.Proposable != nil && *patch.Proposable != p.Proposable {
 			changes = append(changes, fmt.Sprintf("proposable %t -> %t", p.Proposable, *patch.Proposable))
 			p.Proposable = *patch.Proposable
@@ -480,8 +474,8 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 		if len(changes) == 0 {
 			return errNothingToChange()
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, active = ?, proposable = ? WHERE id = ? AND org_id = ?`,
-			p.Name, p.Active, p.Proposable, id, oid)
+		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, proposable = ? WHERE id = ? AND org_id = ?`,
+			p.Name, p.Proposable, id, oid)
 		if isUnique(err) {
 			return exists("person", p.Name)
 		}

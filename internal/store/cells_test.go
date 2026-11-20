@@ -81,8 +81,6 @@ func TestManualCellRefusals(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
 	other := cellWorld(t, s, "Annen")
-	inactive := false
-	s.UpdatePerson(ctx, e.org.Slug, e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
 	ev := e.ev[0].ID
 	for name, c := range map[string]struct {
 		in   NewCell
@@ -98,7 +96,6 @@ func TestManualCellRefusals(t *testing.T) {
 		"text with control chars":       {NewCell{EventID: ev, TaskID: e.sound.ID, Label: "a\nb"}, ErrInvalid},
 		"a locked text":                 {NewCell{EventID: ev, TaskID: e.sound.ID, Label: "x", Locked: true}, ErrInvalid},
 		"no event":                      {NewCell{TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID}, ErrNotFound},
-		"inactive person":               {NewCell{EventID: ev, TaskID: e.sound.ID, PersonID: e.people["Cecilie"].ID}, ErrInvalid},
 		"unknown task":                  {NewCell{EventID: ev, TaskID: 99999, PersonID: e.people["Aslaug"].ID}, ErrNotFound},
 		"another organisation's task":   {NewCell{EventID: ev, TaskID: other.sound.ID, PersonID: e.people["Aslaug"].ID}, ErrNotFound},
 		"another organisation's person": {NewCell{EventID: ev, TaskID: e.sound.ID, PersonID: other.people["Aslaug"].ID}, ErrNotFound},
@@ -190,8 +187,6 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 		t.Errorf("another plan lists none: %+v", other)
 	}
 
-	inactive := false
-	s.UpdatePerson(ctx, e.org.Slug, e.people["Cecilie"].ID, PersonPatch{Active: &inactive})
 	for name, c := range map[string]struct {
 		ev           int64
 		task         int64
@@ -199,7 +194,6 @@ func TestPoolsAreReplacedPerTaskAndEvent(t *testing.T) {
 		want         error
 	}{
 		"a task the planner does not distribute": {e.ev[0].ID, e.sang.ID, []int64{a}, nil, ErrInvalid},
-		"an inactive person":                     {e.ev[0].ID, e.sound.ID, []int64{e.people["Cecilie"].ID}, nil, ErrInvalid},
 		"too many":                               {e.ev[0].ID, e.sound.ID, make([]int64, 401), nil, ErrInvalid},
 		"no event":                               {0, e.sound.ID, []int64{a}, nil, ErrNotFound},
 		"another organisation's person":          {e.ev[0].ID, e.sound.ID, []int64{other.people["Aslaug"].ID}, nil, ErrNotFound},

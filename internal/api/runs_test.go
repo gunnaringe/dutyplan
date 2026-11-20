@@ -36,7 +36,7 @@ func (e *env) plannable(name string) (org, plan string) {
 	must(err)
 	person, err := e.st.CreatePerson(ctx, o.Slug, "Aslaug")
 	must(err)
-	must(e.st.SetPersonTask(ctx, o.Slug, person.ID, task.ID, "neutral"))
+	must(e.st.SetPersonTask(ctx, o.Slug, person.ID, task.ID, "good"))
 	return o.Slug, p.Slug
 }
 

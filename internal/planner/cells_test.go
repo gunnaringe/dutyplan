@@ -102,57 +102,34 @@ func TestBuildInputSendsManualCellsAndSelections(t *testing.T) {
 	}
 }
 
-func TestBuildInputLeavesOutWhatNamesSomeoneWhoIsNotActive(t *testing.T) {
+func TestBuildInputLeavesOutWhatNamesAGroupWithoutMembers(t *testing.T) {
 	w := newWorld(t, "Club")
 	choir := w.group(t, "Choir", []string{"Dina", "Embla"})
-	w.cell(t, w.events[0], w.sound, store.NewCell{PersonID: w.people["Aslaug"].ID})
 	w.cell(t, w.events[1], w.singing, store.NewCell{GroupID: choir.ID})
 	w.cell(t, w.events[2], w.singing, store.NewCell{Label: "Guest"})
-	w.pool(t, w.events[0], w.sound, []string{"Aslaug", "Birger"}, choir)
-	w.pool(t, w.events[1], w.sound, []string{"Aslaug"})
-	off := false
-	deactivate := func(names ...string) {
-		for _, n := range names {
-			w.st.UpdatePerson(ctx, w.org.Slug, w.people[n].ID, store.PersonPatch{Active: &off})
-		}
+	w.pool(t, w.events[0], w.sound, []string{"Aslaug"}, choir)
+	w.pool(t, w.events[1], w.sound, nil, choir)
+	if _, err := w.st.SetGroupMembers(ctx, w.org.Slug, choir.ID, nil); err != nil {
+		t.Fatal(err)
 	}
-
-	deactivate("Aslaug")
 	locked, pools, _, snap, _ := w.cellsAndPools(t)
 	for _, l := range locked {
-		if l.Person != "" {
-			t.Errorf("a manual cell for an inactive person must not be sent (the solver would count the place without knowing who): %+v", l)
+		if l.Group != "" {
+			t.Errorf("a group with nobody in it must not be sent (the solver would count the place without knowing who): %+v", l)
 		}
 	}
-	if len(locked) != 2 {
-		t.Errorf("the group and the text stay: %+v", locked)
+	if len(locked) != 1 {
+		t.Errorf("the text stays: %+v", locked)
 	}
-	if len(snap.rendered(i18n.EN)) != 2 || !strings.Contains(snap.rendered(i18n.EN)[0], "The cell for Aslaug on Sound 2026-08-09") {
-		t.Errorf("the run says it left her out (and that her selection on 16 Aug is now empty): %v", snap.rendered(i18n.EN))
-	}
-	if fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Birger"].ID)}) {
-		t.Errorf("an inactive person leaves the selection: %+v", pools[0])
+	if len(pools) != 2 || len(pools[0].Groups) != 0 || fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Aslaug"].ID)}) {
+		t.Errorf("the group leaves the selection, the person stays: %+v", pools)
 	}
 	// a selection left with nobody still restricts (nobody can be chosen) and says so
-	if len(pools) != 2 || len(pools[1].People) != 0 || len(pools[1].Groups) != 0 {
+	if len(pools[1].People) != 0 || len(pools[1].Groups) != 0 {
 		t.Errorf("the restriction stays when everyone in it is gone: %+v", pools)
 	}
-	if !strings.Contains(strings.Join(snap.rendered(i18n.EN), "|"), "The selection for Sound 2026-08-16 has no active") {
-		t.Errorf("warnings: %v", snap.rendered(i18n.EN))
-	}
-
-	// a group without active members: its manual cell and its place in a selection go too
-	deactivate("Dina", "Embla")
-	locked, pools, _, snap, _ = w.cellsAndPools(t)
-	for _, l := range locked {
-		if l.Group != "" {
-			t.Errorf("a group with nobody active must not be sent: %+v", l)
-		}
-	}
-	if len(pools[0].Groups) != 0 {
-		t.Errorf("the group leaves the selection: %+v", pools[0])
-	}
-	if !strings.Contains(strings.Join(snap.rendered(i18n.EN), "|"), "group «Choir» on Singing 2026-08-16") {
+	all := strings.Join(snap.rendered(i18n.EN), "|")
+	if !strings.Contains(all, "group «Choir» on Singing 2026-08-16") || !strings.Contains(all, "The selection for Sound 2026-08-16 has no people") {
 		t.Errorf("warnings: %v", snap.rendered(i18n.EN))
 	}
 }

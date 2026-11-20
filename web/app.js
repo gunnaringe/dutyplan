@@ -207,7 +207,7 @@ async function pageOrg(r, org, people) {
     const gpath = `${base}/groups/${g.id}`;
     const changed = () => { again('group', g.id); dlg.close(); render(); };
     const name = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': t('common.name') });
-    const boxes = people.filter((p) => p.active || g.members.includes(p.id)).map((p) => ({ p,
+    const boxes = people.map((p) => ({ p,
       box: h('input', { type: 'checkbox', checked: g.members.includes(p.id), 'aria-label': t('group.member_aria', { person: p.name, group: g.name }) }) }));
     const proposable = h('input', { type: 'checkbox', checked: g.proposable, 'aria-label': t('group.proposable') });
     proposable.addEventListener('change', async () => { if (await write(() => api('PATCH', gpath, { proposable: proposable.checked }))) changed(); else proposable.checked = g.proposable; });
@@ -223,7 +223,7 @@ async function pageOrg(r, org, people) {
         if (name.value.trim() !== g.name && await write(() => api('PATCH', gpath, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('group.members')),
-      boxes.length ? [h('div', { class: 'chips' }, boxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name + (p.active ? '' : ' ' + t('person.inactive_short'))))),
+      boxes.length ? [h('div', { class: 'chips' }, boxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
         h('div', { class: 'row-inline' }, h('button', { type: 'button', onclick: async () => {
           if (await write(() => api('PUT', gpath + '/members', { people: boxes.filter((x) => x.box.checked).map((x) => x.p.id) }))) changed();
         } }, t('group.save_members')))] : h('p', { class: 'muted' }, t('group.no_people')),
@@ -297,15 +297,24 @@ async function pageOrg(r, org, people) {
 
 const ANSWER_NEXT = { '': 'good', good: 'poor', poor: 'never', never: '' };
 const ANSWER_MARK = { '': '', good: '✓', poor: '?', never: '✗' };
-const PERSON_TASK_LEVELS = [['', 'person.not_taking_part'], ['never', 'level.task.never'], ['poor', 'level.poor'], ['neutral', 'level.neutral'], ['good', 'level.good']];
-const SELECT_LEVELS = ['standard', 'cannot', 'impractical', 'practical', 'preferred'];
+// One click moves a setting on, the same way as the answers. A person's task: not → bad → good (not = no row).
+// Two tasks on the same event: can't → bad → good (bad = no row: a pair that is not set is impractical for the planner).
+const TASK_NEXT = { '': 'poor', poor: 'good', good: '' };
+const COMBO_NEXT = { cannot: 'standard', standard: 'practical', practical: 'cannot' };
+// cycle: a button that shows a level and moves it on with a click. kind 'task' or 'combo' picks the texts and colours.
+function cycle(kind, level, aria, onNext) {
+  const text = (l) => t(kind === 'task' ? ({ '': 'pick.not', poor: 'pick.poor', good: 'pick.good' })[l] : ({ cannot: 'combo.cannot', standard: 'combo.bad', practical: 'combo.good' })[l]);
+  const b = h('button', { type: 'button', class: 'cyc', 'data-level': level, 'aria-label': `${aria}: ${text(level)}` }, text(level));
+  b.addEventListener('click', () => onNext(kind === 'task' ? TASK_NEXT[level] : COMBO_NEXT[level], b));
+  return b;
+}
 
 // Weighting: what the planner puts weight on, for this plan. The numbers are points in the planner's sum; the defaults are a good
 // starting point. Only what differs from the default is stored, so a changed default reaches plans that never chose anything.
 const WEIGHT_GROUP = {
   w_fair: 'fair', w_fair_range: 'fair', w_task_fair: 'fair', w_task_range: 'fair',
   'w_task.good': 'wishes', 'w_task.poor': 'wishes', 'w_date.good': 'wishes', 'w_date.poor': 'wishes',
-  'w_combo.preferred': 'combos', 'w_combo.practical': 'combos', 'w_combo.impractical': 'combos', default_combination: 'combos',
+  'w_combo.practical': 'combos', 'w_combo.impractical': 'combos',
 };
 const weightLabel = (key) => t('weight.' + key + '.label');
 const weightGroup = (key) => t('weight.group.' + (WEIGHT_GROUP[key] || 'fair'));
@@ -313,15 +322,13 @@ const weightGroup = (key) => t('weight.group.' + (WEIGHT_GROUP[key] || 'fair'));
 function weightsForm(path, wr, saved) {
   const inputs = wr.specs.map((spec) => {
     const cur = spec.key in wr.values ? wr.values[spec.key] : spec.default;
-    const input = spec.kind === 'choice'
-      ? h('select', { 'aria-label': weightLabel(spec.key) }, spec.options.map((o) => h('option', { value: o, selected: o === cur }, hasMsg('combo.' + o) ? t('combo.' + o) : o)))
-      : h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': weightLabel(spec.key) });
+    const input = h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': weightLabel(spec.key) });
     return { spec, input, changed: spec.key in wr.values };
   });
   const groups = [...new Set(wr.specs.map((x) => weightGroup(x.key)))];
   const blocks = groups.map((g) => h('div', { class: 'weight-group' }, h('h4', {}, g),
     inputs.filter(({ spec }) => weightGroup(spec.key) === g).map(({ spec, input, changed }) => {
-      const def = spec.kind === 'choice' ? t('combo.' + spec.default) : spec.default;
+      const def = spec.default;
       return h('div', { class: 'weight-row' + (changed ? ' changed' : '') },
         h('label', {}, h('span', { class: 'wlabel' }, weightLabel(spec.key), changed ? h('span', { class: 'tag' }, t('weights.changed')) : ''), input),
         h('div', { class: 'small muted' }, `${t('weight.' + spec.key + '.hint')} ${t('weights.default', { value: def })}`));
@@ -335,8 +342,7 @@ function weightsForm(path, wr, saved) {
         h('button', { type: 'button', onclick: () => {
           const values = {};
           for (const { spec, input } of inputs) {
-            if (spec.kind === 'choice') values[spec.key] = input.value;
-            else if (input.value.trim() !== '') values[spec.key] = Number(input.value);
+            if (input.value.trim() !== '') values[spec.key] = Number(input.value);
           }
           return save(values, t('weights.saved'))();
         } }, t('weights.save')),
@@ -636,12 +642,10 @@ async function pagePlan(r, org, people) {
       if (await write(async () => { if (!on) confirmed(t('task.alone_off_confirm', { name: tk.name })); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
       else aloneBox.checked = !on;
     });
-    const pairRows = others.map((o) => {
-      const cur = levelWith(o);
-      return h('tr', {}, h('td', {}, o.name), h('td', {}, h('select', { 'aria-label': `${tk.name} + ${o.name}`, onchange: async (e) => {
-        if (await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: e.target.value }))) changed(); else e.target.value = cur;
-      } }, SELECT_LEVELS.map((v) => h('option', { value: v, selected: v === cur }, t('combo.' + v))))));
-    });
+    const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next, b) => {
+      b.disabled = true;
+      if (await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: next }))) changed(); else b.disabled = false;
+    }))));
     dlg = modal(tk.name,
       h('p', { class: 'muted small' }, t('task.org_wide', { org: org.name })),
       h('form', { class: 'row', onsubmit: async (e) => {
@@ -651,7 +655,7 @@ async function pagePlan(r, org, people) {
       h('label', { class: 'check' }, planned, ' ' + t('task.planned'), h('span', { class: 'muted small' }, ' ' + t('task.planned_off'))),
       h('h3', {}, t('task.combine')),
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
-      pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
+      pairRows.length ? [h('p', { class: 'muted small' }, t('task.combine_hint')), h('table', { class: 'mini' }, h('tbody', {}, pairRows))] : '',
       h('p', { class: 'muted small' }, t('task.places_in_table')),
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
         if (await write(async () => { confirmed(t('task.delete_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
@@ -671,20 +675,18 @@ async function pagePlan(r, org, people) {
     const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || { level: '' }).level;
     const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
       const cur = levelOf(tk);
-      return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, h('select', { 'aria-label': t('person.task_aria', { name: p.name, task: tk.name }), onchange: async (e) => {
-        const v = e.target.value;
-        if (await write(() => (v ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: v }) : api('DELETE', `${ppath}/tasks/${tk.id}`)))) changed(); else e.target.value = cur;
-      } }, PERSON_TASK_LEVELS.map(([v, k]) => h('option', { value: v, selected: v === cur }, t(k))))));
+      return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, cycle('task', cur, t('person.task_aria', { name: p.name, task: tk.name }), async (next, b) => {
+        b.disabled = true;
+        if (await write(() => (next ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: next }) : api('DELETE', `${ppath}/tasks/${tk.id}`)))) changed(); else b.disabled = false;
+      })));
     });
     dlg = modal(p.name,
-      p.active ? '' : h('p', { class: 'err' }, t('person.inactive')),
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== p.name && await write(() => api('PATCH', ppath, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('person.tasks')),
-      taskRows.length ? h('table', { class: 'mini' }, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
-      flag('active', t('person.active'), t('person.active_aria', { name: p.name })),
+      taskRows.length ? [h('p', { class: 'muted small' }, t('person.tasks_hint')), h('table', { class: 'mini' }, h('tbody', {}, taskRows))] : h('p', { class: 'muted' }, t('person.no_tasks')),
       flag('proposable', t('person.proposable', { name: p.name }), t('person.proposable_aria', { name: p.name }), t('person.proposable_off')),
       foot(h('span', { class: 'small muted' }, t('person.org_wide', { org: org.name })), closeBtn()));
   }
@@ -704,9 +706,8 @@ async function pagePlan(r, org, people) {
         ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
         : h('button', { type: 'button', class: 'ghost sm', 'aria-label': t('place.lock_aria', { name: x.name }),
           onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, [x.kind]: x.id, fills: x.kind === 'group' ? x.fills : 0, locked: true })) }, t('place.lock')))));
-    const active = people.filter((p) => p.active);
     const kind = h('select', { 'aria-label': t('place.kind') }, [['person', t('common.person')], ['group', t('common.group')], ['text', t('common.text')]].map(([v, text]) => h('option', { value: v }, text)));
-    const personSel = h('select', { 'aria-label': t('common.person') }, active.map((p) => h('option', { value: String(p.id) }, p.name)));
+    const personSel = h('select', { 'aria-label': t('common.person') }, people.map((p) => h('option', { value: String(p.id) }, p.name)));
     const groupSel = h('select', { 'aria-label': t('common.group'), hidden: true }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
     const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text'), hidden: true });
     const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('place.fills'), hidden: true });
@@ -724,7 +725,7 @@ async function pagePlan(r, org, people) {
     if (tk.planned) {
       const pool = poolAt[k] || { people: [], groups: [] };
       const takes = (p) => (chosen[p.id] || []).some((x) => x.task_id === tk.id && x.level !== 'never');
-      const pBoxes = active.filter((p) => takes(p) || pool.people.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: pool.people.includes(p.id), 'aria-label': t('place.pool_person_aria', { name: p.name }) }) }));
+      const pBoxes = people.filter((p) => takes(p) || pool.people.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: pool.people.includes(p.id), 'aria-label': t('place.pool_person_aria', { name: p.name }) }) }));
       const gBoxes = groups.filter((g) => g.tasks.some((x) => x.task_id === tk.id) || pool.groups.includes(g.id)).map((g) => ({ g, box: h('input', { type: 'checkbox', checked: pool.groups.includes(g.id), 'aria-label': t('place.pool_group_aria', { name: g.name }) }) }));
       poolPart = [h('h3', {}, t('place.pool')),
         h('p', { class: 'muted small' }, pool.people.length + pool.groups.length ? t('place.pool_set') : t('place.pool_anyone', { task: tk.name })),
@@ -859,7 +860,7 @@ async function pagePlan(r, org, people) {
   const countCells = {};
   const recount = (evId) => {
     const c = { good: 0, poor: 0, never: 0 };
-    people.forEach((p) => { const l = p.active && (ans[p.id] || {})[evId]; if (l) c[l]++; });
+    people.forEach((p) => { const l = (ans[p.id] || {})[evId]; if (l) c[l]++; });
     countCells[evId].replaceChildren(h('b', { class: 'good' }, '✓ ' + c.good), ' · ', h('b', { class: 'poor' }, '? ' + c.poor), ' · ', h('b', { class: 'never' }, '✗ ' + c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
@@ -884,10 +885,9 @@ async function pagePlan(r, org, people) {
   };
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
-    return h('tr', { class: p.active ? false : 'inactive' },
+    return h('tr', {},
       h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
-        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks')),
-        p.active ? '' : h('span', { class: 'sub' }, t('person.inactive_short')))),
+        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks')))),
       events.map((ev) => answerCell(p, ev)), filler());
   };
 
@@ -913,7 +913,7 @@ async function pagePlan(r, org, people) {
       draftFoot,
       phone ? '' : [
         h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
-        people.filter((p) => p.active).map(personRow), people.filter((p) => !p.active).map(personRow),
+        people.map(personRow),
         addLine(addPerson())])));
 
   // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
@@ -926,16 +926,15 @@ async function pagePlan(r, org, people) {
       const ids = x.kind === 'person' ? [x.id] : x.kind === 'group' ? (groups.find((g) => g.id === x.id) || { members: [] }).members : [];
       ids.forEach((id) => (got[ev.id + '/' + id] ||= []).push(tk.name));
     }
-    const cols = [...people.filter((p) => p.active), ...people.filter((p) => !p.active)];
-    const faded = (p, el) => { if (!p.active) el.classList.add('inactive'); return el; };
+    const cols = people;
     return h('section', { class: 'turned-wrap' },
       h('h2', {}, t('table.availability')),
       h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table turned' },
         h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'corner' }, t('table.date')),
-          cols.map((p) => faded(p, h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p))))))),
+          cols.map((p) => (h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p))))))),
         h('tbody', {}, events.map((ev) => h('tr', {},
           h('th', { scope: 'row' }, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', (countCells[ev.id] = h('span', { class: 'sub count' }))),
-          cols.map((p) => faded(p, answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
+          cols.map((p) => (answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
       addPerson());
   };
   const availability = phone ? turned() : '';

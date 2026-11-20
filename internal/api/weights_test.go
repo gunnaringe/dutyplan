@@ -28,8 +28,8 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 	if len(got.Specs) != len(store.WeightSpecs) || len(got.Values) != 0 || got.Specs[0].Key != "w_fair" {
 		t.Fatalf("a plan starts on the defaults, and the reply lists every setting with its default and limits: %+v", got)
 	}
-	got = read("PUT", path, map[string]any{"values": map[string]any{"w_fair": 15, "w_task_fair": 4, "default_combination": "practical", "w_task.good": 2}})
-	if fmt.Sprint(got.Values) != "map[default_combination:practical w_fair:15 w_task_fair:4]" {
+	got = read("PUT", path, map[string]any{"values": map[string]any{"w_fair": 15, "w_task_fair": 4, "w_task.good": 2}})
+	if fmt.Sprint(got.Values) != "map[w_fair:15 w_task_fair:4]" {
 		t.Errorf("values (the default is not kept): %v", got.Values)
 	}
 	got = read("GET", path, nil)
@@ -54,8 +54,8 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 		{400, "PUT", path, map[string]any{"values": map[string]any{"w_fair": 500}}, "above the range"},
 		{400, "PUT", path, map[string]any{"values": map[string]any{"w_task.poor": 3}}, "wrong sign"},
 		{400, "PUT", path, map[string]any{"values": map[string]any{"w_fair": "mye"}}, "text for a number"},
-		{400, "PUT", path, map[string]any{"values": map[string]any{"default_combination": "ja"}}, "a choice not offered"},
-		{400, "PUT", path, map[string]any{"values": map[string]any{"w_fair": 15, "w_task_fair": 4, "default_combination": "practical"}}, "no change"},
+		{400, "PUT", path, map[string]any{"values": map[string]any{"default_combination": "practical"}}, "no longer a setting"},
+		{400, "PUT", path, map[string]any{"values": map[string]any{"w_fair": 15, "w_task_fair": 4}}, "no change"},
 		{400, "PUT", path, map[string]any{"verdier": map[string]any{}}, "unknown field"},
 		{404, "PUT", "/api/orgs/" + b.org + "/plans/only-a/weights", map[string]any{"values": map[string]any{"w_fair": 12}}, "A's other plan through B"},
 		{404, "GET", "/api/orgs/" + b.org + "/plans/only-a/weights", nil, "A's other plan through B (read)"},

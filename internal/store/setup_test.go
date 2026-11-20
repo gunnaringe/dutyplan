@@ -51,14 +51,22 @@ func TestCombinations(t *testing.T) {
 	if len(list) != 1 || list[0].A != a.ID || list[0].B != b.ID || list[0].Level != "cannot" {
 		t.Fatalf("stored with the smaller id first: %+v", list)
 	}
-	if err := s.SetCombination(ctx, o.Slug, a.ID, b.ID, "preferred"); err != nil { // overwrite, not a second row
+	if err := s.SetCombination(ctx, o.Slug, a.ID, b.ID, "practical"); err != nil { // overwrite, not a second row
 		t.Fatal(err)
 	}
-	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 1 || list[0].Level != "preferred" {
+	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 1 || list[0].Level != "practical" {
 		t.Errorf("overwrite: %+v", list)
 	}
-	if err := s.SetCombination(ctx, o.Slug, a.ID, a.ID, "preferred"); !errors.Is(err, ErrInvalid) {
+	if err := s.SetCombination(ctx, o.Slug, a.ID, a.ID, "practical"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("a task with itself: %v", err)
+	}
+	for _, level := range []string{"impractical", "preferred"} { // can't → bad → good: «bad» is no row
+		if err := s.SetCombination(ctx, o.Slug, a.ID, b.ID, level); !errors.Is(err, ErrInvalid) {
+			t.Errorf("level %s: %v", level, err)
+		}
+		if err := s.SetTaskCombinations(ctx, o.Slug, a.ID, level); !errors.Is(err, ErrInvalid) {
+			t.Errorf("level %s for all: %v", level, err)
+		}
 	}
 	if err := s.SetCombination(ctx, o.Slug, a.ID, b.ID, "kanskje"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("bad level: %v", err)
@@ -69,7 +77,7 @@ func TestCombinations(t *testing.T) {
 	if list, _ = s.ListCombinations(ctx, o.Slug); len(list) != 0 {
 		t.Errorf("standard removes the setting: %+v", list)
 	}
-	s.SetCombination(ctx, o.Slug, a.ID, b.ID, "impractical")
+	s.SetCombination(ctx, o.Slug, a.ID, b.ID, "practical")
 	if err := s.DeleteTask(ctx, o.Slug, a.ID); err != nil { // combinations go with their task
 		t.Fatal(err)
 	}
@@ -127,7 +135,7 @@ func TestCrossOrganisationReferences(t *testing.T) {
 	}{
 		{"an event in A for B's plan", `INSERT INTO event (org_id, plan_id, date, created_at) VALUES (?, ?, '2026-08-09', 'x')`, []any{orgA, planBID}},
 		{"B's event holding A's task", `INSERT INTO event_task (org_id, plan_id, event_id, task_id, slots) VALUES (?, ?, ?, ?, 1)`, []any{orgB, planBID, evB.ID, taskA.ID}},
-		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'preferred')`, []any{orgB, taskA.ID, taskB.ID}},
+		{"combination across", `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, 'practical')`, []any{orgB, taskA.ID, taskB.ID}},
 	} {
 		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
 			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)

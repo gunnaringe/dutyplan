@@ -88,7 +88,7 @@ Migrations are forward-only and run in a transaction at startup.
 |---|---|---|
 | `organization` | | `slug` (unique, in the address), name |
 | `plan` | organisation | `slug` (unique in the organisation), name, **`weights`** (JSON: the planner weights that differ from the default). Replaces "period/semester" |
-| `person` | organisation | name (unique in the organisation), active, **can be proposed** (default yes). Reused in all plans |
+| `person` | organisation | name (unique in the organisation), **can be proposed** (default yes). Reused in all plans |
 | `group`, `group_member` | organisation | **built as `grp`, `grp_member`**: a named set of people (team, choir, couple). No rules of its own. **Can be proposed** (default yes) |
 | `group_task` | organisation | **built as `grp_task`**: the tasks the planner may propose the group for: places it fills (`fills`) and a level |
 | `task` | organisation | name, whether the planner distributes it (otherwise only for manual cells and combinations) |
@@ -118,7 +118,8 @@ The planner does not use the times: its input lists the events by date and creat
 Deleting a task removes its places and combinations; it is refused while it is used in a place set by hand (409).
 
 ### The same scale everywhere
-Event and task both use **never / poor / (neutral) / good**. Combinations use **cannot / impractical / practical / preferred**. These are also the codes on the wire.
+An answer per event uses **never / poor / good** (blank = not answered). A person's task is **not / poor / good** (not = no row), and combinations are
+**cannot / impractical / practical** where no row is impractical (2026-11-20: one click per setting; *neutral* tasks and *preferred* pairs are gone). These are also the codes on the wire.
 
 ## The planner (CP-SAT)
 
@@ -184,7 +185,7 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 - `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit}`, optional; the server picks the seed) answers 202 with an id at once; the run goes on in the background and the page
   asks `GET .../runs/{id|latest}` every second. Only **one run at a time** in the whole server (409 `busy`), time limit 5–120 s (default 20).
   With no planner configured (`--solver` / `$DUTYPLAN_SOLVER`) the API answers 503 and `/api/health` has `"planner": false`; the rest of the app works.
-- Go builds the input from the database (`internal/planner/input.go`): active people only, the ids `t<id>/e<id>/d<id>/p<id>`, "can be proposed",
+- Go builds the input from the database (`internal/planner/input.go`): everyone in the organisation, the ids `t<id>/e<id>/d<id>/p<id>`, "can be proposed",
   task choices, availability per event and combinations. The hash of the input (without seed and time) is stored, so an old plan can be marked **out of date**
   when answers or setup have changed since.
 - The planner is started with `--check`: the independent checker goes over the answer and `violations` are stored and shown. An answer that is not valid JSON with status
@@ -223,7 +224,7 @@ what the event is, what it needs, who got it, who can come.
   "Place in the draft": remove/unlock what is set, lock a planner name, set a person, a group or a text by hand, and the selection (whom the planner picks from).
   Compromises, the distribution and earlier drafts are links under the rows. The page opens with the pinned draft, else the newest.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
-  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, active, can be proposed.
+  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, can be proposed.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
 - **On a phone** (option A of the sketch, chosen 2026-11-20): *Availability* is turned and comes first: events down (date, time, the count), people across (first
   names, a tap on one opens the person), and under each answer the tasks the person has in the draft (set by hand, locked or proposed; through a group too). The
@@ -236,10 +237,11 @@ what the event is, what it needs, who got it, who can come.
 - **Groups** (`/orgs/{org}/groups`, on the organisation page): name, members, "can be proposed" and the tasks the planner may propose the group for
   (places and level; only tasks the planner distributes). Not deleted while a cell or selection names it (409).
 - **Manual cells** (`/plans/{plan}/cells`) and **selections** (`/plans/{plan}/pools`): one event at a time, only an event in the plan (copying an event can take its cells set by hand along).
-  Cells for people must be active. A cell can be on a task the planner does not distribute (for example "Singing" for the choir). "Lock" on a planner name makes a cell
+  A cell can be on a task the planner does not distribute (for example "Singing" for the choir). "Lock" on a planner name makes a cell
   with `locked` for it, which the planner keeps like any other cell.
-- **Active only:** inactive people and groups without active members are never sent to the planner (it would count the place without knowing who). What names them is left out,
-  and the run says so ("The cell for Aslaug on Sound … is left out because the person is not active"). A selection that becomes empty is kept (nobody can be picked) with a warning.
+- **Groups without members** are never sent to the planner (it would count the place without knowing who). What names them is left out,
+  and the run says so ("The cell for the group «Choir» on Sound … was left out"). A selection that becomes empty is kept (nobody can be picked) with a warning.
+  There is no «active» flag (removed 2026-11-20).
 - The planner's warnings are read with names; a cell for a person who "cannot be proposed" gives no warning (that is how the setting is meant to be used).
 
 ### Renaming and deleting (built)
@@ -306,7 +308,7 @@ The solver alone, `solver/`: tests for every rule, the autumn 2026 test data, an
      losing on the total, `w_task_fair` 3 (with `w_task_range` 0) is an option: on the test data the total stayed just as even.
 - **History is per task** (`{person: {task: count}}`), and only works when distribution per task is on. The app does not send history.
 - **The weights are not tuned against real wishes.** They are in `DEFAULT_PARAMS` and are only reasonable starting values.
-- **Task pairs with no setting** count as *impractical* (`default_combination`). In one run 9–13 people shared two
+- **Task pairs with no setting** count as *impractical* (the planner's `default_combination`; the app no longer lets a plan change it). In one run 9–13 people shared two
   tasks on the same day, most pairs with no setting (so impractical) and some wanted. The admin should therefore set up the
   combinations with care.
 

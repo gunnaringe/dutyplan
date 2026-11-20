@@ -145,14 +145,10 @@ func (s *Store) AddCell(ctx context.Context, orgSlug, planSlug string, in NewCel
 		var person, group any
 		switch {
 		case in.PersonID != 0:
-			var active bool
-			if err := tx.QueryRowContext(ctx, `SELECT name, active FROM person WHERE id = ? AND org_id = ?`, in.PersonID, oid).Scan(&what, &active); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND org_id = ?`, in.PersonID, oid).Scan(&what); errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
 				return err
-			}
-			if !active {
-				return Invalid("person_inactive", map[string]any{"name": what}, "%s is not active", what)
 			}
 			person = in.PersonID
 		case in.GroupID != 0:
@@ -299,14 +295,10 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventID, 
 		}
 		for _, p := range people {
 			var n string
-			var active bool
-			if err := tx.QueryRowContext(ctx, `SELECT name, active FROM person WHERE id = ? AND org_id = ?`, p, oid).Scan(&n, &active); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND org_id = ?`, p, oid).Scan(&n); errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
 				return err
-			}
-			if !active {
-				return Invalid("person_inactive", map[string]any{"name": n}, "%s is not active", n)
 			}
 		}
 		for _, g := range groups {
