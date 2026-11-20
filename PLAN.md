@@ -262,8 +262,9 @@ The first version has no login, no personal links and no roles. The consequences
 The solver alone, `solver/`: tests for every rule, the autumn 2026 test data, and random instances, all green.
 
 - **The rules hold.** Every rule has a test that fails if the rule is removed (tried by breaking the model one rule at a
-  time). An independent checker verifies the hard requirements on all plans. Selections, groups in manual cells (with the combination setting), proposed teams and couples, the locked
-  person and the text cells work on the test data (18 people, 17 events, 7 tasks, 4 teams/couples, about 120 assignments).
+  time). An independent checker verifies the hard requirements on all plans. Selections, people set by hand on a task that is not distributed (with the combination setting), the locked
+  person and the text cells work on the test data (18 people, 17 events, 7 tasks, about 130 assignments; the teams and couples
+  of the spike went with groups on 2026-11-20, issue #9).
 - **Size and time.** After rest and the daily cap were removed, a valid and usable plan comes after about 2 seconds, and the
   quality improves up to about 20 s. The solver **does not prove** the plan is the best possible (the upper bound does not tighten), so the result
   is a *proposal* within the time limit. Different seeds give slightly different plans; "try once more" is therefore a useful button.

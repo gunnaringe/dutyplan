@@ -20,7 +20,6 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
 
     people = {p["id"] for p in data["people"]}
     proposable_p = {p["id"]: bool(p.get("proposable", True)) for p in data["people"]}
-    proposable_g = {g["id"]: bool(g.get("proposable", True)) for g in data.get("groups", [])}
     planned = {t["id"] for t in data["tasks"] if t.get("planned", True)}
     dtype = {d["id"]: d["type"] for d in data["dates"]}
     default_combo = (data.get("params") or {}).get("default_combination", DEFAULT_PARAMS["default_combination"])
@@ -33,21 +32,15 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
 
     locked_p: dict[tuple[str, str], list[str]] = defaultdict(list)
     locked_l: dict[tuple[str, str], int] = defaultdict(int)
-    members = {g["id"]: g["members"] for g in data.get("groups", [])}
-    group_cells: list[tuple[str, str, str]] = []  # (date, task, group)
     for lk in data.get("locked", []):
         if "person" in lk:
             locked_p[lk["date"], lk["task"]].append(lk["person"])
         else:
             locked_l[lk["date"], lk["task"]] += int(lk.get("fills", 1))
-            if "group" in lk:
-                group_cells.append((lk["date"], lk["task"], lk["group"]))
     for key in set(locked_p) | set(locked_l):
         slots[key] = max(slots.get(key, 0), len(locked_p.get(key, [])) + locked_l.get(key, 0))
 
     pools = {(pl["date"], pl["task"]): set(pl.get("people", [])) for pl in data.get("pools", [])}
-    pool_groups = {(pl["date"], pl["task"]): set(pl.get("groups", [])) for pl in data.get("pools", [])}
-    group_tasks = {(gt["group"], gt["task"]): gt for gt in data.get("group_tasks", [])}
     combo = {
         frozenset((c["a"], c["b"])): c["level"] for c in data.get("combinations", [])
     }
@@ -94,45 +87,11 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
             if seen[p, key[1], key[0]] == 0:
                 bad.append(f"locked {p} {key[1]} {key[0]} is missing from the plan")
 
-    # groups proposed by the planner
-    gassigns = result.get("group_assignments", [])
-    seen_g = Counter((a["group"], a["task"], a["date"]) for a in gassigns)
-    for k, n in seen_g.items():
-        if n > 1:
-            bad.append(f"duplicate group: {k}")
-    for a in gassigns:
-        g, t, d = a["group"], a["task"], a["date"]
-        key = (d, t)
-        cfg = group_tasks.get((g, t))
-        if cfg is None:
-            bad.append(f"group {g} is not set up for {t}")
-            continue
-        if cfg.get("level") == "never":
-            bad.append(f"group {g} said 'never' to {t}")
-        if key not in slots:
-            bad.append(f"group {g} is assigned to {t} on {d}, but the task does not apply that day")
-            continue
-        per_cell[key] += int(cfg.get("fills", 1))
-        if key in pools and g not in pool_groups[key]:
-            bad.append(f"group {g} is not in the selection for {t} {d}")
-        if not proposable_g[g]:
-            bad.append(f"group {g} cannot be proposed, but is assigned to {t} on {d}")
-        for mem in members[g]:
-            if not proposable_p[mem]:
-                bad.append(f"{mem} (in group {g}) cannot be proposed, but the group is assigned to {t} on {d}")
-            if data.get("person_tasks", {}).get(mem, {}).get(t) == "never":
-                bad.append(f"{mem} (in group {g}) said 'never' to {t} ({d})")
-            if date_lvl(mem, t, d) == "never":
-                bad.append(f"{mem} (in group {g}) has 'never' on {d} for {t}")
-            for gd, gt, gg in group_cells:
-                if gd == d and mem in members[gg] and (gt == t or combo.get(frozenset((gt, t)), default_combo) == "cannot"):
-                    bad.append(f"{mem} is in group {g} on {t} {d} while group {gg} is on {gt}")
-
     missing = {(u["date"], u["task"]): u["missing"] for u in result["unfilled"]}
     for key, n in slots.items():
         filled = per_cell[key] + locked_l.get(key, 0) + missing.get(key, 0)
         if filled != n:
-            bad.append(f"{key}: {per_cell[key]} people/groups + {locked_l.get(key, 0)} manual + {missing.get(key, 0)} empty != {n} places")
+            bad.append(f"{key}: {per_cell[key]} people + {locked_l.get(key, 0)} manual + {missing.get(key, 0)} empty != {n} places")
 
     by_pd: dict[tuple[str, str], set[str]] = defaultdict(set)
     for a in assigns:
@@ -144,24 +103,4 @@ def check(data: dict[str, Any], result: dict[str, Any]) -> list[str]:
                 continue
             if combo.get(frozenset((t1, t2)), default_combo) == "cannot":
                 bad.append(f"{p} has {t1} and {t2} on {d}, which cannot be combined")
-    for a in gassigns:  # members of a proposed group are busy with the group's task
-        g, t, d = a["group"], a["task"], a["date"]
-        for mem in members[g]:
-            for t2 in by_pd.get((mem, d), ()):
-                if t2 == t or combo.get(frozenset((t, t2)), default_combo) == "cannot":
-                    bad.append(f"{mem} is on {t2} on {d} while group {g} is on {t}")
-    for a1, a2 in combinations(gassigns, 2):
-        if a1["date"] != a2["date"]:
-            continue
-        shared = set(members[a1["group"]]) & set(members[a2["group"]])
-        t1, t2 = a1["task"], a2["task"]
-        if shared and (t1 == t2 or combo.get(frozenset((t1, t2)), default_combo) == "cannot"):
-            bad.append(f"groups {a1['group']} ({t1}) and {a2['group']} ({t2}) on {a1['date']} share {sorted(shared)}")
-    for d, t, g in group_cells:  # members of a group in a manual cell are busy with that task
-        for mem in members[g]:
-            for t2 in by_pd.get((mem, d), ()):
-                if mem in locked_p.get((d, t2), []):
-                    continue
-                if t2 == t or combo.get(frozenset((t, t2)), default_combo) == "cannot":
-                    bad.append(f"{mem} is on {t2} on {d} while group {g} is on {t}")
     return bad

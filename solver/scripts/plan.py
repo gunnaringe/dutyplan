@@ -28,7 +28,6 @@ def info(data: dict) -> str:
         [
             f"{len(data['people'])} people, {len(data['tasks'])} tasks, {len(data['dates'])} dates "
             f"({', '.join(f'{n} {t}' for t, n in sorted(types.items()))}), about {slots} places",
-            f"{len(data.get('groups', []))} groups, {len(data.get('group_tasks', []))} group tasks, "
             f"{len(data.get('pools', []))} selections, {len(data.get('locked', []))} manual cells, "
             f"{len(data.get('combinations', []))} combinations",
             f"not proposable: {[p['id'] for p in data['people'] if not p.get('proposable', True)] or 'none'}",
@@ -57,9 +56,6 @@ def deviations(res: dict) -> tuple[str, str, str]:
 
 
 def brief(data: dict, res: dict, problems: list[str]) -> str:
-    teams = defaultdict(int)
-    for g in res["group_assignments"]:
-        teams[g["group"]] += 1
     by = defaultdict(list)
     for a in res["assignments"]:
         by[a["person"], a["date"]].append(a["task"])
@@ -68,12 +64,11 @@ def brief(data: dict, res: dict, problems: list[str]) -> str:
     lines = [
         f"{res['status']} {data['params']['time_limit']:g} s (seed {data['params']['seed']}) | objective {res['objective']:.1f}, "
         f"bound {res['bound']:.1f} | violations: {problems or 'none'}",
-        f"places: {len(res['assignments'])} people + {len(res['group_assignments'])} groups + {len(res['manual'])} manual"
+        f"places: {len(res['assignments'])} people + {len(res['manual'])} manual"
         f" | empty: {sum(u['missing'] for u in res['unfilled'])} | «poor»: {len(res['concessions'])}"
         f" | warnings: {len(res['warnings'])}",
         per_task,
         overall,
-        f"proposed groups (dates): {dict(sorted(teams.items())) or 'none'}",
         f"people with two tasks the same day: {two}",
     ]
     for u in res["unfilled"][:5]:
@@ -86,11 +81,9 @@ def full(data: dict, res: dict) -> str:
     out = []
     for pool in data.get("pools", []):
         got = [a["person"] for a in res["assignments"] if a["date"] == pool["date"] and a["task"] == pool["task"]]
-        out.append(f"selection {pool['date']} {pool['task']}: {pool.get('people', [])} {pool.get('groups', [])} -> {got}")
+        out.append(f"selection {pool['date']} {pool['task']}: {pool.get('people', [])} -> {got}")
     out.append(f"manual cells: {res['manual']}")
     out.append(f"locked people: {[a for a in res['assignments'] if a['locked']]}")
-    for g in res["group_assignments"]:
-        out.append(f"group {g['date']} {g['task']}: {g['group']} {g['members']}")
     for t, per in res["task_load"].items():
         out.append(f"{t:10} " + "  ".join(f"{p} {v['count']}/{v['target']}" for p, v in sorted(per.items())))
     return "\n".join(out)

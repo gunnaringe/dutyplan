@@ -1,7 +1,7 @@
 """Mutation check: break one rule at a time (the planner in Python and the app in Go) and see that at least one test fails.
 
     mise run mutations                 all (about 7 min); quiet on success
-    mise run mutations -- --only group    only those with «group» in the name
+    mise run mutations -- --only selection    only those with «selection» in the name
     mise run mutations -- --list       show the names
 
 Prints only what needs action: mutations that survived (a test is missing), patterns that no longer
@@ -37,34 +37,16 @@ PY_MUTATIONS: list[tuple[str, str, str]] = [
     ("not taking part in the task is ignored", "if t not in self.task_level.get(p, {}):", "if False:"),
     ("never on a task is ignored", 'if self.task_level[p][t] == "never":', "if False:"),
     ("a person who cannot be proposed", "if not self.person_proposable[p]:", "if False:"),
-    ("a group that cannot be proposed", "if not self.group_proposable[g]:", "if False:"),
-    ("a group with a member who cannot be proposed", "if not self.person_proposable[mem]:", "if False:"),
     ("a selection does not apply to people", "if pool is not None and p not in pool:", "if False:"),
-    ("a selection does not apply to groups", "if (d, t) in self.pool and g not in self.pool_groups[d, t]:", "if False:"),
-    ("a manual group does not forbid", "if occ is not None:", "if False:"),
-    ("a group member with never on the event", 'if self.date_level(mem, t, d) == "never":', "if False:"),
-    ("a group member with never on the task", 'if self.task_level.get(mem, {}).get(t) == "never":', "if False:"),
-    ("a group too big for the places", 'if cfg["fills"] > free:', "if False:"),
-    ("a proposed group does not make members busy", 'pair_penalty(f"gp_{g}_{t}_{mem}_{t2}_{d}", v, x[mem, t2, d], lvl)', "pass"),
-    ("groups with a common member", 'pair_penalty(f"gg_{g1}_{t1}_{g2}_{t2}_{d}", y[g1, t1, d], y[g2, t2, d], lvl, times=shared)', "pass"),
-    ("the same task twice through a group", 'lvl = "cannot" if t2 == t else pb.combo_level(t, t2)  # the same task twice makes no sense', "lvl = pb.combo_level(t, t2)"),
-    ("a group fills several places", 'pb.group_tasks[g, t]["fills"] * v for (g, tt, dd), v in y.items()', "v for (g, tt, dd), v in y.items()"),
     ("practical and preferred are ignored", 'obj.append((SCALE * prm["w_combo"][level] * times, both))', "pass"),
-    ("manual group: soft combination", 'obj.append((SCALE * prm["w_combo"][lvl], x[mem, t2, d]))', "pass"),
     ("preferences are ignored", 'w = prm["w_task"][pb.task_level[p][t]] + prm["w_date"][pb.date_level(p, t, d)]', "w = 0"),
-    ("a group's date wishes are ignored", 'mean_date = sum(prm["w_date"][pb.date_level(mem, t, d)] for mem in mems) / len(mems)', "mean_date = 0"),
     ("stability for people", "if (p, t, d) in pb.previous:", "if False:"),
-    ("stability for groups", "if (g, t, d) in pb.previous_groups:", "if False:"),
     ("history overall", "hist = {p: pb.history_total.get(p, 0) for p in persons}", "hist = {p: 0 for p in persons}"),
     ("history per task", "h_t = {p: pb.history_task.get(p, {}).get(t, 0) for p in cand}", "h_t = {p: 0 for p in cand}"),
     ("even distribution off", "m.add(under >= lo_t - load)", "m.add(under >= 0)"),
     ("distribution per task is the main term again", '"w_task_fair": 0,', '"w_task_fair": 10,'),
     ("overall distribution is off by default", '"w_fair": 10,', '"w_fair": 0,'),
     # (the worst-deviation terms w_fair_range and w_task_range are secondary: changing them alone does not change the outcome, so no mutation for them.)
-    ("manual group work per task", "g_t = {p: pb.gcount_task.get((p, t), 0) for p in cand}", "g_t = {p: 0 for p in cand}"),
-    ("manual group work overall", "gcount = {p: pb.gcount_person.get(p, 0) for p in persons}", "gcount = {p: 0 for p in persons}"),
-    ("a proposed group does not count in the distribution", "part[mem, t, d].append(v)  # one assignment per member", "pass"),
-    ("the output does not count through a group", '1 for a in result["group_assignments"]', '0 for a in result["group_assignments"]'),
     ("an empty place is cheap", 'obj.append((-SCALE * prm["w_unfilled"], u))', "pass"),
     ("a manual choice does not win", "m.add(v == 1)  # manuelt valg vinner over filtrene", "pass"),
 ]
