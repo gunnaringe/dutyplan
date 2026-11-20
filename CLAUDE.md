@@ -12,7 +12,8 @@ and an organisation page with the plans (the setup page is gone). There is no ch
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places or description when an event is created (adding repeatedly with `until` and `every`, copying and the availability map stay: the page uses them).
 **CI** (GitHub Actions, since 2026-11-20): `.github/workflows/ci.yml` runs `mise run lint`, `test`, `app:smoke`, `app:ui` (playwright-core from npm, the runner's
-Chrome) and, in a job of its own, `mise run mutations`, on every PR and on main; it must be green before a merge. `.github/workflows/image.yml` builds the image
+Chrome) and, in a job of its own, `mise run mutations`, on every PR and on main. **`main` is protected** (ruleset «main», 2026-11-20): changes only through a PR, the checks `test`, `mutations` and `build` must pass before
+it can merge, no force push or deletion; no review is required. Secret scanning with push protection is on. `.github/workflows/image.yml` builds the image
 (amd64 + arm64; the Go stage cross-compiles) on PRs and publishes `ghcr.io/gunnaringe/dutyplan` from main (`main`, `main-<UTC>-<sha>`, `sha-<sha>`) and `v*` tags.
 A first test runs on kate since 2026-11-20 (asked by the user), behind Pocket ID at dutyplan.haxxor.xyz, manifests in `clusters/kate/dutyplan/`:
 still the image built locally (`mise run app:image`) and imported into the node, not the published one. No backup yet.
