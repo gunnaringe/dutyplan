@@ -24,7 +24,6 @@ type Params struct {
 func tid(id int64) string { return "t" + strconv.FormatInt(id, 10) }
 func eid(id int64) string { return "e" + strconv.FormatInt(id, 10) }
 func pid(id int64) string { return "p" + strconv.FormatInt(id, 10) }
-func gid(id int64) string { return "g" + strconv.FormatInt(id, 10) }
 
 type solverInput struct {
 	Tasks []struct {
@@ -47,42 +46,25 @@ type solverInput struct {
 		B     string `json:"b"`
 		Level string `json:"level"`
 	} `json:"combinations"`
-	Groups     []solverGroup     `json:"groups,omitempty"`
-	GroupTasks []solverGroupTask `json:"group_tasks,omitempty"`
-	Locked     []solverLocked    `json:"locked,omitempty"`
-	Pools      []solverPool      `json:"pools,omitempty"`
-	Params     map[string]any    `json:"params,omitempty"` // the plan's weights, and (not hashed) time limit, seed and workers
+	Locked []solverLocked `json:"locked,omitempty"`
+	Pools  []solverPool   `json:"pools,omitempty"`
+	Params map[string]any `json:"params,omitempty"` // the plan's weights, and (not hashed) time limit, seed and workers
 }
 
-// solverLocked is a manual cell: a person, a group or a text; Fills only for the last two.
+// solverLocked is a manual cell: a person or a text; Fills only for a text.
 type solverLocked struct {
 	Date   string `json:"date"`
 	Task   string `json:"task"`
 	Person string `json:"person,omitempty"`
-	Group  string `json:"group,omitempty"`
 	Label  string `json:"label,omitempty"`
 	Fills  int    `json:"fills,omitempty"`
 }
 
-// solverPool is a selection: the only people and groups that can be chosen. The lists are never null.
+// solverPool is a selection: the only people that can be chosen. The list is never null.
 type solverPool struct {
 	Date   string   `json:"date"`
 	Task   string   `json:"task"`
 	People []string `json:"people"`
-	Groups []string `json:"groups"`
-}
-
-type solverGroup struct {
-	ID         string   `json:"id"`
-	Members    []string `json:"members"`
-	Proposable bool     `json:"proposable"`
-}
-
-type solverGroupTask struct {
-	Group string `json:"group"`
-	Task  string `json:"task"`
-	Fills int    `json:"fills"`
-	Level string `json:"level"`
 }
 
 // notNull makes nil slices empty ones: the solver iterates over what it is given, and JSON null is not a list.
@@ -124,27 +106,10 @@ type Snapshot struct {
 	People []SnapPerson `json:"people"`
 	// Places are the places of the planner's tasks on each event: event -> task -> places.
 	Places map[int64]map[int64]int `json:"places"`
-	Groups []SnapGroup             `json:"groups,omitempty"`
-	// Notes are things the planner was not told about, such as a manual cell for a person who is no longer active. They are
-	// stored as a code and arguments and written in the page's language when the run is shown.
-	Notes []Note `json:"notes,omitempty"`
 }
 
 // SlotsFor is the places of the planner's tasks on one event of the run.
 func (s Snapshot) SlotsFor(e SnapEvent) map[int64]int { return s.Places[e.ID] }
-
-// Note is one such thing: a code (see the catalogs, «note.<code>») and what goes into the sentence.
-type Note struct {
-	Code string   `json:"code"`
-	Args []string `json:"args"`
-}
-
-// SnapGroup is a group as the run saw it: the active members only.
-type SnapGroup struct {
-	ID      int64   `json:"id"`
-	Name    string  `json:"name"`
-	Members []int64 `json:"members"`
-}
 
 type SnapEvent struct {
 	ID   int64  `json:"id"`
@@ -253,73 +218,21 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			in.PersonDates[pid(person.ID)] = m
 		}
 	}
-	// Groups: a group without members is not sent (nor anything that names it).
-	groups := map[int64]bool{}
-	for _, g := range d.Groups {
-		sg := solverGroup{ID: gid(g.ID), Members: []string{}, Proposable: g.Proposable}
-		snapG := SnapGroup{ID: g.ID, Name: g.Name, Members: []int64{}}
-		for _, m := range g.Members {
-			sg.Members = append(sg.Members, pid(m))
-			snapG.Members = append(snapG.Members, m)
-		}
-		if len(sg.Members) == 0 {
-			if len(g.Tasks) > 0 {
-				snap.Notes = append(snap.Notes, Note{"group_no_members", []string{g.Name}})
-			}
-			continue
-		}
-		groups[g.ID] = true
-		in.Groups = append(in.Groups, sg)
-		snap.Groups = append(snap.Groups, snapG)
-		for _, t := range g.Tasks {
-			if planned[t.TaskID] { // the task may have been taken out of the planner's hands after the group was set up
-				in.GroupTasks = append(in.GroupTasks, solverGroupTask{gid(g.ID), tid(t.TaskID), t.Fills, t.Level})
-			}
-		}
-	}
-	// Manual cells and selections. Whatever names a group without members cannot be sent (the solver would count the
-	// place without knowing who): it is left out and the run says so.
-	evDate := map[int64]string{}
-	for _, e := range d.Events {
-		evDate[e.ID] = e.Date
-	}
-	taskName := map[int64]string{}
-	for _, t := range d.Tasks {
-		taskName[t.ID] = t.Name
-	}
-	groupName := map[int64]string{}
-	for _, g := range d.Groups {
-		groupName[g.ID] = g.Name
-	}
-	where := func(ev, task int64) string { return taskName[task] + " " + evDate[ev] }
+	// Manual cells and selections.
 	for _, c := range d.Cells {
 		l := solverLocked{Date: eid(c.EventID), Task: tid(c.TaskID)}
 		switch {
 		case c.PersonID != nil:
 			l.Person = pid(*c.PersonID)
-		case c.GroupID != nil:
-			if !groups[*c.GroupID] {
-				snap.Notes = append(snap.Notes, Note{"group_cell_no_members", []string{groupName[*c.GroupID], where(c.EventID, c.TaskID)}})
-				continue
-			}
-			l.Group, l.Fills = gid(*c.GroupID), c.Fills
 		default:
 			l.Label, l.Fills = c.Label, c.Fills
 		}
 		in.Locked = append(in.Locked, l)
 	}
 	for _, pl := range d.Pools {
-		sp := solverPool{Date: eid(pl.EventID), Task: tid(pl.TaskID), People: []string{}, Groups: []string{}}
+		sp := solverPool{Date: eid(pl.EventID), Task: tid(pl.TaskID), People: []string{}}
 		for _, person := range pl.People {
 			sp.People = append(sp.People, pid(person))
-		}
-		for _, g := range pl.Groups {
-			if groups[g] {
-				sp.Groups = append(sp.Groups, gid(g))
-			}
-		}
-		if len(sp.People)+len(sp.Groups) == 0 { // the restriction stays: nobody can be chosen, and the place says why
-			snap.Notes = append(snap.Notes, Note{"empty_selection", []string{where(pl.EventID, pl.TaskID)}})
 		}
 		in.Pools = append(in.Pools, sp)
 	}

@@ -71,7 +71,7 @@ func (s *Store) RenamePlan(ctx context.Context, orgSlug, planSlug, name string) 
 }
 
 // DeletePlan removes a plan with everything that belongs to it: its events and what hangs on them (answers, manual cells,
-// selections, places per event, info values), its info rows and all its runs, a pinned one too. People, tasks and groups
+// selections, places per event, info values), its info rows and all its runs, a pinned one too. People, tasks and sections
 // are the organisation's and stay. A plan with a run in progress is refused: the run would have nowhere to finish.
 func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug string) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
@@ -109,7 +109,7 @@ func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug string) error 
 	})
 }
 
-// DeleteOrg removes an organisation that has no plans, with its people, tasks, groups and combinations. confirm must be
+// DeleteOrg removes an organisation that has no plans, with its people, tasks, sections and combinations. confirm must be
 // the organisation's slug. It returns the organisation as it was.
 func (s *Store) DeleteOrg(ctx context.Context, orgSlug, confirm string) (Org, error) {
 	var o Org
@@ -132,8 +132,8 @@ func (s *Store) DeleteOrg(ctx context.Context, orgSlug, confirm string) (Org, er
 		if plans > 0 {
 			return Conflict("org_has_plans", map[string]any{"name": o.Name, "count": plans}, "organisation %q still has %d plan(s); delete them first", o.Name, plans)
 		}
-		// Children before parents: what refers to people, tasks and groups first.
-		for _, table := range []string{"grp_task", "grp_member", "task_combination", "person_task", "grp", "task", "person", "person_section"} {
+		// Children before parents: what refers to people and tasks first.
+		for _, table := range []string{"task_combination", "person_task", "task", "person", "person_section"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ?`, id); err != nil {
 				return err
 			}

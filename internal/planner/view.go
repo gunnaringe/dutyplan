@@ -23,17 +23,9 @@ type solverOutput struct {
 		TaskLevel string `json:"task_level"`
 		DateLevel string `json:"date_level"`
 	} `json:"assignments"`
-	GroupAssignments []struct {
-		Date    string   `json:"date"`
-		Task    string   `json:"task"`
-		Group   string   `json:"group"`
-		Members []string `json:"members"`
-		Fills   int      `json:"fills"`
-	} `json:"group_assignments"`
-	Manual []struct { // manual cells that name a group or a text (a person is in Assignments, with locked)
+	Manual []struct { // manual cells that name a text (a person is in Assignments, with locked)
 		Date  string `json:"date"`
 		Task  string `json:"task"`
-		Group string `json:"group"`
 		Label string `json:"label"`
 		Fills int    `json:"fills"`
 	} `json:"manual"`
@@ -41,7 +33,6 @@ type solverOutput struct {
 		Date      string `json:"date"`
 		Task      string `json:"task"`
 		Person    string `json:"person"`
-		Group     string `json:"group"`
 		TaskLevel string `json:"task_level"`
 		DateLevel string `json:"date_level"`
 	} `json:"concessions"`
@@ -75,16 +66,6 @@ type CellPerson struct {
 	Locked bool   `json:"locked"` // a manual cell when the run was made (set by hand or locked): the planner kept it
 }
 
-// CellGroup is a group in a place: proposed by the planner, or set by hand (Locked).
-type CellGroup struct {
-	ID      int64    `json:"id"`
-	Name    string   `json:"name"`
-	Members []string `json:"members"`
-	Fills   int      `json:"fills"`
-	Weak    bool     `json:"weak"` // a member said «poor» for the event or the task
-	Locked  bool     `json:"locked"`
-}
-
 // CellText is a manual cell with free text («Outside guest»).
 type CellText struct {
 	Text  string `json:"text"`
@@ -95,7 +76,6 @@ type Cell struct {
 	TaskID      int64        `json:"task_id"`
 	Slots       int          `json:"slots"` // filled + missing: the event's places, or more when manual cells exceed them
 	People      []CellPerson `json:"people"`
-	Groups      []CellGroup  `json:"groups"`
 	Texts       []CellText   `json:"texts"`
 	Missing     int          `json:"missing"`
 	Explanation string       `json:"explanation,omitempty"`
@@ -186,10 +166,6 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 	for _, t := range snap.Tasks {
 		tasks[tid(t.ID)] = t.Name
 	}
-	groups := map[string]SnapGroup{}
-	for _, g := range snap.Groups {
-		groups[gid(g.ID)] = g
-	}
 	dates := map[string]string{}
 	for _, e := range snap.Events {
 		dates[eid(e.ID)] = e.Date
@@ -203,42 +179,20 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 	}
 	personName, taskName, eventName := orID(people), orID(tasks), orID(dates)
-	groupName := func(id string) string {
-		if g, ok := groups[id]; ok {
-			return g.Name
-		}
-		return id
-	}
-	names := Namer{Person: personName, Task: taskName, Group: groupName, Event: eventName, L: l}
-	memberNames := func(ids []string) []string {
-		out := make([]string, 0, len(ids))
-		for _, id := range ids {
-			out = append(out, personName(id))
-		}
-		sort.Strings(out)
-		return out
-	}
+	names := Namer{Person: personName, Task: taskName, Event: eventName, L: l}
 
-	for _, note := range snap.Notes {
-		args := make([]any, len(note.Args))
-		for i, a := range note.Args {
-			args[i] = a
-		}
-		v.Warnings = append(v.Warnings, i18n.T(l, "note."+note.Code, args...))
-	}
 	for _, w := range out.Warnings {
 		if t := TranslateWarning(w, names); t != "" {
 			v.Warnings = append(v.Warnings, t)
 		}
 	}
 
-	// A cell is every (event, task) the solver says something about: someone in it, a group or text in it, or places
+	// A cell is every (event, task) the solver says something about: someone in it, a text in it, or places
 	// missing. Its places are what is filled plus what is missing, so a manual cell for a task the planner does not
 	// distribute (or beyond the event's places) just works, and a place of such a task shows nothing.
 	type key struct{ ev, task string }
 	type acc struct {
 		people  []CellPerson
-		groups  []CellGroup
 		texts   []CellText
 		missing int
 		why     string
@@ -251,22 +205,11 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return cells[k]
 	}
-	weakGroup := map[[3]string]bool{} // (event, task, group): a member has a «poor»
-	for _, c := range out.Concessions {
-		if c.Group != "" {
-			weakGroup[[3]string{c.Date, c.Task, c.Group}] = true
-		}
-	}
 	for _, a := range out.Assignments {
 		id, _ := parseID(a.Person, "p")
 		weak := a.TaskLevel == "poor" || a.DateLevel == "poor"
 		c := cell(a.Date, a.Task)
 		c.people = append(c.people, CellPerson{ID: id, Name: personName(a.Person), Weak: weak, Locked: a.Locked})
-	}
-	for _, g := range out.GroupAssignments {
-		id, _ := parseID(g.Group, "g")
-		c := cell(g.Date, g.Task)
-		c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(g.Group), Members: memberNames(g.Members), Fills: g.Fills, Weak: weakGroup[[3]string{g.Date, g.Task, g.Group}]})
 	}
 	for _, m := range out.Manual {
 		c := cell(m.Date, m.Task)
@@ -274,17 +217,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		if fills < 1 {
 			fills = 1
 		}
-		if m.Group != "" {
-			id, _ := parseID(m.Group, "g")
-			var members []string
-			for _, mem := range groups[m.Group].Members {
-				members = append(members, personName(pid(mem)))
-			}
-			sort.Strings(members)
-			c.groups = append(c.groups, CellGroup{ID: id, Name: groupName(m.Group), Members: members, Fills: fills, Weak: weakGroup[[3]string{m.Date, m.Task, m.Group}], Locked: true})
-		} else {
-			c.texts = append(c.texts, CellText{Text: m.Label, Fills: fills})
-		}
+		c.texts = append(c.texts, CellText{Text: m.Label, Fills: fills})
 	}
 	for _, u := range out.Unfilled {
 		c := cell(u.Date, u.Task)
@@ -300,11 +233,7 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		case c.TaskLevel == "poor":
 			what = "task"
 		}
-		who := personName(c.Person)
-		if c.Group != "" {
-			who += i18n.T(l, "compromise.member_of", groupName(c.Group))
-		}
-		v.Weak = append(v.Weak, i18n.T(l, "compromise", who, taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
+		v.Weak = append(v.Weak, i18n.T(l, "compromise", personName(c.Person), taskName(c.Task), eventName(c.Date), i18n.T(l, "compromise.what."+what)))
 	}
 
 	// A place the answer says nothing about is shown as missing, never dropped silently.
@@ -344,13 +273,9 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 				continue
 			}
 			sort.Slice(a.people, func(i, j int) bool { return a.people[i].Name < a.people[j].Name })
-			sort.Slice(a.groups, func(i, j int) bool { return a.groups[i].Name < a.groups[j].Name })
 			sort.Slice(a.texts, func(i, j int) bool { return a.texts[i].Text < a.texts[j].Text })
-			c := Cell{TaskID: t.ID, People: nonNil(a.people), Groups: nonNilG(a.groups), Texts: nonNilT(a.texts), Missing: a.missing, Explanation: a.why}
+			c := Cell{TaskID: t.ID, People: nonNil(a.people), Texts: nonNilT(a.texts), Missing: a.missing, Explanation: a.why}
 			c.Slots = len(a.people) + a.missing
-			for _, g := range a.groups {
-				c.Slots += g.Fills
-			}
 			for _, x := range a.texts {
 				c.Slots += x.Fills
 			}
@@ -379,12 +304,6 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 func nonNil(x []CellPerson) []CellPerson {
 	if x == nil {
 		return []CellPerson{}
-	}
-	return x
-}
-func nonNilG(x []CellGroup) []CellGroup {
-	if x == nil {
-		return []CellGroup{}
 	}
 	return x
 }

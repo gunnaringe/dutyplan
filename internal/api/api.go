@@ -56,7 +56,6 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	mux.HandleFunc("PATCH /api/orgs/{org}/people/{id}", s.updatePerson)
 
 	s.setupRoutes(mux)
-	s.groupsRoutes(mux)
 	s.cellsRoutes(mux)
 	s.weightsRoutes(mux)
 	s.runsRoutes(mux)

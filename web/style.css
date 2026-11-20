@@ -71,7 +71,6 @@ form.addrow button { padding: .05rem .55rem; font-size: .8rem; }
 .plan-item { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .8rem; }
 .plan-item .nm { font-weight: 700; flex: 1; }
 .box { border: 1px solid var(--line); border-radius: .6rem; padding: .5rem .8rem; }
-.grp { border-bottom: 1px solid var(--line); padding: .5rem 0; }
 .box form.addrow { margin: .6rem 0 .2rem; }
 .org-foot { margin-top: 2rem; }
 

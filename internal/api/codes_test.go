@@ -41,7 +41,7 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 		params map[string]any
 	}{
 		{"blank name", e.refused(400, "POST", base+"/people", map[string]string{"name": "  "}), "invalid", "name_invalid", map[string]any{"what": "name"}},
-		{"the same person twice", e.refused(409, "POST", base+"/groups", map[string]string{"name": "Choir"}), "conflict", "already_exists", map[string]any{"kind": "group", "name": "Choir"}},
+		{"the same person twice", e.refused(409, "POST", base+"/people", map[string]string{"name": a.anna.Name}), "conflict", "already_exists", map[string]any{"kind": "person", "name": a.anna.Name}},
 		{"nothing to change", e.refused(400, "PATCH", base+"/people/"+itoa(a.anna.ID), map[string]any{"proposable": true}), "invalid", "nothing_to_change", nil},
 		{"a weight above its range", e.refused(400, "PUT", plan+"/weights", map[string]any{"values": map[string]any{"w_fair": 500}}), "invalid", "weight_range", map[string]any{"key": "w_fair", "min": 0.0, "max": 100.0}},
 		{"an unknown weight", e.refused(400, "PUT", plan+"/weights", map[string]any{"values": map[string]any{"nope": 1}}), "invalid", "weight_unknown", map[string]any{"key": "nope"}},
@@ -59,9 +59,9 @@ func TestRefusalsCarryACodeAndParametersForThePage(t *testing.T) {
 		}
 	}
 
-	// in use: a group that a manual cell names
-	e.mustDo(201, "POST", plan+"/cells", map[string]any{"event": a.events[0].ID, "task": a.sang.ID, "group": a.choir.ID})
-	if got := e.refused(409, "DELETE", base+"/groups/"+itoa(a.choir.ID), nil); got.Code != "in_use" || got.Params["kind"] != "group" || got.Params["name"] != "Choir" {
+	// in use: a task that a manual cell names
+	e.mustDo(201, "POST", plan+"/cells", map[string]any{"event": a.events[0].ID, "task": a.sang.ID, "label": "Choir"})
+	if got := e.refused(409, "DELETE", base+"/tasks/"+itoa(a.sang.ID), nil); got.Code != "in_use" || got.Params["kind"] != "task" || got.Params["name"] != "Singing" {
 		t.Errorf("in use: %+v", got)
 	}
 	// without a coded cause the English message still comes

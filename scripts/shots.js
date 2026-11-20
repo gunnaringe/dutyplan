@@ -68,10 +68,6 @@ const CHOICES = {
     // a section: people placed under their own heading in Availability (only placement)
     const guests = await api('POST', `${o}/sections`, { name: 'Guests' });
     for (const name of ['Njål Example', 'Sunniva Test']) await api('PUT', `${o}/people/${person[name]}/position`, { section: guests.id, position: 99 });
-    // a group that works together: it can take Coffee, and the planner counts one assignment for each member
-    const group = await api('POST', `${o}/groups`, { name: 'Kitchen duo' });
-    await api('PUT', `${o}/groups/${group.id}/members`, { people: [person['Mona Example'], person['Jon Demo']] });
-    await api('PUT', `${o}/groups/${group.id}/tasks`, { tasks: [{ task_id: task.Coffee, fills: 1, level: 'good' }] });
     await api('POST', `${o}/plans`, { name: 'Spring 2016' });
 
     // the plan: concerts every Saturday and rehearsals every Wednesday, each event with its own places
@@ -115,7 +111,7 @@ const CHOICES = {
     // can come, so the place stays empty and the draft says why)
     await api('POST', `${p}/cells`, { event: concerts[0].id, task: task.Doors, person: person['Ola Sample'] });
     await api('POST', `${p}/cells`, { event: gala.id, task: task.Doors, label: 'Stewards', fills: 2 });
-    await api('PUT', `${p}/pools`, { event: gala.id, task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']], groups: [] });
+    await api('PUT', `${p}/pools`, { event: gala.id, task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']] });
 
     const draft = async () => {
       const started = await api('POST', `${p}/runs`, { time_limit: 10 });
@@ -187,10 +183,9 @@ const CHOICES = {
     await go(page, planPath, '.dp-table');
     await range(page, 'hero', page.locator('main h1'), page.locator('.grid-scroll'));
 
-    // The organisation: its plans and its groups, and a group.
+    // The organisation and its plans.
     await go(page, `/o/${ORG.slug}`);
     await fromTop(page, '01-organisation', page.locator('.org-foot'));
-    await shoot(page, '02-group', page.getByRole('button', { name: 'Open the group Kitchen duo' }));
 
     // The sections of the table, one by one.
     await go(page, planPath, '.dp-table');

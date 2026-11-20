@@ -314,8 +314,8 @@ func (s *Store) CopyEvent(ctx context.Context, orgSlug, planSlug string, id int6
 				}
 			}
 			if in.Hand {
-				if _, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, group_id, label, fills, locked, created_at)
-					SELECT org_id, plan_id, ?, task_id, person_id, group_id, label, fills, 0, ? FROM manual_cell
+				if _, err := tx.ExecContext(ctx, `INSERT INTO manual_cell (org_id, plan_id, event_id, task_id, person_id, label, fills, locked, created_at)
+					SELECT org_id, plan_id, ?, task_id, person_id, label, fills, 0, ? FROM manual_cell
 					WHERE event_id = ? AND org_id = ? AND plan_id = ? AND locked = 0`, e.ID, s.stamp(), src.ID, oid, pid); err != nil {
 					return err
 				}

@@ -247,7 +247,6 @@ const { spawn } = require('child_process');
 
     // --- the draft: by hand, make a draft, lock, try again, pin ---
     await draft('Café', ev[0]).click();
-    await dialog.locator('select[aria-label="What"]').selectOption('text');
     await dialog.locator('input[aria-label="Text"]').fill('Outside guest');
     await dialog.locator('input[aria-label="Places it fills"]').fill('2');
     await reopens(() => dialog.getByRole('button', { name: 'Set it' }).click(), 'the place dialog opens again');
@@ -332,22 +331,9 @@ const { spawn } = require('child_process');
     await dialog.getByRole('button', { name: 'Delete the event' }).click();
     await until(page, () => document.querySelectorAll('.dp-table thead th[scope=col]:not(.addcol)').length === 3, null, 'the event is deleted');
 
-    // --- the organisation: groups, a plan to delete, rename ---
+    // --- the organisation: a plan to delete, rename ---
     await page.goto(base + '/o/sports-club');
     await h1is(page, 'Sports Club');
-    await addNamed('New group', 'Choir');
-    await page.click('button[aria-label="Open the group Choir"]');
-    await dialog.locator('input[aria-label="Kari Test is in Choir"]').check();
-    await dialog.locator('input[aria-label="Ola Sample is in Choir"]').check();
-    await reopens(() => dialog.getByRole('button', { name: 'Save the members' }).click(), 'the group dialog opens again');
-    ok(await dialog.locator('input[aria-label="Kari Test is in Choir"]').isChecked(), 'the members are saved');
-    await dialog.locator('input[aria-label="Places Choir fills in Sound"]').fill('1');
-    await reopens(() => dialog.getByRole('button', { name: 'Save', exact: true }).click(), 'the group dialog opens again');
-    ok((await dialog.locator('input[aria-label="Places Choir fills in Sound"]').inputValue()) === '1', 'the group’s task is saved');
-    await closeDialog();
-    const grp = await page.innerText('.grp');
-    ok(grp.includes('Kari Test, Ola Sample') && grp.includes('May be proposed for Sound (fills 1)'), 'the group line: ' + grp);
-
     await addNamed('New plan, e.g. Autumn 2026', 'Spring 2027');
     await page.waitForURL('**/p/spring-2027');
     await page.getByRole('button', { name: '⚙ Plan settings' }).click();

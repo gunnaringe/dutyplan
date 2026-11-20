@@ -12,13 +12,6 @@ var en = map[string]string{
 	"explain.not_proposable":          "cannot be proposed: %s",
 	"explain.busy":                    "busy with something else at the event: %s",
 	"explain.not_in_task":             "%d have not chosen the task",
-	"explain.group.not_proposable":    "%s cannot be proposed",
-	"explain.group.not_proposable_by": "%s cannot be proposed because %s cannot be proposed",
-	"explain.group.too_many_places":   "%s needs more places than are left",
-	"explain.group.outside_selection": "%s is outside the selection",
-	"explain.group.task_never":        "%s: %s said «never» to the task",
-	"explain.group.event_never":       "%s: %s cannot attend",
-	"explain.group.busy":              "%s: %s is busy with something else",
 	"explain.silent":                  "The planner said nothing about this place.",
 
 	// Warnings about manual cells (from the solver, with names)
@@ -28,18 +21,12 @@ var en = map[string]string{
 	"warn.manual.outside_selection": "%s was set on %s %s by hand, even though they are outside the selection.",
 	"warn.manual.busy":              "%s was set on %s %s by hand, even though they are busy with %s.",
 	"warn.manual.other":             "%s was set on %s %s by hand, even though «%s».",
-	"warn.manual.group_member":      "%s was set on %s %s by hand, but %s has said it does not suit.",
-	"warn.manual.locked_with_group": "%s was set on %s %s by hand while %s is on %s; the two cannot be combined.",
 
 	// Compromises (a «poor» answer was used)
 	"compromise":            "%s got %s %s, even though it is «poor» for %s.",
 	"compromise.what.event": "the event",
 	"compromise.what.task":  "the task",
 	"compromise.what.both":  "the event and the task",
-	"compromise.member_of":  " (as a member of %s)",
 
 	// Notes made when the run starts: things the planner was not told about
-	"note.group_cell_no_members": "The cell for the group «%s» on %s was left out because the group has no members.",
-	"note.group_no_members":      "The group «%s» has no members and takes no part in the planning.",
-	"note.empty_selection":       "The selection for %s has no people or groups, so nobody can be chosen.",
 }

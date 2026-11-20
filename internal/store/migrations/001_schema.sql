@@ -140,48 +140,13 @@ CREATE TABLE plan_run (
 CREATE INDEX plan_run_plan ON plan_run (plan_id, id DESC);
 CREATE UNIQUE INDEX plan_run_pinned ON plan_run (plan_id) WHERE pinned = 1;
 
--- Groups: a named set of people (team, choir, couple). No rules of their own: a group is just a candidate or a cell
--- that makes all the members busy. «Can be proposed» (default yes) governs whether the planner itself may pick the group.
--- grp instead of group because group is a word in SQL.
-CREATE TABLE grp (
-    id         INTEGER PRIMARY KEY,
-    org_id     INTEGER NOT NULL REFERENCES organization(id),
-    name       TEXT NOT NULL,
-    proposable INTEGER NOT NULL DEFAULT 1 CHECK (proposable IN (0, 1)),
-    created_at TEXT NOT NULL,
-    UNIQUE (org_id, name),
-    UNIQUE (org_id, id)
-);
-
-CREATE TABLE grp_member (
-    org_id    INTEGER NOT NULL,
-    group_id  INTEGER NOT NULL,
-    person_id INTEGER NOT NULL,
-    PRIMARY KEY (group_id, person_id),
-    FOREIGN KEY (org_id, group_id) REFERENCES grp (org_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id)
-);
-
--- The tasks the planner may propose the group for: places the group fills, and how willingly («never» is the same as no row).
--- Deleting a task that is in use here is refused.
-CREATE TABLE grp_task (
-    org_id   INTEGER NOT NULL,
-    group_id INTEGER NOT NULL,
-    task_id  INTEGER NOT NULL,
-    fills    INTEGER NOT NULL CHECK (fills BETWEEN 1 AND 50),
-    level    TEXT NOT NULL CHECK (level IN ('poor', 'neutral', 'good')),
-    PRIMARY KEY (group_id, task_id),
-    FOREIGN KEY (org_id, group_id) REFERENCES grp (org_id, id) ON DELETE CASCADE,
-    FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id)
-);
-
 -- Manual cells and selections, per plan.
---   manual_cell: a person, a group or a text (for example «Outside guest») for a task on an event. The planner never moves
---                it, and it counts as a filled place (fills for a group and a text). locked = 0: set by hand; locked = 1:
+--   manual_cell: a person or a text (for example «Outside guest») for a task on an event. The planner never moves
+--                it, and it counts as a filled place (fills for a text). locked = 0: set by hand; locked = 1:
 --                one of the planner's names that was locked so the next run keeps it (never a text). The planner treats
 --                both the same; the page shows them differently, and copying an event takes only those set by hand.
 --   pool_member: a selection, «only these can be picked» for a task on an event. If there are rows, there is a selection.
--- If the event is deleted, the cells and the selection go with it. A group, task or person in use here cannot be deleted.
+-- If the event is deleted, the cells and the selection go with it. A task or person in use here cannot be deleted.
 CREATE TABLE manual_cell (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL,
@@ -189,21 +154,18 @@ CREATE TABLE manual_cell (
     event_id   INTEGER NOT NULL,
     task_id    INTEGER NOT NULL,
     person_id  INTEGER,
-    group_id   INTEGER,
     label      TEXT,
     fills      INTEGER NOT NULL DEFAULT 1 CHECK (fills BETWEEN 1 AND 50),
     locked     INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
     created_at TEXT NOT NULL,
-    CHECK ((person_id IS NOT NULL) + (group_id IS NOT NULL) + (label IS NOT NULL) = 1),
+    CHECK ((person_id IS NOT NULL) + (label IS NOT NULL) = 1),
     CHECK (locked = 0 OR label IS NULL),
     CHECK (person_id IS NULL OR fills = 1),
     FOREIGN KEY (org_id, plan_id, event_id) REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE, -- cells follow their event
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id),
-    FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id),
-    FOREIGN KEY (org_id, group_id) REFERENCES grp (org_id, id)
+    FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id)
 );
 CREATE UNIQUE INDEX manual_cell_person ON manual_cell (event_id, task_id, person_id) WHERE person_id IS NOT NULL;
-CREATE UNIQUE INDEX manual_cell_group ON manual_cell (event_id, task_id, group_id) WHERE group_id IS NOT NULL;
 CREATE UNIQUE INDEX manual_cell_label ON manual_cell (event_id, task_id, label) WHERE label IS NOT NULL;
 CREATE INDEX manual_cell_plan ON manual_cell (plan_id, event_id, task_id);
 
@@ -213,16 +175,12 @@ CREATE TABLE pool_member (
     plan_id   INTEGER NOT NULL,
     event_id  INTEGER NOT NULL,
     task_id   INTEGER NOT NULL,
-    person_id INTEGER,
-    group_id  INTEGER,
-    CHECK ((person_id IS NOT NULL) + (group_id IS NOT NULL) = 1),
+    person_id INTEGER NOT NULL,
     FOREIGN KEY (org_id, plan_id, event_id) REFERENCES event (org_id, plan_id, id) ON DELETE CASCADE, -- selections follow their event
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id),
-    FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id),
-    FOREIGN KEY (org_id, group_id) REFERENCES grp (org_id, id)
+    FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id)
 );
-CREATE UNIQUE INDEX pool_member_person ON pool_member (event_id, task_id, person_id) WHERE person_id IS NOT NULL;
-CREATE UNIQUE INDEX pool_member_group ON pool_member (event_id, task_id, group_id) WHERE group_id IS NOT NULL;
+CREATE UNIQUE INDEX pool_member_person ON pool_member (event_id, task_id, person_id);
 CREATE INDEX pool_member_plan ON pool_member (plan_id, event_id, task_id);
 
 -- The table on the plan page sets everything about an event in one place.
