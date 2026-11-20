@@ -7,10 +7,10 @@
 min_version = "2026.10.0"
 
 [tools]
-python = "3.12.15"
-uv = "0.13.5"
-go = "1.26.10"
-node = "24.22.3"  # the browser check and the README pictures (scripts/*.js)
+python = "3.14.10"
+uv = "0.13.9"
+go = "1.27.4"
+node = "26.13.1"  # the browser check and the README pictures (scripts/*.js)
 prek = "0.5.11"  # git hooks and the same checks in CI (prek.toml)
 
 [env]

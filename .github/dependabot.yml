@@ -49,3 +49,7 @@ updates:
       timezone: Europe/Oslo
     commit-message:
       prefix: deps
+    ignore:
+      # OR-Tools has no wheels for Python 3.15 yet (9.15 stops at 3.14). Remove this once it has, and bump mise.toml with it.
+      - dependency-name: "*python"
+        versions: [">=3.15"]
