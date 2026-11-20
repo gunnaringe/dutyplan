@@ -168,15 +168,18 @@ const { spawn } = require('child_process');
     }
     const takes = async (person, list) => {
       await page.click(`button[aria-label="Open ${person}"]`);
+      // one click per step: not → bad → good
       for (const [task, level] of list) {
-        await reopens(() => dialog.locator(`select[aria-label="${task} for ${person}"]`).selectOption(level), 'the person dialog opens again');
-        ok((await dialog.locator(`select[aria-label="${task} for ${person}"]`).inputValue()) === level, 'the change is in the new dialog');
+        const btn = () => dialog.locator(`button.cyc[aria-label^="${task} for ${person}:"]`);
+        ok((await btn().getAttribute('data-level')) === '', 'a task starts as not: ' + task);
+        for (let i = 0; i < { poor: 1, good: 2 }[level]; i++) await reopens(() => btn().click(), 'the person dialog opens again');
+        ok((await btn().getAttribute('data-level')) === level, 'the change is in the new dialog: ' + (await btn().getAttribute('aria-label')));
       }
       await closeDialog();
     };
-    await takes('Kari Test', [['Sound', 'good'], ['Video', 'neutral']]);
+    await takes('Kari Test', [['Sound', 'good'], ['Video', 'poor']]);
     await takes('Ola Sample', [['Sound', 'good']]);
-    await takes('Jon Demo', [['Sound', 'neutral'], ['Video', 'good']]);
+    await takes('Jon Demo', [['Sound', 'poor'], ['Video', 'good']]);
     ok((await page.innerText('button[aria-label="Open Kari Test"]')).includes('Sound, Video'), 'the row shows the tasks a person takes');
     await page.click('button[aria-label="Open Kari Test"]');
     ok((await dialog.locator('input[readonly]').count()) === 0, 'the person dialog has no personal link');
@@ -194,8 +197,13 @@ const { spawn } = require('child_process');
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'never', 'Jon Demo, ' + ev[1], 'three clicks give ✗');
 
     await page.click('button[aria-label="Open the task Sound"]');
-    await reopens(() => dialog.locator('select[aria-label="Sound + Video"]').selectOption('cannot'), 'the task dialog opens again');
-    ok((await dialog.locator('select[aria-label="Sound + Video"]').inputValue()) === 'cannot', 'the combination is set');
+    // one click per step: a pair starts as bad → good → can't
+    const pair = () => dialog.locator('button.cyc[aria-label^="Sound + Video:"]');
+    ok((await pair().getAttribute('data-level')) === 'standard', 'a pair starts as bad');
+    await reopens(() => pair().click(), 'the task dialog opens again');
+    ok((await pair().getAttribute('aria-label')) === 'Sound + Video: Good', 'one click gives good');
+    await reopens(() => pair().click(), 'the task dialog opens again');
+    ok((await pair().getAttribute('data-level')) === 'cannot', 'the combination is set to can’t');
     await closeDialog();
 
     // --- the draft: by hand, make a draft, lock, try again, pin ---

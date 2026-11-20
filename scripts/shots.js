@@ -20,16 +20,16 @@ const PLAN = { name: 'December 2015', slug: 'december-2015' };
 const TODAY = '2015-10-21'; // what the pictures show as the day the plans were made (see the timestamps below)
 const TASKS = ['Sound', 'Video', 'Doors', 'Coffee'];
 const PEOPLE = ['Kari Test', 'Ola Sample', 'Mona Example', 'Pia Demo', 'Ingrid Sample', 'Njål Example', 'Sunniva Test', 'Jon Demo'];
-// what each person takes part in: task -> level (poor | neutral | good)
+// what each person takes part in: task -> level (poor | good)
 const CHOICES = {
-  'Kari Test': { Sound: 'good', Video: 'neutral' },
-  'Ola Sample': { Sound: 'neutral', Doors: 'good' },
+  'Kari Test': { Sound: 'good', Video: 'good' },
+  'Ola Sample': { Sound: 'good', Doors: 'good' },
   'Mona Example': { Doors: 'good', Coffee: 'good' },
   'Pia Demo': { Video: 'good', Sound: 'poor' },
-  'Ingrid Sample': { Video: 'neutral', Coffee: 'good' },
-  'Njål Example': { Doors: 'neutral', Sound: 'poor' },
-  'Sunniva Test': { Doors: 'neutral', Video: 'good', Coffee: 'neutral' },
-  'Jon Demo': { Sound: 'neutral', Coffee: 'good' },
+  'Ingrid Sample': { Video: 'good', Coffee: 'good' },
+  'Njål Example': { Doors: 'good', Sound: 'poor' },
+  'Sunniva Test': { Doors: 'good', Video: 'good', Coffee: 'good' },
+  'Jon Demo': { Sound: 'good', Coffee: 'good' },
 };
 
 (async () => {
@@ -57,7 +57,7 @@ const CHOICES = {
     await api('POST', '/orgs', { name: ORG.name });
     for (const name of TASKS) await api('POST', `${o}/tasks`, { name });
     const task = Object.fromEntries((await api('GET', `${o}/tasks`)).map((t) => [t.name, t.id]));
-    for (const [a, b, level] of [['Sound', 'Video', 'impractical'], ['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
+    for (const [a, b, level] of [['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
       await api('PUT', `${o}/combinations`, { a: task[a], b: task[b], level });
     }
     for (const name of PEOPLE) await api('POST', `${o}/people`, { name });

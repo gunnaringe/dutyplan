@@ -130,9 +130,9 @@ func TestKeysUsedByThePageExist(t *testing.T) {
 		t.Errorf("only %d keys found in app.js: the pattern no longer matches the code", seen)
 	}
 	// Parts that app.js puts together at run time.
-	for _, k := range []string{"standard", "cannot", "impractical", "practical", "preferred"} {
-		if _, ok := c["en"]["combo."+k]; !ok {
-			t.Errorf("combo.%s is missing", k)
+	for _, k := range []string{"combo.cannot", "combo.bad", "combo.good", "pick.not", "pick.poor", "pick.good"} { // cycle() in app.js
+		if _, ok := c["en"][k]; !ok {
+			t.Errorf("%s is missing", k)
 		}
 	}
 	for _, k := range []string{"none", "good", "poor", "never"} { // the answer in a cell of the table

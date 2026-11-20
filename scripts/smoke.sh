@@ -90,7 +90,7 @@ code 200 GET /api/orgs/test/people
 code 200 GET /api/orgs/test/plans/autumn-2026/events
 [ "$(grep -o '"date"' "$tmp/body" | wc -l)" -eq 21 ] || fail "the seed should give 21 events (Sundays 2 Aug - 20 Dec)"
 code 200 GET /api/orgs/test/combinations
-[ "$(grep -o '"level":"cannot"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level":"impractical"' "$tmp/body" | wc -l)" -eq 1 ] || fail "the seed's combinations are wrong: $(cat "$tmp/body")"
+[ "$(grep -o '"level":"cannot"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level"' "$tmp/body" | wc -l)" -eq 2 ] || fail "the seed's combinations are wrong: $(cat "$tmp/body")"
 
 # planning with the real planner: the run is done, checked without violations, and invisible to another organisation
 # (org-a has a plan with the same address, autumn-2026)

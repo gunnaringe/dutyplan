@@ -9,7 +9,6 @@ import (
 type PlanPerson struct {
 	ID         int64
 	Name       string
-	Active     bool
 	Proposable bool
 }
 
@@ -67,10 +66,10 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	d.People = []PlanPerson{}
-	if err := scanAll(ctx, tx, `SELECT id, name, active, proposable FROM person WHERE org_id = ? ORDER BY id`, []any{oid},
+	if err := scanAll(ctx, tx, `SELECT id, name, proposable FROM person WHERE org_id = ? ORDER BY id`, []any{oid},
 		func(r *sql.Rows) error {
 			var p PlanPerson
-			err := r.Scan(&p.ID, &p.Name, &p.Active, &p.Proposable)
+			err := r.Scan(&p.ID, &p.Name, &p.Proposable)
 			d.People = append(d.People, p)
 			return err
 		}); err != nil {

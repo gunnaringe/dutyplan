@@ -39,8 +39,7 @@ var nb = map[string]string{
 	"compromise.member_of":  " (som medlem av %s)",
 
 	// Notes made when the run starts: things the planner was not told about
-	"note.inactive_person_cell":  "Ruten for %s på %s er ikke med fordi personen ikke er aktiv.",
-	"note.group_cell_no_members": "Ruten for gruppen «%s» på %s er ikke med fordi gruppen ikke har aktive medlemmer.",
-	"note.group_no_members":      "Gruppen «%s» har ingen aktive medlemmer og er ikke med i planleggingen.",
-	"note.empty_selection":       "Utvalget for %s har ingen aktive personer eller grupper, så ingen kan velges.",
+	"note.group_cell_no_members": "Ruten for gruppen «%s» på %s er ikke med fordi gruppen ikke har medlemmer.",
+	"note.group_no_members":      "Gruppen «%s» har ingen medlemmer og er ikke med i planleggingen.",
+	"note.empty_selection":       "Utvalget for %s har ingen personer eller grupper, så ingen kan velges.",
 }

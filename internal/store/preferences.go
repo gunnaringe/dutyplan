@@ -9,9 +9,10 @@ import (
 	"strconv"
 )
 
-// Levels a person can give a task (not marked at all = not involved) and an event (not marked = neutral).
+// Levels a person can give a task (not marked at all = does not take part; one click on the page goes not → poor → good)
+// and an event (not marked = neutral).
 var (
-	taskLevels  = map[string]bool{"never": true, "poor": true, "neutral": true, "good": true}
+	taskLevels  = map[string]bool{"poor": true, "good": true}
 	eventLevels = map[string]bool{"never": true, "poor": true, "good": true}
 )
 
@@ -19,8 +20,8 @@ const maxAvailabilityPerCall = 400
 
 func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 	var p Person
-	err := q.QueryRowContext(ctx, `SELECT id, name, active, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
-		Scan(&p.ID, &p.Name, &p.Active, &p.Proposable)
+	err := q.QueryRowContext(ctx, `SELECT id, name, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
+		Scan(&p.ID, &p.Name, &p.Proposable)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -30,7 +31,7 @@ func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 // SetPersonTask sets whether and how willingly a person takes part in a task.
 func (s *Store) SetPersonTask(ctx context.Context, orgSlug string, personID, taskID int64, level string) error {
 	if !taskLevels[level] {
-		return fmt.Errorf("%w: level must be never, poor, neutral or good", ErrInvalid)
+		return fmt.Errorf("%w: level must be poor or good (remove the task to not take part)", ErrInvalid)
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)

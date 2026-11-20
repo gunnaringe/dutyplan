@@ -231,9 +231,6 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 	in.PersonTasks = map[string]map[string]string{}
 	in.PersonDates = map[string]map[string]string{}
 	for _, person := range d.People {
-		if !person.Active { // an inactive person is not planned
-			continue
-		}
 		in.People = append(in.People, struct {
 			ID         string `json:"id"`
 			Proposable bool   `json:"proposable"`
@@ -256,22 +253,14 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			in.PersonDates[pid(person.ID)] = m
 		}
 	}
-	// Groups: only active members count. A group left with none is not sent (nor anything that names it).
-	active := map[int64]bool{}
-	for _, person := range d.People {
-		if person.Active {
-			active[person.ID] = true
-		}
-	}
+	// Groups: a group without members is not sent (nor anything that names it).
 	groups := map[int64]bool{}
 	for _, g := range d.Groups {
 		sg := solverGroup{ID: gid(g.ID), Members: []string{}, Proposable: g.Proposable}
 		snapG := SnapGroup{ID: g.ID, Name: g.Name, Members: []int64{}}
 		for _, m := range g.Members {
-			if active[m] {
-				sg.Members = append(sg.Members, pid(m))
-				snapG.Members = append(snapG.Members, m)
-			}
+			sg.Members = append(sg.Members, pid(m))
+			snapG.Members = append(snapG.Members, m)
 		}
 		if len(sg.Members) == 0 {
 			if len(g.Tasks) > 0 {
@@ -288,8 +277,8 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			}
 		}
 	}
-	// Manual cells and selections. Whatever names someone who is not active, or a group left without active members,
-	// cannot be sent (the solver would count the place without knowing who): it is left out and the run says so.
+	// Manual cells and selections. Whatever names a group without members cannot be sent (the solver would count the
+	// place without knowing who): it is left out and the run says so.
 	evDate := map[int64]string{}
 	for _, e := range d.Events {
 		evDate[e.ID] = e.Date
@@ -297,10 +286,6 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 	taskName := map[int64]string{}
 	for _, t := range d.Tasks {
 		taskName[t.ID] = t.Name
-	}
-	personName := map[int64]string{}
-	for _, person := range d.People {
-		personName[person.ID] = person.Name
 	}
 	groupName := map[int64]string{}
 	for _, g := range d.Groups {
@@ -311,10 +296,6 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 		l := solverLocked{Date: eid(c.EventID), Task: tid(c.TaskID)}
 		switch {
 		case c.PersonID != nil:
-			if !active[*c.PersonID] {
-				snap.Notes = append(snap.Notes, Note{"inactive_person_cell", []string{personName[*c.PersonID], where(c.EventID, c.TaskID)}})
-				continue
-			}
 			l.Person = pid(*c.PersonID)
 		case c.GroupID != nil:
 			if !groups[*c.GroupID] {
@@ -330,9 +311,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 	for _, pl := range d.Pools {
 		sp := solverPool{Date: eid(pl.EventID), Task: tid(pl.TaskID), People: []string{}, Groups: []string{}}
 		for _, person := range pl.People {
-			if active[person] {
-				sp.People = append(sp.People, pid(person))
-			}
+			sp.People = append(sp.People, pid(person))
 		}
 		for _, g := range pl.Groups {
 			if groups[g] {

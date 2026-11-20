@@ -61,20 +61,18 @@ func (w world) input(t *testing.T) (inputView, Snapshot, string) {
 	return in, snap, hash
 }
 
-func TestBuildInputSendsGroupsWithTheirActiveMembersOnly(t *testing.T) {
+func TestBuildInputSendsGroupsWithTheirMembers(t *testing.T) {
 	w := newWorld(t, "Club")
-	choir := w.group(t, "Choir", []string{"Aslaug", "Birger", "Dina"}, store.GroupTask{TaskID: w.sound.ID, Fills: 2, Level: "good"})
+	choir := w.group(t, "Choir", []string{"Aslaug", "Birger"}, store.GroupTask{TaskID: w.sound.ID, Fills: 2, Level: "good"})
 	w.group(t, "Empty", nil, store.GroupTask{TaskID: w.camera.ID, Fills: 1, Level: "neutral"}) // meant to be used, has nobody
 	w.group(t, "Rolig", nil)                                                                   // an empty group nobody asked for
-	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Dina"].ID, store.PersonPatch{Active: &inactive})
 
 	in, snap, hash := w.input(t)
 	if len(in.Groups) != 1 || in.Groups[0].ID != gid(choir.ID) || !in.Groups[0].Proposable {
-		t.Fatalf("only the group with active members is sent: %+v", in.Groups)
+		t.Fatalf("only the group with members is sent: %+v", in.Groups)
 	}
 	if got := strings.Join(in.Groups[0].Members, ","); got != pid(w.people["Aslaug"].ID)+","+pid(w.people["Birger"].ID) {
-		t.Errorf("an inactive member is left out: %s", got)
+		t.Errorf("the members: %s", got)
 	}
 	if len(in.GroupTasks) != 1 || in.GroupTasks[0] != (struct {
 		Group string `json:"group"`

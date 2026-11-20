@@ -209,7 +209,7 @@ func TestPersonPatch(t *testing.T) {
 	var p store.Person
 	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Kari Test"}).json(&p)
 	e.mustDo(200, "PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), map[string]any{"proposable": false}).json(&p)
-	if p.Proposable || !p.Active {
+	if p.Proposable {
 		t.Errorf("patch = %+v", p)
 	}
 	if r := e.do("PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), map[string]any{}); r.code != 400 {

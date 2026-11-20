@@ -126,8 +126,10 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 1 {
 		t.Errorf("an update must not add a second row: %d", got)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "kanskje"); !errors.Is(err, ErrInvalid) {
-		t.Errorf("bad level: %v", err)
+	for _, level := range []string{"kanskje", "neutral", "never", ""} { // not → bad → good: «not» is no row
+		if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, level); !errors.Is(err, ErrInvalid) {
+			t.Errorf("level %q: %v", level, err)
+		}
 	}
 	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.singing.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a manual-only task cannot be chosen: %v", err)
@@ -284,12 +286,12 @@ func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	e := newPrefEnv(t)
 	other, _ := e.s.CreatePerson(ctx, e.org.Slug, "Ola Prøve")
 	e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good")
-	e.s.SetPersonTask(ctx, e.org.Slug, other.ID, e.sound.ID, "never")
+	e.s.SetPersonTask(ctx, e.org.Slug, other.ID, e.sound.ID, "poor")
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, e.person.ID, map[int64]string{e.ev[0].ID: "good"})
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, other.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "poor"})
 	mine := e.me(t)
 	theirs := viewOf(t, e.s, e.org.Slug, e.plan.Slug, other.ID)
-	if mine.Tasks[1].Level != "good" || theirs.Tasks[1].Level != "never" {
+	if mine.Tasks[1].Level != "good" || theirs.Tasks[1].Level != "poor" {
 		t.Errorf("task answers: %+v / %+v", mine.Tasks, theirs.Tasks)
 	}
 	if mine.Events[0].Level != "good" || mine.Events[1].Level != "" || theirs.Events[0].Level != "never" || theirs.Events[1].Level != "poor" {

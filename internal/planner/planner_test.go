@@ -79,12 +79,12 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 		must(st.SetPersonTask(ctx, w.org.Slug, w.people[person].ID, task.ID, level))
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
-		choose(n, w.sound, "neutral")
+		choose(n, w.sound, "good")
 	}
 	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
-		choose(n, w.camera, "neutral")
+		choose(n, w.camera, "good")
 	}
-	choose("Frode", w.sound, "never") // takes part but never wants it
+	// Frode chose no task: he takes part in nothing
 	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Aslaug"].ID, map[int64]string{w.events[0].ID: "never"}))
 	must(st.SetAvailability(ctx, w.org.Slug, w.plan.Slug, w.people["Dina"].ID, map[int64]string{w.events[1].ID: "never", w.events[2].ID: "good"}))
 	return w
@@ -103,8 +103,6 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	w := newWorld(t, "Club")
 	off := false
 	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
-	gone := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Frode"].ID, store.PersonPatch{Active: &gone})
 	input, hash, snap, err := BuildInput(w.data(t), Params{TimeLimit: 7, Seed: 3, Workers: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -117,8 +115,8 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 		t.Errorf("params %v", got)
 	}
 	people := in["people"].([]any)
-	if len(people) != 5 { // Frode is inactive
-		t.Fatalf("active people only: %v", people)
+	if len(people) != 6 {
+		t.Fatalf("everyone: %v", people)
 	}
 	proposable := map[string]bool{}
 	for _, p := range people {
@@ -128,11 +126,8 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if proposable[pid(w.people["Embla"].ID)] || !proposable[pid(w.people["Aslaug"].ID)] {
 		t.Errorf("proposable flag: %v", proposable)
 	}
-	if _, ok := in["person_tasks"].(map[string]any)[pid(w.people["Frode"].ID)]; ok {
-		t.Error("an inactive person's answers must not be sent")
-	}
 	pt := in["person_tasks"].(map[string]any)[pid(w.people["Cecilie"].ID)].(map[string]any)
-	if pt[tid(w.sound.ID)] != "neutral" || pt[tid(w.camera.ID)] != "neutral" {
+	if pt[tid(w.sound.ID)] != "good" || pt[tid(w.camera.ID)] != "good" {
 		t.Errorf("Cecilie's tasks: %v", pt)
 	}
 	pd := in["person_dates"].(map[string]any)[pid(w.people["Dina"].ID)].(map[string]any)
@@ -154,8 +149,8 @@ func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	if len(in["dates"].([]any)) != 4 || len(in["day_type_tasks"].(map[string]any)[eid(w.events[0].ID)].(map[string]any)) != 3 {
 		t.Errorf("events and their places: %v %v", in["dates"], in["day_type_tasks"])
 	}
-	// the snapshot names every task (with its planned flag) and the active people
-	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 5 || snap.Places[w.events[0].ID][w.singing.ID] != 0 || snap.Places[w.events[0].ID][w.sound.ID] != 1 {
+	// the snapshot names every task (with its planned flag) and the people
+	if len(snap.Tasks) != 3 || snap.Tasks[0].Planned == snap.Tasks[1].Planned && snap.Tasks[1].Planned == snap.Tasks[2].Planned || len(snap.People) != 6 || snap.Places[w.events[0].ID][w.singing.ID] != 0 || snap.Places[w.events[0].ID][w.sound.ID] != 1 {
 		t.Errorf("snapshot: %+v", snap)
 	}
 	// deterministic, and the hash ignores seed and time limit but not the data
@@ -533,9 +528,8 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	off := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off}) // Embla may not be proposed
-	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Birger"].ID, store.PersonPatch{Active: &inactive}) // Birger is not planned
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})  // Embla may not be proposed
+	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Birger"].ID, store.PersonPatch{Proposable: &off}) // nor Birger
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	run := func() RunView {
@@ -574,7 +568,7 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 			who[e.Date][name] = names
 		}
 	}
-	// Sound can be Aslaug or Cecilie (Birger inactive, Frode said «never»); Aslaug cannot on 9 Aug. Camera: Cecilie or Dina (Embla may not be proposed).
+	// Sound can be Aslaug or Cecilie (Birger may not be proposed, Frode chose nothing); Aslaug cannot on 9 Aug. Camera: Cecilie or Dina (Embla may not be proposed).
 	for date, tasks := range who {
 		for _, n := range tasks["Sound"] {
 			if n != "Aslaug" && n != "Cecilie" || (date == "2026-08-09" && n == "Aslaug") {
@@ -685,10 +679,12 @@ func (sn Snapshot) rendered(l i18n.Lang) []string {
 
 func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	w := newWorld(t, "Club")
-	// a manual cell for someone who is then deactivated: the run notes that it left the cell out
-	w.cell(t, w.events[2], w.sound, store.NewCell{PersonID: w.people["Cecilie"].ID})
-	inactive := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Cecilie"].ID, store.PersonPatch{Active: &inactive})
+	// a manual cell for a group that then loses its members: the run notes that it left the cell out
+	choir := w.group(t, "Choir", []string{"Cecilie"})
+	w.cell(t, w.events[2], w.sound, store.NewCell{GroupID: choir.ID})
+	if _, err := w.st.SetGroupMembers(ctx, w.org.Slug, choir.ID, nil); err != nil {
+		t.Fatal(err)
+	}
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return cannedAnswer(w), nil })
 	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	if err != nil {
@@ -715,7 +711,7 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	if !strings.Contains(nb.Events[1].Cells[1].Explanation, "passer ikke: Aslaug") || !strings.HasPrefix(nb.Events[1].Cells[1].Explanation, "Ingen kan ta denne") {
 		t.Errorf("explanation in Norwegian: %q", nb.Events[1].Cells[1].Explanation)
 	}
-	if !strings.Contains(nb.Warnings[0], "Ruten for Cecilie på Sound 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for Cecilie on Sound 2026-08-23") {
+	if !strings.Contains(nb.Warnings[0], "Ruten for gruppen «Choir» på Sound 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for the group «Choir» on Sound 2026-08-23") {
 		t.Errorf("notes: %q / %q", nb.Warnings, en.Warnings)
 	}
 	// the stored run does not depend on the language: asking for Norwegian does not change what English shows afterwards

@@ -126,7 +126,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	notFound("POST", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d/copy", dateA.ID), map[string]any{"dates": []string{"2026-08-16"}})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
-	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "preferred"})
+	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "practical"})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), map[string]any{"description": "x"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), nil)
 	notFound("GET", "/api/orgs/org-a/plans/nope/events", nil)

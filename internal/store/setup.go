@@ -177,7 +177,9 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 // ---- task combinations ---------------------------------------------------------------------------------------
 
 // Combination levels, as the planner knows them. "standard" (no row) means: use the planner's default.
-var combinationLevels = map[string]bool{"cannot": true, "impractical": true, "practical": true, "preferred": true}
+// combinationLevels are what can be stored for two tasks on the same event: «can't» and «good». A pair that is not set
+// («standard» removes it) is «bad»: the planner's default, impractical.
+var combinationLevels = map[string]bool{"cannot": true, "practical": true}
 
 type Combination struct {
 	A     int64  `json:"a"` // always the smaller task id
@@ -212,7 +214,7 @@ func (s *Store) SetCombination(ctx context.Context, orgSlug string, a, b int64, 
 		return Invalid("combination_self", nil, "a task cannot be combined with itself")
 	}
 	if level != "standard" && !combinationLevels[level] {
-		return Invalid("level_invalid", nil, "level must be cannot, impractical, practical, preferred or standard")
+		return Invalid("level_invalid", nil, "level must be cannot, practical or standard")
 	}
 	if a > b {
 		a, b = b, a

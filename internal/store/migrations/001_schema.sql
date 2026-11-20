@@ -1,7 +1,7 @@
 -- The whole schema. Everything belongs to an organisation, and every child table has org_id with composite foreign keys
 -- to (org_id, id): the database itself stops a row from pointing at something in another organisation, in addition to
 -- the checks in the code. Wire codes are English: levels never|poor|neutral|good, combinations
--- cannot|impractical|practical|preferred.
+-- cannot|practical (the page: can't / good; no row is impractical, «bad»).
 
 -- The organisation is the top level; it has plans (for example «Autumn 2026»).
 CREATE TABLE organization (
@@ -29,7 +29,6 @@ CREATE TABLE person (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL REFERENCES organization(id),
     name       TEXT NOT NULL,
-    active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
     proposable INTEGER NOT NULL DEFAULT 1 CHECK (proposable IN (0, 1)),
     created_at TEXT NOT NULL,
     UNIQUE (org_id, name)
@@ -51,7 +50,7 @@ CREATE TABLE task_combination (
     org_id INTEGER NOT NULL,
     task_a INTEGER NOT NULL,
     task_b INTEGER NOT NULL,
-    level  TEXT NOT NULL CHECK (level IN ('cannot', 'impractical', 'practical', 'preferred')),
+    level  TEXT NOT NULL CHECK (level IN ('cannot', 'practical')),  -- no row: impractical («bad»)
     PRIMARY KEY (task_a, task_b),
     CHECK (task_a < task_b),
     FOREIGN KEY (org_id, task_a) REFERENCES task (org_id, id) ON DELETE CASCADE,
@@ -84,7 +83,7 @@ CREATE TABLE person_task (
     org_id    INTEGER NOT NULL,
     person_id INTEGER NOT NULL,
     task_id   INTEGER NOT NULL,
-    level     TEXT NOT NULL CHECK (level IN ('never', 'poor', 'neutral', 'good')),
+    level     TEXT NOT NULL CHECK (level IN ('poor', 'good')),
     PRIMARY KEY (person_id, task_id),
     FOREIGN KEY (org_id, person_id) REFERENCES person (org_id, id) ON DELETE CASCADE,
     FOREIGN KEY (org_id, task_id) REFERENCES task (org_id, id) ON DELETE CASCADE

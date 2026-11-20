@@ -113,9 +113,6 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 	}
 	base := "/api/orgs/" + a.org + "/plans/" + a.plan
 	ev := a.events[0].ID
-	inactive := false
-	gone, _ := e.st.CreatePerson(context.Background(), a.org, "Gisle")
-	e.st.UpdatePerson(context.Background(), a.org, gone.ID, store.PersonPatch{Active: &inactive})
 
 	for _, c := range []struct {
 		code         int
@@ -127,7 +124,6 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "group": a.choir.ID}, "names two things"},
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "fills": 2}, "a person fills one"},
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "label": "Guest", "locked": true}, "a text cannot be locked"},
-		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": gone.ID}, "inactive person"},
 		{404, "POST", base + "/cells", map[string]any{"task": a.sound.ID, "person": a.anna.ID}, "no event"},
 		{400, "POST", base + "/cells", map[string]any{"events": []int64{ev}, "task": a.sound.ID, "person": a.anna.ID}, "a list of events"},
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "plass": 1}, "unknown field"},
@@ -139,7 +135,6 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		{404, "POST", "/api/orgs/nope/plans/" + a.plan + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID}, "unknown organisation"},
 		{404, "POST", "/api/orgs/" + a.org + "/plans/nope/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID}, "unknown plan"},
 		{400, "PUT", base + "/pools", map[string]any{"event": ev, "task": a.sang.ID, "people": []int64{a.anna.ID}}, "a selection for a task the planner does not distribute"},
-		{400, "PUT", base + "/pools", map[string]any{"event": ev, "task": a.sound.ID, "people": []int64{gone.ID}}, "an inactive person in a selection"},
 		{404, "PUT", base + "/pools", map[string]any{"event": ev, "task": a.sound.ID, "people": []int64{b.anna.ID}}, "another organisation's person in a selection"},
 		{404, "PUT", base + "/pools", map[string]any{"event": a.otherPlanEvent.ID, "task": a.sound.ID, "people": []int64{a.anna.ID}}, "a selection on another plan's event"},
 		{404, "DELETE", base + "/cells/abc", nil, "bad id"},

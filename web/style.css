@@ -136,6 +136,12 @@ button.ans[data-level="good"] { background: var(--accent); border-color: var(--a
 button.ans[data-level="poor"] { background: var(--warn); border-color: var(--warn); color: #fff; }
 button.ans[data-level="never"] { background: transparent; border-color: var(--err); color: var(--err); }
 @media (prefers-color-scheme: dark) { button.ans[data-level="good"], button.ans[data-level="poor"] { color: #0b1a12; } }
+/* cycle(): a level that one click moves on (a person's task: not/bad/good; two tasks: can't/bad/good) */
+button.cyc { min-width: 6rem; min-height: 2.25rem; background: transparent; color: var(--muted); border-color: var(--line); font-weight: 700; }
+button.cyc[data-level="good"], button.cyc[data-level="practical"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.cyc[data-level="poor"], button.cyc[data-level="standard"] { background: var(--warn); border-color: var(--warn); color: #fff; }
+button.cyc[data-level="cannot"] { background: transparent; border-color: var(--err); color: var(--err); }
+@media (prefers-color-scheme: dark) { button.cyc[data-level="good"], button.cyc[data-level="practical"], button.cyc[data-level="poor"], button.cyc[data-level="standard"] { color: #0b1a12; } }
 .dp-table tr.inactive th, .dp-table tr.inactive td, .dp-table.turned .inactive { opacity: .6; }
 
 /* A phone: the availability turned (option A), events down and people across; the event column stays put, people scroll sideways. */

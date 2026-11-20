@@ -167,7 +167,7 @@ func TestUpdatePersonToggles(t *testing.T) {
 	p, _ := s.CreatePerson(ctx, o.Slug, "Kari Test")
 	off := false
 	got, err := s.UpdatePerson(ctx, o.Slug, p.ID, PersonPatch{Proposable: &off})
-	if err != nil || got.Proposable || !got.Active {
+	if err != nil || got.Proposable {
 		t.Fatalf("got %+v, err %v", got, err)
 	}
 	if _, err := s.UpdatePerson(ctx, o.Slug, p.ID, PersonPatch{Proposable: &off}); !errors.Is(err, ErrInvalid) {

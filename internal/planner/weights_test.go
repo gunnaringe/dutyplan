@@ -29,12 +29,12 @@ func TestWeightsBecomeNestedParamsAndPartOfTheHash(t *testing.T) {
 	if len(plain) != 3 || plain["time_limit"] != 5.0 {
 		t.Errorf("without weights the planner is told only time, seed and workers: %v", plain)
 	}
-	if _, err := w.st.SetWeights(ctx, w.org.Slug, w.plan.Slug, map[string]any{"w_fair": 12.0, "w_task.good": 3.0, "w_task.poor": -2.0, "default_combination": "practical"}); err != nil {
+	if _, err := w.st.SetWeights(ctx, w.org.Slug, w.plan.Slug, map[string]any{"w_fair": 12.0, "w_task.good": 3.0, "w_task.poor": -2.0, "w_combo.practical": 4.0}); err != nil {
 		t.Fatal(err)
 	}
 	got, h1 := paramsOf(Params{TimeLimit: 5, Seed: 1, Workers: 1})
 	wt, _ := got["w_task"].(map[string]any)
-	if got["w_fair"] != 12.0 || wt["good"] != 3.0 || wt["poor"] != -2.0 || len(wt) != 2 || got["default_combination"] != "practical" || got["time_limit"] != 5.0 {
+	if got["w_fair"] != 12.0 || wt["good"] != 3.0 || wt["poor"] != -2.0 || len(wt) != 2 || got["w_combo"].(map[string]any)["practical"] != 4.0 || got["time_limit"] != 5.0 {
 		t.Errorf("params: %v", got)
 	}
 	if _, has := got["w_task.good"]; has {
@@ -129,7 +129,7 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 		p, err := st.CreatePerson(ctx, org.Slug, name)
 		must(err)
 		for _, tk := range tasks {
-			must(st.SetPersonTask(ctx, org.Slug, p.ID, tk.ID, "neutral"))
+			must(st.SetPersonTask(ctx, org.Slug, p.ID, tk.ID, "good"))
 		}
 	}
 	svc := New(st, solver, 1, nopLogger())
