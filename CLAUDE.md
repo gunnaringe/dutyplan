@@ -61,7 +61,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   *Event details* (the plan's rows, `plan_field`/`event_field`: ⋮⋮ drags a row, ✎ renames/moves/deletes it; text for people, never sent to the planner, not in the hash),
   *Tasks* (the places per event, typed into the cells; empty = not needed; ⋮⋮ drags a task, in the organisation's order `task.position`, not in the planner's input;
   *Fill row* in the task's dialog sets every event of the plan), the green *Draft allocation* (the run on show merged with what is set by hand), and
-  *Availability* (a count per event and one row per person). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
+  *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; organisation-wide *sections* (`person_section`)
+  are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone the order stays, without headings). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
   - **On a phone** (the sketch's option A, chosen 2026-11-20): the same page with *Availability* turned and moved above the rest: events down, people across
     (first names; the event column stays put), the person's tasks in the draft under each answer. The rest of the table follows, sideways-scrolling. One layout is
@@ -82,7 +83,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **One click per setting** (2026-11-20, the user's choice): a person's task cycles *not → bad → good* (`poor`/`good`, not = no row, the start), two tasks
   on the same event *can't → bad → good* (`cannot`/`practical`, bad = no row = impractical). *Neutral* tasks, *preferred* pairs and the plan setting
   `default_combination` are gone. There is **no «active»** any more (removed 2026-11-20): «Can be proposed» is the only switch per person; people who
-  are not taking part are placed in a section (planned).
+  are not taking part are placed in a section.
 - **Group work = one assignment per member** in the distribution (overall and per task).
 - **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
 - **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
@@ -112,7 +113,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   **The one exception** (the user's choice, 2026-11-20): a mutation may be deleted only when **the user asked for the feature it guards to be removed**, and the
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

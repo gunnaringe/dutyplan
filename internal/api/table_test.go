@@ -194,3 +194,58 @@ func TestFillingARowAndMovingATaskOverHTTP(t *testing.T) {
 		t.Errorf("filling A's task through B: %d", r.code)
 	}
 }
+
+func TestSectionsAndMovingPeopleOverHTTP(t *testing.T) {
+	e := newEnv(t)
+	a := e.cellsWorld("Org A")
+	o := "/api/orgs/" + a.org
+	var x store.Section
+	e.mustDo(201, "POST", o+"/sections", map[string]string{"name": "Guests"}).json(&x)
+	var y store.Section
+	e.mustDo(201, "POST", o+"/sections", map[string]string{"name": "Youth"}).json(&y)
+	e.mustDo(200, "PATCH", o+"/sections/"+itoa(x.ID), map[string]string{"name": "Visitors"}).json(&x)
+	if x.Name != "Visitors" {
+		t.Errorf("rename: %+v", x)
+	}
+	if r := e.do("POST", o+"/sections", map[string]string{"name": "Youth"}); r.code != 409 {
+		t.Errorf("the same name twice: %d", r.code)
+	}
+	e.mustDo(204, "PUT", o+"/sections/"+itoa(y.ID)+"/position", map[string]int{"position": 0})
+	var list []store.Section
+	e.mustDo(200, "GET", o+"/sections", nil).json(&list)
+	if fmt.Sprint(list) != fmt.Sprintf("[{%d Youth} {%d Visitors}]", y.ID, x.ID) {
+		t.Errorf("sections: %+v", list)
+	}
+	e.mustDo(204, "PUT", o+"/people/"+itoa(a.anna.ID)+"/position", map[string]any{"section": x.ID, "position": 0})
+	var people []store.Person
+	e.mustDo(200, "GET", o+"/people", nil).json(&people)
+	last := people[len(people)-1]
+	if last.ID != a.anna.ID || last.Section != x.ID {
+		t.Errorf("Anna is in Visitors, the last section: %+v", people)
+	}
+	for name, body := range map[string]any{"negative": map[string]any{"position": -1}, "missing": map[string]any{"section": x.ID}} {
+		if r := e.do("PUT", o+"/people/"+itoa(a.anna.ID)+"/position", body); r.code != 400 {
+			t.Errorf("person position %s: %d %s", name, r.code, r.body)
+		}
+		if r := e.do("PUT", o+"/sections/"+itoa(x.ID)+"/position", body); r.code != 400 {
+			t.Errorf("section position %s: %d %s", name, r.code, r.body)
+		}
+	}
+	b := e.cellsWorld("Org B")
+	for what, r := range map[string]reply{
+		"A's section through B":     e.do("DELETE", "/api/orgs/"+b.org+"/sections/"+itoa(x.ID), nil),
+		"B's person into A's":       e.do("PUT", "/api/orgs/"+b.org+"/people/"+itoa(b.anna.ID)+"/position", map[string]any{"section": x.ID, "position": 0}),
+		"rename A's section from B": e.do("PATCH", "/api/orgs/"+b.org+"/sections/"+itoa(x.ID), map[string]string{"name": "X"}),
+	} {
+		if r.code != 404 {
+			t.Errorf("%s: %d", what, r.code)
+		}
+	}
+	e.mustDo(204, "DELETE", o+"/sections/"+itoa(x.ID), nil)
+	e.mustDo(200, "GET", o+"/people", nil).json(&people)
+	for _, p := range people {
+		if p.Section != 0 {
+			t.Errorf("after the delete nobody is in a section: %+v", people)
+		}
+	}
+}

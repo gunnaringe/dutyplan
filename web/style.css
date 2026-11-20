@@ -92,7 +92,9 @@ table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
 button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .35rem; font-size: .8rem; line-height: 1.5; }
 .grip { color: var(--muted); cursor: grab; letter-spacing: -2px; user-select: none; }
 .field-row .nm { font-weight: 700; flex: 1; }
-.field-row.drop th, .field-row.drop td, .task-row.drop th, .task-row.drop td { box-shadow: inset 0 2px 0 var(--accent); }
+.dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
+.person-sect .nm { font-weight: 700; flex: 1; }
+.dp-table tr.person-sect th, .dp-table tr.person-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
 .dp-table tr.sect th, .dp-table tr.sect td { background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); font-size: .8rem; }
 .dp-table tr.sect th { text-transform: uppercase; letter-spacing: .04em; }
 .dp-table td input, .dp-table td select { width: 100%; min-width: 0; padding: .2rem .35rem; }

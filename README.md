@@ -50,6 +50,10 @@ page says if a rule was broken (it should never be).
 a cell for ✓ *yes*, again for ? *maybe*, again for ✗ *no*, and once more to clear it; an empty cell is not answered and counts as
 neutral.
 
+People are in the order you put them: ⋮⋮ drags a person to another row. *Sections* (for example *Guests* or *Not this term*)
+are headings with their people below; drag a person onto one, or pick it in the person's dialog. They only place people in
+the table, the same in every plan, and the planner never sees them. Deleting a section puts its people back at the top.
+
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
 
 **It says why.** Click a place in the draft and you see what is set by hand and what came from the planner, can set people by

@@ -226,7 +226,9 @@ what the event is, what it needs, who got it, who can come.
   "Place in the draft": remove/unlock what is set, lock a planner name, set a person, a group or a text by hand, and the selection (whom the planner picks from).
   Compromises, the distribution and earlier drafts are links under the rows. The page opens with the pinned draft, else the newest.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
-  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, can be proposed.
+  ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, can be proposed, section. ⋮⋮ drags a person (`person.position`, per section,
+  `PUT /people/{id}/position {section, position}`). *Sections* (`person_section`, organisation-wide, `/sections`) are headings with their people below;
+  those without one come first, deleting one puts its people last of those. Only placement: the planner's input keeps people by id.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
 - **On a phone** (option A of the sketch, chosen 2026-11-20): *Availability* is turned and comes first: events down (date, time, the count), people across (first
   names, a tap on one opens the person), and under each answer the tasks the person has in the draft (set by hand, locked or proposed; through a group too). The

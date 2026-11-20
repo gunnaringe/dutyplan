@@ -20,8 +20,8 @@ const maxAvailabilityPerCall = 400
 
 func getPerson(ctx context.Context, q dbq, oid, id int64) (Person, error) {
 	var p Person
-	err := q.QueryRowContext(ctx, `SELECT id, name, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
-		Scan(&p.ID, &p.Name, &p.Proposable)
+	err := q.QueryRowContext(ctx, `SELECT id, name, proposable, COALESCE(section_id, 0) FROM person WHERE id = ? AND org_id = ?`, id, oid).
+		Scan(&p.ID, &p.Name, &p.Proposable, &p.Section)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}

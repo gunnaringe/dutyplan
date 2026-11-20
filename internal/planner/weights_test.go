@@ -161,21 +161,36 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 	}
 }
 
-// The order of the tasks is only where they stand in the table: moving one gives the planner the same input.
-func TestTheTaskOrderIsNotPartOfTheInput(t *testing.T) {
+// The order of tasks and people, and the people's sections, are only where they stand in the table: the planner gets the same input.
+func TestTheTableOrderIsNotPartOfTheInput(t *testing.T) {
 	w := newWorld(t, "Club")
 	raw0, h0, _, err := BuildInput(w.data(t), Params{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	same := func(what string) {
+		t.Helper()
+		raw1, h1, _, err := BuildInput(w.data(t), Params{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h1 != h0 || string(raw1) != string(raw0) {
+			t.Errorf("%s changed the planner's input", what)
+		}
+	}
 	if err := w.st.MoveTask(ctx, w.org.Slug, w.camera.ID, 0); err != nil {
 		t.Fatal(err)
 	}
-	raw1, h1, _, err := BuildInput(w.data(t), Params{})
+	same("moving a task in the table")
+	x, err := w.st.CreateSection(ctx, w.org.Slug, "Guests")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h1 != h0 || string(raw1) != string(raw0) {
-		t.Error("moving a task in the table changed the planner's input")
+	if err := w.st.MovePerson(ctx, w.org.Slug, w.people["Embla"].ID, x.ID, 0); err != nil {
+		t.Fatal(err)
 	}
+	if err := w.st.MovePerson(ctx, w.org.Slug, w.people["Dina"].ID, 0, 0); err != nil {
+		t.Fatal(err)
+	}
+	same("placing people in sections and moving them")
 }
