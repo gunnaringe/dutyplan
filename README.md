@@ -50,8 +50,8 @@ neutral.
 
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
 
-**It says why.** Click a place in the draft and you see what is set by hand and what came from the planner, can set a place by
-hand, and can say that the planner picks only from some people (*their own sound engineer*, without any special rule). When a
+**It says why.** Click a place in the draft and you see what is set by hand and what came from the planner, can set people by
+hand (tick as many as you like, also more than the places: the place then shows as fuller than it needs), and can say that the planner picks only from some people (*their own sound engineer*, without any special rule). When a
 place cannot be filled, the reason is in plain words: who is outside the selection, who cannot come, who has not chosen the task.
 Weak spots the planner had to accept are listed as *compromises*.
 

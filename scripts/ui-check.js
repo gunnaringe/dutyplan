@@ -215,6 +215,15 @@ const { spawn } = require('child_process');
     ok((await dialog.innerText()).includes('Outside guest ×2'), 'the text is in the place');
     await closeDialog();
     ok((await draft('Café', ev[0]).locator('.slot.hand').innerText()) === 'Outside guest ×2', 'set by hand is violet in the draft');
+    // several people by hand at once, more than the places
+    const sound2places = await places('Sound', ev[2]).inputValue();
+    await draft('Sound', ev[2]).click();
+    for (const n of ['Kari Test', 'Jon Demo', 'Ola Sample']) await dialog.locator(`input[aria-label="Set ${n} by hand"]`).check();
+    await reopens(() => dialog.getByRole('button', { name: 'Add the people ticked' }).click(), 'the place dialog opens again');
+    ok((await dialog.locator('input[aria-label="Set Kari Test by hand"]').count()) === 0, 'someone set by hand is not offered again');
+    await closeDialog();
+    const hand2 = await draft('Sound', ev[2]).locator('.slot.hand').allInnerTexts();
+    ok(hand2.length === 3 && Number(sound2places) === 1, 'three by hand in a place for ' + sound2places + ': ' + hand2.join(', '));
     ok((await page.locator('.draft-bar').innerText()).includes('No draft yet'), 'no draft yet');
 
     await page.getByRole('button', { name: 'Make a draft' }).click();
