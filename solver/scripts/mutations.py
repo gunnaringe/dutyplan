@@ -62,6 +62,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("live: two tabs' changes keep the first's origin", "internal/api/stream.go", "c.Origin = \"\"", "_ = old"),
     ("live: the end of a run is not announced", "internal/planner/service.go", "fn(orgSlug)", "_ = fn"),
     ("live: the streams stay open at shutdown", "internal/api/stream.go", "close(h.done)", "_ = h.done"),
+    ("live: the server's write timeout cuts the stream", "internal/api/stream.go", "_ = rc.SetWriteDeadline(time.Time{})", "_ = rc"),
     ("live: the stream is never pinged", "internal/api/stream.go", "if !send(\": ping\\n\\n\") {", "if false {"),
     # the page's assets are versioned, so no cache can pair a new page with an old script (2026-11-20)
     ("the page links its assets without a version", "internal/api/api.go", 'page = strings.ReplaceAll(page, `"/`+a+`"`, `"/`+a+`?v=`+s.version[a]+`"`)', "page, _ = strings.Clone(page), a"),

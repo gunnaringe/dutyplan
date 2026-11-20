@@ -1195,13 +1195,24 @@ function follow(org) {
   if (!org || typeof EventSource === 'undefined') return;
   const es = new EventSource(`/api/orgs/${enc(org)}/stream`);
   let broken = false;
+  let fails = 0;  // errors in a row without getting through (a sign-in in front that has expired answers with a redirect)
   es.addEventListener('message', (e) => {
     let c = {};
     try { c = JSON.parse(e.data); } catch (err) { /* a change all the same */ }
     if (c.origin !== CLIENT) liveRefresh();
   });
-  es.addEventListener('error', () => { broken = true; });
-  es.addEventListener('open', () => { if (broken) liveRefresh(); broken = false; });  // back after a break: changes may be missed
+  es.addEventListener('error', () => {
+    broken = true;
+    // Give up after a few tries instead of knocking every 3 s; try again when the tab is looked at, or in a minute.
+    if (++fails < 5 || !live || live.es !== es) return;
+    es.close();
+    live = null;
+    const retry = () => { clearTimeout(timer); document.removeEventListener('visibilitychange', onShow); if (!live) { follow(org); liveRefresh(); } };
+    const onShow = () => { if (document.visibilityState === 'visible') retry(); };
+    const timer = setTimeout(retry, 60000);
+    document.addEventListener('visibilitychange', onShow);
+  });
+  es.addEventListener('open', () => { if (broken) liveRefresh(); broken = false; fails = 0; });  // back after a break: changes may be missed
   live = { org, es };
 }
 const typing = () => {

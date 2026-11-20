@@ -190,3 +190,19 @@ func TestTheStreamIsPingedSoProxiesKeepItOpen(t *testing.T) {
 		t.Fatal("no ping")
 	}
 }
+
+// The server's timeouts are for ordinary answers: a stream outlives them.
+func TestTheStreamOutlivesTheServerTimeouts(t *testing.T) {
+	e := newEnv(t)
+	srv := httptest.NewUnstartedServer(e.h)
+	srv.Config.ReadTimeout, srv.Config.WriteTimeout = 200*time.Millisecond, 200*time.Millisecond
+	srv.Start()
+	t.Cleanup(srv.Close)
+	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
+	s := listen(t, srv, "org-a")
+	time.Sleep(time.Second)
+	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Aslaug"})
+	if m := next(s, 2*time.Second); m == "" {
+		t.Fatal("the stream was cut by the server's timeouts")
+	}
+}
