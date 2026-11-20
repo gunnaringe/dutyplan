@@ -7,12 +7,15 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gunnaringe/dutyplan/internal/planner"
 	"github.com/gunnaringe/dutyplan/internal/store"
@@ -22,6 +25,10 @@ type server struct {
 	st      *store.Store
 	planner *planner.Service
 	static  fs.FS
+	// version holds a short hash of each asset's content. The page links them as /app.js?v=<hash>, so a deploy gives them new
+	// addresses and no browser or proxy cache can hand out an old script with a new page (seen 2026-11-20: an old app.js asked
+	// for a removed API and showed «Page not found»).
+	version map[string]string
 	log     *slog.Logger
 }
 
@@ -31,7 +38,16 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 	if pl == nil {
 		pl = planner.New(st, nil, 1, log)
 	}
-	s := &server{st: st, planner: pl, static: static, log: log}
+	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}}
+	for _, name := range assets {
+		if static == nil {
+			break
+		}
+		if b, err := fs.ReadFile(static, name); err == nil {
+			sum := sha256.Sum256(b)
+			s.version[name] = hex.EncodeToString(sum[:6])
+		}
+	}
 	mux := http.NewServeMux()
 
 	// planner: can this server plan at all? The page hides «Plan» when not.
@@ -64,22 +80,35 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) h
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })
 
-	index := func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "index.html") }
+	index := func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, "index.html") }
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /o/{rest...}", index) // the page itself reads /o/<org>/p/<plan> from the address
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	mux.HandleFunc("GET /i18n.js", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "i18n.js") })
-	mux.HandleFunc("GET /app.js", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "app.js") })
-	mux.HandleFunc("GET /style.css", func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, "style.css") })
+	for _, name := range assets {
+		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, name) })
+	}
 
 	return secure(http.NewCrossOriginProtection().Handler(recoverer(mux, log)))
 }
 
-func (s *server) serveFile(w http.ResponseWriter, name string) {
+// assets are the files index.html links; each gets ?v=<hash of its content>.
+var assets = []string{"i18n.js", "app.js", "style.css"}
+
+// serveFile sends one embedded file. index.html gets the assets' versions in its links. An asset asked for with its
+// current version never changes, so it may be cached for a year; anything else (the page, an asset without or with an
+// old version) must be checked again every time.
+func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) {
 	b, err := fs.ReadFile(s.static, name)
 	if err != nil {
 		writeErr(w, s.log, store.ErrNotFound)
 		return
+	}
+	if name == "index.html" {
+		page := string(b)
+		for _, a := range assets {
+			page = strings.ReplaceAll(page, `"/`+a+`"`, `"/`+a+`?v=`+s.version[a]+`"`)
+		}
+		b = []byte(page)
 	}
 	switch {
 	case name == "app.js" || name == "i18n.js":
@@ -89,7 +118,11 @@ func (s *server) serveFile(w http.ResponseWriter, name string) {
 	default:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
-	w.Header().Set("Cache-Control", "no-cache")
+	if v := r.URL.Query().Get("v"); v != "" && v == s.version[name] {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "no-cache")
+	}
 	w.Write(b)
 }
 

@@ -96,6 +96,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **The weights are configuration per plan** (2026-11-09): `store.WeightSpecs` (default and limits), stored as what differs from the default, and part of the hash. The defaults must be copies of
   the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/app.js`.
 
+- **Assets are versioned** (2026-11-20): the server links `app.js`, `i18n.js` and `style.css` from `index.html` as `?v=<hash of the content>`
+  and lets only that exact address be cached (a year, immutable); the page and bare or old addresses are `no-cache`. A new asset must be
+  added to `assets` in `internal/api/api.go`. Why: a browser (or Cloudflare's Browser Cache TTL) kept an old `app.js` after a deploy, which
+  asked for a removed API and showed «Page not found».
+
 ## Languages and texts
 
 - The repo, its docs, code, comments and tests are in **English**. The page is in English and Norwegian (bokmål); the browser's language is the default and the header has a switch.

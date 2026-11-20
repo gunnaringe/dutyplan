@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -34,7 +36,7 @@ func newEnvWith(t *testing.T, solver planner.Solver) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	static := fstest.MapFS{"index.html": {Data: []byte("<!doctype html>INDEX")}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
+	static := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html>INDEX <link href="/style.css"><script src="/i18n.js"></script><script src="/app.js"></script>`)}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pl := planner.New(st, solver, 1, log)
 	return &env{t: t, h: New(st, pl, static, log), st: st, pl: pl}
@@ -239,6 +241,26 @@ func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 		if r.hdr.Get(h) == "" {
 			t.Errorf("missing header %s", h)
 		}
+	}
+	// The page links each asset with a version from its content; that address may be cached, a bare or old one may not.
+	page := string(e.do("GET", "/o/org-a", nil).body)
+	for _, a := range []struct{ path, content string }{{"/app.js", "//js"}, {"/i18n.js", "//i18n"}, {"/style.css", "/*css*/"}} {
+		sum := sha256.Sum256([]byte(a.content))
+		versioned := a.path + "?v=" + hex.EncodeToString(sum[:6])
+		if !strings.Contains(page, `"`+versioned+`"`) {
+			t.Errorf("the page does not link %s: %s", versioned, page)
+		}
+		if r := e.do("GET", versioned, nil); r.code != 200 || r.hdr.Get("Cache-Control") != "public, max-age=31536000, immutable" {
+			t.Errorf("%s = %d, Cache-Control %q", versioned, r.code, r.hdr.Get("Cache-Control"))
+		}
+		for _, stale := range []string{a.path, a.path + "?v=0123456789ab"} {
+			if r := e.do("GET", stale, nil); r.code != 200 || r.hdr.Get("Cache-Control") != "no-cache" || string(r.body) != a.content {
+				t.Errorf("%s = %d, Cache-Control %q: an unversioned or old address must be checked every time", stale, r.code, r.hdr.Get("Cache-Control"))
+			}
+		}
+	}
+	if r := e.do("GET", "/", nil); r.hdr.Get("Cache-Control") != "no-cache" {
+		t.Errorf("the page itself must be checked every time: %q", r.hdr.Get("Cache-Control"))
 	}
 	if r := e.do("GET", "/favicon.ico", nil); r.code != 204 {
 		t.Errorf("favicon = %d, want 204 (keeps the browser console clean)", r.code)
