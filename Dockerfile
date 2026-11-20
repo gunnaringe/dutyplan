@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 
 # The planner in a virtual environment at /opt/solver, from uv.lock. Not editable, so the venv holds the package itself.
 # The same Python image as the final stage: the venv points at its /usr/local/bin/python3.12.
-FROM docker.io/library/python:3.12.15-slim-trixie AS solver
+FROM docker.io/library/python:3.15.2-slim-trixie AS solver
 COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 ENV UV_PYTHON_DOWNLOADS=never UV_PYTHON=/usr/local/bin/python3.12 UV_PROJECT_ENVIRONMENT=/opt/solver \
     UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
@@ -28,7 +28,7 @@ RUN uv sync --locked --no-dev --no-editable --no-install-project
 COPY solver/dutyplan_solver ./dutyplan_solver
 RUN uv sync --locked --no-dev --no-editable
 
-FROM docker.io/library/python:3.12.15-slim-trixie
+FROM docker.io/library/python:3.15.2-slim-trixie
 COPY --from=solver /opt/solver /opt/solver
 COPY --from=app /out/dutyplan /usr/local/bin/dutyplan
 # The planner and OR-Tools load from the venv alone (not from the source tree, which is not in the image).
