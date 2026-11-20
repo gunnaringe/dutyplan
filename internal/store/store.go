@@ -386,6 +386,7 @@ type Person struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
 	Proposable bool   `json:"proposable"`
+	Section    int64  `json:"section"` // 0: no section
 }
 
 func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person, error) {
@@ -399,7 +400,11 @@ func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person,
 		if err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, created_at) VALUES (?, ?, ?)`, oid, p.Name, s.stamp())
+		var n int // a new person goes last among those without a section
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE org_id = ? AND section_id IS NULL`, oid).Scan(&n); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, position, created_at) VALUES (?, ?, ?, ?)`, oid, p.Name, n, s.stamp())
 		if isUnique(err) {
 			return exists("person", p.Name)
 		}
@@ -417,7 +422,10 @@ func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, proposable FROM person WHERE org_id = ? ORDER BY name COLLATE NOCASE`, oid)
+	// the table's order: those without a section first, then section by section, each in its own order
+	rows, err := s.db.QueryContext(ctx, `SELECT p.id, p.name, p.proposable, COALESCE(p.section_id, 0) FROM person p
+		LEFT JOIN person_section x ON x.id = p.section_id AND x.org_id = p.org_id
+		WHERE p.org_id = ? ORDER BY x.position IS NOT NULL, x.position, p.position, p.id`, oid)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +433,7 @@ func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error
 	out := []Person{}
 	for rows.Next() {
 		var p Person
-		if err := rows.Scan(&p.ID, &p.Name, &p.Proposable); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Proposable, &p.Section); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -454,8 +462,8 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 			return err
 		}
 		// The org_id in every statement is the tenancy guard: another organisation's person is simply not found.
-		err = tx.QueryRowContext(ctx, `SELECT id, name, proposable FROM person WHERE id = ? AND org_id = ?`, id, oid).
-			Scan(&p.ID, &p.Name, &p.Proposable)
+		err = tx.QueryRowContext(ctx, `SELECT id, name, proposable, COALESCE(section_id, 0) FROM person WHERE id = ? AND org_id = ?`, id, oid).
+			Scan(&p.ID, &p.Name, &p.Proposable, &p.Section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}

@@ -25,13 +25,27 @@ CREATE TABLE plan (
 CREATE UNIQUE INDEX plan_org_id ON plan (org_id, id);
 
 -- People belong to the organisation and are reused across plans. proposable: the planner may propose them.
+-- A section only places people in the table (a heading in Availability, for example «Not taking part this term»); the planner never sees it.
+CREATE TABLE person_section (
+    id         INTEGER PRIMARY KEY,
+    org_id     INTEGER NOT NULL REFERENCES organization(id),
+    name       TEXT NOT NULL,
+    position   INTEGER NOT NULL,  -- the order of the headings (0, 1, ...); people without a section come first
+    created_at TEXT NOT NULL,
+    UNIQUE (org_id, name),
+    UNIQUE (org_id, id)
+);
+
 CREATE TABLE person (
     id         INTEGER PRIMARY KEY,
     org_id     INTEGER NOT NULL REFERENCES organization(id),
     name       TEXT NOT NULL,
     proposable INTEGER NOT NULL DEFAULT 1 CHECK (proposable IN (0, 1)),
+    section_id INTEGER,           -- NULL: no section
+    position   INTEGER NOT NULL,  -- the order within the section (0, 1, ...)
     created_at TEXT NOT NULL,
-    UNIQUE (org_id, name)
+    UNIQUE (org_id, name),
+    FOREIGN KEY (org_id, section_id) REFERENCES person_section (org_id, id)
 );
 CREATE UNIQUE INDEX person_org_id ON person (org_id, id);
 

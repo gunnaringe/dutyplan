@@ -65,6 +65,9 @@ const CHOICES = {
     for (const [name, tasks] of Object.entries(CHOICES)) {
       for (const [t, level] of Object.entries(tasks)) await api('PUT', `${o}/people/${person[name]}/tasks/${task[t]}`, { level });
     }
+    // a section: people placed under their own heading in Availability (only placement)
+    const guests = await api('POST', `${o}/sections`, { name: 'Guests' });
+    for (const name of ['Njål Example', 'Sunniva Test']) await api('PUT', `${o}/people/${person[name]}/position`, { section: guests.id, position: 99 });
     // a group that works together: it can take Coffee, and the planner counts one assignment for each member
     const group = await api('POST', `${o}/groups`, { name: 'Kitchen duo' });
     await api('PUT', `${o}/groups/${group.id}/members`, { people: [person['Mona Example'], person['Jon Demo']] });

@@ -182,6 +182,29 @@ const { spawn } = require('child_process');
       await addNamed('Add a person', name);
       await page.waitForSelector(`button[aria-label="Open ${name}"]`);
     }
+    // people in the order they were added; ⋮⋮ drags one, and sections are headings to place people under
+    const peopleOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.person-row .cellbtn, tr.person-sect .nm')]
+      .map((b) => (b.classList.contains('nm') ? '| ' + b.textContent : b.firstChild.textContent)).join(','));
+    ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'people in the order they were added: ' + await peopleOrder());
+    const personRowOf = (name) => page.locator('tr.person-row', { has: page.locator(`button[aria-label="Open ${name}"]`) });
+    await personRowOf('Jon Demo').locator('.grip').dragTo(personRowOf('Kari Test'));
+    await until(page, () => [...document.querySelectorAll('tr.person-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Jon Demo,Kari Test,Ola Sample', null, 'dragging ⋮⋮ moves a person to the top');
+    await addNamed('Add a section', 'Not this term');
+    await page.waitForSelector('tr.person-sect');
+    ok((await page.innerText('tr.person-sect')).includes('Drag people here'), 'a new section is empty');
+    await personRowOf('Ola Sample').locator('.grip').dragTo(page.locator('tr.person-sect'));
+    await until(page, () => document.querySelector('tr.person-sect').innerText.includes('1 person'), null, 'a person dropped on a section heading goes into it');
+    ok((await peopleOrder()) === 'Jon Demo,Kari Test,| Not this term,Ola Sample', 'without a section first, then the section: ' + await peopleOrder());
+    // the person dialog places someone in a section too (for phones)
+    await page.click('button[aria-label="Open Jon Demo"]');
+    await reopens(() => dialog.locator('select[aria-label="Section in the table"]').selectOption({ label: 'Not this term' }), 'the person dialog opens again');
+    await closeDialog();
+    ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo', 'the dialog puts a person last in the section: ' + await peopleOrder());
+    // deleting the section puts its people back, without a section
+    await page.click('button[aria-label="Change the section Not this term"]');
+    await dialog.getByRole('button', { name: 'Delete the section' }).click();
+    await until(page, () => !document.querySelector('tr.person-sect'), null, 'the section is gone');
+    ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'its people come back in their order: ' + await peopleOrder());
     const takes = async (person, list) => {
       await page.click(`button[aria-label="Open ${person}"]`);
       // one click per step: not → bad → good

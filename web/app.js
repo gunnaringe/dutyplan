@@ -363,10 +363,10 @@ async function pagePlan(r, org, people) {
   const epath = pbase + '/events';
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null });
-  const [plan, events, tasks, combos, groups, fields, answers, places, cells, pools, weights, health, runs] = await Promise.all([
+  const [plan, events, tasks, combos, groups, fields, answers, places, cells, pools, weights, health, runs, sections] = await Promise.all([
     api('GET', pbase), api('GET', epath), api('GET', base + '/tasks'), api('GET', base + '/combinations'), api('GET', base + '/groups'),
     api('GET', pbase + '/fields'), api('GET', pbase + '/answers'), api('GET', pbase + '/places'), api('GET', pbase + '/cells'),
-    api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', '/health'), api('GET', pbase + '/runs')]);
+    api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', '/health'), api('GET', pbase + '/runs'), api('GET', base + '/sections')]);
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest.
   const pinned = runs.find((x) => x.pinned);
@@ -600,6 +600,32 @@ async function pagePlan(r, org, people) {
     date.focus();
   }
 
+  // ✎ on a section: its name, where it goes, delete (its people go to those without a section).
+  function sectionDialog(x) {
+    let dlg;
+    const name = h('input', { type: 'text', value: x.name, maxlength: '80', 'aria-label': t('common.name') });
+    const others = sections.filter((o) => o.id !== x.id);
+    const now = sections.findIndex((o) => o.id === x.id);
+    const where = h('select', { 'aria-label': t('section.where') }, h('option', { value: '0', selected: now === 0 }, t('section.first')),
+      others.map((o, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: o.name }))));
+    dlg = modal(t('section.title', { name: x.name }),
+      h('form', { class: 'stack', onsubmit: async (e) => {
+        e.preventDefault();
+        const pos = parseInt(where.value, 10);
+        if (name.value.trim() === x.name && pos === now) { dlg.close(); return; }
+        if (await write(async () => {
+          if (name.value.trim() !== x.name) await api('PATCH', `${base}/sections/${x.id}`, { name: name.value });
+          if (pos !== now) await api('PUT', `${base}/sections/${x.id}/position`, { position: pos });
+        })) { dlg.close(); render(); }
+      } },
+        field(t('common.name'), name),
+        others.length ? field(t('section.where'), where) : '',
+        h('p', { class: 'muted small' }, t('section.hint', { org: org.name })),
+        foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
+          if (await write(async () => { confirmed(t('section.delete_confirm', { name: x.name })); await api('DELETE', `${base}/sections/${x.id}`); })) { dlg.close(); render(); }
+        } }, t('section.delete')), h('button', { type: 'submit' }, t('common.save')))));
+  }
+
   // ✎ on a details row: its name, where it goes, delete.
   function fieldDialog(f) {
     let dlg;
@@ -691,6 +717,12 @@ async function pagePlan(r, org, people) {
       box.addEventListener('change', async () => { if (await write(() => api('PATCH', ppath, { [k]: box.checked }))) changed(); else box.checked = p[k]; });
       return h('label', { class: 'check' }, box, ' ' + text, off ? h('span', { class: 'muted small' }, ' ' + off) : '');
     };
+    // the section the person is placed in (last in it); only where they stand in the table
+    const sectionSel = h('select', { 'aria-label': t('person.section') }, h('option', { value: '0', selected: !p.section }, t('person.no_section')),
+      sections.map((x) => h('option', { value: String(x.id), selected: p.section === x.id }, x.name)));
+    sectionSel.addEventListener('change', async () => {
+      if (await write(() => api('PUT', `${ppath}/position`, { section: parseInt(sectionSel.value, 10), position: people.length }))) changed(); else sectionSel.value = String(p.section);
+    });
     const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || { level: '' }).level;
     const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
       const cur = levelOf(tk);
@@ -707,6 +739,7 @@ async function pagePlan(r, org, people) {
       h('h3', {}, t('person.tasks')),
       taskRows.length ? [h('p', { class: 'muted small' }, t('person.tasks_hint')), h('table', { class: 'mini' }, h('tbody', {}, taskRows))] : h('p', { class: 'muted' }, t('person.no_tasks')),
       flag('proposable', t('person.proposable', { name: p.name }), t('person.proposable_aria', { name: p.name }), t('person.proposable_off')),
+      sections.length ? field(t('person.section'), sectionSel) : '',
       foot(h('span', { class: 'small muted' }, t('person.org_wide', { org: org.name })), closeBtn()));
   }
 
@@ -830,23 +863,31 @@ async function pagePlan(r, org, people) {
     });
     return h('td', { class: 'text' }, input);
   };
-  // ⋮⋮ drags a row to another place among its own kind (details rows, tasks); move(item, position) saves it.
+  // ⋮⋮ drags a row (a details row, a task, a person, a section). dropOn makes a row take what accept(kind, item) allows;
+  // act(item) saves the move. dragRow is the usual case: a row of a kind takes the others of that kind at its position.
   let dragged = null;
   const grip = (title) => h('span', { class: 'grip', draggable: 'true', title, 'aria-hidden': 'true' }, '⋮⋮');
-  const dragRow = (row, handle, kind, item, i, move) => {
-    const mine = () => dragged && dragged.kind === kind && dragged.item.id !== item.id;
+  const handleFor = (handle, kind, item) => {
     handle.addEventListener('dragstart', (e) => { dragged = { kind, item }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.name); });
     handle.addEventListener('dragend', () => { dragged = null; });
-    row.addEventListener('dragover', (e) => { if (mine()) { e.preventDefault(); row.classList.add('drop'); } });
+  };
+  const dropOn = (row, accept, act) => {
+    const ok = () => dragged && accept(dragged.kind, dragged.item);
+    row.addEventListener('dragover', (e) => { if (ok()) { e.preventDefault(); row.classList.add('drop'); } });
     row.addEventListener('dragleave', () => row.classList.remove('drop'));
     row.addEventListener('drop', async (e) => {
+      if (!ok()) return;
       e.preventDefault();
       row.classList.remove('drop');
-      const d = mine() ? dragged.item : null;
+      const d = dragged.item;
       dragged = null;
-      if (d && await write(() => move(d, i))) render();
+      if (await write(() => act(d))) render();
     });
     return row;
+  };
+  const dragRow = (row, handle, kind, item, i, move) => {
+    handleFor(handle, kind, item);
+    return dropOn(row, (k, d) => k === kind && d.id !== item.id, (d) => move(d, i));
   };
   // Details rows: ⋮⋮ drags a row to another place, ✎ opens it.
   const fieldRow = (f, i) => {
@@ -924,12 +965,28 @@ async function pagePlan(r, org, people) {
     paint();
     return h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
   };
+  // People: ⋮⋮ drags a person to another row, also into another section (or onto its heading: the top of it). Sections are
+  // headings with their people below, the organisation's own; those without a section come first. Only placement.
+  const inSection = (id) => people.filter((p) => p.section === id);
+  const movePerson = (d, section, position) => api('PUT', `${base}/people/${d.id}/position`, { section, position });
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
-    return h('tr', {},
-      h('th', { scope: 'row' }, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
-        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks')))),
+    const g = grip(t('person.drag'));
+    handleFor(g, 'person', p);
+    const row = h('tr', { class: 'person-row' },
+      h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
+        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks'))))),
       events.map((ev) => answerCell(p, ev)), filler());
+    return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
+  };
+  const sectionRow = (x, i) => {
+    const g = grip(t('section.drag'));
+    const n = inSection(x.id).length;
+    const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('span', { class: 'nm' }, x.name),
+      h('button', { type: 'button', class: 'edit', 'aria-label': t('section.edit_aria', { name: x.name }), onclick: () => sectionDialog(x) }, '✎'))),
+    h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
+    dragRow(row, g, 'section', x, i, (d, pos) => api('PUT', `${base}/sections/${d.id}/position`, { position: pos }));
+    return dropOn(row, (k) => k === 'person', (d) => movePerson(d, x.id, 0));
   };
 
   const draftFoot = done && (view.weak.length || view.load.length || runs.length > 1)
@@ -953,9 +1010,12 @@ async function pagePlan(r, org, people) {
       tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler())),
       draftFoot,
       phone ? '' : [
-        h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
-        people.map(personRow),
-        addLine(addPerson())])));
+        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
+          (k) => k === 'person', (d) => movePerson(d, 0, 0)),
+        inSection(0).map(personRow),
+        sections.flatMap((x, i) => [sectionRow(x, i), ...inSection(x.id).map(personRow)]),
+        addLine(addPerson()),
+        addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])));
 
   // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
   // (as the draft rows show them: set by hand, locked or from the planner; through a group too).
