@@ -99,6 +99,9 @@ func TestAddingEveryWeekUntilADate(t *testing.T) {
 			t.Errorf("every new event gets the time: %+v", e)
 		}
 	}
+	if evs, _ := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-10-04", Until: "2026-11-01", Every: 2}); dates(evs) != "[2026-10-04 2026-10-18 2026-11-01]" {
+		t.Errorf("every other week: %s", dates(evs))
+	}
 	if evs, _ := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", Until: "2026-08-15"}); dates(evs) != "[2026-08-09]" {
 		t.Errorf("an until before the next week gives one event: %s", dates(evs))
 	}
@@ -106,6 +109,7 @@ func TestAddingEveryWeekUntilADate(t *testing.T) {
 		"until before the date": {Date: "2026-09-01", Until: "2026-08-01"},
 		"too long":              {Date: "2026-01-01", Until: "2027-06-01"},
 		"bad until":             {Date: "2026-08-01", Until: "2026-13-01"},
+		"every too long":        {Date: "2026-08-01", Until: "2026-12-01", Every: maxEveryWeeks + 1},
 		"end before start":      {Date: "2026-08-01", StartTime: "12:00", EndTime: "11:00"},
 	} {
 		if _, err := s.AddEvents(ctx, o.Slug, p.Slug, in); !errors.Is(err, ErrInvalid) {
@@ -115,22 +119,45 @@ func TestAddingEveryWeekUntilADate(t *testing.T) {
 }
 
 func TestRepeatingWeeklyGivesEachDateOnceAndHasLimits(t *testing.T) {
-	got, err := repeatWeekly([]string{"2026-08-16", "2026-08-09", "2026-08-16"}, "2026-08-30")
+	got, err := repeatEvery([]string{"2026-08-16", "2026-08-09", "2026-08-16"}, "2026-08-30", 0)
 	if err != nil || fmt.Sprint(got) != "[2026-08-09 2026-08-16 2026-08-23 2026-08-30]" {
 		t.Errorf("two start dates a week apart, one of them twice: %v %v", got, err)
 	}
-	if got, err = repeatWeekly([]string{"2026-08-09", "2026-08-09"}, ""); err != nil || fmt.Sprint(got) != "[2026-08-09]" {
+	if got, err = repeatEvery([]string{"2026-08-09", "2026-08-09"}, "", 0); err != nil || fmt.Sprint(got) != "[2026-08-09]" {
 		t.Errorf("the same date twice without until: %v %v", got, err)
 	}
 	// four weekdays for a year is more than 200 events
-	if _, err = repeatWeekly([]string{"2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"}, "2026-12-31"); !codeIs(err, "too_many_dates") {
+	if _, err = repeatEvery([]string{"2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"}, "2026-12-31", 0); !codeIs(err, "too_many_dates") {
 		t.Errorf("too many dates: %v", err)
 	}
-	if got, err = repeatWeekly([]string{"2026-01-05", "2026-01-06", "2026-01-07"}, "2026-12-31"); err != nil || len(got) != 156 {
+	if got, err = repeatEvery([]string{"2026-01-05", "2026-01-06", "2026-01-07"}, "2026-12-31", 0); err != nil || len(got) != 156 {
 		t.Errorf("three weekdays for a year: %d %v", len(got), err)
 	}
-	if _, err = repeatWeekly(nil, ""); !codeIs(err, "no_dates") {
+	if _, err = repeatEvery(nil, "", 0); !codeIs(err, "no_dates") {
 		t.Errorf("no dates: %v", err)
+	}
+}
+
+func TestRepeatingEveryFewWeeks(t *testing.T) {
+	got, err := repeatEvery([]string{"2026-08-09"}, "2026-09-20", 2)
+	if err != nil || fmt.Sprint(got) != "[2026-08-09 2026-08-23 2026-09-06 2026-09-20]" {
+		t.Errorf("every other week: %v %v", got, err)
+	}
+	// each start date keeps its own rhythm
+	if got, err = repeatEvery([]string{"2026-08-09", "2026-08-12"}, "2026-09-10", 3); err != nil ||
+		fmt.Sprint(got) != "[2026-08-09 2026-08-12 2026-08-30 2026-09-02]" {
+		t.Errorf("every third week from two dates: %v %v", got, err)
+	}
+	if got, err = repeatEvery([]string{"2026-01-04"}, "2026-12-31", maxEveryWeeks); err != nil || len(got) != 7 {
+		t.Errorf("every %d weeks for a year: %v %v", maxEveryWeeks, got, err)
+	}
+	for _, every := range []int{-1, maxEveryWeeks + 1} {
+		if _, err = repeatEvery([]string{"2026-08-09"}, "2026-09-20", every); !codeIs(err, "every_invalid") {
+			t.Errorf("every %d: %v", every, err)
+		}
+	}
+	if got, err = repeatEvery([]string{"2026-08-09"}, "", 2); err != nil || fmt.Sprint(got) != "[2026-08-09]" {
+		t.Errorf("every without until is one date: %v %v", got, err)
 	}
 }
 

@@ -203,7 +203,7 @@ const CHOICES = {
     await shoot(page, '07-event', page.getByRole('button', { name: /^Open the event Sat 19 Dec/ }));
     await page.getByRole('button', { name: /^Copy the event Sat 5 Dec/ }).click();
     await dialog(page).waitFor();
-    await dialog(page).getByRole('checkbox', { name: 'Every week until' }).check();
+    await dialog(page).getByRole('combobox', { name: 'Repeat' }).selectOption({ label: 'Every other week' });
     await dialog(page).getByLabel('New date').fill('2015-12-26');
     await dialog(page).getByLabel('The last date').fill('2016-01-30');
     await dialog(page).getByLabel('The last date').evaluate((e) => e.blur());

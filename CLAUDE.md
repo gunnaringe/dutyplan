@@ -10,7 +10,7 @@ their own places, details rows, answers, drafts (runs) with set-by-hand places, 
 Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan** (details, tasks with places, the draft allocation, availability), dialogs for the rest,
 and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
-events at once, and no places or description when an event is created (adding weekly with `until`, copying and the availability map stay: the page uses them).
+events at once, and no places or description when an event is created (adding repeatedly with `until` and `every`, copying and the availability map stay: the page uses them).
 A first test runs on kate since 2026-11-20 (asked by the user): the image from `Dockerfile` (`mise run app:image`), behind Pocket ID at
 dutyplan.haxxor.xyz, manifests and the import steps in `clusters/kate/dutyplan/`. No registry, no backup yet.
 
@@ -66,7 +66,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
     (first names; the event column stays put), the person's tasks in the draft under each answer. The rest of the table follows, sideways-scrolling. One layout is
     in the page at a time (`PHONE` in `web/app.js`, the same 40rem as the phone rule in `style.css`); there is no «my» column and no list of one's own.
   - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
-    dates or weekly until, with times, details, places and names set by hand as chosen; answers and drafts are never copied).
+    dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
+    names set by hand as chosen; answers and drafts are never copied).
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background; a planner name that was locked is a cell with `locked` and shows a
     «locked» chip; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank.
@@ -105,7 +106,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   **The one exception** (the user's choice, 2026-11-20): a mutation may be deleted only when **the user asked for the feature it guards to be removed**, and the
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

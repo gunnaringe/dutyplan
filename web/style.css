@@ -165,6 +165,9 @@ table.mini td { padding: .3rem .4rem; }
 table.mini tr.shown td { font-weight: 600; }
 input.wide { width: 100%; }
 .row-inline input.wide { flex: 1; width: auto; min-width: 12rem; }
+/* «Repeat … the last date → n events»: the count is level with the boxes, not with their labels */
+.row-inline.repeat { align-items: flex-end; }
+.row-inline.repeat > span { padding-bottom: .7rem; }
 .dates { display: flex; flex-direction: column; gap: .3rem; align-items: flex-start; }
 .weight-row { padding: .4rem 0; border-bottom: 1px solid var(--line); }
 .weight-row label { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; justify-content: space-between; }

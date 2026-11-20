@@ -10,11 +10,12 @@ import (
 	"unicode/utf8"
 )
 
-// Limits for adding events several at a time (every week until a date, or a copy to several dates), so a typo cannot
-// create a flood of rows.
+// Limits for adding events several at a time (every week or every few weeks until a date, or a copy to several dates), so
+// a typo cannot create a flood of rows. maxEveryWeeks is the longest step the page offers («every 8 weeks»).
 const (
 	maxRepeatDays    = 366
 	maxEventsPerCall = 200
+	maxEveryWeeks    = 8
 )
 
 // Limits for the free text of an event.
@@ -126,11 +127,18 @@ func getEvent(ctx context.Context, q dbq, oid, pid, id int64) (Event, error) {
 	return d, err
 }
 
-// repeatWeekly gives every date in dates, and with until each of them again every 7 days up to and including until, in
-// order and without repeats. The dates must be YYYY-MM-DD, until on or after each of them and at most maxRepeatDays later.
-func repeatWeekly(dates []string, until string) ([]string, error) {
+// repeatEvery gives every date in dates, and with until each of them again every `every` weeks (0 means 1) up to and
+// including until, in order and without repeats. The dates must be YYYY-MM-DD, until on or after each of them and at most
+// maxRepeatDays later. Only the dates are made: nothing remembers the rhythm, and each event is on its own afterwards.
+func repeatEvery(dates []string, until string, every int) ([]string, error) {
 	if len(dates) == 0 {
 		return nil, Invalid("no_dates", nil, "give at least one date")
+	}
+	if every == 0 {
+		every = 1
+	}
+	if every < 1 || every > maxEveryWeeks {
+		return nil, Invalid("every_invalid", map[string]any{"max": maxEveryWeeks}, "every must be 1 to %d weeks", maxEveryWeeks)
 	}
 	var last time.Time
 	if until != "" {
@@ -160,7 +168,7 @@ func repeatWeekly(dates []string, until string) ([]string, error) {
 		if last.Sub(day) > maxRepeatDays*24*time.Hour {
 			return nil, Invalid("range_too_long", map[string]any{"max": maxRepeatDays}, "the range can be at most %d days", maxRepeatDays)
 		}
-		for x := day; !x.After(last); x = x.AddDate(0, 0, 7) {
+		for x := day; !x.After(last); x = x.AddDate(0, 0, 7*every) {
 			if k := x.Format("2006-01-02"); !seen[k] {
 				seen[k] = true
 				out = append(out, k)
@@ -174,11 +182,13 @@ func repeatWeekly(dates []string, until string) ([]string, error) {
 	return out, nil
 }
 
-// NewEvents is what AddEvents takes: a date (and with Until the same weekday every week up to and including that date),
-// and optionally a time of day. The places, the details and the description are set afterwards, or come with a copy.
+// NewEvents is what AddEvents takes: a date (and with Until the same weekday every week, or every Every weeks, up to and
+// including that date), and optionally a time of day. The places, the details and the description are set afterwards,
+// or come with a copy.
 type NewEvents struct {
 	Date      string `json:"date"`
 	Until     string `json:"until"`
+	Every     int    `json:"every"`
 	StartTime string `json:"start_time"`
 	EndTime   string `json:"end_time"`
 }
@@ -194,7 +204,7 @@ func (s *Store) AddEvent(ctx context.Context, orgSlug, planSlug, date string) (E
 
 // AddEvents adds the events, all or nothing. Events are independent: a date may already have others.
 func (s *Store) AddEvents(ctx context.Context, orgSlug, planSlug string, in NewEvents) ([]Event, error) {
-	dates, err := repeatWeekly([]string{in.Date}, in.Until)
+	dates, err := repeatEvery([]string{in.Date}, in.Until, in.Every)
 	if err != nil {
 		return nil, err
 	}
@@ -235,13 +245,14 @@ func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, oid, pid int64, e E
 	return e, nil
 }
 
-// CopyOf says what a copy of an event takes along. Dates are the new dates (and with Until each of them every week up to
-// and including that date). Times copies the start and end time; without it the copies get StartTime and EndTime.
+// CopyOf says what a copy of an event takes along. Dates are the new dates (and with Until each of them every week, or
+// every Every weeks, up to and including that date). Times copies the start and end time; without it the copies get StartTime and EndTime.
 // Details copies the values of the details rows and the description, Places the places, and Hand the cells set by hand
 // (never the planner's names that were locked: a copy has no draft yet). Answers are never copied.
 type CopyOf struct {
 	Dates     []string `json:"dates"`
 	Until     string   `json:"until"`
+	Every     int      `json:"every"`
 	Times     bool     `json:"times"`
 	StartTime string   `json:"start_time"`
 	EndTime   string   `json:"end_time"`
@@ -252,7 +263,7 @@ type CopyOf struct {
 
 // CopyEvent makes copies of an event on other dates, all or nothing, and returns them in date order.
 func (s *Store) CopyEvent(ctx context.Context, orgSlug, planSlug string, id int64, in CopyOf) ([]Event, error) {
-	dates, err := repeatWeekly(in.Dates, in.Until)
+	dates, err := repeatEvery(in.Dates, in.Until, in.Every)
 	if err != nil {
 		return nil, err
 	}

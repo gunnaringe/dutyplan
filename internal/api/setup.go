@@ -124,7 +124,8 @@ func (s *server) listEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, v)
 }
 
-// addEvent adds an event, or with "until" one every week up to and including that date; the answer is the list.
+// addEvent adds an event, or with "until" one every week (or every "every" weeks) up to and including that date; the answer
+// is the list.
 func (s *server) addEvent(w http.ResponseWriter, r *http.Request) {
 	var b store.NewEvents
 	if !decode(w, r, &b) {

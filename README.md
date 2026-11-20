@@ -64,11 +64,12 @@ and whether the planner fills it. The name of a person opens the tasks they take
 ![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)
 ![An event: times, details and description](docs/img/07-event.png)
 
-**Events are easy to copy.** ⧉ on an event copies it to other dates, or every week until a date, with the times, the details,
-the places and the names set by hand if you want them. Answers are never copied. **+** after the last event adds a new one,
-empty or as a copy, also every week.
+**Events are easy to copy.** ⧉ on an event copies it to other dates, or repeats it until a date: every week, every other week,
+or every 3 to 8 weeks. The times, the details, the places and the names set by hand come along if you want them. Answers are
+never copied. **+** after the last event adds a new one, empty or as a copy, and can repeat it the same way. Each event is on its
+own afterwards: nothing remembers the rhythm.
 
-![Copying an event every week](docs/img/08-copy.png)
+![Copying an event every other week](docs/img/08-copy.png)
 
 **Fair, and yours to tune.** «Even» means an equal *total* load: someone who only takes one task does not end up with half of
 someone who takes two. The distribution shows how many turns each person got against their fair share. The weights behind the

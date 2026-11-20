@@ -101,18 +101,21 @@ const { spawn } = require('child_process');
       await addNamed('Add a row, e.g. Theme', name);
       await page.waitForSelector(`button[aria-label="Change the row ${name}"]`);
     }
-    // a new event, every week until a date
+    // a new event, every other week until a date
     await page.getByRole('button', { name: 'Add an event' }).click();
     await dialog.locator('input[aria-label="Date"]').fill('2026-08-02');
     await dialog.locator('input[aria-label="Starts"]').fill('11:00');
-    await dialog.locator('input[aria-label="Every week until"]').check();
-    await dialog.locator('input[aria-label="The last date"]').fill('2026-08-16');
+    ok(await dialog.locator('input[aria-label="The last date"]').isDisabled(), 'no last date until it repeats');
+    await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Every other week' });
+    await dialog.locator('input[aria-label="The last date"]').fill('2026-08-30');
     await until(page, () => document.querySelector('dialog.modal').innerText.includes('→ 3 events'), null, 'the dialog counts the events');
     await dialog.getByRole('button', { name: 'Add', exact: true }).click();
     await msgHas(page, '3 events added.');
     ok((await cols()) === 3, 'three Sundays, one column each');
-    const ev = ['Sun 2 Aug 11:00', 'Sun 9 Aug 11:00', 'Sun 16 Aug 11:00'];
-    ok((await page.innerText('.dp-table thead')).includes('Sun 2 Aug') && (await page.innerText('.dp-table thead')).includes('11:00'), 'the header has the date and the time');
+    const ev = ['Sun 2 Aug 11:00', 'Sun 16 Aug 11:00', 'Sun 30 Aug 11:00'];
+    const head = await page.innerText('.dp-table thead');
+    ok(head.includes('Sun 2 Aug') && head.includes('11:00'), 'the header has the date and the time');
+    ok(head.includes('Sun 16 Aug') && head.includes('Sun 30 Aug') && !head.includes('Sun 9 Aug'), 'every other week: ' + head.replace(/\s+/g, ' '));
 
     // places: typed straight in; Enter moves on to the next event
     const places = (task, e) => page.locator(`input[aria-label="Places for ${task} on ${e}"]`);
@@ -256,12 +259,17 @@ const { spawn } = require('child_process');
 
     // --- copy an event, delete one ---
     await page.click(`button[aria-label="Copy the event ${ev[2]}"]`);
-    ok((await dialog.locator('input[aria-label="New date"]').inputValue()) === '2026-08-23', 'the copy goes a week later by default');
+    const newDate = () => dialog.locator('input[aria-label="New date"]').inputValue();
+    ok((await newDate()) === '2026-09-06', 'the copy goes a week later by default');
+    await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Every 3 weeks' });
+    ok((await newDate()) === '2026-09-20', 'the suggested date follows the rhythm: ' + (await newDate()));
+    await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Does not repeat' });
+    ok((await newDate()) === '2026-09-06', 'and goes back without a repeat');
     ok((await dialog.innerText()).includes('11:00–12:30') && (await dialog.innerText()).includes('Sound 1'), 'the dialog shows what comes along');
     await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
     await msgHas(page, '1 copy made.');
     ok((await cols()) === 4, 'the copy is a new column');
-    const ev3 = 'Sun 23 Aug 11:00';
+    const ev3 = 'Sun 6 Sept 11:00';
     ok((await places('Sound', ev3).inputValue()) === '1' && (await value('Theme', ev3).inputValue()) === 'Finals', 'the places and the details come along');
     ok((await answer('Kari Test', ev3).getAttribute('data-level')) === 'none', 'answers are never copied');
     await page.click(`button[aria-label="Open the event ${ev3}"]`);
@@ -349,7 +357,7 @@ const { spawn } = require('child_process');
     await barHas('Utkast #2', 'the draft texts are Norwegian');
     const tbl = await page.innerText('.dp-table');
     ok(tbl.includes('OM HENDELSEN') && tbl.includes('UTKAST TIL FORDELING') && tbl.includes('TILGJENGELIGHET') && tbl.includes('Ikke fylt'), 'the table is Norwegian: ' + tbl.slice(0, 200));
-    await page.locator('button[aria-label^="Café, søn. 9. aug."]').click();
+    await page.locator('button[aria-label^="Café, søn. 16. aug."]').click();
     ok((await dialog.innerText()).includes('Ikke fylt:') && (await dialog.innerText()).includes('har ikke valgt oppgaven'), 'the server explains in Norwegian too: ' + (await dialog.innerText()));
     await closeDialog();
     ok((await page.locator('button.ans[aria-label^="Kari Test, søn. 2. aug. 11:00:"]').getAttribute('aria-label')).endsWith(': kanskje'), 'the answers are Norwegian');
