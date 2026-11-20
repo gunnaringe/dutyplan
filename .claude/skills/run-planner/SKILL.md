@@ -5,7 +5,7 @@ description: Run the planner on the test data or an input file and see the resul
 
 Everything through mise. The default output is about 6 lines; ask for more only when you need it.
 
-- `mise run plan` : run the test data (20 s) and print a short summary (status, violations, empty places, deviations, groups).
+- `mise run plan` : run the test data (20 s) and print a short summary (status, violations, empty places, deviations).
 - `mise run plan -- --info` : what the input contains, without reading the JSON file.
 - `mise run plan -- --time 8 --seed 2` : faster or another seed. `-- --full` : selections, manual cells and figures per person.
 - `mise run plan -- --input file.json` : your own input (a path from the repo root). Format: the top of `solver/dutyplan_solver/model.py`.

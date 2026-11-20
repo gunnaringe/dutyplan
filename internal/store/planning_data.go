@@ -21,7 +21,6 @@ type PlanningData struct {
 	PersonTasks  map[int64]map[int64]string // person -> task -> level (a row means: takes part)
 	PersonEvents map[int64]map[int64]string // person -> event -> level (no row = neutral)
 	Combinations []Combination
-	Groups       []Group
 	Cells        []ManualCell            // manual cells of the plan
 	Pools        []Pool                  // selections of the plan
 	Weights      map[string]any          // what the plan changed in the planner's weighting (the rest is the default)
@@ -115,9 +114,6 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 			d.Combinations = append(d.Combinations, c)
 			return err
 		}); err != nil {
-		return d, err
-	}
-	if d.Groups, err = listGroups(ctx, tx, oid); err != nil {
 		return d, err
 	}
 	if d.Cells, err = listCells(ctx, tx, oid, pid); err != nil {

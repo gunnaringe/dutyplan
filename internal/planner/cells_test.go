@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gunnaringe/dutyplan/internal/i18n"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -14,7 +13,6 @@ type lockedIn struct {
 	Date   string `json:"date"`
 	Task   string `json:"task"`
 	Person string `json:"person"`
-	Group  string `json:"group"`
 	Label  string `json:"label"`
 	Fills  int    `json:"fills"`
 }
@@ -22,7 +20,6 @@ type poolIn struct {
 	Date   string   `json:"date"`
 	Task   string   `json:"task"`
 	People []string `json:"people"`
-	Groups []string `json:"groups"`
 }
 
 func (w world) cellsAndPools(t *testing.T) (locked []lockedIn, pools []poolIn, raw string, snap Snapshot, hash string) {
@@ -49,47 +46,40 @@ func (w world) cell(t *testing.T, ev store.Event, task store.Task, c store.NewCe
 	}
 }
 
-func (w world) pool(t *testing.T, ev store.Event, task store.Task, people []string, groups ...store.Group) {
+func (w world) pool(t *testing.T, ev store.Event, task store.Task, people []string) {
 	t.Helper()
-	var ids, gids []int64
+	var ids []int64
 	for _, n := range people {
 		ids = append(ids, w.people[n].ID)
 	}
-	for _, g := range groups {
-		gids = append(gids, g.ID)
-	}
-	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, ev.ID, task.ID, ids, gids); err != nil {
+	if err := w.st.SetPool(ctx, w.org.Slug, w.plan.Slug, ev.ID, task.ID, ids); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestBuildInputSendsManualCellsAndSelections(t *testing.T) {
 	w := newWorld(t, "Club")
-	choir := w.group(t, "Choir", []string{"Dina", "Embla"})
 	w.cell(t, w.events[0], w.sound, store.NewCell{PersonID: w.people["Aslaug"].ID})
-	w.cell(t, w.events[1], w.singing, store.NewCell{GroupID: choir.ID, Fills: 2})
+	w.cell(t, w.events[1], w.singing, store.NewCell{PersonID: w.people["Dina"].ID})
 	w.cell(t, w.events[0], w.singing, store.NewCell{Label: "Outside guest", Fills: 3})
-	w.pool(t, w.events[2], w.sound, []string{"Aslaug", "Cecilie"}, choir)
-	w.pool(t, w.events[3], w.camera, nil, choir) // groups only: «people» must be [] and not null
+	w.pool(t, w.events[2], w.sound, []string{"Aslaug", "Cecilie"})
+	w.pool(t, w.events[3], w.camera, []string{"Birger"})
 
-	locked, pools, raw, snap, hash := w.cellsAndPools(t)
+	locked, pools, raw, _, hash := w.cellsAndPools(t)
 	e := func(i int) string { return eid(w.events[i].ID) }
 	want := []lockedIn{ // by event, then by task id (Singing was made first)
-		{e(0), tid(w.singing.ID), "", "", "Outside guest", 3},
-		{e(0), tid(w.sound.ID), pid(w.people["Aslaug"].ID), "", "", 0},
-		{e(1), tid(w.singing.ID), "", gid(choir.ID), "", 2},
+		{e(0), tid(w.singing.ID), "", "Outside guest", 3},
+		{e(0), tid(w.sound.ID), pid(w.people["Aslaug"].ID), "", 0},
+		{e(1), tid(w.singing.ID), pid(w.people["Dina"].ID), "", 0},
 	}
 	if fmt.Sprint(locked) != fmt.Sprint(want) {
 		t.Errorf("locked:\n got %+v\nwant %+v", locked, want)
 	}
-	if len(pools) != 2 || fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Aslaug"].ID), pid(w.people["Cecilie"].ID)}) || fmt.Sprint(pools[0].Groups) != fmt.Sprint([]string{gid(choir.ID)}) {
+	if len(pools) != 2 || fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Aslaug"].ID), pid(w.people["Cecilie"].ID)}) || fmt.Sprint(pools[1].People) != fmt.Sprint([]string{pid(w.people["Birger"].ID)}) {
 		t.Errorf("pools: %+v", pools)
 	}
-	if !strings.Contains(raw, `"people":[],"groups":["`+gid(choir.ID)+`"]`) {
-		t.Errorf("an empty list is [] and never null (the solver would fail on null): %s", raw)
-	}
-	if len(snap.rendered(i18n.EN)) != 0 {
-		t.Errorf("nothing to warn about: %v", snap.rendered(i18n.EN))
+	if strings.Contains(raw, `"groups"`) || strings.Contains(raw, `"group"`) {
+		t.Errorf("the planner is told nothing about groups: %s", raw)
 	}
 	// the stored run is out of date when a manual cell or a selection changes
 	w.pool(t, w.events[2], w.sound, []string{"Aslaug"})
@@ -99,38 +89,6 @@ func TestBuildInputSendsManualCellsAndSelections(t *testing.T) {
 	w.cell(t, w.events[3], w.camera, store.NewCell{Label: "Guest"})
 	if _, _, _, _, h3 := w.cellsAndPools(t); h3 == hash {
 		t.Error("a new manual cell must change the hash")
-	}
-}
-
-func TestBuildInputLeavesOutWhatNamesAGroupWithoutMembers(t *testing.T) {
-	w := newWorld(t, "Club")
-	choir := w.group(t, "Choir", []string{"Dina", "Embla"})
-	w.cell(t, w.events[1], w.singing, store.NewCell{GroupID: choir.ID})
-	w.cell(t, w.events[2], w.singing, store.NewCell{Label: "Guest"})
-	w.pool(t, w.events[0], w.sound, []string{"Aslaug"}, choir)
-	w.pool(t, w.events[1], w.sound, nil, choir)
-	if _, err := w.st.SetGroupMembers(ctx, w.org.Slug, choir.ID, nil); err != nil {
-		t.Fatal(err)
-	}
-	locked, pools, _, snap, _ := w.cellsAndPools(t)
-	for _, l := range locked {
-		if l.Group != "" {
-			t.Errorf("a group with nobody in it must not be sent (the solver would count the place without knowing who): %+v", l)
-		}
-	}
-	if len(locked) != 1 {
-		t.Errorf("the text stays: %+v", locked)
-	}
-	if len(pools) != 2 || len(pools[0].Groups) != 0 || fmt.Sprint(pools[0].People) != fmt.Sprint([]string{pid(w.people["Aslaug"].ID)}) {
-		t.Errorf("the group leaves the selection, the person stays: %+v", pools)
-	}
-	// a selection left with nobody still restricts (nobody can be chosen) and says so
-	if len(pools[1].People) != 0 || len(pools[1].Groups) != 0 {
-		t.Errorf("the restriction stays when everyone in it is gone: %+v", pools)
-	}
-	all := strings.Join(snap.rendered(i18n.EN), "|")
-	if !strings.Contains(all, "group «Choir» on Singing 2026-08-16") || !strings.Contains(all, "The selection for Sound 2026-08-16 has no people") {
-		t.Errorf("warnings: %v", snap.rendered(i18n.EN))
 	}
 }
 
@@ -161,9 +119,9 @@ func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	}
 }
 
-// The user's own case: the choir (a group) sings, set by hand on Singing, a task the planner does not distribute.
-// Singing cannot be combined with Sound or Camera, so the choir's members are out of both, and Sound is limited to two people.
-func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *testing.T) {
+// The user's own case: Dina and Embla sing, set by hand on Singing, a task the planner does not distribute. Singing cannot
+// be combined with Sound or Camera, so the singers are out of both, and Sound is limited to two people.
+func TestTheRealSolverKeepsTheSingersOutOfSoundAndCameraAndHonoursTheSelection(t *testing.T) {
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	for _, n := range []string{"Dina", "Embla"} { // without the rule, Dina and Embla could take Sound too
@@ -171,9 +129,9 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 	}
 	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.sound.ID, "cannot")
 	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.camera.ID, "cannot")
-	choir := w.group(t, "Choir", []string{"Dina", "Embla"})
 	ev := w.events[3]
-	w.cell(t, ev, w.singing, store.NewCell{GroupID: choir.ID})
+	w.cell(t, ev, w.singing, store.NewCell{PersonID: w.people["Dina"].ID})
+	w.cell(t, ev, w.singing, store.NewCell{PersonID: w.people["Embla"].ID})
 	w.pool(t, ev, w.sound, []string{"Aslaug", "Cecilie"}) // «egen lydtekniker»
 
 	s := New(w.st, solver, 1, nopLogger())
@@ -214,8 +172,8 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 		t.Errorf("Singing is a column because it has a manual cell: %v", cols)
 	}
 	sang := cellOf(v, ev, w.singing)
-	if sang == nil || len(sang.Groups) != 1 || !sang.Groups[0].Locked || sang.Groups[0].Name != "Choir" || sang.Slots != 1 || sang.Missing != 0 {
-		t.Fatalf("the choir on Singing: %+v", sang)
+	if sang == nil || len(sang.People) != 2 || !sang.People[0].Locked || sang.People[0].Name != "Dina" || sang.Slots != 2 || sang.Missing != 0 {
+		t.Fatalf("the singers on Singing: %+v", sang)
 	}
 	for _, row := range v.Events { // the day type has a Singing place everywhere, but the planner does not distribute it
 		if row.ID != ev.ID && cellOf(v, store.Event{ID: row.ID}, w.singing) != nil {
@@ -233,7 +191,7 @@ func TestTheRealSolverKeepsTheChoirOutOfLydAndBildeAndHonoursTheSelection(t *tes
 	}
 	for _, p := range append(append([]CellPerson{}, sound.People...), camera.People...) {
 		if p.Name == "Dina" || p.Name == "Embla" {
-			t.Errorf("the choir's members are busy with Singing and cannot take Sound or Camera: %+v", p)
+			t.Errorf("the singers are busy with Singing and cannot take Sound or Camera: %+v", p)
 		}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// cellsRoutes: manual cells (a person, a group or a text set by hand; locked) and selections (only these can be
+// cellsRoutes: manual cells (a person or a text set by hand; locked) and selections (only these can be
 // chosen) of one plan. Both write for several events at once, all or nothing.
 func (s *server) cellsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/cells", s.listCells)
@@ -60,10 +60,9 @@ func (s *server) setPool(w http.ResponseWriter, r *http.Request) {
 		Event  int64   `json:"event"`
 		Task   int64   `json:"task"`
 		People []int64 `json:"people"`
-		Groups []int64 `json:"groups"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	noContent(w, s.st.SetPool(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Event, b.Task, b.People, b.Groups), s)
+	noContent(w, s.st.SetPool(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Event, b.Task, b.People), s)
 }

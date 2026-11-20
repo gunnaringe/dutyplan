@@ -17,7 +17,7 @@ choir sings at a particular event) is *locked* and never moved.
 
 ## General
 
-The tool is general. **Everything is data that the admin creates**: tasks, people, groups (teams), events and their places and details, and the
+The tool is general. **Everything is data that the admin creates**: tasks, people, events and their places and details, and the
 settings between them. Nothing in the planner, the data model or the wording of the app is tied to a church. Names such as Sound,
 Choir, Service and Alpha exist only in the test data and as examples here. The page is in English and Norwegian (bokmål); the
 texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalogue each.
@@ -25,11 +25,8 @@ texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalog
 ## Scope of the first version
 
 - **No login, no links with a secret, no roles.** See *Access without a login*.
-- **Groups are general.** A group is a named set of people (a team, a choir, a couple, a crew). No group has special rules. The admin can put a
-  group in a manual cell, and **the planner can also propose groups** as candidates for the tasks the admin has set up for the group
-  (`group_task`: which task, how many places it fills, and a level). In both cases the members are busy with the task, and the shared
-  combination setting decides what else they can have the same day (see *Manual cells, groups and selections*).
-- **Group work counts as one assignment per member** in the distribution (overall and per task), for manual and proposed groups alike.
+- **No groups for now** (removed 2026-11-20 at the user's request): a place is filled by people one at a time, or by a text. Building
+  groups back is issue #9.
 - **No spreadsheet support**: neither import from nor export to spreadsheets (decided 2026-11-08). Everything is entered in the app.
 - No skills and no conditional requirements ("when X, then Y"). Selections cover that.
 - No upper limit on the number of tasks per person per day, and no rest requirement between events. The combination setting alone
@@ -40,7 +37,7 @@ texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalog
 **Anyone with the address**
 - Opens the page and picks their own name.
 - **Chooses which tasks to take part in.** All tasks are hidden at first; "choose tasks" lets the person tick more. What is not ticked is not shown and is
-  never assigned personally (except through a group the admin has set up for the task, see *Manual cells, groups and selections*).
+  never assigned personally.
 - Chooses a preference per task: *never / poor / neutral / good*. People differ, and it is up to them.
 - Chooses for each **event**: *does not suit / poor / good* (not marked = neutral). **One list covers all the tasks the person takes part in.**
   Sound and Video share the preference, so there is one choice per event. The event counts, not the calendar day: two events on the same day
@@ -50,30 +47,18 @@ texts are in `web/i18n.js` and `internal/i18n`, and more languages are a catalog
   (2026-11-20: no individual user management for now).
 
 **Setup and planning** (part of the same app, not a separate area)
-- Tasks, people, groups, events with their own places, **a shared setting for which tasks can be combined**, places set by hand and selections. Running the
+- Tasks, people, events with their own places, **a shared setting for which tasks can be combined**, places set by hand and selections. Running the
   planner, reading the explanations, locking proposals, looking at earlier runs and pinning one as the current plan.
 
-**Manual cells, groups and selections** (two general tools that cover "the choir sings", "their own sound engineer" and everything like it)
-- The admin can enter a **manual cell** for a task and an event: a person, a **group** or a text (for example "Outside guest"). It is locked and counts as a
-  filled place. A group or a text can fill several places (`fills`).
-- A **group** in a manual cell makes the members busy with that task that day. What they can have in addition is governed by the shared combination
-  setting, with no special rule. Example: the group "Choir" is on the task "Singing" on 20 Sept, and *Singing × Sound* and *Singing × Video* are set to
-  "cannot be combined". Then the members are out of Sound and Video that day. If the pair is "impractical" or "practical" instead, it becomes a penalty or a bonus, not a ban.
+**Manual cells and selections** (two general tools that cover "their own sound engineer" and everything like it)
+- The admin can enter a **manual cell** for a task and an event: a person or a text (for example "Outside guest"). It is locked and counts as a
+  filled place. A text can fill several places (`fills`).
 - The admin can set a **selection** for a task and an event: only these can be picked. The planner chooses among them. "Their own sound engineer when the choir sings" is a
-  selection for Sound of two people who take part in the task and do not sing. If the selection is as large as the number of places, it is in effect a manual assignment.
+  selection for Sound of two people who take part in the task. If the selection is as large as the number of places, it is in effect a manual assignment.
 - A selection is an ordinary hard requirement. If someone in the selection has "does not suit" that day or does not take part in the task, that comes out as an
   explanation (and an empty place if nobody in the selection can).
-- If a group member has "does not suit" on the event a manual group is set for, the manual choice is kept, with a warning.
-- **Proposed groups, what the admin has to set up:** for each group which tasks it may be proposed for, how many places it fills, and a level. One
-  member with "does not suit" on an event rules the whole group out for that event; a couple is not usable on an event one of them cannot make.
-- **Can be proposed, per person and per group** (default yes). When it is no, the planner never picks the person or group itself (not through a selection
-  either), but the admin can still enter them by hand. A group is not proposed either if a member cannot be proposed. The group is proposed for the tasks the admin has
-  set up for it, whether or not the members ticked the task themselves; this setting governs it.
-- **Proposed groups:** the admin sets up which tasks a group can be proposed for (`group_task`). The group is a candidate on a par with a person and fills `fills`
-  places. It is ruled out of an event if one member has "does not suit" (or has said "never" to the task), if the group is outside a selection, or if the
-  members are busy through another group. The points for the event are the average of the members' wishes; the task level is set on the group. The members' own
-  participation in the task is not needed. A selection can name both people and groups.
-- Two groups with a member in common cannot both be picked on the same day if it is the same task or "cannot be combined".
+- **Can be proposed, per person** (default yes). When it is no, the planner never picks the person (not through a selection either), but the admin can still
+  enter them by hand.
 
 ## Data model (SQLite)
 
@@ -89,8 +74,6 @@ Migrations are forward-only and run in a transaction at startup.
 | `organization` | | `slug` (unique, in the address), name |
 | `plan` | organisation | `slug` (unique in the organisation), name, **`weights`** (JSON: the planner weights that differ from the default). Replaces "period/semester" |
 | `person` | organisation | name (unique in the organisation), **can be proposed** (default yes). Reused in all plans |
-| `group`, `group_member` | organisation | **built as `grp`, `grp_member`**: a named set of people (team, choir, couple). No rules of its own. **Can be proposed** (default yes) |
-| `group_task` | organisation | **built as `grp_task`**: the tasks the planner may propose the group for: places it fills (`fills`) and a level |
 | `task` | organisation | name, whether the planner distributes it (otherwise only for manual cells and combinations) |
 | `task_combination` | organisation | **shared**: task A × task B: *cannot be combined / impractical / practical / should be combined* |
 | `person_task` | organisation | **built**: the person takes part in the task (their own choice; no row = not taking part) and a level (never / poor / neutral / good). Only tasks the planner distributes can be chosen |
@@ -99,15 +82,15 @@ Migrations are forward-only and run in a transaction at startup.
 | `plan_field`, `event_field` | plan | the plan's details rows (a note, a theme; ordered by `position`) and their text per event. For people only: never in the input or hash |
 | `person_event` | plan | **built**: level per event (does not suit / poor / good; no row = neutral), shared by the person's tasks. Composite foreign key (org, plan, event) |
 | `person_task_event` | plan | *not built yet*: added when a task has "its own list"; it is then used instead of the shared one |
-| `pool_member` | plan | **built**: the **selection** for one task on one event: the only people and groups that can be picked (if there are rows, there is a selection). Composite foreign key to (org, plan, event) |
-| `manual_cell` | plan | **built**: a place set by hand for a task on an event: one person, one group or a text (+ `fills` places for a group and a text), or (`locked`) a planner name that was locked. Both are fixed for the planner. Proposals from the planner are not stored here but in `plan_run` |
+| `pool_member` | plan | **built**: the **selection** for one task on one event: the only people that can be picked (if there are rows, there is a selection). Composite foreign key to (org, plan, event) |
+| `manual_cell` | plan | **built**: a place set by hand for a task on an event: one person or a text (+ `fills` places for a text), or (`locked`) a planner name that was locked. Both are fixed for the planner. Proposals from the planner are not stored here but in `plan_run` |
 | `plan_run` | plan | status (running/done/failed), seed, time limit, hash of the input, the input, a snapshot of names and places, the planner's answer, error message, **`pinned`** (one per plan, partial unique index). The 20 newest per plan are kept, and the pinned one always |
 
 **Optimisation happens within one plan only** (the user's choice 2026-11-09). Assignments in earlier plans do not count: the app never sends `history` or `previous_plan` to the planner (it can still accept them).
 Every lookup is scoped by the organisation; a plan or person from another organisation gives 404.
 
 **Events:** an event belongs to one plan and has a date (and a time of day, a description, its own places and the details rows' text). Events are **self-contained**: two can fall on the same day (for example a
-service and a staff evening, or two shifts), and availability, combinations, places and group busyness apply to the event, never to the calendar day. The API uses the id (`/events/{id}`).
+service and a staff evening, or two shifts), and availability, combinations and places apply to the event, never to the calendar day. The API uses the id (`/events/{id}`).
 A new event can repeat **every week, or every 2 to 8 weeks, until** a date (at most 366 days; added 2026-11-20 at the user's request: «every other week and such»);
 **copying** an event (`POST /events/{id}/copy`) makes it again on other dates, or repeated the same way until a date,
 with the times, the details, the places and the names set by hand as chosen. Answers and drafts are never copied. There are no day types (removed 2026-11-19): in the planner's
@@ -130,18 +113,12 @@ One yes/no variable per (person, task, event) that is possible after filtering. 
 - Selections (`pool_member`): everyone outside the selection is removed for that task and event.
 - The number of places per task and event (locked cells count).
 - Task pairs that *cannot be combined*: at most one of them per person per day.
-- A group in a manual cell or proposed by the planner: each member is busy with the group's task. The pair (the group's task,
-  the member's other task) follows the combination setting (ban, penalty or bonus), and the member cannot take an extra
-  place on the same task.
-
 **Objective (points, tuned against the test data)**
 - Plus for "good", minus for "poor", on event and task.
 - Plus/minus for *practical*, *impractical* and *should be combined*.
-- **Even distribution = equal total load (the main term; decided by the user 2026-11-09).** Each person's target is their share of all assignments (group work
-  counts one assignment per member), computed from how many events the person can make. The target is rarely a whole number, so a **band**
+- **Even distribution = equal total load (the main term; decided by the user 2026-11-09).** Each person's target is their share of all assignments, computed from how many events the person can make. The target is rarely a whole number, so a **band**
   [lower, upper whole number] is "even enough", and only what falls outside the band costs (`w_fair`, 10). The worst deviation is penalised as well (`w_fair_range`, 10), so that one
   person does not take all the deviation. Which tasks the assignments are in does not matter: someone who only takes Video should not end up with half of what someone who takes Sound and Video gets.
-  (The target is based on the number of places; a proposed group with more members than places gives more assignments than places, and that is not counted into the target beforehand.)
 - **Distribution per task is off by default** (`w_task_fair` and `w_task_range` are 0, and then no variables are built for it). When it is on, everyone who can do a
   task gets an equal share of exactly that task, and people with more tasks then get more in total. The price of total-first: the same task can be shared unevenly among
   those who can do it (see *Results from the spike*).
@@ -151,7 +128,7 @@ One yes/no variable per (person, task, event) that is possible after filtering. 
 - An empty place is allowed, but costs so much that the planner only does it when it cannot be avoided.
 
 **Explanations**: for every empty place or broken "poor" a short text is made, for example "Task X 15 Nov: 4 candidates,
-2 have *does not suit*, 3 are outside the selection, 1 is busy through a group". This is a separate simple filter over the input, not an infeasibility analysis. The server writes
+2 have *does not suit*, 3 are outside the selection". This is a separate simple filter over the input, not an infeasibility analysis. The server writes
 the texts in the page's language (`?lang=`) from codes and arguments kept in the run, so one run can be read in both languages.
 
 ## Architecture: a proper backend
@@ -223,7 +200,7 @@ what the event is, what it needs, who got it, who can come.
   Clicking the task: rename, planned or only by hand, "Cannot be combined with anything" (`PUT /orgs/{org}/tasks/{id}/combinations`) and the single pairs, delete.
 - **Draft allocation** (green): the bar has "Make a draft"/"Try again", the time limit, "Draft #n · time", "✓ Current plan" with Unpin (or Pin), and a key. One row per task:
   what is set by hand (violet), a locked planner name («locked» chip), the planner's names («maybe» when given against a ?), and "Not filled · Why?". Clicking a place opens
-  "Place in the draft": remove/unlock what is set, lock a planner name, set a person, a group or a text by hand, and the selection (whom the planner picks from).
+  "Place in the draft": remove/unlock what is set, lock a planner name, set people or a text by hand, and the selection (whom the planner picks from).
   Compromises, the distribution and earlier drafts are links under the rows. The page opens with the pinned draft, else the newest.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
   ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, can be proposed, section. ⋮⋮ drags a person (`person.position`, per section,
@@ -231,27 +208,23 @@ what the event is, what it needs, who got it, who can come.
   those without one come first, deleting one puts its people last of those. Only placement: the planner's input keeps people by id.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
 - **On a phone** (option A of the sketch, chosen 2026-11-20): *Availability* is turned and comes first: events down (date, time, the count), people across (first
-  names, a tap on one opens the person), and under each answer the tasks the person has in the draft (set by hand, locked or proposed; through a group too). The
+  names, a tap on one opens the person), and under each answer the tasks the person has in the draft (set by hand, locked or proposed). The
   details, places and the draft follow in the ordinary table, which scrolls sideways under the row names. The page draws one layout at a time and switches when
   the width crosses 40rem.
-- The organisation page has the plans and the groups, and rename/delete of the organisation. Any other address (an old setup page, an old personal
+- The organisation page has the plans, and rename/delete of the organisation. Any other address (an old setup page, an old personal
   link) is "Page not found".
 
-### Groups, manual cells and selections (built, phase 4 round 2)
-- **Groups** (`/orgs/{org}/groups`, on the organisation page): name, members, "can be proposed" and the tasks the planner may propose the group for
-  (places and level; only tasks the planner distributes). Not deleted while a cell or selection names it (409).
+### Manual cells and selections (built, phase 4 round 2)
 - **Manual cells** (`/plans/{plan}/cells`) and **selections** (`/plans/{plan}/pools`): one event at a time, only an event in the plan (copying an event can take its cells set by hand along).
-  A cell can be on a task the planner does not distribute (for example "Singing" for the choir). "Lock" on a planner name makes a cell
+  A cell can be on a task the planner does not distribute (for example "Singing"). "Lock" on a planner name makes a cell
   with `locked` for it, which the planner keeps like any other cell.
-- **Groups without members** are never sent to the planner (it would count the place without knowing who). What names them is left out,
-  and the run says so ("The cell for the group «Choir» on Sound … was left out"). A selection that becomes empty is kept (nobody can be picked) with a warning.
   There is no «active» flag (removed 2026-11-20).
 - The planner's warnings are read with names; a cell for a person who "cannot be proposed" gives no warning (that is how the setting is meant to be used).
 
 ### Renaming and deleting (built)
 - Organisations and plans can be renamed (`PATCH`), people and tasks too (they already could be); the address (slug) never changes.
 - **A plan is deleted** (`DELETE`) with its events, places, details rows, answers, manual cells, selections and runs (a pinned one too). Refused while a run is in progress (409 `plan_busy`).
-- **An organisation is deleted** (`DELETE ...?confirm=<slug>`) only when it has no plans (409 `org_has_plans`), with its people, tasks, groups and combinations. The API writes the
+- **An organisation is deleted** (`DELETE ...?confirm=<slug>`) only when it has no plans (409 `org_has_plans`), with its people, sections, tasks and combinations. The API writes the
   deletion to the server log.
 - A test lists the tables with `org_id` and `plan_id`, so a new table cannot be forgotten by the deletions; another checks that nothing is left after a deletion.
 
@@ -272,7 +245,7 @@ The first version has no login, no personal links and no roles. The consequences
 1. **Backend skeleton (done 2026-11-07)**: Go, SQLite, migrations, organisations and plans, people, name picker, change log, frontend.
 2. **Setup (done 2026-11-08)**: tasks, day types with places, combinations, events (singly and for all chosen weekdays in a period; self-contained, several on the same day allowed).
 3. **The person page (done 2026-11-08)**: "My page" per person and plan, mobile first: choose tasks and how willingly, and answer *does not suit / poor / good* per event with one tap (tapping again removes the answer; "Set all"). Answers are saved at once. *Not built:* "its own list for this task". Narrow screens come first; a test fails if a page becomes wider than a 390 px screen.
-4. **Planning**: run, preview, lock, selections, groups, explanations. **Round 1 done (2026-11-08):** "Plan" / "Try again" on the plan, background run, grid per event with explanations, compromises and distribution, check and out-of-date marking (see *Running the planner*). **Round 2 done (2026-11-09):** groups, manual cells, selections and "Lock" (see *Groups, manual cells and selections*). Optimisation happens only within the plan; no history from other plans.
+4. **Planning**: run, preview, lock, selections, explanations. **Round 1 done (2026-11-08):** "Plan" / "Try again" on the plan, background run, grid per event with explanations, compromises and distribution, check and out-of-date marking (see *Running the planner*). **Round 2 done (2026-11-09):** manual cells, selections and "Lock" (see *Manual cells and selections*); groups were part of it until 2026-11-20 (issue #9). Optimisation happens only within the plan; no history from other plans.
 5. **Grid (done 2026-11-09)**: the **grid** (events across, tasks down, fixed first column, sideways scrolling in its own box; the default on wide screens, with a "List / Grid" choice that is remembered) and **"My assignments"** at the top of My page. *No calendar feed* (dropped by the user 2026-11-09: it would show drafts without an approved plan, and events had no times of day then; times of day were added the same day, but the feed was not asked for again).
 5b. **Bilingual page, run history and pin, rename and delete, README, time of day and description on events (done 2026-11-09)**: English and Norwegian page and server texts, English codes on the wire, earlier runs and a pinned current plan, rename/delete of organisations and plans, rename of people and tasks, a time of day and a description on events.
 5c. **The table (done 2026-11-13)**: one view per plan for events, places per event, info rows, everyone's answers and the plan (see *The table*); replaced My page, the list and the grid.
@@ -282,15 +255,16 @@ The first version has no login, no personal links and no roles. The consequences
     forward-auth at dutyplan.haxxor.xyz (manifests in `clusters/kate/dutyplan/`). Not in a registry yet: the image is built locally and imported into the node.
     *Still to do:* a registry and automatic rollout, and a backup of the SQLite file.
 
-**Pilot**: first two or three tasks with manual cells, groups and selections, then the rest of the tasks.
+**Pilot**: first two or three tasks with manual cells and selections, then the rest of the tasks.
 
 ## Results from the spike (phase 0)
 
 The solver alone, `solver/`: tests for every rule, the autumn 2026 test data, and random instances, all green.
 
 - **The rules hold.** Every rule has a test that fails if the rule is removed (tried by breaking the model one rule at a
-  time). An independent checker verifies the hard requirements on all plans. Selections, groups in manual cells (with the combination setting), proposed teams and couples, the locked
-  person and the text cells work on the test data (18 people, 17 events, 7 tasks, 4 teams/couples, about 120 assignments).
+  time). An independent checker verifies the hard requirements on all plans. Selections, people set by hand on a task that is not distributed (with the combination setting), the locked
+  person and the text cells work on the test data (18 people, 17 events, 7 tasks, about 130 assignments; the teams and couples
+  of the spike went with groups on 2026-11-20, issue #9).
 - **Size and time.** After rest and the daily cap were removed, a valid and usable plan comes after about 2 seconds, and the
   quality improves up to about 20 s. The solver **does not prove** the plan is the best possible (the upper bound does not tighten), so the result
   is a *proposal* within the time limit. Different seeds give slightly different plans; "try once more" is therefore a useful button.

@@ -14,7 +14,7 @@ type rich struct {
 	plan, other   Plan
 	people        []Person
 	sound, camera Task
-	group         Group
+	section       Section
 	pinned, dying int64 // runs of plan: a finished pinned run, and one that failed
 }
 
@@ -39,12 +39,9 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	r.camera, err = s.CreateTask(ctx, slug, "Camera")
 	must(err)
 	must(s.SetCombination(ctx, slug, r.sound.ID, r.camera.ID, "cannot"))
-	r.group, err = s.CreateGroup(ctx, slug, "Choir")
+	r.section, err = s.CreateSection(ctx, slug, "Guests")
 	must(err)
-	_, err = s.SetGroupMembers(ctx, slug, r.group.ID, []int64{r.people[0].ID, r.people[1].ID})
-	must(err)
-	_, err = s.SetGroupTasks(ctx, slug, r.group.ID, []GroupTask{{TaskID: r.camera.ID, Fills: 1, Level: "neutral"}})
-	must(err)
+	must(s.MovePerson(ctx, slug, r.people[1].ID, r.section.ID, 0))
 	must(s.SetPersonTask(ctx, slug, r.people[0].ID, r.sound.ID, "good"))
 
 	r.plan, err = s.CreatePlan(ctx, slug, planName)
@@ -63,9 +60,7 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		must(err)
 		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
 		must(err)
-		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.sound.ID, GroupID: r.group.ID, Fills: 1})
-		must(err)
-		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, r.camera.ID, []int64{r.people[0].ID}, []int64{r.group.ID}))
+		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, r.camera.ID, []int64{r.people[0].ID}))
 		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, 2))
 		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
@@ -157,7 +152,7 @@ func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "event event_field event_task grp grp_member grp_task manual_cell person person_event person_section person_task plan plan_field plan_run pool_member task task_combination"
+	want := "event event_field event_task manual_cell person person_event person_section person_task plan plan_field plan_run pool_member task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}
@@ -269,9 +264,9 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	sameCounts(t, "the same organisation's other plan", otherBefore, rowsWith(t, s, "plan_id", otherID))
 	sameCounts(t, "the other organisation's plan with the same address", planBBefore, rowsWith(t, s, "plan_id", planB))
 	sameCounts(t, "the other organisation", orgBBefore, rowsWith(t, s, "org_id", orgB))
-	// the organisation keeps its people, tasks and groups
+	// the organisation keeps its people, tasks and sections
 	after := rowsWith(t, s, "org_id", orgA)
-	for _, table := range []string{"person", "task", "task_combination", "grp", "grp_member", "grp_task", "person_task"} {
+	for _, table := range []string{"person", "task", "task_combination", "person_section", "person_task"} {
 		if after[table] != orgABefore[table] {
 			t.Errorf("deleting a plan changed the organisation's %s: %d -> %d", table, orgABefore[table], after[table])
 		}

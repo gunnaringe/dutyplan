@@ -220,7 +220,6 @@ func testNames() Namer {
 	return Namer{
 		Person: look(map[string]string{"p1": "Aslaug", "p2": "Birger", "p3": "Cecilie"}),
 		Task:   look(map[string]string{"t1": "Sound", "t2": "Singing"}),
-		Group:  look(map[string]string{"g1": "Choir", "g2": "Band"}),
 		Event:  look(map[string]string{"e5": "2026-08-09"}),
 	}
 }
@@ -243,24 +242,14 @@ func TestExplain(t *testing.T) {
 		{map[string]any{"candidates": 2.0, "busy": map[string]any{"p2": []any{"t1"}, "p1": []any{"t1", "t2"}}},
 			both{"2 could have taken it, but are needed elsewhere or cannot be combined with something they already have: busy with something else at the event: Aslaug (Sound, Singing), Birger (Sound).",
 				"2 kunne stilt, men trengs andre steder eller kan ikke kombineres med noe de allerede har: opptatt med noe annet på hendelsen: Aslaug (Sound, Singing), Birger (Sound)."}},
-		// a group's task is named with the group
-		{map[string]any{"candidates": 1.0, "busy": map[string]any{"p1": []any{"t2 (g1)"}}},
-			both{someEN + ": busy with something else at the event: Aslaug (Singing (Choir)).", someNB + ": opptatt med noe annet på hendelsen: Aslaug (Singing (Choir))."}},
+		{map[string]any{"candidates": 1.0, "busy": map[string]any{"p1": []any{"t2"}}},
+			both{someEN + ": busy with something else at the event: Aslaug (Singing).", someNB + ": opptatt med noe annet på hendelsen: Aslaug (Singing)."}},
 		// the selection and who is outside it
-		{map[string]any{"candidates": 0.0, "selection": []any{"p1", "p2"}, "selection_groups": []any{"g1"}, "outside_selection": 4.0},
-			both{"Nobody can take this: the selection is Aslaug, Birger, Choir (4 others are outside it).", "Ingen kan ta denne: utvalget er Aslaug, Birger, Choir (4 andre står utenfor)."}},
+		{map[string]any{"candidates": 0.0, "selection": []any{"p1", "p2"}, "outside_selection": 4.0},
+			both{"Nobody can take this: the selection is Aslaug, Birger (4 others are outside it).", "Ingen kan ta denne: utvalget er Aslaug, Birger (4 andre står utenfor)."}},
 		{map[string]any{"candidates": 0.0, "selection": []any{"p1"}}, both{"Nobody can take this: the selection is Aslaug.", "Ingen kan ta denne: utvalget er Aslaug."}},
 		{map[string]any{"candidates": 0.0, "outside_selection": 3.0},
 			both{"Nobody can take this: the selection is empty (3 others are outside it).", "Ingen kan ta denne: utvalget er tomt (3 andre står utenfor)."}},
-		// why a group could not be proposed; a group that could have been is not mentioned
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "event_never:p2", "g2": "candidate"}},
-			both{"Nobody can take this: Choir: Birger cannot attend.", "Ingen kan ta denne: Choir: Birger passer ikke."}},
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable", "g2": "too_many_places"}},
-			both{"Nobody can take this: Band needs more places than are left; Choir cannot be proposed.", "Ingen kan ta denne: Band trenger flere plasser enn det er igjen; Choir kan ikke foreslås."}},
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "not_proposable:p3", "g2": "outside_selection"}},
-			both{"Nobody can take this: Band is outside the selection; Choir cannot be proposed because Cecilie cannot be proposed.", "Ingen kan ta denne: Band står utenfor utvalget; Choir kan ikke foreslås fordi Cecilie ikke kan foreslås."}},
-		{map[string]any{"candidates": 0.0, "groups": map[string]any{"g1": "task_never:p1", "g2": "busy:p2"}},
-			both{"Nobody can take this: Band: Birger is busy with something else; Choir: Aslaug said «never» to the task.", "Ingen kan ta denne: Band: Birger er opptatt med noe annet; Choir: Aslaug har sagt «ikke» til oppgaven."}},
 	}
 	for _, c := range cases {
 		for l, want := range map[i18n.Lang]string{i18n.EN: c.want.en, i18n.NB: c.want.nb} {
@@ -279,9 +268,7 @@ func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          {"Aslaug was set on Sound 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
 		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           {"Aslaug was set on Sound 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
 		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    {"Aslaug was set on Sound 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
-		"locked: p1 on t1 e5 breaks «busy:t2 (g1)» (manual choice kept)":         {"Aslaug was set on Sound 2026-08-09 by hand, even though they are busy with Singing (Choir).", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen er opptatt med Singing (Choir)."},
-		"group g1 is on t2 e5, but p3 has «never» that day (manual choice kept)": {"Choir was set on Singing 2026-08-09 by hand, but Cecilie has said it does not suit.", "Choir er satt på Singing 2026-08-09 for hånd, men Cecilie har sagt at det ikke passer."},
-		"p2 is locked on t1 e5 while group g1 is on t2":                          {"Birger was set on Sound 2026-08-09 by hand while Choir is on Singing; the two cannot be combined.", "Birger er satt på Sound 2026-08-09 for hånd samtidig som Choir står på Singing; de to kan ikke kombineres."},
+		"locked: p1 on t1 e5 breaks «busy:t2» (manual choice kept)":              {"Aslaug was set on Sound 2026-08-09 by hand, even though they are busy with Singing.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen er opptatt med Singing."},
 		"something else from the solver":                                         {"something else from the solver", "something else from the solver"},
 	}
 	for in, want := range cases {
@@ -664,27 +651,8 @@ func TestEmptyListsAreSentAsListsNeverAsNull(t *testing.T) {
 	}
 }
 
-// rendered writes the snapshot's notes in one language, as the view does.
-func (sn Snapshot) rendered(l i18n.Lang) []string {
-	var out []string
-	for _, n := range sn.Notes {
-		args := make([]any, len(n.Args))
-		for i, a := range n.Args {
-			args[i] = a
-		}
-		out = append(out, i18n.T(l, "note."+n.Code, args...))
-	}
-	return out
-}
-
 func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	w := newWorld(t, "Club")
-	// a manual cell for a group that then loses its members: the run notes that it left the cell out
-	choir := w.group(t, "Choir", []string{"Cecilie"})
-	w.cell(t, w.events[2], w.sound, store.NewCell{GroupID: choir.ID})
-	if _, err := w.st.SetGroupMembers(ctx, w.org.Slug, choir.ID, nil); err != nil {
-		t.Fatal(err)
-	}
 	s := newService(w, func(context.Context, []byte) ([]byte, error) { return cannedAnswer(w), nil })
 	id, err := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})
 	if err != nil {
@@ -699,7 +667,6 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	for name, c := range map[string]struct{ en, nb string }{
 		"compromise":  {en.Weak[0], nb.Weak[0]},
 		"explanation": {en.Events[1].Cells[1].Explanation, nb.Events[1].Cells[1].Explanation},
-		"note":        {en.Warnings[0], nb.Warnings[0]},
 	} {
 		if c.en == c.nb || c.en == "" {
 			t.Errorf("%s must differ between the languages: %q / %q", name, c.en, c.nb)
@@ -710,9 +677,6 @@ func TestTheSameRunIsWrittenInNorwegianWhenAsked(t *testing.T) {
 	}
 	if !strings.Contains(nb.Events[1].Cells[1].Explanation, "passer ikke: Aslaug") || !strings.HasPrefix(nb.Events[1].Cells[1].Explanation, "Ingen kan ta denne") {
 		t.Errorf("explanation in Norwegian: %q", nb.Events[1].Cells[1].Explanation)
-	}
-	if !strings.Contains(nb.Warnings[0], "Ruten for gruppen «Choir» på Sound 2026-08-23") || !strings.Contains(en.Warnings[0], "The cell for the group «Choir» on Sound 2026-08-23") {
-		t.Errorf("notes: %q / %q", nb.Warnings, en.Warnings)
 	}
 	// the stored run does not depend on the language: asking for Norwegian does not change what English shows afterwards
 	if again, _ := s.View(ctx, w.org.Slug, w.plan.Slug, id); again.Weak[0] != en.Weak[0] {

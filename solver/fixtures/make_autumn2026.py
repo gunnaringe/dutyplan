@@ -1,4 +1,4 @@
-"""Makes autumn2026.json: a realistic autumn plan (17 events, 7 tasks, 18 people, 4 teams and couples) with invented names,
+"""Makes autumn2026.json: a realistic autumn plan (17 events, 7 tasks, 18 people) with invented names,
 invented dates and event types, and random (but fixed) wishes.
 
 The dates are the Sundays from 2 August, with the event types spread randomly (a seed of their own), and one event on a weekday.
@@ -15,7 +15,7 @@ rng = random.Random(2026)
 
 PEOPLE = ["Alma", "Bjarne", "Cecilie", "Dagfinn", "Elin", "Frida", "Gro", "Henrik", "Ingrid",
           "Joakim", "Kjersti", "Lasse", "Mona", "Njål", "Oda", "Pål", "Randi", "Sindre"]
-CHOIR = ["Alma", "Dagfinn", "Ingrid", "Kjersti", "Lasse", "Mona"]  # an ordinary group
+CHOIR = ["Alma", "Dagfinn", "Ingrid", "Kjersti", "Lasse", "Mona"]  # set by hand on Singing, one by one
 
 # The events: 17 Sundays from 2 August, the types spread randomly. «staff evening» is on a weekday (two days later).
 # A seed of its own, so that another spread does not move the wishes further down.
@@ -61,6 +61,8 @@ person_tasks = {p: {} for p in PEOPLE}
 for t, ps in INVOLVED.items():
     for p in ps:
         person_tasks[p][t] = pick(["poor", "neutral", "good"], [2, 5, 3])
+for p in CHOIR:
+    person_tasks[p]["singing"] = "neutral"  # they take part in Singing, which is set by hand
 
 _services = [d for d, ty in DATES if ty == "service"]
 choir_dates = [_services[2], _services[7]]  # the choir sings twice
@@ -79,14 +81,6 @@ for p in PEOPLE:
 # A sound engineer who is at the services but would rather have another rhythm on Sound (a calendar of their own)
 person_task_calendars = {"Bjarne": {"sound": {d: pick(["never", "poor", "good", "neutral"], [10, 10, 30, 50]) for d in dates_with_tasks}}}
 
-# Fixed teams and couples the planner can propose as a unit: (members, task, places)
-TEAMS = {
-    "cafe_team_a": (["Cecilie", "Elin", "Kjersti"], "cafe", 3),
-    "cafe_team_b": (["Mona", "Oda", "Randi"], "cafe", 3),
-    "prayer_pair_1": (["Dagfinn", "Gro"], "prayer", 2),
-    "prayer_pair_2": (["Njål", "Pål"], "prayer", 2),
-}
-
 sound_non_choir = [p for p in INVOLVED["sound"] if p not in CHOIR]
 
 data = {
@@ -98,18 +92,12 @@ data = {
     "person_dates": person_dates,
     "person_task_calendars": person_task_calendars,
     "combinations": [{"a": a, "b": b, "level": lvl} for a, b, lvl in COMBOS],
-    # The choir is an ordinary group. The admin enters it by hand on Singing (which is not distributed) and sets a
-    # selection for Sound: «their own sound engineer» among those who do not sing. The members are kept away from Sound and Video by
-    # the combination setting above, not by a special rule.
-    "groups": [{"id": "choir", "members": CHOIR}]
-    + [{"id": g, "members": mems} for g, (mems, _t, _n) in TEAMS.items()],
-    "group_tasks": [
-        {"group": g, "task": t, "fills": n, "level": pick(["neutral", "good"], [2, 1])}
-        for g, (_mems, t, n) in TEAMS.items()
-    ],
+    # The admin enters the singers by hand on Singing (which is not distributed) and sets a selection for Sound: «their own sound
+    # engineer» among those who do not sing. The singers are kept away from Sound and Video by the combination setting above, not
+    # by a special rule.
     "pools": [{"date": d, "task": "sound", "people": sound_non_choir[:2]} for d in choir_dates],
     "locked": [
-        *[{"date": d, "task": "singing", "group": "choir"} for d in choir_dates],
+        *[{"date": d, "task": "singing", "person": p} for d in choir_dates for p in CHOIR],
         {"date": guest_date, "task": "speaker", "label": "Outside guest"},
         {"date": leader_date, "task": "chair", "person": "Ingrid"},
     ],

@@ -193,53 +193,11 @@ async function pageHome() {
     h('p', { class: 'muted small' }, t('home.warning')));
 }
 
-const GROUP_LEVELS = ['poor', 'neutral', 'good'];
-
-// The organisation: its plans and its groups, and rename or delete. Tasks and people are added from a plan's table; they
-// belong to the organisation, so every plan has them.
-async function pageOrg(r, org, people) {
+// The organisation: its plans, and rename or delete. Tasks and people are added from a plan's table; they belong to the
+// organisation, so every plan has them.
+async function pageOrg(r, org) {
   const base = `/orgs/${enc(r.org)}`;
-  const [plans, groups, tasks] = await Promise.all([api('GET', base + '/plans'), api('GET', base + '/groups'), api('GET', base + '/tasks')]);
-  const nameOf = (list, id) => (list.find((x) => x.id === id) || { name: '?' }).name;
-
-  function groupDialog(g) {
-    let dlg;
-    const gpath = `${base}/groups/${g.id}`;
-    const changed = () => { again('group', g.id); dlg.close(); render(); };
-    const name = h('input', { type: 'text', value: g.name, maxlength: '80', 'aria-label': t('common.name') });
-    const boxes = people.map((p) => ({ p,
-      box: h('input', { type: 'checkbox', checked: g.members.includes(p.id), 'aria-label': t('group.member_aria', { person: p.name, group: g.name }) }) }));
-    const proposable = h('input', { type: 'checkbox', checked: g.proposable, 'aria-label': t('group.proposable') });
-    proposable.addEventListener('change', async () => { if (await write(() => api('PATCH', gpath, { proposable: proposable.checked }))) changed(); else proposable.checked = g.proposable; });
-    const rows = tasks.filter((tk) => tk.planned).map((tk) => {
-      const cur = g.tasks.find((x) => x.task_id === tk.id);
-      return { tk,
-        fills: h('input', { type: 'number', min: '0', max: '50', value: cur ? String(cur.fills) : '0', 'aria-label': t('group.fills_aria', { group: g.name, task: tk.name }) }),
-        level: h('select', { 'aria-label': t('group.level_aria', { group: g.name, task: tk.name }) }, GROUP_LEVELS.map((v) => h('option', { value: v, selected: v === (cur ? cur.level : 'neutral') }, t('level.' + v)))) };
-    });
-    dlg = modal(g.name,
-      h('form', { class: 'row', onsubmit: async (e) => {
-        e.preventDefault();
-        if (name.value.trim() !== g.name && await write(() => api('PATCH', gpath, { name: name.value }))) changed();
-      } }, name, h('button', { type: 'submit' }, t('common.rename'))),
-      h('h3', {}, t('group.members')),
-      boxes.length ? [h('div', { class: 'chips' }, boxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
-        h('div', { class: 'row-inline' }, h('button', { type: 'button', onclick: async () => {
-          if (await write(() => api('PUT', gpath + '/members', { people: boxes.filter((x) => x.box.checked).map((x) => x.p.id) }))) changed();
-        } }, t('group.save_members')))] : h('p', { class: 'muted' }, t('group.no_people')),
-      h('h3', {}, t('group.proposed_for')),
-      h('label', { class: 'check' }, proposable, ' ' + t('group.proposable')),
-      h('p', { class: 'muted small' }, t('group.proposed_hint')),
-      rows.length ? [h('table', { class: 'mini' }, h('thead', {}, h('tr', {}, h('th', {}, t('group.col_task')), h('th', {}, t('group.col_fills')), h('th', {}, t('group.col_how')))),
-        h('tbody', {}, rows.map(({ tk, fills, level }) => h('tr', {}, h('td', {}, tk.name), h('td', {}, fills), h('td', {}, level))))),
-        h('div', { class: 'row-inline' }, h('button', { type: 'button', onclick: async () => {
-          const list = rows.map(({ tk, fills, level }) => ({ task_id: tk.id, fills: parseInt(fills.value, 10) || 0, level: level.value })).filter((x) => x.fills > 0);
-          if (await write(() => api('PUT', gpath + '/tasks', { tasks: list }))) changed();
-        } }, t('group.save_tasks')))] : h('p', { class: 'muted' }, t('group.no_planned_tasks')),
-      foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { confirmed(t('group.delete_confirm', { name: g.name })); await api('DELETE', gpath); })) { dlg.close(); render(); }
-      } }, t('group.delete')), closeBtn()));
-  }
+  const plans = await api('GET', base + '/plans');
 
   // Rename (the address stays) or delete. Deleting needs the organisation to have no plans, and its name typed in.
   function orgDialog() {
@@ -266,14 +224,6 @@ async function pageOrg(r, org, people) {
       foot('', closeBtn()));
   }
 
-  const groupLine = (g) => {
-    const members = g.members.map((id) => nameOf(people, id));
-    const proposed = g.proposable ? g.tasks.map((x) => tn('org.group_task', x.fills, { task: nameOf(tasks, x.task_id) })) : [];
-    return h('div', { class: 'grp' },
-      h('button', { type: 'button', class: 'cellbtn inline', 'aria-label': t('org.group_aria', { name: g.name }), onclick: () => groupDialog(g) }, g.name),
-      h('span', { class: 'muted' }, ' · ' + (members.length ? members.join(', ') : t('org.group_empty'))),
-      h('div', { class: 'small muted' }, proposed.length ? t('org.group_proposed', { tasks: proposed.join(', ') }) : t('org.group_by_hand')));
-  };
   const root = h('div', { class: 'org-page' },
     h('h1', {}, org.name),
     h('h2', {}, t('org.plans')),
@@ -281,11 +231,7 @@ async function pageOrg(r, org, people) {
       plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
         : h('p', { class: 'muted' }, t('org.no_plans')),
       addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
-    h('h2', {}, t('org.groups')),
-    h('p', { class: 'muted small' }, t('org.groups_hint')),
-    h('div', { class: 'box' }, groups.length ? groups.map(groupLine) : h('p', { class: 'muted' }, t('org.no_groups')), addRow(t('org.new_group'), (name) => api('POST', base + '/groups', { name }))),
     h('p', { class: 'small muted org-foot' }, h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage'))));
-  root.shown = () => reopened({ group: (id) => { const g = groups.find((x) => x.id === id); if (g) groupDialog(g); } });
   return root;
 }
 
@@ -363,8 +309,8 @@ async function pagePlan(r, org, people) {
   const epath = pbase + '/events';
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null });
-  const [plan, events, tasks, combos, groups, fields, answers, places, cells, pools, weights, health, runs, sections] = await Promise.all([
-    api('GET', pbase), api('GET', epath), api('GET', base + '/tasks'), api('GET', base + '/combinations'), api('GET', base + '/groups'),
+  const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections] = await Promise.all([
+    api('GET', pbase), api('GET', epath), api('GET', base + '/tasks'), api('GET', base + '/combinations'),
     api('GET', pbase + '/fields'), api('GET', pbase + '/answers'), api('GET', pbase + '/places'), api('GET', pbase + '/cells'),
     api('GET', pbase + '/pools'), api('GET', pbase + '/weights'), api('GET', '/health'), api('GET', pbase + '/runs'), api('GET', base + '/sections')]);
 
@@ -398,13 +344,12 @@ async function pagePlan(r, org, people) {
   const slotsAt = (ev, tk) => {
     const k = at(ev, tk);
     const n = placesAt[k] || 0;
-    const items = (cellsAt[k] || []).map((c) => ({ cell: c, kind: c.person_id ? 'person' : c.group_id ? 'group' : 'text', id: c.person_id || c.group_id || 0,
-      name: c.person_id ? nameOf(people, c.person_id) : c.group_id ? nameOf(groups, c.group_id) : c.label, fills: c.fills || 1, hand: !c.locked, locked: c.locked }));
+    const items = (cellsAt[k] || []).map((c) => ({ cell: c, kind: c.person_id ? 'person' : 'text', id: c.person_id || 0,
+      name: c.person_id ? nameOf(people, c.person_id) : c.label, fills: c.fills || 1, hand: !c.locked, locked: c.locked }));
     const rc = planCell[k];
     if (rc) {
       const has = (kind, id) => items.some((x) => x.kind === kind && x.id === id);
       rc.people.filter((p) => !p.locked && !has('person', p.id)).forEach((p) => items.push({ kind: 'person', id: p.id, name: p.name, fills: 1, weak: p.weak }));
-      rc.groups.filter((g) => !g.locked && !has('group', g.id)).forEach((g) => items.push({ kind: 'group', id: g.id, name: g.name, fills: g.fills, weak: g.weak }));
     }
     const filled = items.reduce((s, x) => s + x.fills, 0);
     return { n, items, open: Math.max(0, n - filled), why: rc && rc.missing > 0 ? rc.explanation || '' : '' };
@@ -757,9 +702,9 @@ async function pagePlan(r, org, people) {
       h('td', { class: 'right' }, x.cell
         ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
         : h('button', { type: 'button', class: 'ghost sm', 'aria-label': t('place.lock_aria', { name: x.name }),
-          onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, [x.kind]: x.id, fills: x.kind === 'group' ? x.fills : 0, locked: true })) }, t('place.lock')))));
+          onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: x.id, locked: true })) }, t('place.lock')))));
     // By hand: tick any number of people (also more than the places: the place then shows as fuller than needed), or set a
-    // group or a text that fills places.
+    // text that fills places.
     const inCell = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
     const pick = people.filter((p) => !inCell.has(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', 'aria-label': t('place.person_aria', { name: p.name }) }) }));
     const peopleForm = pick.length ? h('form', { class: 'stack', onsubmit: async (e) => {
@@ -769,30 +714,24 @@ async function pagePlan(r, org, people) {
       if (await write(async () => { for (const { p } of ticked) await api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id }); })) changed();
     } }, h('div', { class: 'chips' }, pick.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
       h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, t('place.add_people')), h('span', { class: 'muted small' }, t('place.add_people_hint')))) : '';
-    const kind = h('select', { 'aria-label': t('place.kind') }, [['group', t('common.group')], ['text', t('common.text')]].filter(([v]) => v !== 'group' || groups.length).map(([v, text]) => h('option', { value: v }, text)));
-    const groupSel = h('select', { 'aria-label': t('common.group'), hidden: kind.value !== 'group' }, groups.map((g) => h('option', { value: String(g.id) }, g.name)));
-    const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text'), hidden: kind.value !== 'text' });
+    const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text') });
     const fills = h('input', { type: 'number', min: '1', max: '50', value: '1', 'aria-label': t('place.fills') });
-    kind.addEventListener('change', () => { groupSel.hidden = kind.value !== 'group'; textIn.hidden = kind.value !== 'text'; });
     const setForm = h('form', { class: 'row-inline', onsubmit: async (e) => {
       e.preventDefault();
-      const body = { event: ev.id, task: tk.id, fills: parseInt(fills.value, 10) || 1 };
-      if (kind.value === 'group') body.group = parseInt(groupSel.value, 10);
-      else body.label = textIn.value;
+      const body = { event: ev.id, task: tk.id, label: textIn.value, fills: parseInt(fills.value, 10) || 1 };
       if (await write(() => api('POST', pbase + '/cells', body))) changed();
-    } }, kind, groupSel, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
+    } }, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
 
     let poolPart = h('p', { class: 'muted small' }, t('place.not_planned'));
     if (tk.planned) {
-      const pool = poolAt[k] || { people: [], groups: [] };
+      const pool = poolAt[k] || { people: [] };
       const takes = (p) => (chosen[p.id] || []).some((x) => x.task_id === tk.id && x.level !== 'never');
       const pBoxes = people.filter((p) => takes(p) || pool.people.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: pool.people.includes(p.id), 'aria-label': t('place.pool_person_aria', { name: p.name }) }) }));
-      const gBoxes = groups.filter((g) => g.tasks.some((x) => x.task_id === tk.id) || pool.groups.includes(g.id)).map((g) => ({ g, box: h('input', { type: 'checkbox', checked: pool.groups.includes(g.id), 'aria-label': t('place.pool_group_aria', { name: g.name }) }) }));
       poolPart = [h('h3', {}, t('place.pool')),
-        h('p', { class: 'muted small' }, pool.people.length + pool.groups.length ? t('place.pool_set') : t('place.pool_anyone', { task: tk.name })),
-        pBoxes.length + gBoxes.length ? [h('div', { class: 'chips' }, pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name)), gBoxes.map(({ g, box }) => h('label', { class: 'chip' }, box, ' ' + t('place.group_suffix', { name: g.name })))),
+        h('p', { class: 'muted small' }, pool.people.length ? t('place.pool_set') : t('place.pool_anyone', { task: tk.name })),
+        pBoxes.length ? [h('div', { class: 'chips' }, pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
           h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost sm', onclick: act(() => api('PUT', pbase + '/pools', {
-            event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id), groups: gBoxes.filter((x) => x.box.checked).map((x) => x.g.id) })) }, t('place.pool_save')))]
+            event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, t('place.pool_save')))]
           : h('p', { class: 'muted small' }, t('place.pool_nobody', { task: tk.name }))];
     }
     const hands = s.items.filter((x) => x.hand);
@@ -1018,14 +957,13 @@ async function pagePlan(r, org, people) {
         addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])));
 
   // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
-  // (as the draft rows show them: set by hand, locked or from the planner; through a group too).
+  // (as the draft rows show them: set by hand, locked or from the planner).
   const firstName = (p) => p.name.split(/\s+/)[0];
   const shortName = (p) => (people.some((o) => o.id !== p.id && firstName(o) === firstName(p)) ? firstName(p) + ' ' + p.name.split(/\s+/).pop()[0] + '.' : firstName(p));
   const turned = () => {
     const got = {};  // 'event/person' -> the names of the tasks they have in the draft
     for (const ev of events) for (const tk of tasks) for (const x of slotsAt(ev, tk).items) {
-      const ids = x.kind === 'person' ? [x.id] : x.kind === 'group' ? (groups.find((g) => g.id === x.id) || { members: [] }).members : [];
-      ids.forEach((id) => (got[ev.id + '/' + id] ||= []).push(tk.name));
+      if (x.kind === 'person') (got[ev.id + '/' + x.id] ||= []).push(tk.name);
     }
     const cols = people;
     return h('section', { class: 'turned-wrap' },
@@ -1070,7 +1008,7 @@ async function render() {
       store.set('org', r.org);
     }
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });
-    const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org, people) : pagePlan(r, org, people)]);
+    const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org) : pagePlan(r, org, people)]);
     if (seq !== renderSeq || !body) return;
     const y = location.pathname === lastPath ? window.scrollY : 0;  // the same page again (after a change): stay where we are
     main.replaceChildren(body);

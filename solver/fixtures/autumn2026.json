@@ -183,7 +183,8 @@
  ],
  "person_tasks": {
   "Alma": {
-   "sound": "poor"
+   "sound": "poor",
+   "singing": "neutral"
   },
   "Bjarne": {
    "sound": "neutral",
@@ -197,7 +198,8 @@
   "Dagfinn": {
    "sound": "neutral",
    "video": "neutral",
-   "prayer": "poor"
+   "prayer": "poor",
+   "singing": "neutral"
   },
   "Elin": {
    "sound": "good",
@@ -219,7 +221,8 @@
   },
   "Ingrid": {
    "chair": "neutral",
-   "speaker": "neutral"
+   "speaker": "neutral",
+   "singing": "neutral"
   },
   "Joakim": {
    "video": "good",
@@ -227,16 +230,19 @@
   },
   "Kjersti": {
    "host": "good",
-   "cafe": "neutral"
+   "cafe": "neutral",
+   "singing": "neutral"
   },
   "Lasse": {
    "chair": "good",
-   "speaker": "neutral"
+   "speaker": "neutral",
+   "singing": "neutral"
   },
   "Mona": {
    "speaker": "poor",
    "cafe": "neutral",
-   "prayer": "neutral"
+   "prayer": "neutral",
+   "singing": "neutral"
   },
   "Njål": {
    "chair": "good",
@@ -467,75 +473,6 @@
    "level": "cannot"
   }
  ],
- "groups": [
-  {
-   "id": "choir",
-   "members": [
-    "Alma",
-    "Dagfinn",
-    "Ingrid",
-    "Kjersti",
-    "Lasse",
-    "Mona"
-   ]
-  },
-  {
-   "id": "cafe_team_a",
-   "members": [
-    "Cecilie",
-    "Elin",
-    "Kjersti"
-   ]
-  },
-  {
-   "id": "cafe_team_b",
-   "members": [
-    "Mona",
-    "Oda",
-    "Randi"
-   ]
-  },
-  {
-   "id": "prayer_pair_1",
-   "members": [
-    "Dagfinn",
-    "Gro"
-   ]
-  },
-  {
-   "id": "prayer_pair_2",
-   "members": [
-    "Njål",
-    "Pål"
-   ]
-  }
- ],
- "group_tasks": [
-  {
-   "group": "cafe_team_a",
-   "task": "cafe",
-   "fills": 3,
-   "level": "neutral"
-  },
-  {
-   "group": "cafe_team_b",
-   "task": "cafe",
-   "fills": 3,
-   "level": "neutral"
-  },
-  {
-   "group": "prayer_pair_1",
-   "task": "prayer",
-   "fills": 2,
-   "level": "good"
-  },
-  {
-   "group": "prayer_pair_2",
-   "task": "prayer",
-   "fills": 2,
-   "level": "neutral"
-  }
- ],
  "pools": [
   {
    "date": "2026-08-30",
@@ -558,12 +495,62 @@
   {
    "date": "2026-08-30",
    "task": "singing",
-   "group": "choir"
+   "person": "Alma"
+  },
+  {
+   "date": "2026-08-30",
+   "task": "singing",
+   "person": "Dagfinn"
+  },
+  {
+   "date": "2026-08-30",
+   "task": "singing",
+   "person": "Ingrid"
+  },
+  {
+   "date": "2026-08-30",
+   "task": "singing",
+   "person": "Kjersti"
+  },
+  {
+   "date": "2026-08-30",
+   "task": "singing",
+   "person": "Lasse"
+  },
+  {
+   "date": "2026-08-30",
+   "task": "singing",
+   "person": "Mona"
   },
   {
    "date": "2026-10-25",
    "task": "singing",
-   "group": "choir"
+   "person": "Alma"
+  },
+  {
+   "date": "2026-10-25",
+   "task": "singing",
+   "person": "Dagfinn"
+  },
+  {
+   "date": "2026-10-25",
+   "task": "singing",
+   "person": "Ingrid"
+  },
+  {
+   "date": "2026-10-25",
+   "task": "singing",
+   "person": "Kjersti"
+  },
+  {
+   "date": "2026-10-25",
+   "task": "singing",
+   "person": "Lasse"
+  },
+  {
+   "date": "2026-10-25",
+   "task": "singing",
+   "person": "Mona"
   },
   {
    "date": "2026-08-23",
@@ -578,84 +565,84 @@
  ],
  "history": {
   "Alma": {
-   "sound": 1
+   "sound": 3
   },
   "Bjarne": {
-   "sound": 1,
-   "host": 3
+   "sound": 2,
+   "host": 1
   },
   "Cecilie": {
    "host": 1,
    "cafe": 3,
-   "prayer": 0
+   "prayer": 1
   },
   "Dagfinn": {
-   "sound": 2,
-   "video": 3,
-   "prayer": 0
+   "sound": 3,
+   "video": 0,
+   "prayer": 2
   },
   "Elin": {
-   "sound": 1,
+   "sound": 3,
    "host": 0,
-   "cafe": 2
+   "cafe": 1
   },
   "Frida": {
-   "sound": 2,
+   "sound": 0,
    "host": 2
   },
   "Gro": {
-   "video": 1,
-   "host": 0,
-   "prayer": 0
+   "video": 2,
+   "host": 2,
+   "prayer": 1
   },
   "Henrik": {
-   "video": 1,
-   "host": 2
+   "video": 0,
+   "host": 0
   },
   "Ingrid": {
-   "chair": 0,
-   "speaker": 3
+   "chair": 1,
+   "speaker": 2
   },
   "Joakim": {
-   "video": 3,
-   "host": 1
+   "video": 0,
+   "host": 3
   },
   "Kjersti": {
-   "host": 0,
-   "cafe": 0
+   "host": 3,
+   "cafe": 1
   },
   "Lasse": {
-   "chair": 1,
-   "speaker": 3
+   "chair": 0,
+   "speaker": 0
   },
   "Mona": {
-   "speaker": 2,
-   "cafe": 2,
+   "speaker": 1,
+   "cafe": 3,
    "prayer": 2
   },
   "Njål": {
-   "chair": 0,
-   "prayer": 1
+   "chair": 2,
+   "prayer": 2
   },
   "Oda": {
-   "chair": 1,
-   "cafe": 2,
-   "prayer": 2
+   "chair": 0,
+   "cafe": 1,
+   "prayer": 1
   },
   "Pål": {
    "chair": 2,
    "speaker": 2,
-   "prayer": 1
+   "prayer": 2
   },
   "Randi": {
-   "speaker": 3,
+   "speaker": 2,
    "host": 1,
-   "cafe": 0
+   "cafe": 3
   },
   "Sindre": {
-   "speaker": 3,
-   "cafe": 3,
-   "prayer": 2
+   "speaker": 1,
+   "cafe": 0,
+   "prayer": 3
   }
  },
  "params": {

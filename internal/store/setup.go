@@ -24,7 +24,7 @@ func isForeignKey(err error) bool {
 // with it (a reference into another organisation is "not found"); the composite foreign keys are the backstop.
 func inOrg(ctx context.Context, q dbq, table string, oid, id int64) error {
 	switch table {
-	case "task", "person", "grp":
+	case "task", "person":
 	default:
 		panic("inOrg: unknown table " + table)
 	}
@@ -154,7 +154,7 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 	return t, err
 }
 
-// DeleteTask refuses (ErrConflict) while a group, a manual cell or a selection uses the task. Its places on events, the
+// DeleteTask refuses (ErrConflict) while a manual cell or a selection uses the task. Its places on events, the
 // people's answers about it and its combination settings go with it.
 func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
@@ -171,7 +171,7 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
-			return inUse("task", name, "a group, a manual cell or a selection")
+			return inUse("task", name, "a manual cell or a selection")
 		} else if err != nil {
 			return err
 		}

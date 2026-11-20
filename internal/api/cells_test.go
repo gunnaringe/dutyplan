@@ -13,10 +13,9 @@ type cellsWorld struct {
 	otherPlanEvent store.Event   // in another plan of the same organisation
 	sound, sang    store.Task    // sang is not distributed by the planner
 	anna           store.Person
-	choir          store.Group
 }
 
-// cellsWorld: an organisation (see plannable) with a second event, a task the planner does not distribute, a group,
+// cellsWorld: an organisation (see plannable) with a second event, a task the planner does not distribute,
 // and a second plan with an event of its own. Both organisations get a plan with the same slug.
 func (e *env) cellsWorld(name string) cellsWorld {
 	e.t.Helper()
@@ -50,8 +49,6 @@ func (e *env) cellsWorld(name string) cellsWorld {
 	people, err := e.st.ListPeople(ctx, org)
 	must(err)
 	w.anna = people[0]
-	w.choir, err = e.st.CreateGroup(ctx, org, "Choir")
-	must(err)
 	return w
 }
 
@@ -62,14 +59,11 @@ func TestManualCellsAndSelectionsOverHTTP(t *testing.T) {
 	ev0, ev1 := a.events[0].ID, a.events[1].ID
 
 	var made store.ManualCell
-	e.mustDo(201, "POST", base+"/cells", map[string]any{"event": ev0, "task": a.sang.ID, "group": a.choir.ID, "fills": 2}).json(&made)
-	if made.EventID != ev0 || made.Fills != 2 || made.GroupID == nil || *made.GroupID != a.choir.ID {
-		t.Fatalf("a group in a cell: %+v", made)
+	e.mustDo(201, "POST", base+"/cells", map[string]any{"event": ev0, "task": a.sang.ID, "label": "Choir", "fills": 2}).json(&made)
+	if made.EventID != ev0 || made.Fills != 2 || made.Label != "Choir" {
+		t.Fatalf("a text in a cell: %+v", made)
 	}
 	// what a manual cell names cannot be deleted from under it
-	if r := e.do("DELETE", "/api/orgs/"+a.org+"/groups/"+itoa(a.choir.ID), nil); r.code != 409 {
-		t.Errorf("deleting a group a manual cell names: %d %s", r.code, r.body)
-	}
 	if r := e.do("DELETE", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sang.ID), nil); r.code != 409 {
 		t.Errorf("deleting a task a manual cell names: %d %s", r.code, r.body)
 	}
@@ -92,13 +86,13 @@ func TestManualCellsAndSelectionsOverHTTP(t *testing.T) {
 		t.Errorf("after delete: %d", len(list))
 	}
 
-	e.mustDo(204, "PUT", base+"/pools", map[string]any{"event": ev1, "task": a.sound.ID, "people": []int64{a.anna.ID}, "groups": []int64{a.choir.ID}})
+	e.mustDo(204, "PUT", base+"/pools", map[string]any{"event": ev1, "task": a.sound.ID, "people": []int64{a.anna.ID}})
 	var pools []store.Pool
 	e.mustDo(200, "GET", base+"/pools", nil).json(&pools)
-	if len(pools) != 1 || pools[0].EventID != ev1 || len(pools[0].People) != 1 || len(pools[0].Groups) != 1 {
+	if len(pools) != 1 || pools[0].EventID != ev1 || len(pools[0].People) != 1 {
 		t.Fatalf("pools: %+v", pools)
 	}
-	e.mustDo(204, "PUT", base+"/pools", map[string]any{"event": ev1, "task": a.sound.ID, "people": []int64{}, "groups": []int64{}})
+	e.mustDo(204, "PUT", base+"/pools", map[string]any{"event": ev1, "task": a.sound.ID, "people": []int64{}})
 	e.mustDo(200, "GET", base+"/pools", nil).json(&pools)
 	if len(pools) != 0 {
 		t.Errorf("an empty selection removes it: %+v", pools)
@@ -121,7 +115,7 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		what         string
 	}{
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID}, "names nothing"},
-		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "group": a.choir.ID}, "names two things"},
+		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "label": "Guest"}, "names two things"},
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID, "fills": 2}, "a person fills one"},
 		{400, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "label": "Guest", "locked": true}, "a text cannot be locked"},
 		{404, "POST", base + "/cells", map[string]any{"task": a.sound.ID, "person": a.anna.ID}, "no event"},
@@ -131,7 +125,6 @@ func TestCellAndSelectionRefusals(t *testing.T) {
 		{404, "POST", base + "/cells", map[string]any{"event": b.events[0].ID, "task": a.sound.ID, "person": a.anna.ID}, "another organisation's event"},
 		{404, "POST", base + "/cells", map[string]any{"event": ev, "task": b.sound.ID, "person": a.anna.ID}, "another organisation's task"},
 		{404, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": b.anna.ID}, "another organisation's person"},
-		{404, "POST", base + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "group": b.choir.ID}, "another organisation's group"},
 		{404, "POST", "/api/orgs/nope/plans/" + a.plan + "/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID}, "unknown organisation"},
 		{404, "POST", "/api/orgs/" + a.org + "/plans/nope/cells", map[string]any{"event": ev, "task": a.sound.ID, "person": a.anna.ID}, "unknown plan"},
 		{400, "PUT", base + "/pools", map[string]any{"event": ev, "task": a.sang.ID, "people": []int64{a.anna.ID}}, "a selection for a task the planner does not distribute"},

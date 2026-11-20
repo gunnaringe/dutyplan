@@ -185,3 +185,25 @@ func TestTheRealSolverFillsAnEventsOwnPlaces(t *testing.T) {
 		}
 	}
 }
+
+func TestASelectionIsSentAsAListEvenWhenItIsEmpty(t *testing.T) {
+	w := newWorld(t, "Club")
+	d := w.data(t)
+	// The page cannot make an empty selection, but the planner iterates over the list: null would not be one.
+	d.Pools = []store.Pool{{EventID: w.events[0].ID, TaskID: w.sound.ID}}
+	raw, _, _, err := BuildInput(d, Params{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in struct {
+		Pools []struct {
+			People json.RawMessage `json:"people"`
+		} `json:"pools"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		t.Fatal(err)
+	}
+	if len(in.Pools) != 1 || string(in.Pools[0].People) != "[]" {
+		t.Errorf("the selection is sent as %s, want an empty list", raw)
+	}
+}

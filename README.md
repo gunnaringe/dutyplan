@@ -10,7 +10,7 @@ and tells you why a place stays empty.
 
 ![The plan page: one table with the events across, what each needs, everyone's answers, and who does what](docs/img/hero.png)
 
-*Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, groups, events and the details shown for them are
+*Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, events and the details shown for them are
 all things you create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
 
 ## The problem
@@ -39,7 +39,7 @@ every plan).
 ![Event details and the places each event needs](docs/img/03-details-places.png)
 
 **The draft allocation.** Between the tasks and the answers is the draft: who has each place. What you set yourself has a
-violet background: a person, a group, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
+violet background: a person, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
 planner can be **locked** with one click, and *Try again* keeps it. A place given against a *?* is marked *maybe*, and a place
 that cannot be filled says *Not filled · Why?*. The planner is checked afterwards by a second, independent program, and the
 page says if a rule was broken (it should never be).
@@ -90,11 +90,9 @@ with the weighting and the plan's name.
 
 ![Plan settings: the name, the weighting and the earlier drafts](docs/img/11-settings.png)
 
-**Groups.** A *group* is a named set of people who work as one: a team, a couple. It can be set by hand in a place, or proposed
-by the planner for the tasks you choose; the members are busy together, and each counts as having worked.
+**The organisation.** An organisation's page lists its plans, and is where it is renamed or deleted.
 
-![An organisation: its plans and its groups](docs/img/01-organisation.png)
-![A group: its members, and the tasks the planner may propose it for](docs/img/02-group.png)
+![An organisation and its plans](docs/img/01-organisation.png)
 
 **English and Norwegian, on a phone.** The page follows the browser's language and has a switch in the header; the
 explanations the planner writes follow it too. On a phone the availability is turned: events go down and people across, so a
@@ -109,7 +107,7 @@ server starts when you make a draft. **No login**: read the warning below before
 
 ## How it works
 
-1. An **organisation** holds everything that is shared: people, tasks, groups and which tasks can be combined.
+1. An **organisation** holds everything that is shared: people, sections, tasks and which tasks can be combined.
 2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**, shown as one table.
 3. Everyone answers in the plan's table (there are no user accounts: a person is a row, and anyone with the address can fill it in).
 4. **Make a draft** runs the planner. Set places by hand, lock names, choose whom the planner picks from, change the weighting,

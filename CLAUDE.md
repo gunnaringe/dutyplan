@@ -5,10 +5,10 @@ Private GitHub repo: `gunnaringe/dutyplan` (the folder and the Go module `github
 program *Tjenesteplan*, and the binary, the Python package and `DUTYPLAN_SOLVER` keep the `dutyplan` name). Keep it private, and check that nothing personal has been added before you push (see
 «Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, the no-login warning); keep it true when behaviour changes.
 
-Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, tasks, combinations, groups, events with
+Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, tasks, combinations, sections, events with
 their own places, details rows, answers, drafts (runs) with set-by-hand places, locks and selections, a pinned current plan, rename and delete, a page in English and
 Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan** (details, tasks with places, the draft allocation, availability), dialogs for the rest,
-and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
+and an organisation page with the plans (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places or description when an event is created (adding repeatedly with `until` and `every`, copying and the availability map stay: the page uses them).
 A first test runs on kate since 2026-11-20 (asked by the user): the image from `Dockerfile` (`mise run app:image`), behind Pocket ID at
@@ -54,7 +54,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
-  and group busyness apply to the event. The planner's «dates» are events (the id is arbitrary text).
+  apply to the event. The planner's «dates» are events (the id is arbitrary text).
 - **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; the page opens with it (else the newest run).
   Pinned runs are never pruned. There is still no approval flow or publishing.
 - **One table per plan, one view** (2026-11-19, from the sketches): events across (date, time, ⧉ copy; **+** adds one), then four sections:
@@ -75,16 +75,14 @@ starts the Python planner, turns the answer into a view with explanations), `int
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank.
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
-- **A general tool.** Tasks, people, groups, events and details rows are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
-- **No special rules for single things.** A **group** is a named set of people. It can be in a manual cell or proposed by the planner
-  (`group_tasks`); the members are then busy, and the shared combination setting (task × task) decides what else they can have the same day.
-  A **selection** (only these people/groups can be picked) covers «their own sound engineer» and the like. No skills or conditional requirements.
-- **Can be proposed** is a setting per person and per group (default yes). No = the planner never picks them; manual cells are fine.
+- **A general tool.** Tasks, people, events and details rows are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
+- **No groups** (removed 2026-11-20 at the user's request; building them back is issue #9). A place set by hand is a person or a text.
+- **No special rules for single things.** A **selection** (only these people can be picked) covers «their own sound engineer» and the like. No skills or conditional requirements.
+- **Can be proposed** is a setting per person (default yes). No = the planner never picks them; manual cells are fine.
 - **One click per setting** (2026-11-20, the user's choice): a person's task cycles *not → bad → good* (`poor`/`good`, not = no row, the start), two tasks
   on the same event *can't → bad → good* (`cannot`/`practical`, bad = no row = impractical). *Neutral* tasks, *preferred* pairs and the plan setting
   `default_combination` are gone. There is **no «active»** any more (removed 2026-11-20): «Can be proposed» is the only switch per person; people who
   are not taking part are placed in a section.
-- **Group work = one assignment per member** in the distribution (overall and per task).
 - **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
 - **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
 - **No login in the first version.** No links with a secret, no roles, and no change log (removed 2026-11-19).
@@ -98,7 +96,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 
 - The repo, its docs, code, comments and tests are in **English**. The page is in English and Norwegian (bokmål); the browser's language is the default and the header has a switch.
 - **On the wire everything is English and ASCII**: an answer per event `never|poor|good` (blank = not answered), a person's task `poor|good` (no row = not),
-  a combination `cannot|practical` (no row = `impractical`, «bad»), a group's task `poor|neutral|good`; error kinds and codes. Texts for people are made at the edge.
+  a combination `cannot|practical` (no row = `impractical`, «bad»); error kinds and codes. Texts for people are made at the edge.
 - **The page** (`web/i18n.js`): `MESSAGES = {en: {...}, nb: {...}}`, one `'key': 'text',` per line, `{placeholders}`, `.one`/`.other` for anything that counts (`tn`). Use `’` (not `'`) inside texts.
   `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key `app.js` names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
 - **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
@@ -112,6 +110,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - Every rule must have a test that fails when the rule is broken in the model: `solver/scripts/mutations.py` (`PY_MUTATIONS`, `GO_MUTATIONS`) checks it. An outdated pattern (`OUTDATED`) is fixed, never deleted, and the number of mutations must not drop.
   **The one exception** (the user's choice, 2026-11-20): a mutation may be deleted only when **the user asked for the feature it guards to be removed**, and the
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
+  Used once so far: the group mutations, when groups were removed (2026-11-20, issue #9).
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
   created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
