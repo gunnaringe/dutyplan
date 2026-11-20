@@ -1,5 +1,6 @@
 # All tools and commands go through mise. Do not run python/uv/pytest/go directly.
-#   mise install      the tools (python, uv, go) in exact versions (below)
+#   mise install      the tools (python, uv, go, node, prek) in exact versions (below)
+#   prek install      the checks of prek.toml on every commit (once per clone)
 #   mise run up       setup + build + start the app (a new database gets the demo organisation)
 #   mise run setup    the Python packages (ortools, pytest) from solver/uv.lock; go fetches the Go packages itself
 #   mise tasks        all tasks
@@ -9,6 +10,8 @@ min_version = "2026.10.0"
 python = "3.12.15"
 uv = "0.13.5"
 go = "1.26.10"
+node = "24.22.3"  # the browser check and the README pictures (scripts/*.js)
+prek = "0.5.11"  # git hooks and the same checks in CI (prek.toml)
 
 [env]
 # uv must use mise's Python and the lock file, never download a Python of its own or change the lock on its own.
@@ -36,6 +39,11 @@ description = "The quickest loop: the Go tests and the Python rule tests (about 
 depends = ["test:app", "test:solver:fast"]
 quiet = true
 run = "echo 'test:fast: ok'"
+
+[tasks.lint]
+description = "The prek checks on the whole tree (YAML, JSON, TOML, gofmt, JS syntax, no keys or big files), quiet unless one fails"
+quiet = true
+run = "prek run --all-files --quiet"
 
 [tasks."test:app"]
 description = "go vet + go test for the app, quiet (about 3 s). Args: -- -run Name"
@@ -112,10 +120,10 @@ dir = "{{config_root}}/solver"
 run = "uv run python scripts/mutations.py"
 
 [tasks.verify]
-description = "Tests (Go + Python) + mutations + smoke test of the app: everything that must be green before a commit"
+description = "Lint + tests (Go + Python) + mutations + smoke test of the app: everything that must be green before a commit"
 # The mutations come after the rest, never beside it: the Python ones edit solver/dutyplan_solver/ in place while they run, so a test
 # or smoke run against the real planner at the same time would run a broken planner (seen 2026-11-13 as a KeyError from the solver).
-depends = ["test", "app:smoke"]
+depends = ["lint", "test", "app:smoke"]
 quiet = true
 run = ["mise run mutations", "echo 'verify: ok'"]
 

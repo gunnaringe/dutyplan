@@ -1,0 +1,51 @@
+# The checks of `mise run verify` (prek, tests, smoke test, mutations) plus the browser check, on every pull request and on main.
+# The tools come from mise.toml (jdx/mise-action), the Python packages from solver/uv.lock.
+# The mutations get a job of their own: the Python ones edit the planner in place while they run, so nothing else may use it then.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: prek checks (YAML, JSON, TOML, gofmt, JS syntax, keys, big files)
+        run: mise run lint
+      - name: Python packages
+        run: mise run setup
+      - name: Tests (Go and Python)
+        run: mise run test
+      - name: Smoke test of the app
+        run: mise run app:smoke
+      - name: Browser check (English and Norwegian)
+        env:
+          PLAYWRIGHT_CORE: ${{ runner.temp }}/pw/node_modules/playwright-core
+          CHROME: /usr/bin/google-chrome
+        run: |
+          mise exec -- npm install --silent --no-save --prefix "$RUNNER_TEMP/pw" playwright-core@1.64.0
+          mise run app:ui
+
+  mutations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: Python packages
+        run: mise run setup
+      - name: Every rule broken in turn must make a test fail
+        run: mise run mutations

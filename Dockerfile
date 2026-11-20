@@ -1,17 +1,20 @@
-# Build: mise run image   (or: podman build -t dutyplan .)
+# Build: mise run app:image   (or: podman build -t dutyplan .)
 # Run:   podman run --rm -p 8080:8080 -v dutyplan-data:/data dutyplan
+# CI publishes it for amd64 and arm64 as ghcr.io/gunnaringe/dutyplan (.github/workflows/image.yml).
 #
 # One image with the server and the planner. The database is /data/dutyplan.db; /data must be writable by uid 10001
 # (SQLite keeps its -wal and -shm files next to the database). There is no login: read «No login» in README.md first.
 
-FROM docker.io/library/golang:1.26.10-trixie AS app
+# The Go build runs on the build machine and cross-compiles (no emulation for arm64).
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.26.10-trixie AS app
+ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY web ./web
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dutyplan ./cmd/dutyplan
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/dutyplan ./cmd/dutyplan
 
 # The planner in a virtual environment at /opt/solver, from uv.lock. Not editable, so the venv holds the package itself.
 # The same Python image as the final stage: the venv points at its /usr/local/bin/python3.12.

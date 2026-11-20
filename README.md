@@ -4,6 +4,8 @@
 coffee? People say what they can take part in and when they cannot; a planner proposes who does what as evenly as it can,
 and tells you why a place stays empty.
 
+[![CI](https://github.com/gunnaringe/dutyplan/actions/workflows/ci.yml/badge.svg)](https://github.com/gunnaringe/dutyplan/actions/workflows/ci.yml)
+[![Image](https://github.com/gunnaringe/dutyplan/actions/workflows/image.yml/badge.svg)](https://github.com/gunnaringe/dutyplan/pkgs/container/dutyplan)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 ![Go, SQLite and plain JavaScript](https://img.shields.io/badge/go-SQLite%20%2B%20vanilla%20JS-00ADD8)
 ![English and Norwegian bokmål](https://img.shields.io/badge/UI-English%20%C2%B7%20bokm%C3%A5l-lightgrey)
@@ -132,6 +134,7 @@ Content-Security-Policy, but that only keeps other pages and search engines out;
 | What | For | Version |
 | --- | --- | --- |
 | Go | building the server | 1.26 |
+| Node | only the browser check and the pictures in `docs/img` | 24 |
 | Python with [OR-Tools](https://developers.google.com/optimization) | the planner (optional: without it everything works except **Make a draft**) | 3.12 (newer ones that OR-Tools has wheels for also work) |
 | [mise](https://mise.jdx.dev) | the easy way to get both, pinned (see `mise.toml`) | recent |
 
@@ -142,7 +145,7 @@ The database is SQLite through a pure-Go driver, so there is nothing to install 
 With mise:
 
 ```sh
-mise install            # Go, Python and uv, in the versions pinned in mise.toml (once)
+mise install            # Go, Python, uv, Node and prek, in the versions pinned in mise.toml (once)
 mise run up             # installs the Python packages, builds, starts on http://127.0.0.1:8080 and prints the address
 ```
 
@@ -168,15 +171,16 @@ planner-venv/bin/pip install ./solver     # the planner and OR-Tools
 DUTYPLAN_SOLVER="$PWD/planner-venv/bin/python -m dutyplan_solver" ./dutyplan --db /var/lib/dutyplan/dutyplan.db
 ```
 
-As a container (the server and the planner in one image, built from `Dockerfile`; `mise run app:image` tags it with the commit):
+As a container: the server and the planner in one image, for amd64 and arm64. Every push to `main` publishes it as
+`ghcr.io/gunnaringe/dutyplan:main` (and as `main-<UTC time>-<commit>` and `sha-<commit>`, which never move):
 
 ```sh
-podman build -t dutyplan .
-podman run --rm -p 127.0.0.1:8080:8080 -v dutyplan-data:/data dutyplan
+podman run --rm -p 127.0.0.1:8080:8080 -v dutyplan-data:/data ghcr.io/gunnaringe/dutyplan:main
 ```
 
 The database is `/data/dutyplan.db`, and the image runs as uid 10001, so a directory mounted at `/data` must be writable by it.
-There is no published image.
+To build it yourself from `Dockerfile`: `podman build -t dutyplan .`, or `mise run app:image`, which tags it with the commit.
+`main` is not a release: the schema can still change in ways an older database does not survive (see *Data and backups*).
 
 ## Options
 
@@ -212,22 +216,31 @@ the drafts. Deleting an organisation removes everything in it; the deletion is w
 
 ## Development
 
-Everything goes through mise; `mise tasks` lists the tasks.
+Everything goes through mise; `mise tasks` lists the tasks. `prek install` (once per clone) runs the checks of `prek.toml`
+on every commit.
 
 | Task | |
 | --- | --- |
+| `mise run lint` | the prek checks on the whole tree: YAML, JSON, TOML, gofmt, JavaScript syntax, no private keys or big files |
 | `mise run test` | all tests, Go and Python, quiet (about 15 s) |
 | `mise run test:fast` | the quickest loop: Go and the planner's rule tests |
 | `mise run mutations` | breaks every rule in turn and checks that a test fails (about 7 min) |
 | `mise run app:smoke` | starts the server on a temporary database and checks the tenant isolation with curl |
-| `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium; see the script) |
+| `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium: `PLAYWRIGHT_CORE` and `CHROME`, see the script) |
 | `mise run app:shots` | makes the pictures in `docs/img` from the real app on invented data (about 30 s); run it again when the page changes visibly |
-| `mise run verify` | tests, mutations and the smoke test: everything that must be green before a commit |
+| `mise run verify` | lint, tests, mutations and the smoke test: everything that must be green before a commit |
+| `mise run app:image` | builds the container image as `localhost/dutyplan:<commit>` |
+
+GitHub Actions runs the same checks on every pull request and on `main` (`.github/workflows/ci.yml`): the prek checks, the tests,
+the smoke test, the browser check and the mutations. `.github/workflows/image.yml` builds the image for every pull request and publishes it from
+`main` and from `v*` tags. Dependabot proposes updates to the Go and Python packages, the actions and the base images weekly.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the planner's
 input from the database, runs it, turns the answer into a view), `internal/api` (JSON API), `internal/i18n` (server texts),
 `web/` (the page: plain JavaScript, no build step), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
 rules and conventions for anyone (or any assistant) working on the code; `PLAN.md` has the design notes.
+
+Security problems: see [SECURITY.md](SECURITY.md).
 
 ## License
 
