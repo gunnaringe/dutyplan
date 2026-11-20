@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -102,5 +103,20 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 	e.mustDo(200, "GET", events, nil).json(&list)
 	if len(list) != 7 {
 		t.Errorf("refused additions add nothing: %d events", len(list))
+	}
+
+	// every few weeks: adding and copying
+	var other []store.Event
+	e.mustDo(201, "POST", events, map[string]any{"date": "2026-10-04", "until": "2026-11-01", "every": 2}).json(&other)
+	if len(other) != 3 || other[0].Date != "2026-10-04" || other[1].Date != "2026-10-18" || other[2].Date != "2026-11-01" {
+		t.Errorf("every other week: %+v", other)
+	}
+	e.mustDo(201, "POST", events+"/"+strconv.FormatInt(other[0].ID, 10)+"/copy",
+		map[string]any{"dates": []string{"2026-11-08"}, "until": "2026-12-06", "every": 4, "times": true}).json(&other)
+	if len(other) != 2 || other[0].Date != "2026-11-08" || other[1].Date != "2026-12-06" {
+		t.Errorf("a copy every 4 weeks: %+v", other)
+	}
+	if got := e.refused(400, "POST", events, map[string]any{"date": "2026-10-04", "until": "2026-11-01", "every": 9}); got.Code != "every_invalid" {
+		t.Errorf("every 9 weeks: %+v", got)
 	}
 }

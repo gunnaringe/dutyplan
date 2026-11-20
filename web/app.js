@@ -77,12 +77,14 @@ const fmtTime = (iso) => new Date(iso).toLocaleString(locale(), { day: 'numeric'
 const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-// The dates «every week until»: from each start date, every 7 days up to and including until, without repeats.
-function weeklyDates(dates, until) {
+// The dates «every N weeks until» (the server makes the same, store.repeatEvery): from each start date, every 7·every
+// days up to and including until, without repeats. every 0 is no repeat.
+const MAX_EVERY = 8; // store.maxEveryWeeks
+function repeatDates(dates, until, every) {
   const out = new Set();
   for (const d of dates.filter(Boolean)) {
-    if (!until) { out.add(d); continue; }
-    for (let x = d; x <= until && out.size <= 400; x = addDays(x, 7)) out.add(x);
+    if (!until || !every) { out.add(d); continue; }
+    for (let x = d; x <= until && out.size <= 400; x = addDays(x, 7 * every)) out.add(x);
   }
   return [...out];
 }
@@ -486,19 +488,27 @@ async function pagePlan(r, org, people) {
         h('button', { type: 'submit' }, t('common.save')))));
   }
 
-  // «Every week until»: a box and a date, and how many events that gives.
-  function weekly(dates) {
-    const box = h('input', { type: 'checkbox', 'aria-label': t('copy.weekly') });
+  // «Repeat»: does not repeat, every week, every other week … every 8 weeks, until a date, and how many events that gives.
+  // onEvery is told when the choice changes (the dialogs move a date they suggested into the new rhythm).
+  function repeat(dates, onEvery) {
+    const everyText = (n) => (n === 1 ? t('copy.every_1') : n === 2 ? t('copy.every_2') : t('copy.every_n', { n }));
+    const sel = h('select', { 'aria-label': t('copy.repeat') }, h('option', { value: '0' }, t('copy.once')),
+      Array.from({ length: MAX_EVERY }, (_, i) => h('option', { value: String(i + 1) }, everyText(i + 1))));
     const until = h('input', { type: 'date', disabled: true, 'aria-label': t('copy.until') });
     const count = h('span', { class: 'small muted', 'aria-live': 'polite' });
+    const every = () => Number(sel.value);
     const update = () => {
-      until.disabled = !box.checked;
-      const n = weeklyDates(dates(), box.checked ? until.value : '').length;
+      until.disabled = !every();
+      until.required = !!every();
+      const n = repeatDates(dates(), until.value, every()).length;
       count.textContent = n ? '→ ' + tn('copy.count', n) : '';
     };
-    box.addEventListener('change', update);
+    sel.addEventListener('change', () => { if (onEvery) onEvery(every()); update(); });
     until.addEventListener('input', update);
-    return { el: h('div', { class: 'row-inline' }, h('label', { class: 'check' }, box, ' ' + t('copy.weekly')), until, count), until: () => (box.checked ? until.value : ''), update };
+    return {
+      el: h('div', { class: 'row-inline repeat' }, field(t('copy.repeat'), sel), field(t('copy.until'), until), count),
+      until: () => (every() ? until.value : ''), every, update,
+    };
   }
 
   // A copy of an event on one or more dates. What comes along is chosen; answers and the draft are never copied.
@@ -507,7 +517,9 @@ async function pagePlan(r, org, people) {
     const inputs = [];
     const list = h('div', { class: 'dates' });
     const dates = () => inputs.map((i) => i.value).filter(Boolean);
-    const week = weekly(dates);
+    // The first new date is a suggestion one step after the event, in the rhythm chosen, until it is changed by hand.
+    let suggested = true;
+    const week = repeat(dates, (n) => { if (suggested) inputs[0].value = addDays(ev.date, 7 * Math.max(n, 1)); });
     const addDate = (v) => {
       const i = h('input', { type: 'date', value: v || '', 'aria-label': t('copy.date') });
       i.addEventListener('input', week.update);
@@ -515,7 +527,7 @@ async function pagePlan(r, org, people) {
       list.append(i);
       return i;
     };
-    addDate(addDays(ev.date, 7));
+    addDate(addDays(ev.date, 7)).addEventListener('input', () => { suggested = false; });
     const check = (on, text, detail) => {
       const box = h('input', { type: 'checkbox', checked: on, 'aria-label': text });
       return { box, el: h('label', { class: 'check' }, box, ' ' + text, detail ? h('span', { class: 'muted small' }, ' ' + detail) : '') };
@@ -532,7 +544,7 @@ async function pagePlan(r, org, people) {
         e.preventDefault();
         let made;
         if (await write(async () => {
-          made = await api('POST', `${epath}/${ev.id}/copy`, { dates: dates(), until: week.until(), times: times.box.checked, details: det.box.checked, places: pl.box.checked, hand: hand.box.checked });
+          made = await api('POST', `${epath}/${ev.id}/copy`, { dates: dates(), until: week.until(), every: week.every(), times: times.box.checked, details: det.box.checked, places: pl.box.checked, hand: hand.box.checked });
         })) { dlg.close(); await render(); say(tn('copy.done', made.length)); }
       } },
         field(t('copy.date'), list),
@@ -545,7 +557,7 @@ async function pagePlan(r, org, people) {
     week.update();
   }
 
-  // A new event: empty, or a copy of one there is; optionally every week until a date.
+  // A new event: empty, or a copy of one there is; optionally repeated every week or every few weeks until a date.
   function newEventDialog() {
     let dlg;
     const last = events[events.length - 1];
@@ -554,8 +566,10 @@ async function pagePlan(r, org, people) {
       [...events].reverse().map((ev) => h('option', { value: String(ev.id), selected: !!last && ev.id === last.id }, t('event.copy_of', { label: label(ev) }))));
     const start = h('input', { type: 'time', 'aria-label': t('event.starts') });
     const end = h('input', { type: 'time', 'aria-label': t('event.ends') });
-    const week = weekly(() => [date.value]);
-    date.addEventListener('input', week.update);
+    // The date is a suggestion one step after the last event, in the rhythm chosen, until it is changed by hand.
+    let suggested = !!last;
+    const week = repeat(() => [date.value], (n) => { if (suggested) date.value = addDays(last.date, 7 * Math.max(n, 1)); });
+    date.addEventListener('input', () => { suggested = false; week.update(); });
     const timesHint = h('p', { class: 'muted small' });
     const hint = () => { timesHint.textContent = from.value ? t('event.times_from_copy') : ''; };
     from.addEventListener('change', hint);
@@ -566,8 +580,8 @@ async function pagePlan(r, org, people) {
         const times = { start_time: start.value, end_time: start.value ? end.value : '' };
         if (await write(async () => {
           made = from.value
-            ? await api('POST', `${epath}/${from.value}/copy`, { dates: [date.value], until: week.until(), times: !start.value, ...times, details: true, places: true, hand: false })
-            : await api('POST', epath, { date: date.value, until: week.until(), ...times });
+            ? await api('POST', `${epath}/${from.value}/copy`, { dates: [date.value], until: week.until(), every: week.every(), times: !start.value, ...times, details: true, places: true, hand: false })
+            : await api('POST', epath, { date: date.value, until: week.until(), every: week.every(), ...times });
         })) { dlg.close(); await render(); say(tn('event.added', made.length)); }
       } },
         h('div', { class: 'row-inline' }, field(t('event.date'), date), field(t('event.start_from'), from)),

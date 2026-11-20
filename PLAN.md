@@ -108,7 +108,8 @@ Every lookup is scoped by the organisation; a plan or person from another organi
 
 **Events:** an event belongs to one plan and has a date (and a time of day, a description, its own places and the details rows' text). Events are **self-contained**: two can fall on the same day (for example a
 service and a staff evening, or two shifts), and availability, combinations, places and group busyness apply to the event, never to the calendar day. The API uses the id (`/events/{id}`).
-A new event can repeat **every week until** a date (at most 366 days); **copying** an event (`POST /events/{id}/copy`) makes it again on other dates or every week until a date,
+A new event can repeat **every week, or every 2 to 8 weeks, until** a date (at most 366 days; added 2026-11-20 at the user's request: «every other week and such»);
+**copying** an event (`POST /events/{id}/copy`) makes it again on other dates, or repeated the same way until a date,
 with the times, the details, the places and the names set by hand as chosen. Answers and drafts are never copied. There are no day types (removed 2026-11-19): in the planner's
 input every event is its own type with its own places.
 **Time of day and description (built 2026-11-09):** `start_time` and an optional `end_time` are `HH:MM` on a 24-hour clock (local time, no time zone; the end is after the start on the same day, and an end needs a start);
@@ -210,8 +211,8 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 ### The table (built 2026-11-13, redone from the sketches 2026-11-19)
 One view per plan, inspired by *whenever*: the person making the plan sets everything in the same table people give their answers in. Read a column from the top:
 what the event is, what it needs, who got it, who can come.
-- **Columns are events**: the date and times (click: the event's dialog with times, the details, description, delete, copy), ⧉ copies it (to dates, or every week until a
-  date, with times, details, places and names set by hand as chosen), and "+" after the last adds one (empty or as a copy, also every week).
+- **Columns are events**: the date and times (click: the event's dialog with times, the details, description, delete, copy), ⧉ copies it (to dates, or every week or every few weeks until a
+  date, with times, details, places and names set by hand as chosen), and "+" after the last adds one (empty or as a copy, also repeated).
 - **Event details**: the plan's own rows (`plan_field` + `event_field`; for example a note or a theme), typed straight into the cells; text for people, not for the planner
   (not in the input or hash). ⋮⋮ drags a row (`PUT /fields/{id}/position`), ✎ renames, moves or deletes it. `GET|POST /plans/{plan}/fields`, `PATCH|DELETE /fields/{id}`,
   `PUT /events/{id}/fields/{field}`.
