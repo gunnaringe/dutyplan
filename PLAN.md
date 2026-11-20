@@ -155,7 +155,7 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 ## Architecture: a proper backend
 
 - **A Go binary with embedded SQLite** (`modernc.org/sqlite`, pure Go, no cgo), numbered migrations embedded and run in a
-  transaction at startup, and a vanilla JS frontend embedded. Meant to run on kate (Flux, image on GHCR); deployment is postponed.
+  transaction at startup, and a vanilla JS frontend embedded. Runs on kate as a first test (2026-11-20; see phase 6).
   A backend is needed for shared storage between all users, for the planner and for the history, even without a login.
 - **API: plain JSON over `net/http`, not Connect** (chosen 2026-11-07, differs from `scoreboard/`). There are well under ten kinds of endpoint, and
   Connect would have needed `buf`, two code generators and generated code. Switching later is cheap because the interface is narrow.
@@ -271,7 +271,9 @@ The first version has no login, no personal links and no roles. The consequences
 5c. **The table (done 2026-11-13)**: one view per plan for events, places per event, info rows, everyone's answers and the plan (see *The table*); replaced My page, the list and the grid.
 5d. **Simpler, from the sketches (done 2026-11-19)**: the change log, the declared name and the day types removed; each event has its own places, events are copied, details
     rows can be moved; the table got the draft allocation section and dialogs for the rest (see *The table*); the setup page became the organisation page. One schema file.
-6. **Deployment on kate**: image, Flux, SQLite backup. **Postponed (the user's choice 2026-11-09)**; not started. Remember when it is taken up: Python and `ortools` must be in the image, `DUTYPLAN_SOLVER` must be set, and the database needs a backup.
+6. **Deployment on kate (first test 2026-11-20)**: one image with the server and the planner (`Dockerfile`, `mise run app:image`), behind kate's Pocket ID
+    forward-auth at dutyplan.haxxor.xyz (manifests in `clusters/kate/dutyplan/`). Not in a registry yet: the image is built locally and imported into the node.
+    *Still to do:* a registry and automatic rollout, and a backup of the SQLite file.
 
 **Pilot**: first two or three tasks with manual cells, groups and selections, then the rest of the tasks.
 

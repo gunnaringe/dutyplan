@@ -1,0 +1,12 @@
+# The Dockerfile copies only what it names; this keeps the context small and local data out of it.
+.git
+*.db
+*.db-wal
+*.db-shm
+bin
+docs
+scripts
+solver/.venv
+solver/.mutation-backup
+solver/fixtures
+solver/tests

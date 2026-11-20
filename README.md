@@ -162,6 +162,16 @@ planner-venv/bin/pip install ./solver     # the planner and OR-Tools
 DUTYPLAN_SOLVER="$PWD/planner-venv/bin/python -m dutyplan_solver" ./dutyplan --db /var/lib/dutyplan/dutyplan.db
 ```
 
+As a container (the server and the planner in one image, built from `Dockerfile`; `mise run app:image` tags it with the commit):
+
+```sh
+podman build -t dutyplan .
+podman run --rm -p 127.0.0.1:8080:8080 -v dutyplan-data:/data dutyplan
+```
+
+The database is `/data/dutyplan.db`, and the image runs as uid 10001, so a directory mounted at `/data` must be writable by it.
+There is no published image.
+
 ## Options
 
 | Flag | Default | |

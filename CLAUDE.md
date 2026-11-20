@@ -11,7 +11,8 @@ Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan*
 and an organisation page with the plans and groups (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places or description when an event is created (adding weekly with `until`, copying and the availability map stay: the page uses them).
-Deployment on kate (phase 6) is postponed at the user's request (2026-11-09): do not start on it unless asked.
+A first test runs on kate since 2026-11-20 (asked by the user): the image from `Dockerfile` (`mise run app:image`), behind Pocket ID at
+dutyplan.haxxor.xyz, manifests and the import steps in `clusters/kate/dutyplan/`. No registry, no backup yet.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
 starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
@@ -100,9 +101,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
 ## Testing and data
 
 - `check.py` is an independent checker; keep it independent of `model.py` (only the default values are shared).
-- Every rule must have a test that fails when the rule is broken in the model: `solver/scripts/mutations.py` (`PY_MUTATIONS`, `GO_MUTATIONS`) checks it. An outdated pattern (`OUTDATED`) is fixed, never deleted, and the number of mutations must not drop, unless the rule it guards was removed on purpose
-  (say which, and why, in the commit message; 2026-11-19: 248 → 256 with the day-type and change-log rules gone; 2026-11-20: 256 → 238 with the per-person API,
-  places set when an event is created and cells for several events at once gone).
+- Every rule must have a test that fails when the rule is broken in the model: `solver/scripts/mutations.py` (`PY_MUTATIONS`, `GO_MUTATIONS`) checks it. An outdated pattern (`OUTDATED`) is fixed, never deleted, and the number of mutations must not drop.
+  **The one exception** (the user's choice, 2026-11-20): a mutation may be deleted only when **the user asked for the feature it guards to be removed**, and the
+  commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
+  History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
+  created and cells for several events at once gone.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

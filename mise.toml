@@ -59,6 +59,18 @@ description = "Build the app to bin/dutyplan (one static binary with the fronten
 quiet = true
 run = "go build -o bin/dutyplan ./cmd/dutyplan"
 
+[tasks."app:image"]
+description = "Build the container image (server + planner, Dockerfile) as localhost/dutyplan:<commit>, -dirty with uncommitted changes (about 4 min the first time). Prints the name"
+quiet = true
+run = '''
+tag=$(git rev-parse --short=12 HEAD)
+git diff --quiet HEAD -- || tag="$tag-dirty"
+log=$(mktemp)
+podman build -t "localhost/dutyplan:$tag" . >"$log" 2>&1 || { tail -30 "$log"; rm -f "$log"; exit 1; }
+rm -f "$log"
+echo "image: localhost/dutyplan:$tag"
+'''
+
 [tasks.up]
 description = "Everything in one command: the Python packages, the build, then the app in the foreground (a new database gets the demo organisation «Test»). Args: -- --addr 127.0.0.1:8080 --db file.db"
 depends = ["setup", "app:build"]
