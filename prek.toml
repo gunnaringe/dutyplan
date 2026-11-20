@@ -1,0 +1,26 @@
+# Git hooks and CI checks, run by prek (`mise install` provides it):
+#   prek install              run them on every commit (once per clone)
+#   mise run lint             check the whole tree (CI does this; `mise run verify` too)
+# The built-in hooks need no network and no Python; the local ones use the tools from mise.toml.
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-yaml" },               # workflows, dependabot
+  { id = "check-json" },
+  { id = "check-toml" },               # mise.toml, prek.toml, pyproject.toml
+  { id = "check-merge-conflict" },
+  { id = "check-added-large-files" },  # the README pictures stay small (pngquant)
+  { id = "detect-private-key" },       # the repo is public
+  { id = "end-of-file-fixer" },
+  { id = "trailing-whitespace", exclude = '\.png$' },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  { id = "gofmt", name = "gofmt", language = "system", types = ["go"], pass_filenames = false,
+    entry = "sh -c 'out=$(gofmt -l cmd internal web); [ -z \"$out\" ] || { echo \"$out\"; exit 1; }'" },
+  { id = "node-check", name = "node --check (page and scripts)", language = "system", files = '^(web|scripts)/[^/]+\.js$',
+    entry = "node --check" },
+]

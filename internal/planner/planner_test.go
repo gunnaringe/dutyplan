@@ -264,12 +264,12 @@ func TestExplain(t *testing.T) {
 
 func TestSolverWarningsAreReadableAndTheDesignedUseIsSilent(t *testing.T) {
 	cases := map[string]both{
-		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":          {"Aslaug was set on Sound 2026-08-09 by hand, even though it does not suit them.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om det ikke passer."},
-		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":          {"Aslaug was set on Sound 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
-		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":           {"Aslaug was set on Sound 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
-		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)":    {"Aslaug was set on Sound 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
-		"locked: p1 on t1 e5 breaks «busy:t2» (manual choice kept)":              {"Aslaug was set on Sound 2026-08-09 by hand, even though they are busy with Singing.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen er opptatt med Singing."},
-		"something else from the solver":                                         {"something else from the solver", "something else from the solver"},
+		"locked: p1 on t1 e5 breaks «event_never» (manual choice kept)":       {"Aslaug was set on Sound 2026-08-09 by hand, even though it does not suit them.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om det ikke passer."},
+		"locked: p1 on t1 e5 breaks «not_in_task» (manual choice kept)":       {"Aslaug was set on Sound 2026-08-09 by hand, even though they have not chosen the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen ikke har valgt oppgaven."},
+		"locked: p1 on t1 e5 breaks «task_never» (manual choice kept)":        {"Aslaug was set on Sound 2026-08-09 by hand, even though they said «never» to the task.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen har sagt «ikke» til oppgaven."},
+		"locked: p1 on t1 e5 breaks «outside_selection» (manual choice kept)": {"Aslaug was set on Sound 2026-08-09 by hand, even though they are outside the selection.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen står utenfor utvalget."},
+		"locked: p1 on t1 e5 breaks «busy:t2» (manual choice kept)":           {"Aslaug was set on Sound 2026-08-09 by hand, even though they are busy with Singing.", "Aslaug er satt på Sound 2026-08-09 for hånd, selv om hen er opptatt med Singing."},
+		"something else from the solver":                                      {"something else from the solver", "something else from the solver"},
 	}
 	for in, want := range cases {
 		for l, w := range map[i18n.Lang]string{i18n.EN: want.en, i18n.NB: want.nb} {

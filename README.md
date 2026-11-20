@@ -145,7 +145,7 @@ The database is SQLite through a pure-Go driver, so there is nothing to install 
 With mise:
 
 ```sh
-mise install            # Go, Python, uv and Node, in the versions pinned in mise.toml (once)
+mise install            # Go, Python, uv, Node and prek, in the versions pinned in mise.toml (once)
 mise run up             # installs the Python packages, builds, starts on http://127.0.0.1:8080 and prints the address
 ```
 
@@ -216,27 +216,31 @@ the drafts. Deleting an organisation removes everything in it; the deletion is w
 
 ## Development
 
-Everything goes through mise; `mise tasks` lists the tasks.
+Everything goes through mise; `mise tasks` lists the tasks. `prek install` (once per clone) runs the checks of `prek.toml`
+on every commit.
 
 | Task | |
 | --- | --- |
+| `mise run lint` | the prek checks on the whole tree: YAML, JSON, TOML, gofmt, JavaScript syntax, no private keys or big files |
 | `mise run test` | all tests, Go and Python, quiet (about 15 s) |
 | `mise run test:fast` | the quickest loop: Go and the planner's rule tests |
 | `mise run mutations` | breaks every rule in turn and checks that a test fails (about 7 min) |
 | `mise run app:smoke` | starts the server on a temporary database and checks the tenant isolation with curl |
 | `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium: `PLAYWRIGHT_CORE` and `CHROME`, see the script) |
 | `mise run app:shots` | makes the pictures in `docs/img` from the real app on invented data (about 30 s); run it again when the page changes visibly |
-| `mise run verify` | tests, mutations and the smoke test: everything that must be green before a commit |
+| `mise run verify` | lint, tests, mutations and the smoke test: everything that must be green before a commit |
 | `mise run app:image` | builds the container image as `localhost/dutyplan:<commit>` |
 
-GitHub Actions runs the same checks on every pull request and on `main` (`.github/workflows/ci.yml`): the tests, the smoke test,
-the browser check and the mutations. `.github/workflows/image.yml` builds the image for every pull request and publishes it from
+GitHub Actions runs the same checks on every pull request and on `main` (`.github/workflows/ci.yml`): the prek checks, the tests,
+the smoke test, the browser check and the mutations. `.github/workflows/image.yml` builds the image for every pull request and publishes it from
 `main` and from `v*` tags. Dependabot proposes updates to the Go and Python packages, the actions and the base images weekly.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the planner's
 input from the database, runs it, turns the answer into a view), `internal/api` (JSON API), `internal/i18n` (server texts),
 `web/` (the page: plain JavaScript, no build step), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
 rules and conventions for anyone (or any assistant) working on the code; `PLAN.md` has the design notes.
+
+Security problems: see [SECURITY.md](SECURITY.md).
 
 ## License
 

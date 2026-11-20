@@ -11,7 +11,7 @@ Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan*
 and an organisation page with the plans (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places or description when an event is created (adding repeatedly with `until` and `every`, copying and the availability map stay: the page uses them).
-**CI** (GitHub Actions, since 2026-11-20): `.github/workflows/ci.yml` runs `mise run test`, `app:smoke`, `app:ui` (playwright-core from npm, the runner's
+**CI** (GitHub Actions, since 2026-11-20): `.github/workflows/ci.yml` runs `mise run lint`, `test`, `app:smoke`, `app:ui` (playwright-core from npm, the runner's
 Chrome) and, in a job of its own, `mise run mutations`, on every PR and on main; it must be green before a merge. `.github/workflows/image.yml` builds the image
 (amd64 + arm64; the Go stage cross-compiles) on PRs and publishes `ghcr.io/gunnaringe/dutyplan` from main (`main`, `main-<UTC>-<sha>`, `sha-<sha>`) and `v*` tags.
 A first test runs on kate since 2026-11-20 (asked by the user), behind Pocket ID at dutyplan.haxxor.xyz, manifests in `clusters/kate/dutyplan/`:
@@ -23,11 +23,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
 
 ## Run cheaply (read this first)
 
-- **Everything goes through mise**: `mise install` (python, uv, go, node), `mise run setup` (Python packages), then `mise tasks`. Never python/uv/pytest/go directly.
+- **Everything goes through mise**: `mise install` (python, uv, go, node, prek), `prek install` (the hooks of `prek.toml`), `mise run setup` (Python packages), then `mise tasks`. Never python/uv/pytest/go directly.
   Skills: `verify` (tests + mutations), `run-planner` (the planner) and `run-app` (the app). The tasks are quiet and print about 1–8 lines.
 - **Start the app for a person: `mise run up`** (setup + build + run; seeds the demo organisation into a new database). For your own checks use `mise run app:run -- --addr ... --db /tmp/x.db`.
 - The usual loop: change → `mise run test:fast` (Go + Python rules, about 5 s) → `mise run test` (everything, about 15 s) → after a rule change
-  `mise run mutations -- --only <word>` (the whole set takes about 7 min) → before a commit `mise run verify` (tests + all mutations + smoke test of the app).
+  `mise run mutations -- --only <word>` (the whole set takes about 7 min) → before a commit `mise run verify` (`lint` = prek: gofmt, JS syntax, YAML/JSON/TOML, keys, big files; tests; all mutations; smoke test of the app).
   For a change to the page also `mise run app:ui` (browser check in both languages, about 20 s).
 - **The Python mutations edit `solver/dutyplan_solver/` in place** while they run (restored at the end, on Ctrl-C and on SIGTERM; a leftover is restored from
   `solver/.mutation-backup/` by the next run). Never run tests, the smoke test or the app against the real planner at the same time; `verify` runs the mutations last for this reason.

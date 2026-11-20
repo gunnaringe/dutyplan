@@ -1,0 +1,3 @@
+# The same files on every system: the README pictures are compared byte for byte, and the texts are LF.
+* text=auto eol=lf
+*.png binary
