@@ -57,6 +57,9 @@ starts the Python planner, turns the answer into a view with explanations), `int
   *Tasks* (the places per event, typed into the cells; empty = not needed), the green *Draft allocation* (the run on show merged with what is set by hand), and
   *Availability* (a count per event and one row per person). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
+  - **On a phone** (the sketch's option A, chosen 2026-11-20): the same page with *Availability* turned and moved above the rest: events down, people across
+    (first names; the event column stays put), the person's tasks in the draft under each answer. The rest of the table follows, sideways-scrolling. One layout is
+    in the page at a time (`PHONE` in `web/app.js`, the same 40rem as the phone rule in `style.css`); there is no «my» column and no list of one's own.
   - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
     dates or weekly until, with times, details, places and names set by hand as chosen; answers and drafts are never copied).
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background; a planner name that was locked is a cell with `locked` and shows a

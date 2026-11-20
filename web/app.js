@@ -344,6 +344,11 @@ function weightsForm(path, wr, saved) {
 // What the page keeps between redraws of the same plan: the draft picked under the earlier drafts.
 const planState = { key: '', runId: null };
 
+// A phone gets the availability turned (the sketch's option A, chosen 2026-11-20): events down, people across, the event column
+// stays put. The same width as the phone rule in style.css, and width only, so the keyboard coming up never redraws the page.
+const PHONE = matchMedia('(max-width: 40rem)');
+PHONE.addEventListener('change', () => { if (route().page === 'plan') render(); });
+
 async function pagePlan(r, org, people) {
   const base = `/orgs/${enc(r.org)}`;
   const pbase = `${base}/plans/${enc(r.plan)}`;
@@ -844,7 +849,7 @@ async function pagePlan(r, org, people) {
     countCells[evId].replaceChildren(h('b', { class: 'good' }, '✓ ' + c.good), ' · ', h('b', { class: 'poor' }, '? ' + c.poor), ' · ', h('b', { class: 'never' }, '✗ ' + c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
-  const answerCell = (p, ev) => {
+  const answerCell = (p, ev, got) => {
     const b = h('button', { type: 'button', class: 'ans' });
     let busy = false;  // a second click while the first is on its way would send the same answer twice
     const paint = () => {
@@ -861,7 +866,7 @@ async function pagePlan(r, org, people) {
       busy = false;
     });
     paint();
-    return h('td', { class: 'answer' }, b);
+    return h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
   };
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
@@ -878,6 +883,8 @@ async function pagePlan(r, org, people) {
       view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
       runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : ''))) : '';
 
+  const phone = PHONE.matches;
+  const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
   const table = h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
@@ -890,15 +897,41 @@ async function pagePlan(r, org, people) {
       h('tr', { class: 'sect draft' }, h('th', { scope: 'row' }, t('draft.title')), h('td', { colspan: String(cols + 1) }, bar)),
       tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler())),
       draftFoot,
-      h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
-      people.filter((p) => p.active).map(personRow), people.filter((p) => !p.active).map(personRow),
-      addLine(addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }))))));
+      phone ? '' : [
+        h('tr', { class: 'sect' }, h('th', { scope: 'row' }, t('table.availability')), events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
+        people.filter((p) => p.active).map(personRow), people.filter((p) => !p.active).map(personRow),
+        addLine(addPerson())])));
+
+  // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
+  // (as the draft rows show them: set by hand, locked or from the planner; through a group too).
+  const firstName = (p) => p.name.split(/\s+/)[0];
+  const shortName = (p) => (people.some((o) => o.id !== p.id && firstName(o) === firstName(p)) ? firstName(p) + ' ' + p.name.split(/\s+/).pop()[0] + '.' : firstName(p));
+  const turned = () => {
+    const got = {};  // 'event/person' -> the names of the tasks they have in the draft
+    for (const ev of events) for (const tk of tasks) for (const x of slotsAt(ev, tk).items) {
+      const ids = x.kind === 'person' ? [x.id] : x.kind === 'group' ? (groups.find((g) => g.id === x.id) || { members: [] }).members : [];
+      ids.forEach((id) => (got[ev.id + '/' + id] ||= []).push(tk.name));
+    }
+    const cols = [...people.filter((p) => p.active), ...people.filter((p) => !p.active)];
+    const faded = (p, el) => { if (!p.active) el.classList.add('inactive'); return el; };
+    return h('section', { class: 'turned-wrap' },
+      h('h2', {}, t('table.availability')),
+      h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table turned' },
+        h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'corner' }, t('table.date')),
+          cols.map((p) => faded(p, h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p))))))),
+        h('tbody', {}, events.map((ev) => h('tr', {},
+          h('th', { scope: 'row' }, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', (countCells[ev.id] = h('span', { class: 'sub count' }))),
+          cols.map((p) => faded(p, answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
+      addPerson());
+  };
+  const availability = phone ? turned() : '';
   events.forEach((ev) => recount(ev.id));
 
   const root = h('div', { class: 'plan-page' },
     h('p', { class: 'small' }, link(`/o/${enc(r.org)}`, t('common.back', { name: org.name }))),
     h('div', { class: 'title-bar' }, h('h1', {}, plan.name), h('button', { type: 'button', class: 'ghost', onclick: settingsDialog }, '⚙ ' + t('settings.open'))),
-    h('p', { class: 'muted small' }, events.length ? t('table.hint') : t('table.no_events')),
+    h('p', { class: 'muted small' }, events.length ? t(phone ? 'table.hint_phone' : 'table.hint') : t('table.no_events')),
+    availability,
     table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },

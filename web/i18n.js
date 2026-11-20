@@ -165,6 +165,7 @@ const MESSAGES = {
     'common.save': 'Save',
 
     'table.hint': 'Read a column from the top: what the event is, what it needs, who got it, who can come. Click an answer to change it: ✓ yes, ? maybe, ✗ no, empty = not answered.',
+    'table.hint_phone': 'Tap an answer to change it: ✓ yes, ? maybe, ✗ no, empty = not answered. Under it are the tasks the person has in the draft. The details, the places and the draft are in the table further down.',
     'table.no_events': 'No events yet: add one with + at the end of the date row.',
     'table.date': 'Date',
     'table.tasks': 'Tasks',
@@ -533,6 +534,7 @@ const MESSAGES = {
     'common.save': 'Lagre',
 
     'table.hint': 'Les en kolonne ovenfra: hva hendelsen er, hva den trenger, hvem som fikk den, hvem som kan komme. Klikk på et svar for å endre det: ✓ ja, ? kanskje, ✗ nei, tomt = ikke svart.',
+    'table.hint_phone': 'Trykk på et svar for å endre det: ✓ ja, ? kanskje, ✗ nei, tomt = ikke svart. Under står oppgavene personen har i utkastet. Detaljene, plassene og utkastet er i tabellen lenger ned.',
     'table.no_events': 'Ingen hendelser ennå: legg til en med + på slutten av datoraden.',
     'table.date': 'Dato',
     'table.tasks': 'Oppgaver',

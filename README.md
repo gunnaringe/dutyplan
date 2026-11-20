@@ -89,9 +89,11 @@ by the planner for the tasks you choose; the members are busy together, and each
 ![A group: its members, and the tasks the planner may propose it for](docs/img/02-group.png)
 
 **English and Norwegian, on a phone.** The page follows the browser's language and has a switch in the header; the
-explanations the planner writes follow it too. On a narrow screen the table scrolls sideways under the names.
+explanations the planner writes follow it too. On a phone the availability is turned: events go down and people across, so a
+tap answers, and under each answer are the tasks that person has in the draft. The rest of the table follows below it and scrolls
+sideways under the row names.
 
-![The plan on a phone](docs/img/14-phone.png)
+![The plan on a phone: the availability turned, events down and people across](docs/img/14-phone.png)
 ![The same plan in Norwegian](docs/img/15-norwegian.png)
 
 **Small to run.** One Go binary with the web page inside it and a SQLite file; the planner is a separate Python program that the

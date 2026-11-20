@@ -126,17 +126,26 @@ button.draftbtn:hover { border-color: var(--line); }
 .slot.open { color: var(--muted); font-style: italic; }
 
 /* availability */
-td.count { white-space: nowrap; }
-td.count .good { color: var(--accent); }
-td.count .poor { color: var(--warn); }
-td.count .never { color: var(--err); }
+.count { white-space: nowrap; }
+.count .good { color: var(--accent); }
+.count .poor { color: var(--warn); }
+.count .never { color: var(--err); }
 td.answer { text-align: center; }
 button.ans { width: 100%; min-height: 2.25rem; background: transparent; color: var(--fg); border-color: var(--line); font-weight: 700; }
 button.ans[data-level="good"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.ans[data-level="poor"] { background: var(--warn); border-color: var(--warn); color: #fff; }
 button.ans[data-level="never"] { background: transparent; border-color: var(--err); color: var(--err); }
 @media (prefers-color-scheme: dark) { button.ans[data-level="good"], button.ans[data-level="poor"] { color: #0b1a12; } }
-.dp-table tr.inactive th, .dp-table tr.inactive td { opacity: .6; }
+.dp-table tr.inactive th, .dp-table tr.inactive td, .dp-table.turned .inactive { opacity: .6; }
+
+/* A phone: the availability turned (option A), events down and people across; the event column stays put, people scroll sideways. */
+.turned-wrap h2 { margin: .75rem 0 .25rem; font-size: 1rem; }
+.dp-table.turned th[scope=row] { min-width: 6.5rem; max-width: 7.5rem; }
+.dp-table.turned thead th, .dp-table.turned td { min-width: 3.75rem; max-width: 5.5rem; text-align: center; }
+.dp-table.turned thead th.corner { text-align: left; }
+.dp-table.turned thead .cellbtn { font-size: .8rem; text-align: center; overflow-wrap: anywhere; }
+.dp-table.turned .got { display: flex; flex-wrap: wrap; justify-content: center; gap: .15rem; margin-top: .25rem; }
+span.chip.task { border-color: var(--accent); color: var(--accent); }
 
 /* ---- dialogs ---- */
 dialog.modal { width: min(36rem, calc(100% - 1.5rem)); max-height: calc(100% - 2rem); border: 1px solid var(--line); border-radius: .6rem; background: var(--bg); color: var(--fg); padding: 1rem; }

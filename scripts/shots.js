@@ -229,10 +229,9 @@ const CHOICES = {
     await save(tall, '11-settings', dialog(tall));
     await closeDialog(tall);
 
-    // On a phone the table scrolls sideways under the names.
+    // On a phone the availability is turned: events down, people across, with each person's tasks in the draft under the answer.
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
-    await go(phone, planPath, '.dp-table');
-    await phone.locator('.dp-table tr.sect.draft').evaluate((e) => e.scrollIntoView());
+    await go(phone, planPath, '.dp-table.turned');
     await phone.screenshot({ path: path.join(OUT, '14-phone.png') });
 
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));

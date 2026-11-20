@@ -224,6 +224,10 @@ what the event is, what it needs, who got it, who can come.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
   ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, active, can be proposed.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
+- **On a phone** (option A of the sketch, chosen 2026-11-20): *Availability* is turned and comes first: events down (date, time, the count), people across (first
+  names, a tap on one opens the person), and under each answer the tasks the person has in the draft (set by hand, locked or proposed; through a group too). The
+  details, places and the draft follow in the ordinary table, which scrolls sideways under the row names. The page draws one layout at a time and switches when
+  the width crosses 40rem.
 - The organisation page has the plans and the groups, and rename/delete of the organisation. Any other address (an old setup page, an old personal
   link) is "Page not found".
 
