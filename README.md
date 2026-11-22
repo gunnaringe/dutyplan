@@ -12,7 +12,7 @@ and tells you why a place stays empty.
 
 ![The plan page: one table with the events across, what each needs, everyone's answers, and who does what](docs/img/hero.png)
 
-A [50-second film](web/demo-en.mp4) shows a plan made from nothing to a draft ([in Norwegian](web/demo-nb.mp4)).
+A 50-second film shows a plan made from nothing to a draft: it plays on the start page of a running server, and is here as [MP4](web/demo-en.mp4) ([in Norwegian](web/demo-nb.mp4)).
 
 *Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, events and the details shown for them are
 all things you create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
