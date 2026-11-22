@@ -118,10 +118,12 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, name) })
 	}
 
-	return &Handler{Handler: secure(http.NewCrossOriginProtection().Handler(recoverer(s.access(s.notifying(mux)), log))), hub: s.hub}
+	return &Handler{Handler: secure(s.indexable, http.NewCrossOriginProtection().Handler(recoverer(s.access(s.limit(s.notifying(mux))), log))), hub: s.hub}
 }
 
 // assets are the files the page links; each gets ?v=<hash of its content> where index.html links it.
+const robotsMeta = `<meta name="robots" content="noindex, nofollow">`
+
 var assets = []string{"i18n.js", "app.js", "style.css", "landing.png"}
 
 // serveFile sends one embedded file. index.html gets the assets' versions in its links. An asset asked for with its
@@ -137,6 +139,9 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 		page := string(b)
 		for _, a := range assets {
 			page = strings.ReplaceAll(page, `"/`+a+`"`, `"/`+a+`?v=`+s.version[a]+`"`)
+		}
+		if s.indexable(r) {
+			page = strings.Replace(page, robotsMeta, "", 1)
 		}
 		b = []byte(page)
 	}
@@ -158,12 +163,18 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 	w.Write(b)
 }
 
-func secure(next http.Handler) http.Handler {
+// indexable: only the start page with a login (the landing page says what this is); everything else, and all of it
+// without a login, is kept out of search engines.
+func (s *server) indexable(r *http.Request) bool { return s.auth != nil && r.URL.Path == "/" }
+
+func secure(indexable func(*http.Request) bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("X-Robots-Tag", "noindex, nofollow") // no login: keep it out of search engines
+		if !indexable(r) {
+			h.Set("X-Robots-Tag", "noindex, nofollow")
+		}
 		h.Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		next.ServeHTTP(w, r)
 	})

@@ -336,6 +336,9 @@ func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, err
 		if err != nil {
 			return err
 		}
+		if err := atMost(ctx, tx, MaxPlansPerOrg, "plans", `SELECT COUNT(*) FROM plan WHERE org_id = ?`, oid); err != nil {
+			return err
+		}
 		_, err = tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
 		if isUnique(err) {
 			return exists("plan", p.Slug)
@@ -398,6 +401,9 @@ func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person,
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
+			return err
+		}
+		if err := atMost(ctx, tx, MaxPeoplePerOrg, "people", `SELECT COUNT(*) FROM person WHERE org_id = ?`, oid); err != nil {
 			return err
 		}
 		var n int // a new person goes last among those without a section

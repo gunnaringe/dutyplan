@@ -32,6 +32,9 @@ type Login struct {
 	ClientSecret string
 	PublicURL    string // this app's address, e.g. https://dutyplan.example.org/ (the callback is <PublicURL>auth/callback)
 	SignupURL    string // optional: where someone without an account makes one (Pocket ID: <issuer>/signup); the start page offers it
+	// ClientIPHeader: the header a proxy in front puts the visitor's address in (CF-Connecting-IP behind Cloudflare), for the
+	// rate limits of those not signed in. Empty: the connection's address. Set it only when every request comes through that proxy.
+	ClientIPHeader string
 }
 
 const (

@@ -253,9 +253,15 @@ async function signOut() {
 }
 
 // The start for someone not signed in: what this is, and the way in.
+// deadLink: /s/<token> sends a link that no longer works to /?link=invalid; say so where it lands.
+function deadLink() {
+  return new URLSearchParams(location.search).get('link') === 'invalid' ? h('p', { class: 'notice', role: 'status' }, t('link.invalid')) : '';
+}
+
 function pageLanding() {
   const point = (k) => h('li', {}, h('h3', {}, t('landing.' + k + '_title')), h('p', {}, t('landing.' + k)));
   return h('div', { class: 'landing' },
+    deadLink(),
     h('h1', {}, t('landing.title')),
     h('p', { class: 'lead' }, t('landing.lead')),
     h('p', { class: 'row-inline' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
@@ -400,9 +406,10 @@ function enterMovesOn(input) {
 async function pageHome() {
   const orgs = await get('/orgs');
   const last = store.get('org');
-  if (last && !location.search.includes('switch') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
+  if (last && !location.search.includes('switch') && !location.search.includes('link=') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
   const name = h('input', { type: 'text', placeholder: t('home.name_placeholder'), maxlength: '80', required: true, 'aria-label': t('home.name_placeholder') });
   return h('div', {},
+    deadLink(),
     h('h1', {}, t('home.title')),
     orgs.length ? h('ul', { class: 'plain' }, orgs.map((o) => h('li', {}, link('/o/' + enc(o.slug), o.name)))) : h('p', { class: 'muted' }, t('home.none')),
     ME && ME.login && !ME.user ? '' : h('h2', {}, t('home.new')),

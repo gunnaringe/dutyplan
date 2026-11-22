@@ -119,6 +119,9 @@ func (s *Store) CreateOrgOwnedBy(ctx context.Context, name string, userID int64)
 	}
 	o := Org{Name: name, CreatedAt: s.stamp()}
 	err = s.write(ctx, func(tx *sql.Tx) error {
+		if err := atMost(ctx, tx, MaxOwnedOrgs, "orgs", `SELECT COUNT(*) FROM membership WHERE user_id = ? AND role = 'owner'`, userID); err != nil {
+			return err
+		}
 		var id int64
 		for n := 1; ; n++ {
 			o.Slug = base

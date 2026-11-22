@@ -69,6 +69,9 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, err
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE org_id = ?`, oid).Scan(&n); err != nil {
 			return err
 		}
+		if n >= MaxTasksPerOrg {
+			return Invalid("too_many_tasks", map[string]any{"max": MaxTasksPerOrg}, "at most %d tasks", MaxTasksPerOrg)
+		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, position, created_at) VALUES (?, ?, ?, ?, ?)`, oid, t.Name, t.Planned, n, s.stamp())
 		if isUnique(err) {
 			return exists("task", t.Name)
