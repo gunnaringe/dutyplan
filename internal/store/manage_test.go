@@ -149,10 +149,10 @@ func sameCounts(t *testing.T, what string, before, after map[string]int) {
 func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	s := open(t)
 	got := func(column string) string { return strings.Join(tablesWith(t, s, column), " ") }
-	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member"; got("plan_id") != want {
+	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member share_link"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member task task_combination"
+	want := "event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}

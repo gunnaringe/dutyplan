@@ -31,6 +31,7 @@ const ICONS = {
   maybe: '<path d="M8.5 8.5a3.5 3.5 0 1 1 5.2 3.05c-1.1.62-1.7 1.3-1.7 2.45v.5M12 19h.01" stroke-width="3"/>',
   auto: '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>',
   left: '<path d="M15 18l-6-6 6-6"/>', right: '<path d="M9 18l6-6-6-6"/>',
 };
 function icon(name) {
@@ -261,7 +262,7 @@ function pageLanding() {
       ME.signup ? h('a', { class: 'button ghost', href: ME.signup }, t('landing.sign_up')) : ''),
     h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account')),
     h('img', { src: '/landing.png', alt: t('landing.picture'), width: '1280', height: '842', loading: 'lazy' }),
-    h('ul', { class: 'points' }, ['tap', 'fair', 'live'].map(point)),
+    h('ul', { class: 'points' }, ['tap', 'fair', 'live', 'share'].map(point)),
     h('p', { class: 'muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
 }
 
@@ -299,7 +300,8 @@ async function renderHeader(r) {
     h('span', { class: 'spacer' }),
     h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
     who ? h('span', { class: 'who' }, h('span', { class: 'muted small', title: who.email || '' }, who.name),
-      h('button', { type: 'button', class: 'ghost sm', onclick: signOut }, t('header.sign_out'))) : '');
+      h('button', { type: 'button', class: 'ghost sm', onclick: signOut }, t('header.sign_out')))
+      : ME && ME.login ? h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')) : '');
 }
 
 // ---- building blocks -------------------------------------------------------------------------------------------------
@@ -403,8 +405,8 @@ async function pageHome() {
   return h('div', {},
     h('h1', {}, t('home.title')),
     orgs.length ? h('ul', { class: 'plain' }, orgs.map((o) => h('li', {}, link('/o/' + enc(o.slug), o.name)))) : h('p', { class: 'muted' }, t('home.none')),
-    h('h2', {}, t('home.new')),
-    h('form', { class: 'row', onsubmit: async (e) => {
+    ME && ME.login && !ME.user ? '' : h('h2', {}, t('home.new')),
+    ME && ME.login && !ME.user ? '' : h('form', { class: 'row', onsubmit: async (e) => {
       e.preventDefault();
       let o;
       if (await write(async () => { o = await api('POST', '/orgs', { name: name.value }); })) { store.set('org', o.slug); go('/o/' + enc(o.slug)); }
@@ -416,6 +418,7 @@ async function pageHome() {
 // organisation, so every plan has them.
 async function pageOrg(r, org) {
   const base = `/orgs/${enc(r.org)}`;
+  if (org.plan) return go(`/o/${enc(r.org)}/p/${enc(org.plan)}`);  // a link to one plan: that plan is all there is
   const plans = await get(base + '/plans');
 
   // Rename (the address stays) or delete. Deleting needs the organisation to have no plans, and its name typed in.
@@ -449,9 +452,118 @@ async function pageOrg(r, org) {
     h('div', { class: 'plans' },
       plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
         : h('p', { class: 'muted' }, t('org.no_plans')),
-      addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
-    h('p', { class: 'small muted org-foot' }, h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage'))));
+      org.level === 'view' ? '' : addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
+    viewOnly(org),
+    h('p', { class: 'small muted org-foot' },
+      org.role === 'owner' ? h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage')) : '',
+      ME && ME.login && org.role ? h('button', { type: 'button', class: 'link-button', onclick: () => membersDialog(r.org, org) }, t('members.open')) : '',
+      ME && ME.login && org.role === 'owner' ? h('button', { type: 'button', class: 'link-button', onclick: () => shareDialog(r.org, org, null) }, t('share.open_org')) : ''));
   return root;
+}
+
+// ---- sharing: links and members ------------------------------------------------------------------------------------
+// A link lets whoever opens it in (no account needed): view or edit, the whole organisation or one plan. An invitation
+// (join) makes whoever opens it, signed in, an editor. Only the owner shares and changes members; the page asks the server
+// what this person may do (org.role, org.level, org.plan from GET /orgs/{org}).
+
+const LINK_LEVEL = { view: 'share.level_view', edit: 'share.level_edit', join: 'share.level_join' };
+const ROLE = { owner: 'members.role_owner', editor: 'members.role_editor' };
+const viewOnly = (org) => (org.level === 'view' ? h('p', { class: 'view-only' }, icon('info'), ' ', t('share.view_only')) : '');
+const linkURL = (l) => location.origin + '/s/' + l.token;
+// redraws an open dialog in place (modal() fills the dialog whose key is refreshKey)
+async function redraw(dlg, build) {
+  const key = 'again:' + Math.random();
+  dlg.dataset.key = key;
+  try { await build(key); } finally { delete dlg.dataset.key; }
+}
+
+async function copyLink(l, button) {
+  try {
+    await navigator.clipboard.writeText(linkURL(l));
+    button.textContent = t('share.copied');
+  } catch (e) {
+    window.prompt(t('share.copy_prompt'), linkURL(l));  // no clipboard (an old browser, or not https): to copy by hand
+  }
+}
+
+function linkRow(l, base, again) {
+  const copy = h('button', { type: 'button', class: 'sm', onclick: (e) => copyLink(l, e.currentTarget) }, t('share.copy'));
+  const gone = l.expires_at && new Date(l.expires_at) < new Date();
+  return h('li', { class: 'link-row' + (gone ? ' gone' : '') },
+    h('span', { class: 'lvl ' + l.level }, t(LINK_LEVEL[l.level])),
+    h('span', { class: 'what' }, l.label || h('span', { class: 'muted' }, t('share.no_label')),
+      h('span', { class: 'muted small' }, ' · ', gone ? t('share.ran_out') : l.expires_at ? t('share.until', { date: new Date(l.expires_at).toLocaleDateString(locale()) }) : t('share.forever'),
+        l.created_by ? ' · ' + t('share.by', { name: l.created_by }) : '')),
+    gone ? '' : copy,
+    h('button', { type: 'button', class: 'ghost sm danger', 'aria-label': t('share.delete_aria', { name: l.label || t(LINK_LEVEL[l.level]) }),
+      onclick: async () => { if (await write(() => api('DELETE', `${base}/links/${l.id}`))) again(); } }, t('common.remove')));
+}
+
+const expirySelect = (dflt) => h('select', { 'aria-label': t('share.expires') },
+  [[0, 'share.never'], [7, 'share.days_7'], [30, 'share.days_30'], [90, 'share.days_90']].map(([d, k]) => h('option', { value: String(d), selected: d === dflt }, t(k))));
+
+// Share the organisation (plan null) or one plan: the links there are, and a new one.
+async function shareDialog(orgSlug, org, plan) {
+  const base = `/orgs/${enc(orgSlug)}`;
+  let dlg;
+  const build = async (key) => {
+    const all = await api('GET', base + '/links');
+    const mine = all.filter((l) => l.level !== 'join' && (plan ? l.plan === plan.slug : !l.plan));
+    const level = h('select', { 'aria-label': t('share.level') }, ['view', 'edit'].map((x) => h('option', { value: x }, t(LINK_LEVEL[x]))));
+    const label = h('input', { type: 'text', maxlength: '80', placeholder: t('share.label_placeholder'), 'aria-label': t('share.label') });
+    const expires = expirySelect(0);
+    const title = plan ? t('share.title_plan', { name: plan.name }) : t('share.title_org', { name: org.name });
+    if (key) refreshKey = key;
+    dlg = modal(title, { info: [t('share.info'), t('share.info_levels')] },
+      mine.length ? h('ul', { class: 'plain links' }, mine.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : h('p', { class: 'muted' }, t('share.none')),
+      h('h3', {}, t('share.new')),
+      h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
+        e.preventDefault();
+        let made;
+        if (await write(async () => { made = await api('POST', base + '/links', { plan: plan ? plan.slug : '', level: level.value, label: label.value, expires_days: Number(expires.value) }); })) {
+          redraw(dlg, build);
+          try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
+        }
+      } }, level, label, expires, h('button', { type: 'submit' }, t('share.create'))),
+      foot('', closeBtn()));
+  };
+  await build();
+}
+
+// The members: everyone sees who they are and may leave; the owner changes roles, removes people, and invites with a link.
+async function membersDialog(orgSlug, org) {
+  const base = `/orgs/${enc(orgSlug)}`;
+  const owner = org.role === 'owner';
+  let dlg;
+  const build = async (key) => {
+    const [members, links] = await Promise.all([api('GET', base + '/members'), owner ? api('GET', base + '/links') : []]);
+    const invites = links.filter((l) => l.level === 'join');
+    const row = (m) => h('li', { class: 'member' },
+      h('span', { class: 'what' }, m.name, m.you ? h('span', { class: 'muted small' }, ' ' + t('members.you')) : '', m.email ? h('span', { class: 'muted small' }, ' · ' + m.email) : ''),
+      owner ? h('select', { 'aria-label': t('members.role_aria', { name: m.name }), onchange: async (e) => {
+        if (await write(() => api('PATCH', `${base}/members/${m.id}`, { role: e.target.value }))) redraw(dlg, build); else e.target.value = m.role;
+      } }, ['owner', 'editor'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted' }, t(ROLE[m.role])),
+      owner || m.you ? h('button', { type: 'button', class: 'ghost sm danger', onclick: async () => {
+        if (!confirm(m.you ? t('members.leave_confirm', { name: org.name }) : t('members.remove_confirm', { name: m.name }))) return;
+        if (await write(() => api('DELETE', `${base}/members/${m.id}`))) { if (m.you) { dlg.close(); store.set('org', ''); fetched.clear(); go('/?switch'); } else redraw(dlg, build); }
+      } }, m.you ? t('members.leave') : t('members.remove')) : '');
+    const expires = expirySelect(7);
+    if (key) refreshKey = key;
+    dlg = modal(t('members.title', { name: org.name }), { info: [t('members.info')] },
+      h('ul', { class: 'plain members' }, members.map(row)),
+      owner ? [h('h3', {}, t('members.invite')), h('p', { class: 'muted small' }, t('members.invite_hint')),
+        invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : '',
+        h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
+          e.preventDefault();
+          let made;
+          if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: '', expires_days: Number(expires.value) }); })) {
+            redraw(dlg, build);
+            try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
+          }
+        } }, expires, h('button', { type: 'submit' }, t('members.invite_create')))] : '',
+      foot('', closeBtn()));
+  };
+  await build();
 }
 
 // ---- the plan page: one table ----------------------------------------------------------------------------------------
@@ -1290,7 +1402,9 @@ async function pagePlan(r, org, people) {
       h('h1', {}, plan.name),
       infoBtn(plan.name, [t(phone ? 'table.hint_phone' : 'table.hint')]),
       events.length ? sideways(phone ? null : table, events) : '',
+      ME && ME.login && org.role === 'owner' ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
       h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
+    viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
     availability,
     table);
@@ -1313,7 +1427,7 @@ async function render() {
   try {
     const who = await me();
     if (seq !== renderSeq) return;
-    if (who.login && !who.user) {
+    if (who.login && !who.user && !(who.links || []).length) {
       headerSignedOut();
       main.replaceChildren(pageLanding());
       document.title = t('brand');

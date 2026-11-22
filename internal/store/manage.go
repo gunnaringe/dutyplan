@@ -97,7 +97,7 @@ func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug string) error 
 		// The runs have no cascade, so they go first; the events take their answers, manual cells, selections, places and info
 		// values with them (ON DELETE CASCADE), and then the info rows can go. A table added later that refers to a plan or an
 		// event without a cascade makes this fail, and the test that lists the tables with a plan_id says where to look.
-		for _, table := range []string{"plan_run", "event", "plan_field"} {
+		for _, table := range []string{"plan_run", "event", "plan_field", "share_link"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ? AND plan_id = ?`, oid, pid); err != nil {
 				return err
 			}
@@ -133,7 +133,7 @@ func (s *Store) DeleteOrg(ctx context.Context, orgSlug, confirm string) (Org, er
 			return Conflict("org_has_plans", map[string]any{"name": o.Name, "count": plans}, "organisation %q still has %d plan(s); delete them first", o.Name, plans)
 		}
 		// Children before parents: what refers to people and tasks first.
-		for _, table := range []string{"task_combination", "person_task", "task", "person", "person_section", "membership"} {
+		for _, table := range []string{"task_combination", "person_task", "task", "person", "person_section", "membership", "share_link"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ?`, id); err != nil {
 				return err
 			}
