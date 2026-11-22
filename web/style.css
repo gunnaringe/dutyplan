@@ -268,13 +268,38 @@ input.wide { width: 100%; }
 .invited h2 { margin: 0 0 .3rem; font-size: 1.2rem; }
 .invited p { margin: .3rem 0; }
 a.button.solid { background: var(--accent); color: #fff; }
-.landing { max-width: 60rem; }
-.landing h1 { font-size: 1.9rem; margin-bottom: .4rem; }
-.landing .lead { font-size: 1.1rem; max-width: 42rem; }
-.landing img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; margin: 1rem 0; }
-.landing .points { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .5rem 1.5rem; }
-.landing .points h3 { margin: .4rem 0 .2rem; font-size: 1rem; }
+/* the start page for someone not signed in: wider than the other pages, for the film */
+main:has(> .landing) { max-width: 68rem; }
+.landing .hero { text-align: center; max-width: 44rem; margin: 2rem auto 1.5rem; }
+.landing .hero h1 { font-size: 2.3rem; line-height: 1.15; margin: .6rem 0 .6rem; letter-spacing: -.01em; }
+.landing .hero .lead { font-size: 1.15rem; margin: 0 auto 1.1rem; }
+.landing .hero .cta { justify-content: center; gap: .6rem; }
+.landing .hero .cta > * { font-size: 1.05rem; padding: .55rem 1.3rem; }
+.landing img.logo { display: block; width: 56px; height: 56px; margin: 0 auto; }
+.landing figure.demo { margin: 0 auto 2.5rem; max-width: 64rem; text-align: center; }
+.landing video.demo { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; object-position: top;
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .12); background: var(--bg); }
+.landing figure.demo figcaption { margin-top: .6rem; }
+.landing .how h2, .landing .points { max-width: 60rem; margin-left: auto; margin-right: auto; }
+.landing .how h2 { text-align: center; font-size: 1.5rem; margin-bottom: 1rem; }
+.landing ol.steps { list-style: none; padding: 0; margin: 0 auto 2.5rem; max-width: 60rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 1rem; }
+.landing ol.steps li { text-align: center; padding: 0 .5rem; }
+.landing .step-n { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: var(--accent); color: var(--bg); font-weight: 700; }
+.landing ol.steps h3 { margin: .5rem 0 .25rem; font-size: 1.05rem; }
+.landing ol.steps p { margin: 0; color: var(--muted); }
+.landing .points { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.landing .points li { border: 1px solid var(--line); border-radius: 10px; padding: 1rem; background: var(--draft-row); }
+.landing .point-ic { display: inline-grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 8px; background: var(--draft-bg); color: var(--draft-fg); }
+.landing .point-ic svg { width: 1.2rem; height: 1.2rem; }
+.landing .points h3 { margin: .6rem 0 .25rem; font-size: 1rem; }
 .landing .points p { margin: 0; color: var(--muted); }
+.landing > .invited, .landing > .notice { max-width: 44rem; margin-left: auto; margin-right: auto; }
+.landing .landing-foot { text-align: center; border-top: 1px solid var(--line); padding-top: 1rem; }
+@media (max-width: 640px) {
+  .landing .hero { margin-top: 1rem; }
+  .landing .hero h1 { font-size: 1.7rem; }
+  .landing .hero .lead { font-size: 1.02rem; }
+}
 header .who { display: flex; gap: .5rem; align-items: center; }
 
 /* sharing */
@@ -376,7 +401,6 @@ button.cellbtn.no-tasks { color: var(--muted); }
 .draft-bar .run-id { font-weight: 600; cursor: help; }
 header .brand { display: inline-flex; align-items: center; gap: .5rem; }
 header .brand img { display: block; }
-.landing img.logo { display: block; width: 72px; height: 72px; border: none; border-radius: 0; margin: 1rem 0 0; }
 @media (max-width: 40rem) { header .brand span { display: none; } header .icon-btn, .dropdown > summary { min-width: 2.25rem; } }
 
 /* ---- selecting cells (2026-11-22) ---- */

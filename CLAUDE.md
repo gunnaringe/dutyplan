@@ -76,9 +76,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
   to the organisation's **Members** page (`/o/<org>/members`, members with a login) and **Settings** page (`/o/<org>/settings`: rename and
   delete, admins), the language button (`EN`/`NB`, a menu) and the person signed in as initials (a menu with their name and a Sign out
   button). Buttons in the header are one height (`app:ui` checks it). Members and settings are pages, not dialogs.
-  The Members page (2026-11-22) has three parts: the members, inviting new ones (invitation links) and the links to plans (made under Share
+  The Members page (2026-11-22) has three parts: the members, «Invite a member» and the links to plans (made under Share
   on each plan, listed here to see and delete in one place). A link is a row: an icon for what it gives, its name with «Can view / Can edit /
   Becomes a member», expiry and maker under it, then round icon buttons (share where `navigator.share` exists, copy, delete).
+  An invitation is worded as being for a person, never as «a link»: the form asks «Who are you inviting?» (stored as the link's label)
+  and the row reads «Invitation for <label>».
   Deleting a link, removing a member, leaving and changing one's own role are asked first in the
   page's own dialog (`ask()`).
 - **Selecting cells** (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a whole Row. Kinda like you would in a
@@ -197,6 +199,13 @@ starts the Python planner, turns the answer into a view with explanations), `int
   created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 247 with the live stream. 2026-11-22: 247 → 274 with signing in and sharing, 274 → 290 with the limits, 290 → 293 with admin/member and links to plans only, 293 → 302 with selecting cells, 302 → 309 with notes on answers, 309 → 311 with the agent guide, 311 → 310 with the event description removed (4 deleted at the user's request, 3 for migration 006).
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
+- **The film on the start page** is `web/demo-en.mp4` and `web/demo-nb.mp4` (embedded, served with an ETag and ranges), made by
+  `mise run app:video [en|nb]` (about 3 min, `scripts/video.js`; ffmpeg comes with the task, not in CI): the real app on the same invented
+  data, recorded with the CDP screencast (Playwright's own recorder needs a separate ffmpeg download), a drawn pointer and a caption per
+  step, the planner's wait cut out, played at 1.4×, H.264 at 1024×576 (about 400 KB each: keep each under the 500 KB large-file hook).
+  Run it again when what it shows changes visibly (adding events, places, answers, the draft, a place set by hand); the selectors are by
+  structure and by the texts in `web/i18n.js`, so a changed text there is picked up. Re-encoding never gives identical bytes; commit the
+  files only when the film changed. The start page plays it muted and looping, and still with controls under `prefers-reduced-motion`.
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).
 - Do not give a script a name that collides with the standard library (`inspect.py` broke the numpy import).
 - Do not run `mise lock` here: `lockfile` in this configuration wrote a `mise.lock` in `~/code` (the parent configuration). The versions are pinned in `mise.toml`.

@@ -236,6 +236,19 @@ const { spawn } = require('child_process');
     await answer('Jon Demo', ev[1]).click();
     await answer('Jon Demo', ev[1]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'never', 'Jon Demo, ' + ev[1], 'three clicks give ✗');
+    // On a slow line, quick clicks while the first answer is on its way all count, and reach the server in order (four go
+    // round to empty again, as later steps expect).
+    {
+      await page.route('**/availability', async (route) => { await new Promise((r) => setTimeout(r, 400)); await route.continue(); });
+      for (let i = 0; i < 4; i++) await answer('Jon Demo', ev[2]).click();
+      await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'none', 'Jon Demo, ' + ev[2], 'four quick clicks go round to empty at once');
+      await page.waitForTimeout(2000);
+      await page.unroute('**/availability');
+      const fresh = await context.newPage();  // a new tab reads what the server has (a reload here would show in the next check)
+      await fresh.goto(page.url());
+      await until(fresh, (x) => (document.querySelector(`button.ans[aria-label^="${x}:"]`) || {}).dataset?.level === 'none', 'Jon Demo, ' + ev[2], 'the server has all four clicks');
+      await fresh.close();
+    }
     // An answer is shown at once and only sent: nothing is fetched again, so nothing flickers.
     {
       const gets = [];
@@ -689,7 +702,28 @@ const { spawn } = require('child_process');
       await pg.route('**/auth/login**', (route) => { signInAt = route.request().url(); return route.fulfill({ body: 'sign-in', contentType: 'text/plain' }); });
       await pg.goto(base + '/o/sample-club?x=1');
       await h1is(pg, 'Plan who does what, fairly');
-      ok(await pg.locator('.landing img:not(.logo)').count() === 1 && await pg.locator('.landing img.logo').count() === 1 && await pg.locator('.landing .points li').count() === 4, 'the start page explains, with a picture');
+      ok(await pg.locator('.landing img.logo').count() === 1 && await pg.locator('.landing ol.steps li').count() === 4 && await pg.locator('.landing .points li').count() === 4, 'the start page explains, in steps');
+      // the film: in the page's language, the plan as its poster, and a file the browser can read (where it plays H.264)
+      const film = () => pg.evaluate(() => { const v = document.querySelector('.landing video.demo'); return v && { src: v.getAttribute('src'), poster: v.getAttribute('poster'), muted: v.muted, h264: v.canPlayType('video/mp4; codecs="avc1.64001f"') }; });
+      const f = await film();
+      ok(f && f.src === '/demo-en.mp4' && f.poster === '/landing.png' && f.muted, 'the start page has the film: ' + JSON.stringify(f));
+      if (f.h264) await until(pg, () => document.querySelector('.landing video.demo').readyState >= 1, null, 'the film loads');
+      // the logo stays small, and nothing is wider than the screen, on a computer and on a phone
+      for (const width of [1280, 390]) {
+        await pg.setViewportSize({ width, height: 800 });
+        await pg.waitForTimeout(100);
+        const m = await pg.evaluate(() => { const r = document.querySelector('.landing img.logo').getBoundingClientRect(); return [r.width, r.height, document.documentElement.scrollWidth, document.documentElement.clientWidth]; });
+        ok(m[0] <= 80 && m[1] <= 80, `the logo on the start page is ${m[0]}×${m[1]} at ${width} px`);
+        ok(m[2] <= m[3], `the start page is ${m[2]} px wide on a ${m[3]} px screen`);
+      }
+      await pg.setViewportSize({ width: 1280, height: 720 });
+      await pg.evaluate(() => localStorage.setItem('tp.lang', 'nb'));
+      await pg.reload();
+      await pg.waitForSelector('.landing video.demo');
+      ok((await film()).src === '/demo-nb.mp4', 'the film in Norwegian on the Norwegian page');
+      await pg.evaluate(() => localStorage.setItem('tp.lang', 'en'));
+      await pg.reload();
+      await h1is(pg, 'Plan who does what, fairly');
       ok((await pg.getAttribute('.landing a.button', 'href')) === 'https://id.example.invalid/signup', 'the start page offers to create an account');
       await pg.click('.landing button:has-text("Sign in")');
       await pg.waitForURL('**/auth/login**');
@@ -739,8 +773,12 @@ const { spawn } = require('child_process');
       await pg.click('header a[aria-label="Members"]');
       await pg.waitForURL('**/o/sports-club/members');
       await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed on the members page');
-      await pg.click('main button:has-text("Make invitation link")');
-      await until(pg, () => [...document.querySelectorAll('main .link-row .lvl')].some((x) => x.textContent === 'Becomes a member'), null, 'the invitation is listed');
+      // an invitation is for a person: whom it is for, as its name in the list
+      await pg.fill('main form.new-link input[type=text]', 'the new treasurer');
+      ok((await pg.innerText('main form.new-link')).includes('Who are you inviting?'), 'the invitation asks whom it is for');
+      await pg.click('main form.new-link button[type=submit]:text-is("Invite")');
+      await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.querySelector('.title').textContent === 'Invitation for the new treasurer' && li.querySelector('.lvl').textContent === 'Becomes a member'), null, 'the invitation is listed with whom it is for');
+      ok(await pg.evaluate(() => navigator.clipboard.readText()).then((x) => /\/s\/[\w-]{20,}$/.test(x)), 'the new invitation is copied');
       // signed in on a phone: the header (members, settings, language, initials) and the pages stay inside the screen
       await pg.setViewportSize({ width: 390, height: 844 });
       for (const url of ['/o/sports-club', '/o/sports-club/members', '/o/sports-club/p/autumn-2026']) {

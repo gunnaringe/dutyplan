@@ -102,6 +102,13 @@ depends = ["app:build"]
 quiet = true
 run = "node scripts/shots.js"
 
+[tasks."app:video"]
+description = "The film on the start page (web/demo-en.mp4, web/demo-nb.mp4) from the real app on invented data (about 2 min). Args: en | nb. Not in verify or CI; run it again when what the film shows changes visibly"
+depends = ["app:build"]
+quiet = true
+tools = { "conda:ffmpeg" = "9.0.2" }
+run = "node scripts/video.js"
+
 [tasks."app:seed"]
 description = "Put test data into a running app: the organisation «Test» with the tasks Singing, Sound and Video. Args: -- http://127.0.0.1:8080"
 quiet = true
