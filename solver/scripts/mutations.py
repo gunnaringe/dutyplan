@@ -121,7 +121,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("tenant: people are listed without the org", "internal/store/store.go", "WHERE p.org_id = ? ORDER BY x.position", "WHERE ? > 0 ORDER BY x.position"),
     ("tenant: plans are listed without the org", "internal/store/store.go", "FROM plan WHERE org_id = ? ORDER BY id DESC", "FROM plan WHERE ? > 0 ORDER BY id DESC"),
     ("foreign keys off", "internal/store/store.go", 'q.Add("_pragma", "foreign_keys(1)")', 'q.Add("_pragma", "foreign_keys(0)")'),
-    ("cross-site writes are allowed", "internal/api/api.go", "http.NewCrossOriginProtection().Handler(recoverer(s.access(s.notifying(mux)), log))", "recoverer(s.access(s.notifying(mux)), log)"),
+    ("cross-site writes are allowed", "internal/api/api.go", "http.NewCrossOriginProtection().Handler(recoverer(s.access(s.limit(s.notifying(mux))), log))", "recoverer(s.access(s.limit(s.notifying(mux))), log)"),
     ("a database with unknown migrations is opened", "internal/store/store.go", "if !known[v] {", "if false {"),
     ("an organisation can be duplicated", "internal/store/migrations/001_schema.sql", "slug       TEXT NOT NULL UNIQUE,", "slug       TEXT NOT NULL,"),
     ("a plan can be duplicated in the organisation", "internal/store/migrations/001_schema.sql", "UNIQUE (org_id, slug)", "UNIQUE (id)"),
