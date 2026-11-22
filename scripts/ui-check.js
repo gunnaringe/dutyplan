@@ -100,7 +100,7 @@ const { spawn } = require('child_process');
       await page.waitForSelector(`button[aria-label="Open the task ${name}"]`);
     }
     for (const name of ['Note', 'Theme']) {
-      await addNamed('Add a row, e.g. Theme', name);
+      await addNamed('Add a row', name);
       await page.waitForSelector(`button[aria-label="Change the row ${name}"]`);
     }
     // a new event, every other week until a date
@@ -221,7 +221,7 @@ const { spawn } = require('child_process');
     await takes('Kari Test', [['Sound', 'good'], ['Video', 'poor']]);
     await takes('Ola Sample', [['Sound', 'good']]);
     await takes('Jon Demo', [['Sound', 'poor'], ['Video', 'good']]);
-    ok((await page.innerText('button[aria-label="Open Kari Test"]')).includes('Sound, Video'), 'the row shows the tasks a person takes');
+    ok((await page.getAttribute('button[aria-label="Open Kari Test"]', 'title')) === 'Sound, Video', 'hovering a name shows the tasks the person takes');
     await page.click('button[aria-label="Open Kari Test"]');
     ok((await dialog.locator('input[readonly]').count()) === 0, 'the person dialog has no personal link');
     await closeDialog();
@@ -381,7 +381,8 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Make a draft' }).click();
     const barHas = (x, what) => until(page, (v) => document.querySelector('.draft-bar') && document.querySelector('.draft-bar').innerText.includes(v), x, what, 20000)
       .catch(async (e) => { throw new Error(e.message + ': ' + (await page.innerText('.draft-bar').catch(() => '(no bar)'))); });
-    await barHas('Draft #1', 'the first draft is shown');
+    const runIs = (n, what) => until(page, (v) => (document.querySelector('.draft-bar .run-id') || {}).textContent === v, '#' + n, what, 20000);
+    await runIs(1, 'the first draft is shown');
     let sound0 = await draft('Sound', ev[0]).innerText();
     ok(/Kari Test|Ola Sample|Jon Demo/.test(sound0), 'the planner filled Sound: ' + sound0);
     const cafe1 = await draft('Café', ev[1]).innerText();
@@ -398,16 +399,16 @@ const { spawn } = require('child_process');
     ok((await dialog.innerText()).includes('Unlock'), 'a locked name can be unlocked');
     await closeDialog();
     sound0 = await draft('Sound', ev[0]).innerText();
-    const lockMark = () => draft('Sound', ev[0]).locator('.slot.locked .mark.lock[aria-label="Locked: kept from the planner"]').count();
+    const lockMark = () => draft('Sound', ev[0]).locator('.slot.locked .mark.lock[aria-label="Locked"]').count();
     ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name has the lock square: ' + sound0);
     await page.getByRole('button', { name: 'Try again' }).click();
-    await barHas('Draft #2', 'try again makes a second draft');
+    await runIs(2, 'try again makes a second draft');
     sound0 = await draft('Sound', ev[0]).innerText();
     ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name is kept: ' + sound0);
 
     await page.getByRole('button', { name: 'Make it the current plan' }).click();
     await msgHas(page, 'Draft #2 is now the current plan.');
-    await barHas('✓ Current plan', 'the pinned draft is the current plan');
+    await until(page, () => !!document.querySelector('.draft-bar button.pin[aria-pressed=true]'), null, 'the pinned draft is the current plan');
     // an answer changes: the draft is out of date
     await answer('Ola Sample', ev[2]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Ola Sample, ' + ev[2], 'the answer is saved');
@@ -417,10 +418,10 @@ const { spawn } = require('child_process');
     await page.getByRole('button', { name: 'Plan settings' }).click();
     ok((await dialog.innerText()).includes('Draft #1') && (await dialog.innerText()).includes('Current plan'), 'the earlier drafts are listed with the current plan');
     await dialog.getByRole('button', { name: 'Show draft #1' }).click();
-    await barHas('Draft #1', 'an earlier draft can be shown');
+    await runIs(1, 'an earlier draft can be shown');
     await barHas('Show the newest', 'and the newest is one click away');
     await page.getByRole('button', { name: 'Show the newest' }).click();
-    await barHas('Draft #2', 'back to the newest');
+    await runIs(2, 'back to the newest');
     // the distribution, closed with its own Close button (as every dialog is)
     await page.getByRole('button', { name: 'Distribution', exact: true }).click();
     ok((await dialog.innerText()).includes('fair share'), 'the distribution lists the load against the fair share');
@@ -468,6 +469,19 @@ const { spawn } = require('child_process');
       const sizes = await page.evaluate(() => [...document.querySelectorAll('header .icon-btn, header .dropdown > summary')].map((e) => Math.round(e.getBoundingClientRect().height)));
       ok(sizes.length >= 2 && sizes.every((x) => x === sizes[0]), 'the header buttons are the same height: ' + sizes);
     }
+
+    // --- folding: a section folds to its heading, and stays folded after a reload ---
+    await page.goto(base + planUrl);
+    await page.waitForSelector('.dp-table');
+    const taskRows = () => page.evaluate(() => [...document.querySelectorAll('.dp-table tr[data-fold~=tasks]')].filter((r) => !r.hidden).length);
+    ok((await taskRows()) > 0, 'the tasks are shown');
+    await page.click('button.fold[data-key=tasks]');
+    ok((await taskRows()) === 0 && (await page.getAttribute('button.fold[data-key=tasks]', 'aria-expanded')) === 'false', 'the tasks fold');
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await taskRows()) === 0, 'and stay folded after a reload');
+    await page.click('button.fold[data-key=tasks]');
+    ok((await taskRows()) > 0, 'and unfold');
 
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---
     await page.setViewportSize({ width: 390, height: 844 });
@@ -517,7 +531,7 @@ const { spawn } = require('child_process');
     await page.waitForSelector('h2:has-text("Planer")');  // and survives a reload
     await page.goto(base + planUrl);
     await h1is(page, 'Autumn 2026');
-    await barHas('Utkast #2', 'the draft texts are Norwegian');
+    await until(page, () => ((document.querySelector('.draft-bar .run-id') || {}).title || '').startsWith('Utkast #2'), null, 'the draft texts are Norwegian');
     const tbl = await page.innerText('.dp-table');
     ok(tbl.includes('OM HENDELSEN') && tbl.includes('UTKAST TIL FORDELING') && tbl.includes('TILGJENGELIGHET') && tbl.includes('Ikke fylt'), 'the table is Norwegian: ' + tbl.slice(0, 200));
     await page.locator('button[aria-label^="Café, søn. 16. aug."]').click();
@@ -554,7 +568,7 @@ const { spawn } = require('child_process');
       await pg.route('**/auth/login**', (route) => { signInAt = route.request().url(); return route.fulfill({ body: 'sign-in', contentType: 'text/plain' }); });
       await pg.goto(base + '/o/sample-club?x=1');
       await h1is(pg, 'Plan who does what, fairly');
-      ok(await pg.locator('.landing img').count() === 1 && await pg.locator('.landing .points li').count() === 4, 'the start page explains, with a picture');
+      ok(await pg.locator('.landing img:not(.logo)').count() === 1 && await pg.locator('.landing img.logo').count() === 1 && await pg.locator('.landing .points li').count() === 4, 'the start page explains, with a picture');
       ok((await pg.getAttribute('.landing a.button', 'href')) === 'https://id.example.invalid/signup', 'the start page offers to create an account');
       await pg.click('.landing button:has-text("Sign in")');
       await pg.waitForURL('**/auth/login**');

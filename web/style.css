@@ -299,3 +299,24 @@ header .icon-btn .ic svg, .dropdown > summary .ic svg { width: 1.1rem; height: 1
 .slot.locked { font-weight: 600; }
 .legend .mark { vertical-align: -.2rem; }
 .members-page h1 .info, .members-page h2 .info { margin-left: .35rem; }
+
+/* ---- folding sections (2026-11-22): a caret before the heading; folded = pointing right ---- */
+button.fold { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; min-height: 0; padding: 0;
+  background: none; border: none; color: var(--muted); flex: none; }
+button.fold:hover { color: var(--accent); }
+button.fold .ic svg { width: 1rem; height: 1rem; transition: transform .15s; }
+button.fold[aria-expanded=false] .ic svg { transform: rotate(-90deg); }
+.draft-bar button.fold { padding: 0; }
+
+/* ---- less text: the copy button shows on the date it belongs to; a person without tasks is muted; the pin is an icon ---- */
+.dp-table thead th button.edit { opacity: 0; transition: opacity .1s; }
+.dp-table thead th:hover button.edit, .dp-table thead th:focus-within button.edit { opacity: 1; }
+@media (hover: none) { .dp-table thead th button.edit { opacity: 1; } }
+button.cellbtn.no-tasks { color: var(--muted); }
+.draft-bar button.icon.pin { padding: .15rem .35rem; color: var(--muted); }
+.draft-bar button.icon.pin.on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.draft-bar .run-id { font-weight: 600; cursor: help; }
+header .brand { display: inline-flex; align-items: center; gap: .5rem; }
+header .brand img { display: block; }
+.landing img.logo { display: block; margin: 1rem 0 0; }
+@media (max-width: 40rem) { header .brand span { display: none; } header .icon-btn, .dropdown > summary { min-width: 2.25rem; } }
