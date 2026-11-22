@@ -41,6 +41,7 @@ const ICONS = {
   check: '<path d="M20 6L9 17l-5-5"/>', caret: '<path d="M6 9l6 6 6-6"/>',
   today: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1.6" fill="currentColor"/>',
   pin: '<path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/>',
+  x: '<path d="M18 6L6 18M6 6l12 12"/>',
 };
 // mark: the square that says a place is locked (kept by the planner) or set by hand.
 const mark = (kind) => h('span', { class: 'mark ' + kind, title: t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), 'aria-label': t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), role: 'img' }, icon(kind));
@@ -157,6 +158,8 @@ function changedBy(method, path) {
     }
     if (x === 'tasks') return with_('places');  // Fill row
     if (x === 'people') return with_('answers');  // availability
+    if (x === 'answers') return with_('answers');  // a selection of answers
+    if (x === 'places') return with_('places');  // a selection of places
     if (['fields', 'cells', 'pools', 'weights', 'runs'].includes(x)) return x === 'fields' ? ['fields'] : with_(x);
     return null;
   }
@@ -841,7 +844,7 @@ async function pagePlan(r, org, people) {
   const folds = (key, rows) => [rows].flat(Infinity).filter((x) => x instanceof Element)
     .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
   const applyFolds = (table) => {
-    table.querySelectorAll('tr[data-fold]').forEach((tr) => { tr.hidden = tr.dataset.fold.split(' ').some((k) => folded.has(k)); });
+    table.querySelectorAll('tr[data-fold]').forEach((tr) => { tr.hidden = tr.dataset.filtered === '1' || tr.dataset.fold.split(' ').some((k) => folded.has(k)); });
     table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
   };
   const foldBtn = (key, title) => h('button', { type: 'button', class: 'fold', 'data-key': key, 'aria-expanded': String(!folded.has(key)),
@@ -850,6 +853,15 @@ async function pagePlan(r, org, people) {
       store.set(foldKey, JSON.stringify([...folded]));
       applyFolds(e.currentTarget.closest('table'));
     } }, icon('caret'));
+  // With many people: a filter on the names (only the rows; the sections stay). A selection keeps to the rows shown.
+  let filterText = '';
+  const filterBox = () => h('input', { type: 'search', class: 'filter', value: filterText, placeholder: t('table.filter'), 'aria-label': t('table.filter'),
+    oninput: (e) => {
+      filterText = e.target.value.trim().toLowerCase();
+      const table = e.target.closest('table');
+      table.querySelectorAll('tr.person-row').forEach((tr) => { tr.dataset.filtered = filterText && !tr.dataset.name.includes(filterText) ? '1' : ''; });
+      applyFolds(table);
+    } });
 
   const bar = h('div', { class: 'draft-bar' });
   const poll = async () => {
@@ -1325,6 +1337,185 @@ async function pagePlan(r, org, people) {
   };
   const putDraftCell = (ev, tk) => { const td = draftCell(ev, tk); if (draftTd[at(ev, tk)]) draftTd[at(ev, tk)].replaceWith(td); draftTd[at(ev, tk)] = td; return td; };
 
+  // ---- selecting cells like in a spreadsheet (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a
+  // whole Row"): drag over cells, Shift+click to stretch, Ctrl/⌘+click to add or take away one, a click on ⋮⋮ for the
+  // whole row, a click on an event's count for everyone that day. Two grids: places (tasks × events) and answers (people ×
+  // events); a selection is in one of them. A bar at the bottom sets every selected cell at once (one request); Escape
+  // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Not on a phone (the turned table).
+  const grids = { places: { rows: [], cells: new Map() }, answers: { rows: [], cells: new Map() } };
+  const evIndex = new Map(events.map((ev, i) => [ev.id, i]));
+  let sel = null;  // { grid, keys: Set('row/event'), anchor: { row, ev } }
+  const selbar = h('div', { class: 'selbar', hidden: true, role: 'region', 'aria-label': t('sel.bar') });
+  const cellKey = (row, ev) => row + '/' + ev;
+  const reg = (grid, row, ev, td, paint) => {
+    if (PHONE.matches || org.level === 'view') return;
+    const g = grids[grid];
+    if (!g.rows.includes(row)) g.rows.push(row);
+    g.cells.set(cellKey(row, ev.id), { td, row, ev, paint });
+    td.dataset.cell = grid + '|' + row + '|' + ev.id;
+  };
+  const rowShown = (grid, row) => { const c = grids[grid].cells.get(cellKey(row, events[0] && events[0].id)); return !c || !c.td.closest('tr').hidden; };
+  const paintSel = () => {
+    document.querySelectorAll('td.sel').forEach((td) => td.classList.remove('sel'));
+    if (sel) sel.keys.forEach((k) => { const c = grids[sel.grid].cells.get(k); if (c) c.td.classList.add('sel'); });
+    drawBar();
+  };
+  const unselect = () => { sel = null; paintSel(); };
+  const rect = (grid, a, b) => {
+    const rows = grids[grid].rows;
+    const [r0, r1] = [rows.indexOf(a.row), rows.indexOf(b.row)].sort((x, y) => x - y);
+    const [c0, c1] = [evIndex.get(a.ev), evIndex.get(b.ev)].sort((x, y) => x - y);
+    const keys = new Set();
+    for (let i = r0; i <= r1; i++) if (rowShown(grid, rows[i])) for (let j = c0; j <= c1; j++) keys.add(cellKey(rows[i], events[j].id));
+    return keys;
+  };
+  const selectRect = (grid, anchor, to, add) => {
+    const keys = rect(grid, anchor, to);
+    if (add && sel && sel.grid === grid) sel.base.forEach((k) => keys.add(k));
+    sel = { grid, keys, anchor, base: add && sel && sel.grid === grid ? sel.base : new Set() };
+    paintSel();
+  };
+  const toggleCell = (grid, row, ev) => {
+    if (!sel || sel.grid !== grid) sel = { grid, keys: new Set(), anchor: { row, ev }, base: new Set() };
+    const k = cellKey(row, ev);
+    if (sel.keys.has(k)) sel.keys.delete(k); else sel.keys.add(k);
+    sel.anchor = { row, ev };
+    sel.base = new Set(sel.keys);
+    if (!sel.keys.size) sel = null;
+    paintSel();
+  };
+  // A whole row (⋮⋮), or a whole event column (its count): Shift stretches from the last one, Ctrl/⌘ adds or takes away.
+  const selectLine = (grid, e, pick) => {
+    const keys = new Set([...grids[grid].cells.keys()].filter((k) => pick(grids[grid].cells.get(k)) && rowShown(grid, grids[grid].cells.get(k).row)));
+    if (!keys.size) return;
+    const first = grids[grid].cells.get([...keys][0]);
+    if ((e.ctrlKey || e.metaKey) && sel && sel.grid === grid) {
+      const all = [...keys].every((k) => sel.keys.has(k));
+      keys.forEach((k) => (all ? sel.keys.delete(k) : sel.keys.add(k)));
+      sel.base = new Set(sel.keys);
+      if (!sel.keys.size) sel = null;
+    } else if (e.shiftKey && sel && sel.grid === grid) {
+      const last = grids[grid].cells.get([...keys].pop());
+      sel.keys = rect(grid, sel.anchor, { row: last.row, ev: events[events.length - 1].id });
+      rect(grid, sel.anchor, { row: first.row, ev: events[0].id }).forEach((k) => sel.keys.add(k));
+      sel.base = new Set(sel.keys);
+    } else {
+      sel = { grid, keys, anchor: { row: first.row, ev: first.ev.id }, base: new Set(keys) };
+    }
+    paintSel();
+  };
+  // Dragging: from the cell pressed to the cell under the pointer; near an edge the table scrolls on.
+  let drag = null;  // { grid, from: { row, ev }, moved, x, y, add }
+  const cellAt = (x, y) => {
+    const td = document.elementFromPoint(x, y)?.closest('td[data-cell]');
+    if (!td) return null;
+    const [grid, row, ev] = td.dataset.cell.split('|');
+    return { grid, row: Number(row), ev: Number(ev) };
+  };
+  const dragFollow = () => {
+    if (!drag) return;
+    const c = cellAt(drag.x, drag.y);
+    if (!c || c.grid !== drag.grid) return;
+    if (!drag.moved && c.row === drag.from.row && c.ev === drag.from.ev) return;
+    if (!drag.moved) { drag.moved = true; document.body.classList.add('selecting'); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); }
+    selectRect(drag.grid, drag.from, c, drag.add);
+  };
+  let scroller = null;
+  const autoScroll = () => {
+    if (!drag || !drag.moved) return;
+    const box = document.querySelector('.grid-scroll.main');
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    const edge = 40, step = 24;
+    const dx = drag.x > r.right - edge ? step : drag.x < r.left + 160 + edge ? -step : 0;
+    const dy = drag.y > Math.min(r.bottom, innerHeight) - edge ? step : drag.y < Math.max(r.top, 0) + 80 ? -step : 0;
+    if (dx) box.scrollLeft += dx;
+    if (dy) box.scrollTop += dy;
+    if (dx || dy) dragFollow();
+  };
+  const onMove = (e) => { if (drag) { drag.x = e.clientX; drag.y = e.clientY; dragFollow(); } };
+  const onUp = () => {
+    if (!drag) return;
+    const moved = drag.moved;
+    drag = null;
+    clearInterval(scroller);
+    document.body.classList.remove('selecting');
+    if (moved) document.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+  };
+  const onCellDown = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    const td = e.target.closest('td[data-cell]');
+    if (!td) return;
+    const [grid, row, ev] = td.dataset.cell.split('|').map((x, i) => (i ? Number(x) : x));
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleCell(grid, row, ev); swallowClick(); return; }
+    if (e.shiftKey && sel && sel.grid === grid) { e.preventDefault(); selectRect(grid, sel.anchor, { row, ev }, false); swallowClick(); return; }
+    if (sel) unselect();
+    drag = { grid, from: { row, ev }, moved: false, x: e.clientX, y: e.clientY, add: false };
+    clearInterval(scroller);
+    scroller = setInterval(autoScroll, 40);
+  };
+  const swallowClick = () => document.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+  const onKey = (e) => {
+    if (!sel || !selbar.isConnected) return;
+    if (document.querySelector('dialog[open]')) return;
+    const typing = e.target.closest && e.target.closest('input, textarea, select');
+    if (e.key === 'Escape') { unselect(); return; }
+    if (typing && !e.target.closest('.selbar')) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); applySel(sel.grid === 'answers' ? '' : 0); return; }
+    if (sel.grid === 'answers' && ['1', '2', '3'].includes(e.key) && !typing) { e.preventDefault(); applySel({ 1: 'good', 2: 'poor', 3: 'never' }[e.key]); }
+    if (sel.grid === 'places' && /^[0-9]$/.test(e.key) && !typing) { e.preventDefault(); const n = selbar.querySelector('input'); if (n) { n.focus(); n.value = e.key; } }
+  };
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('keydown', onKey);
+  // the listeners go with the page: a new page has its own
+  const offSel = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('keydown', onKey); };
+  const watchGone = setInterval(() => { if (!selbar.isConnected && document.querySelector('#main > *')) { offSel(); clearInterval(watchGone); } }, 2000);
+
+  // Setting the selection: shown at once, one request, taken back if the server refuses.
+  const applySel = async (value) => {
+    if (!sel) return;
+    const g = grids[sel.grid];
+    const cells = [...sel.keys].map((k) => g.cells.get(k)).filter(Boolean);
+    if (sel.grid === 'answers') {
+      const was = cells.map((c) => (ans[c.row] || {})[c.ev.id] || '');
+      const items = cells.filter((c, i) => was[i] !== value).map((c) => ({ person: c.row, event: c.ev.id, level: value }));
+      if (!items.length) return;
+      const paint = () => { cells.forEach((c) => c.paint()); new Set(cells.map((c) => c.ev.id)).forEach(recount); };
+      cells.forEach((c) => { (ans[c.row] ||= {})[c.ev.id] = value; });
+      paint();
+      if (!(await write(() => api('PUT', pbase + '/answers', { answers: items })))) { cells.forEach((c, i) => { ans[c.row][c.ev.id] = was[i]; }); paint(); }
+    } else {
+      const n = Number(value) || 0;
+      const was = cells.map((c) => placesAt[at(c.ev, { id: c.row })] || 0);
+      const items = cells.filter((c, i) => was[i] !== n).map((c) => ({ event: c.ev.id, task: c.row, slots: n }));
+      if (!items.length) return;
+      const set = (c, v) => { const k = at(c.ev, { id: c.row }); if (v) placesAt[k] = v; else delete placesAt[k]; };
+      const paint = () => cells.forEach((c) => { c.paint(); putDraftCell(c.ev, tasks.find((tk) => tk.id === c.row)); });
+      cells.forEach((c) => set(c, n));
+      paint();
+      if (!(await write(() => api('PUT', pbase + '/places', { places: items })))) { cells.forEach((c, i) => set(c, was[i])); paint(); }
+    }
+  };
+  const drawBar = () => {
+    selbar.hidden = !sel;
+    if (!sel) { selbar.replaceChildren(); return; }
+    const n = sel.keys.size;
+    const close = h('button', { type: 'button', class: 'ghost icon', title: t('sel.unselect'), 'aria-label': t('sel.unselect'), onclick: unselect }, icon('x'));
+    const count = h('span', { class: 'n' }, tn('sel.count', n));
+    if (sel.grid === 'answers') {
+      const lv = (level, key) => h('button', { type: 'button', class: 'ans', 'data-level': level, title: t('answer.' + level) + ' (' + key + ')', 'aria-label': t('sel.set_answer', { answer: t('answer.' + level) }),
+        onclick: () => applySel(level) }, answerMark(level));
+      selbar.replaceChildren(count, lv('good', '1'), lv('poor', '2'), lv('never', '3'),
+        h('button', { type: 'button', class: 'ghost sm', title: t('sel.clear') + ' (Delete)', onclick: () => applySel('') }, t('sel.clear')), close);
+    } else {
+      const num = h('input', { type: 'number', min: '0', max: '50', inputmode: 'numeric', 'aria-label': t('sel.places_aria'), placeholder: '#' });
+      const form = h('form', { class: 'row-inline', onsubmit: (e) => { e.preventDefault(); applySel(parseInt(num.value || '0', 10)); } },
+        num, h('button', { type: 'submit', class: 'sm' }, t('sel.set')));
+      selbar.replaceChildren(count, form, h('button', { type: 'button', class: 'ghost sm', title: t('sel.clear') + ' (Delete)', onclick: () => applySel(0) }, t('sel.clear')), close);
+    }
+  };
+
   // Places: how many each event needs, typed straight in; empty = not needed. Only a real change is sent.
   const placesCell = (tk, ev) => {
     const k = at(ev, tk);
@@ -1340,7 +1531,9 @@ async function pagePlan(r, org, people) {
       paint();
     });
     paint();
-    return h('td', { class: 'places' }, input);
+    const td = h('td', { class: 'places' }, input);
+    reg('places', tk.id, ev, td, paint);
+    return td;
   };
   // Tasks: ⋮⋮ drags a task to another row (the organisation's order, the same in every plan); the name opens it.
   const taskRow = (tk, i) => {
@@ -1349,6 +1542,8 @@ async function pagePlan(r, org, people) {
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) },
         tk.name, tk.planned ? '' : h('span', { class: 'sub' }, t('table.by_hand'))))),
     events.map((ev) => placesCell(tk, ev)), filler());
+    g.title = t('task.drag') + ' · ' + t('sel.row_hint');
+    g.addEventListener('click', (e) => selectLine('places', e, (c) => c.row === tk.id));
     return dragRow(row, g, 'task', tk, i, (d, pos) => api('PUT', `${base}/tasks/${d.id}/position`, { position: pos }));
   };
 
@@ -1381,7 +1576,9 @@ async function pagePlan(r, org, people) {
       busy = false;
     });
     paint();
-    return h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
+    const td = h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
+    if (!got) reg('answers', p.id, ev, td, paint);
+    return td;
   };
   // People: ⋮⋮ drags a person to another row, also into another section (or onto its heading: the top of it). Sections are
   // headings with their people below, the organisation's own; those without a section come first. Only placement.
@@ -1410,9 +1607,10 @@ async function pagePlan(r, org, people) {
   };
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
-    const g = grip(t('person.drag'));
+    const g = grip(t('person.drag') + ' · ' + t('sel.row_hint'));
+    g.addEventListener('click', (e) => selectLine('answers', e, (c) => c.row === p.id));
     handleFor(g, 'person', p);
-    const row = h('tr', { class: 'person-row' },
+    const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase() },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name), autoBtn(p))),
@@ -1447,8 +1645,9 @@ async function pagePlan(r, org, people) {
       h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler()))]),
       phone ? '' : [
-        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')]))),
-          events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
+        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
+          people.length > 8 ? filterBox() : ''),
+          events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         folds('avail', [
           inSection(0).map(personRow),
@@ -1456,6 +1655,7 @@ async function pagePlan(r, org, people) {
           addLine(addPerson()),
           addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])])));
   applyFolds(table);
+  table.addEventListener('pointerdown', onCellDown);
 
   // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
   // (as the draft rows show them: set by hand, locked or from the planner).
@@ -1491,7 +1691,8 @@ async function pagePlan(r, org, people) {
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
     availability,
-    table);
+    table,
+    selbar);
   if (!phone) dragScroll(table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },

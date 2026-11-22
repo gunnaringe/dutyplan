@@ -470,6 +470,64 @@ const { spawn } = require('child_process');
       ok(sizes.length >= 2 && sizes.every((x) => x === sizes[0]), 'the header buttons are the same height: ' + sizes);
     }
 
+    // --- selecting like a spreadsheet: drag, the bar, Ctrl+click, a whole row, a whole day, the keys; then put it all back ---
+    await page.goto(base + planUrl);
+    await page.waitForSelector('.dp-table');
+    {
+      const who = ['Kari Test', 'Ola Sample'];
+      const levelOf = (person, e) => page.evaluate((x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level, person + ', ' + e);
+      const before = {};
+      for (const p of who) for (const e of ev) before[p + '|' + e] = await levelOf(p, e);
+      const centre = async (loc) => { const b = await loc.boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+      const [x0, y0] = await centre(answer(who[0], ev[0]));
+      const [x1, y1] = await centre(answer(who[1], ev[1]));
+      await page.mouse.move(x0, y0);
+      await page.mouse.down();
+      await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 4 });
+      await page.mouse.move(x1, y1, { steps: 4 });
+      await page.mouse.up();
+      ok((await page.locator('td.sel').count()) === 4 && (await page.innerText('.selbar .n')) === '4 cells', 'dragging selects a block of answers');
+      ok((await levelOf(who[0], ev[0])) === before[who[0] + '|' + ev[0]], 'the drag did not click the first answer');
+      await page.click('.selbar button.ans[data-level=good]');
+      await until(page, () => document.querySelectorAll('td.sel button.ans[data-level=good]').length === 4, null, 'the bar sets all four to yes');
+      await page.keyboard.press('2');
+      await until(page, () => document.querySelectorAll('td.sel button.ans[data-level=poor]').length === 4, null, 'the key 2 sets them to maybe');
+      await page.keyboard.down('Control');
+      await answer(who[0], ev[0]).click();
+      await page.keyboard.up('Control');
+      ok((await page.locator('td.sel').count()) === 3, 'Ctrl+click takes one cell out of the selection');
+      await page.keyboard.press('Escape');
+      ok((await page.locator('td.sel').count()) === 0 && (await page.locator('.selbar').isHidden()), 'Escape lets go');
+      await page.locator('tr.person-row', { has: answer(who[1], ev[0]) }).locator('.grip').click();
+      ok((await page.locator('td.sel').count()) === ev.length, 'a click on ⋮⋮ selects the whole row');
+      await page.keyboard.press('Escape');
+      await page.locator('td.count').nth(2).click();
+      ok((await page.locator('td.sel').count()) === (await page.locator('tr.person-row').count()), 'a click on a count selects everyone that day');
+      await page.keyboard.press('Escape');
+      // put the answers back the way they were, one click at a time
+      const next = { none: 'good', good: 'poor', poor: 'never', never: 'none' };
+      for (const p of who) for (const e of ev) {
+        for (let i = 0; i < 4 && (await levelOf(p, e)) !== before[p + '|' + e]; i++) {
+          const was = await levelOf(p, e);
+          await answer(p, e).click();
+          await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x[0]}:"]`).dataset.level === x[1], [p + ', ' + e, next[was]], 'one click back');
+        }
+      }
+      // places: a row of a task, set at once, then cleared with Delete, then put back
+      const placesWas = [];
+      for (const e of ev) placesWas.push(await places('Sound', e).inputValue());
+      await page.locator('tr.task-row', { has: places('Sound', ev[0]) }).locator('.grip').click();
+      ok((await page.locator('td.sel input[type=number]').count()) === ev.length, 'a click on ⋮⋮ selects a task row');
+      await page.fill('.selbar input[type=number]', '3');
+      await page.click('.selbar button:has-text("Set")');
+      await until(page, () => [...document.querySelectorAll('td.sel input[type=number]')].every((i) => i.value === '3'), null, 'Set gives every selected place 3');
+      await page.keyboard.press('Delete');
+      await until(page, () => [...document.querySelectorAll('td.sel input[type=number]')].every((i) => i.value === ''), null, 'Delete clears them');
+      await page.keyboard.press('Escape');
+      for (let i = 0; i < ev.length; i++) if (placesWas[i]) { await places('Sound', ev[i]).fill(placesWas[i]); await places('Sound', ev[i]).press('Tab'); }
+      await page.waitForTimeout(300);
+    }
+
     // --- folding: a section folds to its heading, and stays folded after a reload ---
     await page.goto(base + planUrl);
     await page.waitForSelector('.dp-table');

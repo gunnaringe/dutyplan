@@ -320,3 +320,18 @@ header .brand { display: inline-flex; align-items: center; gap: .5rem; }
 header .brand img { display: block; }
 .landing img.logo { display: block; margin: 1rem 0 0; }
 @media (max-width: 40rem) { header .brand span { display: none; } header .icon-btn, .dropdown > summary { min-width: 2.25rem; } }
+
+/* ---- selecting cells (2026-11-22) ---- */
+body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
+.dp-table td.sel { background: color-mix(in srgb, #2b6cd6 16%, transparent) !important; box-shadow: inset 0 0 0 2px #2b6cd6; }
+.dp-table td.count { cursor: pointer; }
+.dp-table td.count:hover { text-decoration: underline; }
+.selbar { position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .6rem; background: var(--bg); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
+.selbar[hidden] { display: none; }
+.selbar .n { font-weight: 600; padding: 0 .4rem; white-space: nowrap; }
+.selbar button, .selbar input { height: 2.25rem; min-height: 0; }
+.selbar button.ans, .selbar button.icon { width: 2.5rem; padding: 0; }
+.selbar input[type=number] { width: 4.5rem; }
+.selbar form { margin: 0; }
+.dp-table input.filter { width: 100%; margin-top: .3rem; padding: .2rem .4rem; font-size: .85rem; min-height: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
