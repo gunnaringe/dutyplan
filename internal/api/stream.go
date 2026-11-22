@@ -186,6 +186,9 @@ func (s *server) stream(w http.ResponseWriter, r *http.Request) {
 		case <-s.hub.done:
 			return
 		case c := <-ch:
+			if !grantFrom(r).sees(org, c) {
+				continue
+			}
 			b, _ := json.Marshal(c)
 			if !send("data: " + string(b) + "\n\n") {
 				return

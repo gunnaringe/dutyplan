@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -79,6 +80,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 		mux.HandleFunc("GET /auth/login", au.login)
 		mux.HandleFunc("GET /auth/callback", au.callback)
 		mux.HandleFunc("POST /auth/logout", au.logout)
+		mux.HandleFunc("GET /s/{token}", s.openLink)
 	}
 
 	mux.HandleFunc("GET /api/orgs", s.listOrgs)
@@ -104,6 +106,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 	s.runsRoutes(mux)
 	s.tableRoutes(mux)
 	s.sectionsRoutes(mux)
+	s.linkRoutes(mux)
 
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })
 
@@ -238,14 +241,26 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // ---- handlers ------------------------------------------------------------------------------------------------
 
-// listOrgs: with a login, the organisations the person is a member of.
+// listOrgs: with a login, the organisations the person is a member of, and those of the links opened in this browser.
 func (s *server) listOrgs(w http.ResponseWriter, r *http.Request) {
-	var orgs []store.Org
+	if s.auth == nil {
+		orgs, err := s.st.ListOrgs(r.Context())
+		if err != nil {
+			writeErr(w, s.log, err)
+			return
+		}
+		writeJSON(w, 200, orgs)
+		return
+	}
+	orgs := []store.Org{}
 	var err error
 	if u, ok := userFrom(r); ok {
 		orgs, err = s.st.ListOrgsOf(r.Context(), u.ID)
-	} else {
-		orgs, err = s.st.ListOrgs(r.Context())
+	}
+	for _, l := range s.links(r) {
+		if !slices.ContainsFunc(orgs, func(o store.Org) bool { return o.Slug == l.Org }) {
+			orgs = append(orgs, store.Org{Slug: l.Org, Name: l.OrgName})
+		}
 	}
 	if err != nil {
 		writeErr(w, s.log, err)
@@ -277,13 +292,24 @@ func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, o)
 }
 
+// getOrg also says what the asker may do there: role owner or editor (a member; without a login everyone is owner), or else
+// the level of their link (view or edit) and, for a link to one plan, that plan.
 func (s *server) getOrg(w http.ResponseWriter, r *http.Request) {
 	o, err := s.st.GetOrg(r.Context(), r.PathValue("org"))
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
 	}
-	writeJSON(w, 200, o)
+	g := grantFrom(r)
+	if s.auth == nil {
+		g.role = store.RoleOwner
+	}
+	writeJSON(w, 200, struct {
+		store.Org
+		Role  string `json:"role,omitempty"`
+		Level string `json:"level,omitempty"`
+		Plan  string `json:"plan,omitempty"`
+	}{o, g.role, g.level, g.plan})
 }
 
 func (s *server) listPlans(w http.ResponseWriter, r *http.Request) {

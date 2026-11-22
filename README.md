@@ -132,6 +132,11 @@ Someone who is not signed in sees a page that explains what this is, and **Sign 
 provider), and then they create an organisation, which they own. Members of an organisation are its **owner** (may also delete it)
 or **editors**; nobody else sees that it exists.
 
+**Sharing.** The owner shares the organisation, or one plan, with a link (**Share**): *view* lets whoever opens it look, *edit* lets
+them change everything there except members, links and deleting. Nobody needs an account to use a link; it works until it is deleted
+or runs out. A link to one plan shows only that plan, and the people and tasks its table needs. Under **Members** the owner makes
+invitation links (whoever opens one and signs in becomes an editor), changes roles and removes people; everyone may leave.
+
 Make a client at your OpenID Connect provider: confidential, with PKCE, the redirect address `<your address>/auth/callback` and,
 for signing out at the provider too, the address `<your address>/` after logout. Then start the server with `--oidc-issuer`,
 `--oidc-client-id`, `--oidc-client-secret-file` and `--public-url` (or the `DUTYPLAN_OIDC_*` and `DUTYPLAN_PUBLIC_URL`

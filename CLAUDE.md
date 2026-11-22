@@ -59,12 +59,19 @@ starts the Python planner, turns the answer into a view with explanations), `int
   creates an organisation owns it; a taken address gets `-2`, `-3` (never a 409 that tells the name exists). `--no-login` (or listening on
   loopback without `--oidc-issuer`) = no login, everyone may do everything: the tests, the scripts and kate (behind its forward-auth). The
   `access:` mutations guard it.
+- **Sharing** (2026-11-22, the user: "possible to create shared links that allow access to the plan or org"): `share_link` (003), `internal/api/access.go`.
+  A link is view or edit, to the organisation or one plan; `join` is an invitation (opened signed in = editor). Opening `/s/<token>` keeps the
+  token in the `__Host-dutyplan-links` cookie (up to 20), signed in or not; `access` lets a request through on a link when no membership does. A
+  plan link reaches its plan and the organisation's shared parts (people, tasks, sections; the plan page needs them), never the plan list,
+  other plans, members or links, and its stream hears nothing of other plans (`grant.sees`). A link never renames or deletes the organisation.
+  Only the owner manages links and members; anyone may leave; the last owner stays. Tokens are stored as they are, so the owner can copy a link
+  again. `GET /orgs/{org}` says `role` / `level` / `plan`, which the page uses to show or hide. The `share:` mutations guard it.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
 - **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a
   field the page does not call; add it together with the page change that needs it. **A person in a plan is a row, not an account**: no personal links, no per-person pages or endpoints for
   the people who are planned (name, task choices, can be proposed). Accounts are only for those who plan (see *Signing in*); links that share a
-  whole organisation or plan are planned (2026-11-22).
+  whole organisation or plan are built (see *Sharing*).
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
