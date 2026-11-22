@@ -296,19 +296,29 @@ function invitedBox() {
 }
 
 function pageLanding() {
-  const point = (k) => h('li', {}, h('h3', {}, t('landing.' + k + '_title')), h('p', {}, t('landing.' + k)));
+  const point = ([k, ic]) => h('li', {}, h('span', { class: 'point-ic' }, icon(ic)), h('h3', {}, t('landing.' + k + '_title')), h('p', {}, t('landing.' + k)));
+  const step = ([title, text], i) => h('li', {}, h('span', { class: 'step-n' }, String(i + 1)), h('h3', {}, t(title)), h('p', {}, t(text)));
+  // the film of how it works (scripts/video.js), in the page's language; still, with its controls, for those who ask for
+  // less motion
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const film = h('video', { class: 'demo', src: '/demo-' + currentLang + '.mp4', poster: '/landing.png', width: '1024', height: '576',
+    controls: true, loop: true, playsinline: true, preload: still ? 'none' : 'auto', autoplay: !still, 'aria-label': t('landing.video') });
+  film.muted = true; // muted as a property too: browsers only start a video by themselves when it has no sound
   return h('div', { class: 'landing' },
     deadLink(),
     invitedBox(),
-    h('img', { class: 'logo', src: '/logo.svg', alt: '', width: '72', height: '72' }),
-    h('h1', {}, t('landing.title')),
-    h('p', { class: 'lead' }, t('landing.lead')),
-    h('p', { class: 'row-inline' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
-      ME.signup ? h('a', { class: 'button ghost', href: ME.signup }, t('landing.sign_up')) : ''),
-    h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account')),
-    h('img', { src: '/landing.png', alt: t('landing.picture'), width: '1280', height: '842', loading: 'lazy' }),
-    h('ul', { class: 'points' }, ['tap', 'fair', 'live', 'share'].map(point)),
-    h('p', { class: 'muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
+    h('section', { class: 'hero' },
+      h('img', { class: 'logo', src: '/logo.svg', alt: '', width: '56', height: '56' }),
+      h('h1', {}, t('landing.title')),
+      h('p', { class: 'lead' }, t('landing.lead')),
+      h('p', { class: 'row-inline cta' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
+        ME.signup ? h('a', { class: 'button ghost', href: ME.signup }, t('landing.sign_up')) : ''),
+      h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account'))),
+    h('figure', { class: 'demo' }, film, h('figcaption', { class: 'muted small' }, t('landing.video_caption'))),
+    h('section', { class: 'how' }, h('h2', {}, t('landing.how')), h('ol', { class: 'steps' }, [['landing.step_dates_title', 'landing.step_dates'], ['landing.step_answers_title', 'landing.step_answers'],
+      ['landing.step_draft_title', 'landing.step_draft'], ['landing.step_share_title', 'landing.step_share']].map(step))),
+    h('ul', { class: 'points' }, [['tap', 'up'], ['fair', 'check'], ['live', 'users'], ['share', 'share']].map(point)),
+    h('p', { class: 'landing-foot muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
 }
 
 // brand: the logo and the app's name, linking home.
@@ -600,12 +610,13 @@ function ask(title, text, yes) {
 }
 
 async function copyLink(l, button) {
+  const join = l.level === 'join';
   try {
     await navigator.clipboard.writeText(linkURL(l));
     button.classList.add('done');
     button.replaceChildren(icon('check'));
     setTimeout(() => { button.classList.remove('done'); button.replaceChildren(icon('copy')); }, 1500);
-    say(t('share.copied'));
+    say(t(join ? 'members.invite_copied' : 'share.copied'));
   } catch (e) {
     window.prompt(t('share.copy_prompt'), linkURL(l));  // no clipboard (an old browser, or not https): to copy by hand
   }
@@ -613,11 +624,12 @@ async function copyLink(l, button) {
 
 const LINK_ICON = { view: 'eye', edit: 'hand', join: 'join' };
 const LINK_ACCESS = { view: 'share.access_view', edit: 'share.access_edit', join: 'share.access_join' };
-// A link: what it is (the plan and its label, or «Invitation link») on top, what it gives and how long under it, then
-// share (where the device can), copy and delete.
+// A link: what it is (the plan and its label, or whom an invitation is for) on top, what it gives and how long under it,
+// then share (where the device can), copy and delete.
 function linkRow(l, base, again, withPlan) {
   const gone = l.expires_at && new Date(l.expires_at) < new Date();
-  const name = l.level === 'join' ? t('members.invite_link') : l.label || t('share.no_label');
+  const join = l.level === 'join';
+  const name = join ? (l.label ? t('members.invite_for', { name: l.label }) : t('members.invite_link')) : l.label || t('share.no_label');
   const share = !gone && navigator.share ? iconBtn('share', t('share.share'), () => navigator.share({ title: name, url: linkURL(l) }).catch(() => {})) : '';
   return h('li', { class: 'link-row' + (gone ? ' gone' : '') },
     h('span', { class: 'link-ic ' + l.level, 'aria-hidden': 'true' }, icon(LINK_ICON[l.level])),
@@ -629,8 +641,8 @@ function linkRow(l, base, again, withPlan) {
         l.created_by ? ' · ' + t('share.by', { name: l.created_by }) : '')),
     h('span', { class: 'acts' }, share,
       gone ? '' : iconBtn('copy', t('share.copy'), (e) => copyLink(l, e.currentTarget)),
-      iconBtn('trash', t('share.delete_aria', { name }), async () => {
-        if (!(await ask(t('share.delete_title'), t(l.level === 'join' ? 'share.delete_join' : 'share.delete_text', { name }), t('common.remove')))) return;
+      iconBtn('trash', t(join ? 'members.invite_delete_aria' : 'share.delete_aria', { name }), async () => {
+        if (!(await ask(t(join ? 'members.invite_delete_title' : 'share.delete_title'), t(join ? 'share.delete_join' : 'share.delete_text', { name }), t('common.remove')))) return;
         if (await write(() => api('DELETE', `${base}/links/${l.id}`))) again();
       }, 'danger')));
 }
@@ -695,6 +707,8 @@ async function pageMembers(r, org) {
       } }, ['admin', 'member'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted small' }, t(ROLE[m.role])),
       admin || m.you ? iconBtn(m.you ? 'logout' : 'trash', m.you ? t('members.leave') : t('members.remove_aria', { name: m.name }), () => leave(m), 'danger') : ''));
   const expires = expirySelect(7);
+  // an invitation is for a person: whom it is for, as its label (a name, or a role), so the list says who has not joined yet
+  const who = h('input', { type: 'text', maxlength: '80', placeholder: t('members.invite_who_placeholder') });
   return h('div', { class: 'org-page members-page' },
     h('h1', {}, t('nav.members'), infoBtn(t('nav.members'), [t('members.info')])),
     h('ul', { class: 'plain members' }, members.map(row)),
@@ -704,11 +718,11 @@ async function pageMembers(r, org) {
       h('form', { class: 'new-link', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: '', expires_days: Number(expires.value) }); })) {
+        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: who.value.trim(), expires_days: Number(expires.value) }); })) {
           again();
-          try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
+          try { await navigator.clipboard.writeText(linkURL(made)); say(t('members.invite_made_copied')); } catch (err) { say(t('members.invite_made')); }
         }
-      } }, field(t('share.expires'), expires), h('button', { type: 'submit' }, t('members.invite_create')))] : '',
+      } }, field(t('members.invite_who'), who), field(t('share.expires'), expires), h('button', { type: 'submit' }, t('members.invite_create')))] : '',
     h('h2', {}, t('members.plan_links')),
     h('p', { class: 'muted small lead' }, t('members.plan_links_hint')),
     shared.length ? h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, again, true))) : h('p', { class: 'muted' }, t('share.none')));

@@ -36,7 +36,7 @@ func newEnvWith(t *testing.T, solver planner.Solver) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	static := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html>INDEX <link href="/style.css"><script src="/i18n.js"></script><script src="/app.js"></script>`)}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}}
+	static := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html>INDEX <link href="/style.css"><script src="/i18n.js"></script><script src="/app.js"></script>`)}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}, "demo-en.mp4": {Data: []byte("0123456789")}}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pl := planner.New(st, solver, 1, log)
 	return &env{t: t, h: New(st, pl, static, log), st: st, pl: pl}
@@ -261,6 +261,25 @@ func TestFrontendIsServedWithSafeHeaders(t *testing.T) {
 	}
 	if r := e.do("GET", "/", nil); r.hdr.Get("Cache-Control") != "no-cache" {
 		t.Errorf("the page itself must be checked every time: %q", r.hdr.Get("Cache-Control"))
+	}
+	// The film: a video type, in parts when asked (browsers ask for a video by ranges), and 304 when the browser has it.
+	video := func(hdr, val string) reply {
+		req := httptest.NewRequest("GET", "/demo-en.mp4", nil)
+		req.Header.Set(hdr, val)
+		w := httptest.NewRecorder()
+		e.h.ServeHTTP(w, req)
+		return reply{w.Code, w.Body.Bytes(), w.Header()}
+	}
+	sum := sha256.Sum256([]byte("0123456789"))
+	etag := `"` + hex.EncodeToString(sum[:6]) + `"`
+	if r := video("Range", "bytes=2-5"); r.code != 206 || string(r.body) != "2345" || r.hdr.Get("Content-Type") != "video/mp4" || r.hdr.Get("ETag") != etag {
+		t.Errorf("a range of the video = %d %q %v", r.code, r.body, r.hdr)
+	}
+	if r := video("If-None-Match", etag); r.code != 304 || len(r.body) != 0 {
+		t.Errorf("the video the browser already has = %d, want 304", r.code)
+	}
+	if r := video("If-None-Match", `"0123456789ab"`); r.code != 200 || string(r.body) != "0123456789" {
+		t.Errorf("an old copy of the video = %d, want the whole file", r.code)
 	}
 	if r := e.do("GET", "/favicon.ico", nil); r.code != 204 {
 		t.Errorf("favicon = %d, want 204 (keeps the browser console clean)", r.code)

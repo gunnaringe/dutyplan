@@ -12,6 +12,8 @@ and tells you why a place stays empty.
 
 ![The plan page: one table with the events across, what each needs, everyone's answers, and who does what](docs/img/hero.png)
 
+A [50-second film](web/demo-en.mp4) shows a plan made from nothing to a draft ([in Norwegian](web/demo-nb.mp4)).
+
 *Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, events and the details shown for them are
 all things you create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
 
@@ -283,6 +285,7 @@ on every commit.
 | `mise run app:smoke` | starts the server on a temporary database and checks the tenant isolation with curl |
 | `mise run app:ui` | browser check of the page in both languages (needs `playwright-core` and Chromium: `PLAYWRIGHT_CORE` and `CHROME`, see the script) |
 | `mise run app:shots` | makes the pictures in `docs/img` from the real app on invented data (about 30 s); run it again when the page changes visibly |
+| `mise run app:video` | makes the film on the start page (`web/demo-en.mp4`, `web/demo-nb.mp4`) from the real app on invented data (about 3 min) |
 | `mise run verify` | lint, tests, mutations and the smoke test: everything that must be green before a commit |
 | `mise run app:image` | builds the container image as `localhost/dutyplan:<commit>` |
 

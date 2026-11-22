@@ -8,6 +8,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,6 +19,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gunnaringe/dutyplan/internal/planner"
 	"github.com/gunnaringe/dutyplan/internal/store"
@@ -124,7 +126,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 // assets are the files the page links; each gets ?v=<hash of its content> where index.html links it.
 const robotsMeta = `<meta name="robots" content="noindex, nofollow">`
 
-var assets = []string{"i18n.js", "app.js", "style.css", "landing.png", "logo.svg", "llms.txt"}
+var assets = []string{"i18n.js", "app.js", "style.css", "landing.png", "demo-en.mp4", "demo-nb.mp4", "logo.svg", "llms.txt"}
 
 // serveFile sends one embedded file. index.html gets the assets' versions in its links. An asset asked for with its
 // current version never changes, so it may be cached for a year; anything else (the page, an asset without or with an
@@ -154,6 +156,8 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 		w.Header().Set("Content-Type", "image/png")
 	case strings.HasSuffix(name, ".svg"):
 		w.Header().Set("Content-Type", "image/svg+xml")
+	case strings.HasSuffix(name, ".mp4"):
+		w.Header().Set("Content-Type", "video/mp4")
 	case strings.HasSuffix(name, ".txt"):
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	default:
@@ -164,7 +168,12 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 	} else {
 		w.Header().Set("Cache-Control", "no-cache")
 	}
-	w.Write(b)
+	// The version as an ETag: what is checked again costs a 304, not the whole file. ServeContent also answers range
+	// requests (a browser asks for a video in parts) and If-None-Match.
+	if v := s.version[name]; v != "" {
+		w.Header().Set("ETag", `"`+v+`"`)
+	}
+	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(b))
 }
 
 // indexable: only the start page with a login (the landing page says what this is); everything else, and all of it
