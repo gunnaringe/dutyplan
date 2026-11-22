@@ -137,7 +137,9 @@ const { spawn } = require('child_process');
     await places('Café', ev[1]).press('Enter');
     await places('Video', ev[0]).fill('1');
     await places('Video', ev[0]).press('Tab');
-    const draft = (task, e) => page.locator(`button[aria-label="${task}, ${e}: open the place"]`);
+    // a place of the draft (its cell), and ⋯ in it, which opens the place's dialog (a click on the cell itself does nothing)
+    const draft = (task, e) => page.locator('td.draft', { has: page.locator(`button[aria-label="${task}, ${e}: open the place"]`) });
+    const openPlace = (task, e) => page.locator(`button[aria-label="${task}, ${e}: open the place"]`).click();
     await until(page, () => !!document.querySelector('button[aria-label="Video, Sun 2 Aug 11:00: open the place"]'), null, 'a place gets a cell in the draft without a reload');
     ok((await draft('Sound', ev[0]).innerText()).includes('1 open place'), 'an open place before the first draft');
     await page.reload();
@@ -395,7 +397,7 @@ const { spawn } = require('child_process');
     await closeDialog();
 
     // --- the draft: by hand, make a draft, lock, try again, pin ---
-    await draft('Café', ev[0]).click();
+    await openPlace('Café', ev[0]);
     await dialog.locator('input[aria-label="Text"]').fill('Outside guest');
     await dialog.locator('input[aria-label="Places it fills"]').fill('2');
     await reopens(() => dialog.getByRole('button', { name: 'Set it' }).click(), 'the place dialog opens again');
@@ -404,7 +406,7 @@ const { spawn } = require('child_process');
     ok((await draft('Café', ev[0]).locator('.slot.hand').innerText()) === 'Outside guest ×2', 'set by hand is violet in the draft');
     // several people by hand at once, more than the places
     const sound2places = await places('Sound', ev[2]).inputValue();
-    await draft('Sound', ev[2]).click();
+    await openPlace('Sound', ev[2]);
     for (const n of ['Kari Test', 'Jon Demo', 'Ola Sample']) await dialog.locator(`input[aria-label="Set ${n} by hand"]`).check();
     await reopens(() => dialog.getByRole('button', { name: 'Add the people ticked' }).click(), 'the place dialog opens again');
     ok((await dialog.locator('input[aria-label="Set Kari Test by hand"]').count()) === 0, 'someone set by hand is not offered again');
@@ -422,20 +424,20 @@ const { spawn } = require('child_process');
     ok(/Kari Test|Ola Sample|Jon Demo/.test(sound0), 'the planner filled Sound: ' + sound0);
     const cafe1 = await draft('Café', ev[1]).innerText();
     ok(cafe1.includes('Not filled') && cafe1.includes('Why?'), 'an unfilled place says so: ' + cafe1);
-    await draft('Café', ev[1]).click();
+    await openPlace('Café', ev[1]);
     const why = await dialog.innerText();
     ok(why.includes('Not filled:') && why.includes('have not chosen the task'), 'the place dialog explains: ' + why);
     await closeDialog();
 
-    await draft('Sound', ev[0]).click();
+    await openPlace('Sound', ev[0]);
     const lockBtn = dialog.getByRole('button', { name: /^Lock / });
     const lockedName = (await lockBtn.getAttribute('aria-label')).slice(5);
     await reopens(() => lockBtn.click(), 'the place dialog opens again');
     ok((await dialog.innerText()).includes('Unlock'), 'a locked name can be unlocked');
     await closeDialog();
     sound0 = await draft('Sound', ev[0]).innerText();
-    const lockMark = () => draft('Sound', ev[0]).locator('.slot.locked .mark.lock[aria-label="Locked"]').count();
-    ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name has the lock square: ' + sound0);
+    const lockMark = () => draft('Sound', ev[0]).locator(`.slot.locked button.lockbtn.on[aria-label="Unlock ${lockedName}"]`).count();
+    ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name has a pressed lock: ' + sound0);
     await page.getByRole('button', { name: 'Try again' }).click();
     await runIs(2, 'try again makes a second draft');
     sound0 = await draft('Sound', ev[0]).innerText();
@@ -462,6 +464,49 @@ const { spawn } = require('child_process');
     ok((await dialog.innerText()).includes('fair share'), 'the distribution lists the load against the fair share');
     await dialog.locator('.modal-foot').getByRole('button', { name: 'Close', exact: true }).click();
     await dialog.waitFor({ state: 'detached' });
+
+    // --- locking in the draft: the lock by a name, a row selected, Lock all; then Remove unlocked, and back with a pin ---
+    {
+      const cell = (task, e) => `button[aria-label="${task}, ${e}: open the place"]`;
+      const inCell = (sel, what) => until(page, ([c, q]) => { const td = document.querySelector(c)?.closest('td'); return !!td && !!td.querySelector(q); }, [cell('Sound', ev[1]), sel], what);
+      await draft('Sound', ev[1]).locator('.nm').first().click();
+      ok((await page.locator('dialog[open]').count()) === 0, 'a click on a name in the draft opens nothing');
+      const one = draft('Sound', ev[1]).locator('button.lockbtn:not(.on)').first();
+      const who = (await one.getAttribute('aria-label')).slice(5);
+      await one.click();
+      await inCell(`button.lockbtn.on[aria-label="Unlock ${who}"]`, 'the lock by a name locks it');
+      const soundRow = () => page.evaluate(() => {
+        const tr = [...document.querySelectorAll('tr.draft-row')].find((x) => x.querySelector('th').textContent === 'Sound');
+        return { on: tr.querySelectorAll('button.lockbtn.on').length, off: tr.querySelectorAll('button.lockbtn:not(.on)').length };
+      });
+      await page.locator('tr.draft-row', { has: page.locator('th', { hasText: /^Sound$/ }) }).locator('button.rowpick').click();
+      ok((await page.locator('.selbar').innerText()).includes('Unlock'), 'a row of the draft selected gives Lock and Unlock');
+      await page.locator('.selbar').getByRole('button', { name: 'Unlock', exact: true }).click();
+      await until(page, () => !document.querySelector('tr.draft-row button.lockbtn.on'), null, 'Unlock in the bar unlocks the row’s names');
+      await page.locator('.selbar').getByRole('button', { name: 'Lock', exact: true }).click();
+      await until(page, () => { const tr = [...document.querySelectorAll('tr.draft-row')].find((x) => x.querySelector('th').textContent === 'Sound');
+        return !tr.querySelector('button.lockbtn:not(.on)') && !!tr.querySelector('button.lockbtn.on'); }, null, 'Lock in the bar locks every name in the row');
+      ok((await soundRow()).off === 0, 'the whole row is locked');
+      await page.keyboard.press('Escape');
+      await page.getByRole('button', { name: 'Lock all' }).click();
+      await until(page, () => !document.querySelector('tr.draft-row button.lockbtn:not(.on)'), null, 'Lock all locks every name of the draft');
+      ok(await page.getByRole('button', { name: 'Lock all' }).isDisabled(), 'nothing is left to lock');
+      // one unlocked again; Remove unlocked takes only that one, asked in the page's own dialog
+      await draft('Sound', ev[1]).locator(`button.lockbtn.on[aria-label="Unlock ${who}"]`).click();
+      await inCell(`button.lockbtn:not(.on)[aria-label="Lock ${who}"]`, 'the lock by a name unlocks it');
+      await page.getByRole('button', { name: 'Remove unlocked' }).click();
+      await page.locator('dialog.ask[open]').getByRole('button', { name: 'Remove', exact: true }).click();
+      await barHas('Unlocked names removed', 'Remove unlocked leaves no draft on show');
+      ok(!(await draft('Sound', ev[1]).innerText()).includes(who), 'the unlocked name went');
+      ok((await draft('Sound', ev[0]).locator('button.lockbtn.on').count()) > 0, 'the locked names stay');
+      ok((await draft('Café', ev[0]).locator('.slot.hand').innerText()) === 'Outside guest ×2', 'what is set by hand stays');
+      await page.reload();
+      await barHas('Unlocked names removed', 'no draft on show after a reload either');
+      await page.getByRole('button', { name: 'Plan settings' }).click();
+      await dialog.getByRole('button', { name: 'Make draft #2 the current plan' }).click();
+      await runIs(2, 'pinning a draft shows it again');
+      await closeDialog();
+    }
 
     // --- copy an event, delete one ---
     await page.click(`button[aria-label="Copy the event ${ev[2]}"]`);

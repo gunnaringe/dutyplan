@@ -106,6 +106,14 @@ type Snapshot struct {
 	People []SnapPerson `json:"people"`
 	// Places are the places of the planner's tasks on each event: event -> task -> places.
 	Places map[int64]map[int64]int `json:"places"`
+	// Kept are the planner's names that were locked when the run started ("e<event>/t<task>/p<person>"): unlocked later,
+	// they are still the planner's names in this draft (one set by hand and removed later is not). Not in the input.
+	Kept []string `json:"kept,omitempty"`
+}
+
+// keptKey names a locked name in Snapshot.Kept.
+func keptKey(event, task, person int64) string {
+	return eid(event) + "/" + tid(task) + "/" + pid(person)
 }
 
 // SlotsFor is the places of the planner's tasks on one event of the run.
@@ -224,6 +232,9 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 		switch {
 		case c.PersonID != nil:
 			l.Person = pid(*c.PersonID)
+			if c.Locked {
+				snap.Kept = append(snap.Kept, keptKey(c.EventID, c.TaskID, *c.PersonID))
+			}
 		default:
 			l.Label, l.Fills = c.Label, c.Fills
 		}

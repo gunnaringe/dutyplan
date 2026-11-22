@@ -56,7 +56,9 @@ every plan).
 
 **The draft allocation.** Between the tasks and the answers is the draft: who has each place. What you set yourself has a
 violet background and a ✎ square: a person, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
-planner can be **locked** with one click (a 🔒 square), and *Try again* keeps it. A place given against a *?* is marked *maybe*, and a place
+planner has a lock by it: one click **locks** it, and *Try again* keeps it. Drag over places (or ⇥ at a row's end) to lock or unlock
+many at once, **Lock all** locks every name of the draft, and **Remove unlocked** takes away the planner's names that are not locked
+(the draft stays under the earlier drafts). A place given against a *?* is marked *maybe*, and a place
 that cannot be filled says *Not filled · Why?*. The planner is checked afterwards by a second, independent program, and the
 page says if a rule was broken (it should never be).
 
@@ -85,8 +87,9 @@ the table, the same in every plan, and the planner never sees them. Deleting a s
 
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
 
-**It says why.** Click a place in the draft and you see what is set by hand and what came from the planner, can set people by
-hand (tick as many as you like, also more than the places: the place then shows as fuller than it needs), and can say that the planner picks only from some people (*their own sound engineer*, without any special rule). When a
+**It says why.** Open a place in the draft (⋯) and you see what is set by hand and what came from the planner, can set people by
+hand (tick as many as you like, also more than the places: the place then shows as fuller than it needs), and can say that the planner picks only from some people (*their own sound engineer*, without any special rule; such a place has a
+small funnel in the draft). When a
 place cannot be filled, the reason is in plain words: who is outside the selection, who cannot come, who has not chosen the task.
 Weak spots the planner had to accept are listed as *compromises*.
 

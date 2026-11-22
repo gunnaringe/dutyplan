@@ -64,6 +64,7 @@ type CellPerson struct {
 	Name   string `json:"name"`
 	Weak   bool   `json:"weak"`   // the person said «poor» for the event or the task
 	Locked bool   `json:"locked"` // a manual cell when the run was made (set by hand or locked): the planner kept it
+	Kept   bool   `json:"kept"`   // of those, one of the planner's names that was locked (not set by hand)
 }
 
 // CellText is a manual cell with free text («Outside guest»).
@@ -204,11 +205,16 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 		return cells[k]
 	}
+	kept := map[string]bool{}
+	for _, k := range snap.Kept {
+		kept[k] = true
+	}
 	for _, a := range out.Assignments {
 		id, _ := parseID(a.Person, "p")
 		weak := a.TaskLevel == "poor" || a.DateLevel == "poor"
 		c := cell(a.Date, a.Task)
-		c.people = append(c.people, CellPerson{ID: id, Name: personName(a.Person), Weak: weak, Locked: a.Locked})
+		c.people = append(c.people, CellPerson{ID: id, Name: personName(a.Person), Weak: weak, Locked: a.Locked,
+			Kept: a.Locked && kept[a.Date+"/"+a.Task+"/"+a.Person]})
 	}
 	for _, m := range out.Manual {
 		c := cell(m.Date, m.Task)

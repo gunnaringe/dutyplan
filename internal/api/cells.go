@@ -14,6 +14,19 @@ func (s *server) cellsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/cells/{id}", s.deleteCell)
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/pools", s.listPools)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/pools", s.setPool)
+	// the draft: lock or unlock many of the planner's names at once, and «Remove unlocked» (no draft on show)
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/locks", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Locks  []store.Lock `json:"locks"`
+			Locked bool         `json:"locked"`
+		}
+		if decodeMax(w, r, &b, 512<<10) {
+			noContent(w, s.st.SetLocks(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Locks, b.Locked), s)
+		}
+	})
+	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/draft", func(w http.ResponseWriter, r *http.Request) {
+		noContent(w, s.st.SetDraftAside(r.Context(), r.PathValue("org"), r.PathValue("plan")), s)
+	})
 }
 
 func (s *server) listCells(w http.ResponseWriter, r *http.Request) {
