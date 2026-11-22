@@ -209,6 +209,9 @@ To build it yourself from `Dockerfile`: `podman build -t dutyplan .`, or `mise r
 | `--public-url` | `$DUTYPLAN_PUBLIC_URL` | the address people open, e.g. `https://plan.example.org/`; the callback is `<address>auth/callback`. |
 | `--no-login` | `$DUTYPLAN_NO_LOGIN=1` | no signing in: everyone who reaches the address may do everything (see *Signing in*). |
 
+`dutyplan health [url]` asks a running server whether it is well (exit 0) or not (1), by default `http://127.0.0.1:8080/api/health`: a
+container health check that needs no shell or curl in the image.
+
 `DUTYPLAN_SOLVER` is the same as `--solver`. The server writes one line with its address to standard output and logs to
 standard error. It stops cleanly on `SIGINT` and `SIGTERM`. A planner run that was going when the server stopped is marked as
 failed at the next start.
