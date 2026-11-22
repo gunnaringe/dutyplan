@@ -46,6 +46,9 @@ const ICONS = {
   trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
   join: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>',
+  code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+  message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
   chevron: '<path d="M9 18l6-6-6-6"/>',
 };
 // mark: the square that says a place is locked (kept by the planner) or set by hand.
@@ -313,12 +316,34 @@ function pageLanding() {
       h('p', { class: 'lead' }, t('landing.lead')),
       h('p', { class: 'row-inline cta' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
         ME.signup ? h('a', { class: 'button ghost', href: ME.signup }, t('landing.sign_up')) : ''),
-      h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account'))),
+      h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account')),
+      h('p', { class: 'free' }, t('landing.free'))),
     h('figure', { class: 'demo' }, film, h('figcaption', { class: 'muted small' }, t('landing.video_caption'))),
     h('section', { class: 'how' }, h('h2', {}, t('landing.how')), h('ol', { class: 'steps' }, [['landing.step_dates_title', 'landing.step_dates'], ['landing.step_answers_title', 'landing.step_answers'],
       ['landing.step_draft_title', 'landing.step_draft'], ['landing.step_share_title', 'landing.step_share']].map(step))),
     h('ul', { class: 'points' }, [['tap', 'up'], ['fair', 'check'], ['live', 'users'], ['share', 'share']].map(point)),
-    h('p', { class: 'landing-foot muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
+    about());
+}
+
+// About: why it exists, that it is free, and how to reach the maker (the same address as Sermon Studio's).
+const CONTACT = 'contact@sermon-studio.app';
+const REPO = 'https://github.com/gunnaringe/dutyplan';
+// withLinks: a text whose {name} placeholders become the given nodes (links inside a translated sentence).
+function withLinks(key, nodes) {
+  return t(key).split(/\{(\w+)\}/).map((part, i) => (i % 2 ? nodes[part] : part));
+}
+function about() {
+  const ext = (href, ic, key, title) => h('li', {}, h('a', { href, title: title ? t(title) : null }, icon(ic), h('span', {}, t(key))));
+  return h('footer', { class: 'about', id: 'about' },
+    h('h2', {}, t('about.title')),
+    h('p', {}, t('about.why')),
+    h('p', {}, t('about.free')),
+    h('p', {}, withLinks('about.contact', { email: h('a', { href: 'mailto:' + CONTACT }, CONTACT), github: h('a', { href: REPO + '/issues' }, 'GitHub') })),
+    h('p', {}, h('a', { class: 'signature', href: 'https://gunnaringe.sort.land', title: 'gunnaringe.sort.land' }, 'Gunnar Inge Gjøvik Sortland')),
+    h('ul', { class: 'about-links' },
+      ext(REPO, 'code', 'about.source', 'about.source_title'),
+      ext(REPO + '/issues', 'message', 'about.issues', 'about.issues_title'),
+      ext(REPO + '/blob/main/LICENSE', 'file', 'about.licence')));
 }
 
 // brand: the logo and the app's name, linking home.

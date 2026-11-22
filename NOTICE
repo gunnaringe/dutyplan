@@ -1,0 +1,9 @@
+Dutyplan (Tjenesteplan)
+Copyright Gunnar Inge Gjøvik Sortland
+
+Licensed under the Apache License 2.0 (LICENSE), except:
+
+- web/signature.woff2 is the author's own handwriting, cut down to the letters
+  of the author's name, for the signature in the About section of the start
+  page. It is not covered by the Apache License: it may be used only to show
+  that name in Dutyplan and its copies, unchanged.
