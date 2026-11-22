@@ -5,6 +5,8 @@
   --hand-bg: #e6defa; --hand-fg: #35246e; --draft-bg: #e3efe7; --draft-fg: #245c3c; --draft-line: #9cc5ab; --draft-row: #f6faf7;
   /* the three levels of every choice: good (green thumb up), if needed (yellow ?), can't (red thumb down) */
   --yes: #1d8a4a; --maybe: #b98a00; --no: #c62828;
+  /* two heights for controls: on the page and in dialogs, and the compact one inside the table; the name column's width */
+  --ctl: 2.25rem; --ctl-sm: 1.75rem; --namecol: 13rem;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -23,9 +25,9 @@ main { max-width: 56rem; margin: 0 auto; padding: .5rem 1rem 1rem; overflow-wrap
 h1 { font-size: 1.5rem; margin: .5rem 0 1rem; }
 h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
 a { color: var(--accent); }
-a.button { display: inline-block; padding: .3rem .9rem; border: 1px solid var(--accent); border-radius: .4rem; text-decoration: none; font-weight: 600; }
+a.button { display: inline-block; padding: .4rem .9rem; border: 1px solid var(--accent); border-radius: .4rem; text-decoration: none; font-weight: 600; }
 input, select, button { font: inherit; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: .4rem; background: var(--bg); color: var(--fg); }
-button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; white-space: nowrap; }
 @media (prefers-color-scheme: dark) { button { color: #0b1a12; } }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button.ghost { background: transparent; color: var(--fg); border-color: var(--line); }
@@ -50,7 +52,9 @@ th { color: var(--muted); font-weight: 600; font-size: .875rem; }
 .err { color: var(--err); }
 .warn { color: var(--warn); }
 p.notice { padding: .5rem .8rem; border: 1px solid var(--warn); border-radius: .4rem; background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }
-#msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
+/* what was done (or refused): over the page at the bottom, so nothing moves when it shows */
+#msg { position: fixed; left: 50%; top: 3.5rem; cursor: pointer; transform: translateX(-50%); z-index: 20; max-width: min(36rem, calc(100% - 2rem));
+  padding: .5rem 1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg); box-shadow: 0 4px 16px rgb(0 0 0 / .15); }
 #msg:empty { display: none; }
 /* signed out, or the server out of reach: a bar at the top with the way back */
 #conn { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: center;
@@ -79,7 +83,7 @@ details summary { cursor: pointer; min-height: 2.75rem; display: flex; align-ite
 form.addrow { display: flex; align-items: center; gap: .3rem; border: 1px dashed var(--line); border-radius: .4rem; padding: .1rem .3rem; width: max-content; max-width: 100%; }
 form.addrow .plus { font-weight: 700; color: var(--muted); }
 form.addrow input { border: none; background: transparent; min-width: 0; width: 13rem; font-size: .875rem; padding: .2rem .25rem; }
-form.addrow button { padding: .05rem .55rem; font-size: .8rem; }
+form.addrow button { padding: .05rem .7rem; font-size: .8rem; }
 
 /* ---- the organisation ---- */
 .plans { display: grid; gap: .6rem; }
@@ -97,10 +101,12 @@ main:has(.plan-page) { max-width: 100rem; }
 .title-bar .settings { margin-left: auto; }
 .sideways { display: inline-flex; gap: .25rem; align-items: center; }
 button.icon { padding: .2rem .35rem; line-height: 0; }
+.title-bar > button:not(.info), .title-bar .sideways button { height: var(--ctl); }
+.title-bar .sideways button { width: var(--ctl); display: inline-flex; align-items: center; justify-content: center; }
 .grid-scroll { overflow-x: auto; margin: .4rem 0; border: 1px solid var(--line); border-radius: .4rem; }
 /* The main table scrolls inside the window, so the dates (top) and the names (left) stay put, and the sideways scroll bar is
    always on screen instead of under the last row. */
-.grid-scroll.main { overflow: auto; max-height: calc(100dvh - 7rem); scroll-snap-type: x proximity; scroll-padding-left: 10.5rem; overscroll-behavior-x: contain; }
+.grid-scroll.main { overflow: auto; max-height: calc(100dvh - 7rem); scroll-snap-type: x proximity; scroll-padding-left: var(--namecol); overscroll-behavior-x: contain; }
 .grid-scroll.main thead th { position: sticky; top: 0; z-index: 2; background: var(--bg); }
 .grid-scroll.main thead th[scope=col] { scroll-snap-align: start; }
 .grid-scroll.main thead th.corner { left: 0; z-index: 3; }
@@ -108,13 +114,20 @@ button.icon { padding: .2rem .35rem; line-height: 0; }
 .grid-scroll:focus-visible { outline-offset: -2px; }
 table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
 .dp-table th, .dp-table td { vertical-align: top; padding: .2rem .35rem; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); min-width: 6.5rem; }
-.dp-table th[scope=row] { position: sticky; left: 0; z-index: 1; background: var(--bg); min-width: 10rem; max-width: 13rem; color: var(--fg); font-size: .875rem; }
+/* the names have one width (the corner too), the same as the snap padding, so a date that snaps into place is never under them */
+.dp-table th[scope=row] { position: sticky; left: 0; z-index: 1; background: var(--bg); width: var(--namecol); min-width: var(--namecol); max-width: var(--namecol); color: var(--fg); font-size: .875rem; }
+.dp-table thead th[scope=col] .cellbtn { white-space: nowrap; }
+/* controls inside the table have the compact height */
+.dp-table form.addrow button, .dp-table th.addcol button, .draft-bar button:not(.info), .dp-table .draft-bar select { height: var(--ctl-sm); padding-top: 0; padding-bottom: 0; }
+.dp-table th.addcol button { min-width: var(--ctl-sm); padding: 0 .5rem; }
+.dp-table form.addrow { width: 100%; }
+.dp-table form.addrow input { flex: 1; width: auto; }
 .dp-table thead th { font-size: .8rem; color: var(--fg); }
 .dp-table th.addcol, .dp-table td.addcol { min-width: 0; border-right: none; }
 .dp-table .sub { display: block; font-weight: 400; font-size: .75rem; color: var(--muted); line-height: 1.25; }
 .dp-table .rl { display: flex; align-items: center; gap: .35rem; }
 .dp-table thead .rl .edit { margin-left: auto; }
-button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .35rem; font-size: .8rem; line-height: 1.5; }
+button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0; width: var(--ctl-sm); height: var(--ctl-sm); font-size: .8rem; line-height: 1; flex: none; }
 .grip { color: var(--muted); cursor: grab; letter-spacing: -2px; user-select: none; }
 .field-row .nm { font-weight: 700; flex: 1; }
 .dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
@@ -143,6 +156,7 @@ button.cellbtn.inline { display: inline; }
 .draft-bar .row-inline { margin: 0; }
 .dp-table .draft-bar select { width: auto; padding: .1rem .3rem; }
 .draft-bar button { padding: .15rem .7rem; }
+.draft-bar .pin { width: var(--ctl-sm); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .draft-bar p, .draft-bar ul { margin: .25rem 0; }
 .draft-bar .pinned { border: 1px solid var(--accent); color: var(--accent); border-radius: .4rem; padding: 0 .5rem; font-weight: 700; white-space: nowrap; }
 .legend { margin-left: auto; display: inline-flex; gap: .75rem; align-items: center; color: var(--fg); }
@@ -200,6 +214,7 @@ label.field { display: flex; flex-direction: column; gap: .2rem; font-size: .875
 label.field > input, label.field > select, label.field > textarea { color: var(--fg); }
 label.check { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .35rem 0; }
 table.mini td { padding: .3rem .4rem; }
+table.mini td:last-child:not(:first-child) { width: 1%; white-space: nowrap; text-align: right; }
 table.mini tr.shown td { font-weight: 600; }
 input.wide { width: 100%; }
 .row-inline input.wide { flex: 1; width: auto; min-width: 12rem; }
@@ -222,9 +237,13 @@ input.wide { width: 100%; }
   header .spacer { display: none; }
   .title-bar h1 { font-size: 1.1rem; }
   /* a phone gets the same table: a narrower name column and narrower days, so more of them fit */
-  .dp-table th[scope=row] { min-width: 6.5rem; max-width: 7.5rem; font-size: .8rem; }
+  :root { --namecol: 7.5rem; }
+  /* the add line has no room for a name and «Add» side by side: the name on top, the button under it */
+  .dp-table form.addrow { flex-wrap: wrap; }
+  .dp-table form.addrow .plus { display: none; }
+  .dp-table form.addrow input { flex-basis: 100%; }
+  .dp-table th[scope=row] { font-size: .8rem; }
   .dp-table th, .dp-table td { min-width: 4.75rem; }
-  .grid-scroll.main { scroll-padding-left: 7rem; }
   .legend { margin-left: 0; }
 }
 
@@ -339,6 +358,7 @@ body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
 .who-item { display: flex; align-items: center; gap: .5rem; padding: .3rem; border-radius: .3rem; cursor: pointer; }
 .who-item:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .who-item[hidden] { display: none; }
+label.field[hidden] { display: none; }
 
 /* a note on an answer: a tab in the cell's corner (amber when there is a note, faint on hover to add one) and one popover */
 td.answer .note-tab { position: absolute; top: 0; right: 0; width: 1.1rem; height: 1.1rem; min-height: 0; min-width: 0; padding: 0; border: none;
