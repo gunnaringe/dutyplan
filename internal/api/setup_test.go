@@ -86,7 +86,7 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	if len(dates) != 5 {
 		t.Errorf("dates: %+v", dates)
 	}
-	e.mustDo(200, "PATCH", fmt.Sprintf("%s/%d", events, dates[1].ID), map[string]any{"description": "Autumn break"})
+	e.mustDo(200, "PATCH", fmt.Sprintf("%s/%d", events, dates[1].ID), map[string]any{"start_time": "10:00"})
 	e.mustDo(204, "DELETE", fmt.Sprintf("%s/%d", events, dates[1].ID), nil)
 	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", camera.ID), nil) // its places and its combination go with it
 	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
@@ -127,7 +127,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
 	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "practical"})
-	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), map[string]any{"description": "x"})
+	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), map[string]any{"start_time": "10:00"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), nil)
 	notFound("GET", "/api/orgs/org-a/plans/nope/events", nil)
 	notFound("PATCH", "/api/orgs/org-a/tasks/abc", map[string]any{"name": "x"})
@@ -141,7 +141,7 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	}
 	var datesA []store.Event
 	e.mustDo(200, "GET", "/api/orgs/org-a/plans/autumn-2026/events", nil).json(&datesA)
-	if len(datesA) != 1 || datesA[0].Description != "" {
+	if len(datesA) != 1 || datesA[0].StartTime != "" {
 		t.Errorf("A's date untouched: %+v", datesA)
 	}
 }
@@ -159,6 +159,6 @@ func TestSetupWritesNeedValidInput(t *testing.T) {
 		t.Errorf("a blank task name: %d", r.code)
 	}
 	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "2026-08-09", "description": "x"}); r.code != 400 {
-		t.Errorf("a description is set by editing the event, not with the new one: %d %s", r.code, r.body)
+		t.Errorf("an event has no description (a details row holds it): %d %s", r.code, r.body)
 	}
 }

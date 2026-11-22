@@ -15,28 +15,24 @@ func addTimed(t *testing.T, s *Store, o Org, p Plan, date, start, end string) Ev
 	return evs[0]
 }
 
-func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
+func TestAnEventCanHaveATimeOfDay(t *testing.T) {
 	s, o, p := setup(t)
 	evs, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: " 11:00 ", EndTime: "12:30"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw := "  Bring the banner.\r\nDoors open at 10:30.\tThanks!  "
-	e, err := s.UpdateEvent(ctx, o.Slug, p.Slug, evs[0].ID, EventPatch{Description: &raw})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if e.StartTime != "11:00" || e.EndTime != "12:30" || e.Description != "Bring the banner.\nDoors open at 10:30.\tThanks!" {
+	e := evs[0]
+	if e.StartTime != "11:00" || e.EndTime != "12:30" {
 		t.Errorf("added: %+v", e)
 	}
 	// without times it is as before
 	plain, err := s.AddEvent(ctx, o.Slug, p.Slug, "2026-08-16")
-	if err != nil || plain.StartTime != "" || plain.EndTime != "" || plain.Description != "" {
+	if err != nil || plain.StartTime != "" || plain.EndTime != "" {
 		t.Errorf("plain: %+v %v", plain, err)
 	}
 	// a start time without an end time is fine; the times stay with the event
 	got, _ := s.ListEvents(ctx, o.Slug, p.Slug)
-	if len(got) != 2 || got[0].StartTime != "11:00" || got[0].EndTime != "12:30" || got[0].Description != e.Description {
+	if len(got) != 2 || got[0].StartTime != "11:00" || got[0].EndTime != "12:30" {
 		t.Errorf("listed: %+v", got)
 	}
 	startOnly := addTimed(t, s, o, p, "2026-08-23", "09:05", "")
@@ -48,45 +44,33 @@ func TestAnEventCanHaveATimeOfDayAndADescription(t *testing.T) {
 	}
 }
 
-func TestRefusedTimesAndDescriptions(t *testing.T) {
+func TestRefusedTimes(t *testing.T) {
 	s, o, p := setup(t)
-	// times come with a new event; a description is set on an existing one (in another plan, so this one stays empty)
-	other, _ := s.CreatePlan(ctx, o.Slug, "Other")
-	base, _ := s.AddEvent(ctx, o.Slug, other.Slug, "2026-08-02")
-	add := func(start, end, desc string) error {
-		if desc != "" {
-			_, err := s.UpdateEvent(ctx, o.Slug, other.Slug, base.ID, EventPatch{Description: &desc})
-			return err
-		}
+	add := func(start, end string) error {
 		_, err := s.AddEvents(ctx, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", StartTime: start, EndTime: end})
 		return err
 	}
-	for name, c := range map[string]struct{ start, end, desc, code string }{
-		"hour 24":               {"24:00", "", "", "start_time_invalid"},
-		"minute 60":             {"10:60", "", "", "start_time_invalid"},
-		"no colon":              {"1100", "", "", "start_time_invalid"},
-		"one digit hour":        {"9:30", "", "", "start_time_invalid"},
-		"seconds":               {"11:00:00", "", "", "start_time_invalid"},
-		"text":                  {"noon", "", "", "start_time_invalid"},
-		"bad end":               {"11:00", "25:00", "", "end_time_invalid"},
-		"end without start":     {"", "12:00", "", "end_without_start"},
-		"end before start":      {"12:00", "11:00", "", "end_not_after_start"},
-		"end equal to start":    {"12:00", "12:00", "", "end_not_after_start"},
-		"control character":     {"", "", "bell\x07", "description_invalid"},
-		"too long":              {"", "", strings.Repeat("x", maxDescriptionRunes+1), "description_invalid"},
-		"too long (multi-byte)": {"", "", strings.Repeat("å", maxDescriptionRunes+1), "description_invalid"},
+	for name, c := range map[string]struct{ start, end, code string }{
+		"hour 24":            {"24:00", "", "start_time_invalid"},
+		"minute 60":          {"10:60", "", "start_time_invalid"},
+		"no colon":           {"1100", "", "start_time_invalid"},
+		"one digit hour":     {"9:30", "", "start_time_invalid"},
+		"seconds":            {"11:00:00", "", "start_time_invalid"},
+		"text":               {"noon", "", "start_time_invalid"},
+		"bad end":            {"11:00", "25:00", "end_time_invalid"},
+		"end without start":  {"", "12:00", "end_without_start"},
+		"end before start":   {"12:00", "11:00", "end_not_after_start"},
+		"end equal to start": {"12:00", "12:00", "end_not_after_start"},
 	} {
-		if err := add(c.start, c.end, c.desc); !codeIs(err, c.code) || !errors.Is(err, ErrInvalid) {
+		if err := add(c.start, c.end); !codeIs(err, c.code) || !errors.Is(err, ErrInvalid) {
 			t.Errorf("%s: %v, want %s", name, err, c.code)
 		}
 	}
 	if evs, _ := s.ListEvents(ctx, o.Slug, p.Slug); len(evs) != 0 {
 		t.Errorf("refused events were stored: %+v", evs)
 	}
-	if err := add("", "", strings.Repeat("å", maxDescriptionRunes)); err != nil {
-		t.Errorf("exactly the limit: %v", err)
-	}
 	// the database says no too, whatever the code does
+	addTimed(t, s, o, p, "2026-08-09", "", "")
 	for name, q := range map[string]string{
 		"a bad start":             `UPDATE event SET start_time = '9:00'`,
 		"an end without a start":  `UPDATE event SET end_time = '12:00', start_time = ''`,
@@ -98,7 +82,7 @@ func TestRefusedTimesAndDescriptions(t *testing.T) {
 	}
 }
 
-func TestUpdatingTimesAndDescription(t *testing.T) {
+func TestUpdatingTimes(t *testing.T) {
 	s, o, p := setup(t)
 	e := addTimed(t, s, o, p, "2026-08-09", "", "")
 	str := func(v string) *string { return &v }
@@ -125,23 +109,6 @@ func TestUpdatingTimesAndDescription(t *testing.T) {
 	}
 	if got, err = up(EventPatch{StartTime: str(""), EndTime: str("")}); err != nil || got.StartTime != "" || got.EndTime != "" {
 		t.Fatalf("clear both: %+v %v", got, err)
-	}
-	if got, err = up(EventPatch{Description: str("Line one\r\nline two ")}); err != nil || got.Description != "Line one\nline two" {
-		t.Fatalf("description: %+v %v", got, err)
-	}
-	if _, err = up(EventPatch{Description: str("Line one\nline two")}); !codeIs(err, "nothing_to_change") {
-		t.Errorf("the same description: %v", err)
-	}
-	if _, err = up(EventPatch{Description: str("x\x00y")}); !codeIs(err, "description_invalid") {
-		t.Errorf("a control character: %v", err)
-	}
-	if got, err = up(EventPatch{Description: str("")}); err != nil || got.Description != "" {
-		t.Fatalf("clear the description: %+v %v", got, err)
-	}
-	// a description change leaves the time alone
-	up(EventPatch{StartTime: str("09:00")})
-	if got, err = up(EventPatch{Description: str("hall")}); err != nil || got.StartTime != "09:00" || got.Description != "hall" {
-		t.Errorf("the description keeps the time: %+v %v", got, err)
 	}
 }
 

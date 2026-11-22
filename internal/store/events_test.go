@@ -50,17 +50,17 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 	if list, _ := s.ListEvents(ctx, o.Slug, p.Slug); len(list) != 1 || list[0].ID != d.ID {
 		t.Fatalf("deleting one event leaves the other: %v", list)
 	}
-	got, err := s.UpdateEvent(ctx, o.Slug, p.Slug, d.ID, EventPatch{Description: ptr("Coats in the side room")})
-	if err != nil || got.Description != "Coats in the side room" || got.Date != d.Date {
+	got, err := s.UpdateEvent(ctx, o.Slug, p.Slug, d.ID, EventPatch{StartTime: ptr("10:30")})
+	if err != nil || got.StartTime != "10:30" || got.Date != d.Date {
 		t.Fatalf("update: %+v %v", got, err)
 	}
-	if _, err := s.UpdateEvent(ctx, o.Slug, p.Slug, d.ID, EventPatch{Description: ptr("Coats in the side room")}); !errors.Is(err, ErrInvalid) {
+	if _, err := s.UpdateEvent(ctx, o.Slug, p.Slug, d.ID, EventPatch{StartTime: ptr("10:30")}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op update: %v", err)
 	}
 
 	// The event belongs to its plan: through another plan's slug it does not exist.
 	p2, _ := s.CreatePlan(ctx, o.Slug, "Spring 2027")
-	if _, err := s.UpdateEvent(ctx, o.Slug, p2.Slug, d.ID, EventPatch{Description: ptr("x")}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateEvent(ctx, o.Slug, p2.Slug, d.ID, EventPatch{StartTime: ptr("11:00")}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("event through the wrong plan: %v", err)
 	}
 	if err := s.DeleteEvent(ctx, o.Slug, p2.Slug, d.ID); !errors.Is(err, ErrNotFound) {
@@ -171,11 +171,7 @@ func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	desc := "Doors open at 18:00"
-	src, err := s.UpdateEvent(ctx, o.Slug, p.Slug, srcs[0].ID, EventPatch{Description: &desc})
-	if err != nil {
-		t.Fatal(err)
-	}
+	src := srcs[0]
 	note, _ := s.AddField(ctx, o.Slug, p.Slug, "Note")
 	if err := s.SetFieldValue(ctx, o.Slug, p.Slug, src.ID, note.ID, "Christmas gala"); err != nil {
 		t.Fatal(err)
@@ -199,8 +195,8 @@ func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 		t.Fatalf("copies: %v %v", copies, err)
 	}
 	c := copies[0]
-	if c.StartTime != "18:30" || c.EndTime != "22:00" || c.Description != "Doors open at 18:00" {
-		t.Errorf("times and description come along: %+v", c)
+	if c.StartTime != "18:30" || c.EndTime != "22:00" {
+		t.Errorf("the times come along: %+v", c)
 	}
 	fields, _ := s.ListFields(ctx, o.Slug, p.Slug)
 	values := map[int64]string{}
@@ -239,8 +235,8 @@ func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 	if err != nil || dates(bare) != "[2027-02-06 2027-02-13 2027-02-20]" {
 		t.Fatalf("every week until: %v %v", bare, err)
 	}
-	if bare[0].StartTime != "10:00" || bare[0].EndTime != "" || bare[0].Description != "" {
-		t.Errorf("without times and details the copy gets the given time and no description: %+v", bare[0])
+	if bare[0].StartTime != "10:00" || bare[0].EndTime != "" {
+		t.Errorf("without times the copy gets the given time: %+v", bare[0])
 	}
 	ps, _ = s.ListEventPlaces(ctx, o.Slug, p.Slug)
 	cells, _ = s.ListCells(ctx, o.Slug, p.Slug)
