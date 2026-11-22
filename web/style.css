@@ -51,6 +51,11 @@ th { color: var(--muted); font-weight: 600; font-size: .875rem; }
 .warn { color: var(--warn); }
 #msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
 #msg:empty { display: none; }
+/* signed out, or the server out of reach: a bar at the top with the way back */
+#conn { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: center;
+  padding: .45rem 1rem; background: color-mix(in srgb, var(--warn) 18%, var(--bg)); border-bottom: 1px solid var(--warn); font-weight: 600; }
+#conn button, .conn-line button { padding: .2rem .8rem; }
+.conn-line { display: inline-flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
 #msg.err { color: var(--err); }
 #msg.ok { color: var(--accent); }
 .chips { display: flex; flex-wrap: wrap; gap: .5rem; }

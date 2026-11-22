@@ -151,6 +151,10 @@ const MESSAGES = {
     'run.on_show': 'on show',
 
     'common.close': 'Close',
+    'net.signed_out': 'You have been signed out, so changes cannot be saved.',
+    'net.sign_in': 'Sign in again',
+    'net.offline': 'The server cannot be reached right now.',
+    'net.retry': 'Try again',
     'common.info': 'What is this?',
     'common.info_aria': 'About {name}',
     'common.save': 'Save',
@@ -520,6 +524,10 @@ const MESSAGES = {
     'run.on_show': 'vises',
 
     'common.close': 'Lukk',
+    'net.signed_out': 'Du er logget ut, så endringer kan ikke lagres.',
+    'net.sign_in': 'Logg inn igjen',
+    'net.offline': 'Får ikke kontakt med serveren akkurat nå.',
+    'net.retry': 'Prøv igjen',
     'common.info': 'Hva er dette?',
     'common.info_aria': 'Om {name}',
     'common.save': 'Lagre',

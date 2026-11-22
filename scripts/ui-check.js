@@ -48,6 +48,8 @@ const { spawn } = require('child_process');
       await page.evaluate(() => document.querySelectorAll('dialog.modal[open]').forEach((d) => { d.dataset.same = '1'; d.firstElementChild.dataset.old = '1'; }));
       await action();
       await until(page, () => document.querySelector('dialog.modal[open][data-same]') && !document.querySelector('dialog.modal [data-old]'), null, what);
+      const text = await dialog.innerText();
+      ok(!text.includes('[object'), 'a dialog shows a list as «[object …]»: ' + text.slice(0, 200));
     };
     // addRow: a dashed line with a name and «Add»
     const addNamed = async (placeholder, name) => {
@@ -278,6 +280,46 @@ const { spawn } = require('child_process');
       ok(gets.length > 0 && gets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'a task level fetches only the answers and the drafts again: ' + gets.join(', '));
       while ((await btn().getAttribute('data-level')) !== was) await reopens(() => btn().click(), 'and back');
       await closeDialog();
+    }
+    // Signed out (the sign-in in front answers with a redirect to its own site): a bar with «Sign in again», never «Failed to fetch»
+    {
+      const signedOut = (route) => route.fulfill({ status: 307, headers: { Location: 'https://auth.example.invalid/login' } });
+      await page.route('**/api/**', signedOut);
+      const cell = answer('Ola Sample', ev[1]);
+      const was = await cell.getAttribute('data-level');
+      await cell.click();
+      await page.waitForSelector('#conn.signed_out');
+      const bar = await page.innerText('#conn');
+      ok(bar.includes('signed out') && bar.includes('Sign in again'), 'the bar offers to sign in again: ' + bar);
+      ok((await cell.getAttribute('data-level')) === was, 'the click is taken back');
+      const body = await page.innerText('body');
+      ok(!/failed to fetch|\[object/i.test(body), 'no «Failed to fetch» or «[object» on the page');
+      // in a dialog, which covers the bar, the dialog says it too
+      await page.unroute('**/api/**', signedOut);
+      await page.click('button[aria-label="Open Kari Test"]');
+      await page.route('**/api/**', signedOut);
+      await dialog.locator('button.cyc').first().click();
+      await until(page, () => (document.querySelector('dialog[open] [data-msg]') || {}).textContent.includes('Sign in again'), null, 'the dialog offers to sign in again');
+      await page.unroute('**/api/**', signedOut);
+      await closeDialog();
+      await page.click('#conn button');  // a reload: through the sign-in and back
+      await page.waitForSelector('button.ans');
+      ok(!(await page.locator('#conn').count()), 'signed in again, the bar is gone');
+      ok((await cell.getAttribute('data-level')) === was, 'nothing was saved while signed out');
+    }
+    // The server out of reach: a bar with «Try again», and the page stays as it was
+    {
+      const down = (route) => route.abort('connectionrefused');
+      await page.route('**/api/**', down);
+      await answer('Ola Sample', ev[1]).click();
+      await page.waitForSelector('#conn.offline');
+      ok((await page.innerText('#conn')).includes('Try again'), 'the bar offers to try again');
+      ok(await page.locator('button.ans').count() > 0, 'the table is still there');
+      await page.unroute('**/api/**', down);
+      await page.click('#conn button');
+      await until(page, () => !document.querySelector('#conn'), null, 'back again, the bar is gone');
+      // the browser logs the refused request it was made to make; that is the test, not a fault of the page
+      for (let i = errors.length - 1; i >= 0; i--) if (errors[i].includes('ERR_CONNECTION_REFUSED')) errors.splice(i, 1);
     }
     // ⓘ: the explanation in a dialog, not on the page
     await page.click('button[aria-label="About Availability"]');
