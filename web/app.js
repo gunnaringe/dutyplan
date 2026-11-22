@@ -99,7 +99,7 @@ function connectionLine(state) {
   const retry = () => { connection(''); fetched.clear(); if (!live) follow(route().org); render(); };
   return h('span', { class: 'conn-line' }, h('span', {}, t(state === 'signed_out' ? 'net.signed_out' : 'net.offline')), ' ',
     state === 'signed_out'
-      ? h('button', { type: 'button', onclick: () => location.reload() }, t('net.sign_in'))
+      ? h('button', { type: 'button', onclick: signIn }, t('net.sign_in'))
       : h('button', { type: 'button', onclick: (e) => { const d = e.currentTarget.closest('dialog'); if (d) d.close(); retry(); } }, t('net.retry')));
 }
 // Is the server still there, and are we still signed in? Asked when the stream breaks.
@@ -229,6 +229,52 @@ function link(path, text, props) {
 }
 const linkBtn = (text, onclick, aria) => h('button', { type: 'button', class: 'link-button', 'aria-label': aria, onclick }, text);
 
+// ---- signing in ------------------------------------------------------------------------------------------------------
+// /api/me: {login: false} when the server has no login (everyone may do everything), else {login: true, user: {name, email} or null}.
+let ME = null;
+async function me() {
+  if (!ME) ME = await api('GET', '/me');
+  return ME;
+}
+// to the sign-in, and back to this page afterwards (without a login: the sign-in in front of the app, by loading again)
+function signIn() {
+  if (ME && !ME.login) return location.reload();
+  location.href = '/auth/login?next=' + encodeURIComponent(location.pathname + location.search);
+}
+async function signOut() {
+  let to = '/';
+  try {
+    const res = await fetch('/auth/logout', { method: 'POST' });
+    to = (await res.json()).to || '/';
+  } catch (e) { /* signed out here all the same, or the next page says the server is gone */ }
+  store.set('org', '');
+  location.href = to;
+}
+
+// The start for someone not signed in: what this is, and the way in.
+function pageLanding() {
+  const point = (k) => h('li', {}, h('h3', {}, t('landing.' + k + '_title')), h('p', {}, t('landing.' + k)));
+  return h('div', { class: 'landing' },
+    h('h1', {}, t('landing.title')),
+    h('p', { class: 'lead' }, t('landing.lead')),
+    h('p', { class: 'row-inline' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
+      ME.signup ? h('a', { class: 'button ghost', href: ME.signup }, t('landing.sign_up')) : ''),
+    h('p', { class: 'muted small' }, t(ME.signup ? 'landing.account_signup' : 'landing.account')),
+    h('img', { src: '/landing.png', alt: t('landing.picture'), width: '1280', height: '842', loading: 'lazy' }),
+    h('ul', { class: 'points' }, ['tap', 'fair', 'live'].map(point)),
+    h('p', { class: 'muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
+}
+
+function headerSignedOut() {
+  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); render(); } },
+    LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
+  document.getElementById('top').replaceChildren(
+    h('a', { href: '/', class: 'brand' }, t('brand')),
+    h('span', { class: 'spacer' }),
+    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
+    h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')));
+}
+
 function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
@@ -246,11 +292,14 @@ async function renderHeader(r) {
     orgs.map((o) => h('option', { value: o.slug, selected: o.slug === r.org }, o.name)));
   const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); fetched.clear(); render(); } },
     LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
+  const who = ME && ME.user;
   document.getElementById('top').replaceChildren(
     link('/?switch', t('brand'), { class: 'brand' }),
     h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select),
     h('span', { class: 'spacer' }),
-    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang));
+    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
+    who ? h('span', { class: 'who' }, h('span', { class: 'muted small', title: who.email || '' }, who.name),
+      h('button', { type: 'button', class: 'ghost sm', onclick: signOut }, t('header.sign_out'))) : '');
 }
 
 // ---- building blocks -------------------------------------------------------------------------------------------------
@@ -360,7 +409,7 @@ async function pageHome() {
       let o;
       if (await write(async () => { o = await api('POST', '/orgs', { name: name.value }); })) { store.set('org', o.slug); go('/o/' + enc(o.slug)); }
     } }, name, h('button', { type: 'submit' }, t('common.create'))),
-    h('p', { class: 'muted small' }, t('home.warning')));
+    ME && ME.login ? '' : h('p', { class: 'muted small' }, t('home.warning')));
 }
 
 // The organisation: its plans, and rename or delete. Tasks and people are added from a plan's table; they belong to the
@@ -1262,6 +1311,15 @@ async function render() {
   const main = document.getElementById('main');
   const r = route();
   try {
+    const who = await me();
+    if (seq !== renderSeq) return;
+    if (who.login && !who.user) {
+      headerSignedOut();
+      main.replaceChildren(pageLanding());
+      document.title = t('brand');
+      if (new URLSearchParams(location.search).get('signin') === 'failed') say(t('landing.failed'), 'err');
+      return;
+    }
     let people = [];
     let org = null;
     if (r.org) {

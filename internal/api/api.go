@@ -1,9 +1,10 @@
 // Package api is the JSON HTTP API plus the embedded single-page frontend.
 //
-// There is no login. The organisation is part of every path (/api/orgs/{org}/...), so the server keeps no "current
-// organisation" and switching is just navigating. Writes with a body must be application/json, and cross-site writes
-// are refused (http.CrossOriginProtection: Sec-Fetch-Site and Origin; no CORS is offered). The organisation list is
-// readable by anyone who can reach the address.
+// People sign in with OpenID Connect (auth.go), and see and change only the organisations they are members of; without a
+// login (New, or --no-login) everyone may do everything. The organisation is part of every path (/api/orgs/{org}/...), so
+// the server keeps no "current organisation" and switching is just navigating. Writes with a body must be
+// application/json, and cross-site writes are refused (http.CrossOriginProtection: Sec-Fetch-Site and Origin; no CORS is
+// offered).
 package api
 
 import (
@@ -30,16 +31,30 @@ type server struct {
 	// for a removed API and showed «Page not found»).
 	version map[string]string
 	log     *slog.Logger
-	hub     *hub // the open streams (stream.go)
+	hub     *hub  // the open streams (stream.go)
+	auth    *auth // nil: no login
 }
 
-// New builds the handler. static must contain index.html, i18n.js, app.js and style.css. pl may be nil: planning then answers
-// 503 «unavailable» and everything else works.
+// New builds the handler without a login. static must contain index.html, i18n.js, app.js and style.css. pl may be nil:
+// planning then answers 503 «unavailable» and everything else works.
 func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) *Handler {
+	return build(st, pl, static, log, nil)
+}
+
+// NewWithLogin builds the handler with signing in (auth.go).
+func NewWithLogin(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger, login Login) (*Handler, error) {
+	au, err := newAuth(login, st, log)
+	if err != nil {
+		return nil, err
+	}
+	return build(st, pl, static, log, au), nil
+}
+
+func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger, au *auth) *Handler {
 	if pl == nil {
 		pl = planner.New(st, nil, 1, log)
 	}
-	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub()}
+	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub(), auth: au}
 	pl.OnFinish(func(org, plan string) {
 		s.hub.publish(org, change{Method: "RUN", Path: "/orgs/" + org + "/plans/" + plan + "/runs"})
 	})
@@ -58,6 +73,13 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) *
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]bool{"ok": true, "planner": s.planner.Available()})
 	})
+
+	mux.HandleFunc("GET /api/me", s.me)
+	if au != nil {
+		mux.HandleFunc("GET /auth/login", au.login)
+		mux.HandleFunc("GET /auth/callback", au.callback)
+		mux.HandleFunc("POST /auth/logout", au.logout)
+	}
 
 	mux.HandleFunc("GET /api/orgs", s.listOrgs)
 	mux.HandleFunc("POST /api/orgs", s.createOrg)
@@ -93,11 +115,11 @@ func New(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger) *
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, name) })
 	}
 
-	return &Handler{Handler: secure(http.NewCrossOriginProtection().Handler(recoverer(s.notifying(mux), log))), hub: s.hub}
+	return &Handler{Handler: secure(http.NewCrossOriginProtection().Handler(recoverer(s.access(s.notifying(mux)), log))), hub: s.hub}
 }
 
-// assets are the files index.html links; each gets ?v=<hash of its content>.
-var assets = []string{"i18n.js", "app.js", "style.css"}
+// assets are the files the page links; each gets ?v=<hash of its content> where index.html links it.
+var assets = []string{"i18n.js", "app.js", "style.css", "landing.png"}
 
 // serveFile sends one embedded file. index.html gets the assets' versions in its links. An asset asked for with its
 // current version never changes, so it may be cached for a year; anything else (the page, an asset without or with an
@@ -120,6 +142,8 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	case name == "style.css":
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	case strings.HasSuffix(name, ".png"):
+		w.Header().Set("Content-Type", "image/png")
 	default:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
@@ -214,8 +238,15 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 
 // ---- handlers ------------------------------------------------------------------------------------------------
 
+// listOrgs: with a login, the organisations the person is a member of.
 func (s *server) listOrgs(w http.ResponseWriter, r *http.Request) {
-	orgs, err := s.st.ListOrgs(r.Context())
+	var orgs []store.Org
+	var err error
+	if u, ok := userFrom(r); ok {
+		orgs, err = s.st.ListOrgsOf(r.Context(), u.ID)
+	} else {
+		orgs, err = s.st.ListOrgs(r.Context())
+	}
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
@@ -232,7 +263,13 @@ func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	o, err := s.st.CreateOrg(r.Context(), b.Name)
+	var o store.Org
+	var err error
+	if u, ok := userFrom(r); ok {
+		o, err = s.st.CreateOrgOwnedBy(r.Context(), b.Name, u.ID) // the one who makes it owns it
+	} else {
+		o, err = s.st.CreateOrg(r.Context(), b.Name)
+	}
 	if err != nil {
 		writeErr(w, s.log, err)
 		return

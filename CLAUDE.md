@@ -3,7 +3,7 @@
 Shares out duties among events with hard requirements, preferences and an even distribution. A general tool (not only for churches).
 Public GitHub repo (since 2026-11-20, the user's choice): `gunnaringe/dutyplan` (the folder and the Go module `github.com/gunnaringe/dutyplan` have the same name; the Norwegian page calls the
 program *Tjenesteplan*, and the binary, the Python package and `DUTYPLAN_SOLVER` keep the `dutyplan` name). Everything pushed is public: check that nothing personal has been added before you push (see
-«Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, the no-login warning); keep it true when behaviour changes.
+«Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, signing in); keep it true when behaviour changes.
 
 Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, tasks, combinations, sections, events with
 their own places, details rows, answers, drafts (runs) with set-by-hand places, locks and selections, a pinned current plan, rename and delete, a page in English and
@@ -43,18 +43,28 @@ starts the Python planner, turns the answer into a view with explanations), `int
 
 ## Design rules from the user (do not break without asking)
 
-- **End to end first** (2026-11-20): make what exists work end to end before adding features. No individual user management (confirmed 2026-11-20).
-- **No users yet, so no migrations** (2026-11-20): change `internal/store/migrations/001_schema.sql` in place; an old database is refused at startup
-  and is simply deleted. No upgrade code and no backward compatibility until the user says the app is live.
+- **End to end first** (2026-11-20): make what exists work end to end before adding features.
+- **Migrations from 002 on** (2026-11-22): signing in came as `002_access.sql`, because kate's database already had 001 and the move to
+  Contabo with public signup was close. Until the user says the app is live an old database may still be deleted; but do not change an
+  applied migration, add the next number.
 
 - **Organisation → plans.** Everything belongs to an organisation; an organisation has several plans (for example «Autumn 2026»). The organisation is in the address
   (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), the server has no «current organisation». Every lookup is scoped by the organisation, and
-  a plan/person from another organisation gives 404 (the isolation tests and the `tenant:` mutations guard this). No login.
+  a plan/person from another organisation gives 404 (the isolation tests and the `tenant:` mutations guard this).
+- **Signing in** (2026-11-22, the user: "Make it use proper oidc ... let people sign up with new organization themselves"): `internal/api/auth.go`,
+  OpenID Connect (code + PKCE, go-oidc) against one provider; in production the Pocket ID at id.sermon-studio.app, shared with sermon-studio
+  ("User management and login will be the same"). Session = random token in a host-only `__Host-dutyplan` cookie, its SHA-256 in `session`.
+  `access` (middleware) is the one place that decides: pages, `/api/health` and `/api/me` open; the rest needs a session (401 `signed_out`); an
+  organisation's routes need a member (`membership`: owner or editor), 404 for anyone else; deleting the organisation is owner-only (403). Whoever
+  creates an organisation owns it; a taken address gets `-2`, `-3` (never a 409 that tells the name exists). `--no-login` (or listening on
+  loopback without `--oidc-issuer`) = no login, everyone may do everything: the tests, the scripts and kate (behind its forward-auth). The
+  `access:` mutations guard it.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
 - **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a
-  field the page does not call; add it together with the page change that needs it. **No individual user management**: no personal links, no per-person pages or endpoints,
-  no accounts. A person is a row in the organisation (name, task choices, can be proposed) and in each plan's table.
+  field the page does not call; add it together with the page change that needs it. **A person in a plan is a row, not an account**: no personal links, no per-person pages or endpoints for
+  the people who are planned (name, task choices, can be proposed). Accounts are only for those who plan (see *Signing in*); links that share a
+  whole organisation or plan are planned (2026-11-22).
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time) and a description; the planner does not use them, so they must not change the input or hash of a run. Availability («can I»), combinations, places
@@ -90,7 +100,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   are not taking part are placed in a section.
 - **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
 - **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
-- **No login in the first version.** No links with a secret, no roles, and no change log (removed 2026-11-19).
+- **No change log** (removed 2026-11-19). Roles: owner and editor only.
 - Each person chooses which tasks they take part in; one list per person with answers per event (*does not suit / poor / good*), an optional own list per task (not built).
 - «Even distribution» = **equal total load** (the user's answer 2026-11-09): someone who only takes Video should not end up with half of someone who takes Sound and Video.
   Distribution per task is off by default (`w_task_fair`/`w_task_range` 0). Do not make the per-task term the main term again without asking.
@@ -106,10 +116,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
   (`keyed()`/`reopened()`, never closed and opened again), and a redraw waits while a text field is being typed in. Clicks on answers,
   levels and ⚡ show at once and go back if the server refuses. Hosting will be behind Cloudflare: the stream pings every 25 s (its idle
   limit is 100 s) and has no write timeout; after 5 failed reconnects in a row (an expired sign-in in front) the page stops and tries again when the tab is shown or after a minute. Do not add polling or full reloads back.
-- **Signed out or out of reach** (2026-11-22, the user: "should offer a reauth/refresh instead of showing Object object and failed to fetch"): the app
-  sits behind a sign-in (forward auth) that answers an expired session with a redirect (303 on kate). `api()` fetches with `redirect: 'manual'`, so a
+- **Signed out or out of reach** (2026-11-22, the user: "should offer a reauth/refresh instead of showing Object object and failed to fetch"): the
+  app's own login answers 401; a sign-in in front of it (forward auth, kate) answers an expired session with a redirect (303). `api()` fetches with `redirect: 'manual'`, so a
   redirect, a 401 or a non-JSON answer means *signed out*, and a network error means *out of reach*; `connection()` then shows a bar at the top with
-  «Sign in again» (a reload through the sign-in) or «Try again», the page stays as it was, a click is taken back, and an open dialog says it too.
+  «Sign in again» (to `/auth/login?next=<this page>`, or a reload through the sign-in in front) or «Try again», the page stays as it was, a click is taken back, and an open dialog says it too.
   Never show a raw error («Failed to fetch») for these. modal() flattens its parts like h(): `append()` writes a list as «[object …]».
 - **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
   Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).

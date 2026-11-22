@@ -533,6 +533,36 @@ const { spawn } = require('child_process');
     await h1is(nbPage, 'Choose organisation');
     await nbContext.close();
 
+    // With a login (the server says so in /api/me; the sign-in itself is tested in Go): someone not signed in gets the start
+    // page, and «Sign in» goes to the sign-in and back to the same page; someone signed in sees their name and «Sign out».
+    {
+      const c = await browser.newContext({ locale: 'en-GB' });
+      const pg = await c.newPage();
+      watch(pg);
+      let who = null;
+      await pg.route('**/api/me', (route) => route.fulfill({ json: { login: true, user: who, signup: 'https://id.example.invalid/signup' } }));
+      let signInAt = '';
+      await pg.route('**/auth/login**', (route) => { signInAt = route.request().url(); return route.fulfill({ body: 'sign-in', contentType: 'text/plain' }); });
+      await pg.goto(base + '/o/sample-club?x=1');
+      await h1is(pg, 'Plan who does what, fairly');
+      ok(await pg.locator('.landing img').count() === 1 && await pg.locator('.landing .points li').count() === 3, 'the start page explains, with a picture');
+      ok((await pg.getAttribute('.landing a.button', 'href')) === 'https://id.example.invalid/signup', 'the start page offers to create an account');
+      await pg.click('.landing button:has-text("Sign in")');
+      await pg.waitForURL('**/auth/login**');
+      ok(new URL(signInAt).searchParams.get('next') === '/o/sample-club?x=1', 'back to the same page after signing in: ' + signInAt);
+      who = { name: 'Kari Test', email: 'kari@example.org' };
+      let signedOut = false;
+      await pg.route('**/auth/logout', (route) => { signedOut = route.request().method() === 'POST'; return route.fulfill({ json: { to: '/?bye' } }); });
+      await pg.goto(base + '/?switch');
+      await h1is(pg, 'Choose organisation');
+      ok((await pg.innerText('header')).includes('Kari Test'), 'the header shows who is signed in');
+      ok(!(await pg.innerText('main')).includes('There is no login'), 'no «no login» warning with a login');
+      await pg.click('header button:has-text("Sign out")');
+      await pg.waitForURL('**/?bye');
+      ok(signedOut, 'signing out posts to /auth/logout and goes where it says');
+      await c.close();
+    }
+
     ok(errors.length === 0, 'console errors: ' + errors.join(' | ') + ' 404 on: ' + notFound.join(', '));
     console.log('ui-check: ok');
   } catch (e) {

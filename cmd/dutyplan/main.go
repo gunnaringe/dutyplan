@@ -1,4 +1,4 @@
-// Command dutyplan serves the duty-planning app: one binary, SQLite, embedded frontend. No login.
+// Command dutyplan serves the duty-planning app: one binary, SQLite, embedded frontend, signing in with OpenID Connect.
 package main
 
 import (
@@ -27,6 +27,12 @@ func main() {
 	dbPath := flag.String("db", "dutyplan.db", "SQLite database file (created if missing)")
 	solverCmd := flag.String("solver", os.Getenv("DUTYPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m dutyplan_solver\" (default $DUTYPLAN_SOLVER; empty = no planning)")
 	workers := flag.Int("workers", min(runtime.NumCPU(), 8), "threads the planner may use")
+	issuer := flag.String("oidc-issuer", os.Getenv("DUTYPLAN_OIDC_ISSUER"), "OpenID Connect provider to sign in with (default $DUTYPLAN_OIDC_ISSUER)")
+	clientID := flag.String("oidc-client-id", os.Getenv("DUTYPLAN_OIDC_CLIENT_ID"), "the app's client id at the provider (default $DUTYPLAN_OIDC_CLIENT_ID)")
+	secretFile := flag.String("oidc-client-secret-file", os.Getenv("DUTYPLAN_OIDC_CLIENT_SECRET_FILE"), "file with the client secret (default $DUTYPLAN_OIDC_CLIENT_SECRET_FILE)")
+	publicURL := flag.String("public-url", os.Getenv("DUTYPLAN_PUBLIC_URL"), "the app's address as people open it, e.g. https://dutyplan.example.org/ (default $DUTYPLAN_PUBLIC_URL)")
+	signupURL := flag.String("oidc-signup-url", os.Getenv("DUTYPLAN_OIDC_SIGNUP_URL"), "optional: where to make an account at the provider, offered on the start page (default $DUTYPLAN_OIDC_SIGNUP_URL)")
+	noLogin := flag.Bool("no-login", os.Getenv("DUTYPLAN_NO_LOGIN") == "1", "no signing in: everyone who reaches the address may do everything (default $DUTYPLAN_NO_LOGIN=1)")
 	flag.Parse()
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -56,7 +62,32 @@ func main() {
 		log.Error("listen", "err", err)
 		os.Exit(1)
 	}
-	handler := api.New(st, planner.New(st, solver, *workers, log), web.Files, log)
+	pl := planner.New(st, solver, *workers, log)
+	var handler *api.Handler
+	switch {
+	case *issuer != "" && !*noLogin:
+		var secret []byte
+		if *secretFile != "" {
+			if secret, err = os.ReadFile(*secretFile); err != nil {
+				log.Error("read the client secret", "err", err)
+				os.Exit(1)
+			}
+		}
+		handler, err = api.NewWithLogin(st, pl, web.Files, log, api.Login{Issuer: *issuer, ClientID: *clientID,
+			ClientSecret: strings.TrimSpace(string(secret)), PublicURL: *publicURL, SignupURL: *signupURL})
+		if err != nil {
+			log.Error("login", "err", err)
+			os.Exit(1)
+		}
+	case *noLogin || loopback(ln.Addr()):
+		if !*noLogin {
+			log.Warn("no login configured (--oidc-issuer): fine on this machine only, everyone who reaches it may do everything")
+		}
+		handler = api.New(st, pl, web.Files, log)
+	default:
+		log.Error("no login configured: give --oidc-issuer (and the client and public URL), or --no-login if something in front does the signing in")
+		os.Exit(1)
+	}
 	srv := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -80,4 +111,10 @@ func main() {
 		log.Error("serve", "err", err)
 		os.Exit(1)
 	}
+}
+
+// loopback: only this machine can reach the address.
+func loopback(a net.Addr) bool {
+	t, ok := a.(*net.TCPAddr)
+	return ok && t.IP.IsLoopback()
 }
