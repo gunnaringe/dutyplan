@@ -18,8 +18,8 @@ type User struct {
 // Roles of a member of an organisation. RoleNone: not a member.
 const (
 	RoleNone   = ""
-	RoleOwner  = "owner"
-	RoleEditor = "editor"
+	RoleAdmin  = "admin"
+	RoleMember = "member"
 )
 
 // SignedIn records a sign-in: the person (made the first time, name and email updated every time) and a new session.
@@ -76,7 +76,7 @@ func (s *Store) EndSession(ctx context.Context, tokenHash string) (idToken strin
 	return idToken, err
 }
 
-// Role is what a person is in an organisation: RoleOwner, RoleEditor, or RoleNone (also when there is no such organisation).
+// Role is what a person is in an organisation: RoleAdmin, RoleMember, or RoleNone (also when there is no such organisation).
 func (s *Store) Role(ctx context.Context, orgSlug string, userID int64) (string, error) {
 	var role string
 	err := s.db.QueryRowContext(ctx, `SELECT m.role FROM membership m JOIN organization o ON o.id = m.org_id WHERE o.slug = ? AND m.user_id = ?`,
@@ -119,7 +119,7 @@ func (s *Store) CreateOrgOwnedBy(ctx context.Context, name string, userID int64)
 	}
 	o := Org{Name: name, CreatedAt: s.stamp()}
 	err = s.write(ctx, func(tx *sql.Tx) error {
-		if err := atMost(ctx, tx, MaxOwnedOrgs, "orgs", `SELECT COUNT(*) FROM membership WHERE user_id = ? AND role = 'owner'`, userID); err != nil {
+		if err := atMost(ctx, tx, MaxOwnedOrgs, "orgs", `SELECT COUNT(*) FROM membership WHERE user_id = ? AND role = 'admin'`, userID); err != nil {
 			return err
 		}
 		var id int64
@@ -137,7 +137,7 @@ func (s *Store) CreateOrgOwnedBy(ctx context.Context, name string, userID int64)
 			}
 			break
 		}
-		_, err := tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, ?, ?)`, id, userID, RoleOwner, o.CreatedAt)
+		_, err := tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, ?, ?)`, id, userID, RoleAdmin, o.CreatedAt)
 		return err
 	})
 	return o, err

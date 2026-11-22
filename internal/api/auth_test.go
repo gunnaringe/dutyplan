@@ -308,23 +308,32 @@ func TestMembersSeeAndChangeOnlyTheirOwnOrganisations(t *testing.T) {
 	}
 }
 
-func TestOnlyTheOwnerDeletesTheOrganisation(t *testing.T) {
+func TestOnlyAnAdminRenamesOrDeletesTheOrganisation(t *testing.T) {
 	e := newLoginEnv(t)
 	kari, ola := e.signIn("kari", "/"), e.signIn("ola", "/")
 	e.as(kari, "POST", "/api/orgs", map[string]string{"name": "Choir"})
 	var olaID int64
 	e.st.DB().QueryRow(`SELECT id FROM app_user WHERE subject = 'ola'`).Scan(&olaID)
-	if _, err := e.st.DB().Exec(`INSERT INTO membership (org_id, user_id, role, created_at) SELECT id, ?, 'editor', '' FROM organization WHERE slug = 'choir'`, olaID); err != nil {
+	if _, err := e.st.DB().Exec(`INSERT INTO membership (org_id, user_id, role, created_at) SELECT id, ?, 'member', '' FROM organization WHERE slug = 'choir'`, olaID); err != nil {
 		t.Fatal(err)
 	}
-	if r := e.as(ola, "PATCH", "/api/orgs/choir", map[string]string{"name": "The choir"}); r.code != 200 {
-		t.Fatalf("an editor renames: %d", r.code)
+	if r := e.as(ola, "POST", "/api/orgs/choir/plans", map[string]string{"name": "Autumn"}); r.code != 201 {
+		t.Fatalf("a member makes a plan: %d", r.code)
+	}
+	if r := e.as(ola, "PATCH", "/api/orgs/choir", map[string]string{"name": "The choir"}); r.code != 403 || r.errCode() != "forbidden" {
+		t.Fatalf("a member renames: %d, want 403", r.code)
+	}
+	if r := e.as(ola, "DELETE", "/api/orgs/choir/plans/autumn", nil); r.code != 204 {
+		t.Fatalf("a member deletes a plan: %d", r.code)
 	}
 	if r := e.as(ola, "DELETE", "/api/orgs/choir?confirm=choir", nil); r.code != 403 {
-		t.Fatalf("an editor deletes: %d, want 403", r.code)
+		t.Fatalf("a member deletes: %d, want 403", r.code)
+	}
+	if r := e.as(kari, "PATCH", "/api/orgs/choir", map[string]string{"name": "The choir"}); r.code != 200 {
+		t.Fatalf("the admin renames: %d", r.code)
 	}
 	if r := e.as(kari, "DELETE", "/api/orgs/choir?confirm=choir", nil); r.code != 204 {
-		t.Fatalf("the owner deletes: %d", r.code)
+		t.Fatalf("the admin deletes: %d", r.code)
 	}
 }
 

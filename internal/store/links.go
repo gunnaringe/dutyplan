@@ -10,14 +10,15 @@ import (
 	"time"
 )
 
-// Link levels. LevelJoin is an invitation: whoever opens it while signed in becomes an editor of the organisation.
+// Link levels. A view or edit link is to one plan; LevelJoin is an invitation to the organisation: whoever opens it
+// while signed in becomes a member.
 const (
 	LevelView = "view"
 	LevelEdit = "edit"
 	LevelJoin = "join"
 )
 
-// Link shares an organisation, or one plan of it (Plan set). Token is the secret in its address (/s/<token>).
+// Link shares one plan (view, edit), or invites to the organisation (join, Plan empty). Token is the secret in its address (/s/<token>).
 type Link struct {
 	ID        int64  `json:"id"`
 	Org       string `json:"org"`
@@ -57,13 +58,16 @@ func newToken() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// CreateLink makes a link to the organisation, or to one of its plans (planSlug not ""). expiresDays 0: it never runs out.
+// CreateLink makes a view or edit link to one plan, or an invitation (join, planSlug ""). expiresDays 0: it never runs out.
 func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label string, expiresDays int, userID int64) (Link, error) {
 	if level != LevelView && level != LevelEdit && level != LevelJoin {
 		return Link{}, Invalid("link_level", nil, "the level must be view, edit or join")
 	}
 	if level == LevelJoin && planSlug != "" {
 		return Link{}, Invalid("link_join_plan", nil, "an invitation is to the whole organisation")
+	}
+	if level != LevelJoin && planSlug == "" {
+		return Link{}, Invalid("link_plan", nil, "a view or edit link is to one plan")
 	}
 	label = strings.TrimSpace(label)
 	if len([]rune(label)) > 80 || !validText(label) {
@@ -156,7 +160,7 @@ type Member struct {
 
 func (s *Store) Members(ctx context.Context, orgSlug string) ([]Member, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT u.id, u.name, u.email, m.role FROM membership m JOIN app_user u ON u.id = m.user_id
-		JOIN organization o ON o.id = m.org_id WHERE o.slug = ? ORDER BY m.role DESC, u.name COLLATE NOCASE, u.id`, orgSlug)
+		JOIN organization o ON o.id = m.org_id WHERE o.slug = ? ORDER BY m.role, u.name COLLATE NOCASE, u.id`, orgSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +176,7 @@ func (s *Store) Members(ctx context.Context, orgSlug string) ([]Member, error) {
 	return out, rows.Err()
 }
 
-// changeMember sets a member's role, or removes them (role RoleNone). The organisation always keeps an owner.
+// changeMember sets a member's role, or removes them (role RoleNone). The organisation always keeps an admin.
 func (s *Store) changeMember(ctx context.Context, orgSlug string, userID int64, role string) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
@@ -185,13 +189,13 @@ func (s *Store) changeMember(ctx context.Context, orgSlug string, userID int64, 
 		} else if err != nil {
 			return err
 		}
-		if old == RoleOwner && role != RoleOwner {
-			var owners int
-			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM membership WHERE org_id = ? AND role = 'owner'`, oid).Scan(&owners); err != nil {
+		if old == RoleAdmin && role != RoleAdmin {
+			var admins int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM membership WHERE org_id = ? AND role = 'admin'`, oid).Scan(&admins); err != nil {
 				return err
 			}
-			if owners < 2 {
-				return Conflict("last_owner", nil, "the organisation must keep an owner: make someone else owner first")
+			if admins < 2 {
+				return Conflict("last_admin", nil, "the organisation must keep an admin: make someone else admin first")
 			}
 		}
 		if role == RoleNone {
@@ -203,10 +207,10 @@ func (s *Store) changeMember(ctx context.Context, orgSlug string, userID int64, 
 	})
 }
 
-// SetRole makes a member owner or editor.
+// SetRole makes a member admin or member.
 func (s *Store) SetRole(ctx context.Context, orgSlug string, userID int64, role string) error {
-	if role != RoleOwner && role != RoleEditor {
-		return Invalid("role_invalid", nil, "the role must be owner or editor")
+	if role != RoleAdmin && role != RoleMember {
+		return Invalid("role_invalid", nil, "the role must be admin or member")
 	}
 	return s.changeMember(ctx, orgSlug, userID, role)
 }
@@ -216,7 +220,7 @@ func (s *Store) RemoveMember(ctx context.Context, orgSlug string, userID int64) 
 	return s.changeMember(ctx, orgSlug, userID, RoleNone)
 }
 
-// Join makes the person an editor of the organisation an invitation is to (a member already keeps their role), and
+// Join makes the person a member of the organisation an invitation is to (a member already keeps their role), and
 // returns that organisation; ErrNotFound when the token is no invitation or has run out.
 func (s *Store) Join(ctx context.Context, token string, userID int64) (Org, error) {
 	var o Org
@@ -230,7 +234,7 @@ func (s *Store) Join(ctx context.Context, token string, userID int64) (Org, erro
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, 'editor', ?) ON CONFLICT DO NOTHING`, oid, userID, s.stamp())
+		_, err = tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING`, oid, userID, s.stamp())
 		return err
 	})
 	return o, err
