@@ -33,7 +33,15 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/>',
   left: '<path d="M15 18l-6-6 6-6"/>', right: '<path d="M9 18l6-6-6-6"/>',
+  lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  hand: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>', caret: '<path d="M6 9l6 6 6-6"/>',
 };
+// mark: the square that says a place is locked (kept by the planner) or set by hand.
+const mark = (kind) => h('span', { class: 'mark ' + kind, title: t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), 'aria-label': t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), role: 'img' }, icon(kind));
 function icon(name) {
   const s = h('span', { class: 'ic ic-' + name, 'aria-hidden': 'true' });
   s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
@@ -273,12 +281,10 @@ function pageLanding() {
 }
 
 function headerSignedOut() {
-  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); render(); } },
-    LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
   document.getElementById('top').replaceChildren(
     h('a', { href: '/', class: 'brand' }, t('brand')),
     h('span', { class: 'spacer' }),
-    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
+    langMenu(),
     h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')));
 }
 
@@ -286,6 +292,7 @@ function route() {
   const parts = location.pathname.split('/').filter(Boolean);
   if (parts[0] === 'o' && parts[1]) {
     if (parts.length === 2) return { page: 'org', org: parts[1] };
+    if (parts.length === 3 && (parts[2] === 'members' || parts[2] === 'settings')) return { page: parts[2], org: parts[1] };
     if (parts.length === 4 && parts[2] === 'p') return { page: 'plan', org: parts[1], plan: parts[3] };
     return { page: 'none', org: parts[1] };
   }
@@ -297,17 +304,55 @@ async function renderHeader(r) {
   const select = h('select', { 'aria-label': t('header.org'), onchange: (e) => go(e.target.value === '' ? '/?switch' : '/o/' + enc(e.target.value)) },
     h('option', { value: '' }, r.org ? t('header.switch_org') : t('header.choose_org')),
     orgs.map((o) => h('option', { value: o.slug, selected: o.slug === r.org }, o.name)));
-  const lang = h('select', { id: 'lang', 'aria-label': t('lang.label'), onchange: (e) => { setLang(e.target.value); fetched.clear(); render(); } },
-    LANGS.map((l) => h('option', { value: l, selected: l === currentLang }, t('lang.' + l))));
   const who = ME && ME.user;
+  const org = r.org ? await get('/orgs/' + enc(r.org)).catch(() => null) : null;
+  const role = org ? org.role || '' : '';
+  const nav = (page, ic, label) => {
+    const a = link(`/o/${enc(r.org)}/${page}`, '', { class: 'icon-btn' + (r.page === page ? ' on' : ''), title: label, 'aria-label': label });
+    a.append(icon(ic));
+    return a;
+  };
+  const tools = [];
+  if (r.org && role && ME && ME.login) tools.push(nav('members', 'users', t('nav.members')));
+  if (r.org && role === 'admin') tools.push(nav('settings', 'settings', t('nav.settings')));
   document.getElementById('top').replaceChildren(
     link('/?switch', t('brand'), { class: 'brand' }),
     h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select),
     h('span', { class: 'spacer' }),
-    h('label', { class: 'lang' }, h('span', { class: 'sr-only' }, t('lang.label')), lang),
-    who ? h('span', { class: 'who' }, h('span', { class: 'muted small', title: who.email || '' }, who.name),
-      h('button', { type: 'button', class: 'ghost sm', onclick: signOut }, t('header.sign_out')))
-      : ME && ME.login ? h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')) : '');
+    ...tools,
+    langMenu(),
+    who ? userMenu(who) : ME && ME.login ? h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')) : '');
+}
+
+// dropdown: a button that opens a panel under it; closes on a click outside, Escape, or a choice.
+function dropdown(cls, button, label, ...panel) {
+  const d = h('details', { class: 'dropdown ' + cls });
+  const close = (e) => {
+    if (!d.isConnected) return off();
+    if (e.type === 'keydown' ? e.key === 'Escape' : !d.contains(e.target)) { d.open = false; if (e.type === 'keydown') d.querySelector('summary').focus(); }
+  };
+  const off = () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', close); };
+  d.addEventListener('toggle', () => { off(); if (d.open) { document.addEventListener('pointerdown', close); document.addEventListener('keydown', close); } });
+  d.append(h('summary', { title: label, 'aria-label': label }, button), h('div', { class: 'drop-panel' }, ...panel));
+  return d;
+}
+
+// The language: a button with its code (EN, NB) and a list of the languages.
+function langMenu() {
+  return dropdown('lang', [h('span', { class: 'code' }, currentLang.toUpperCase()), icon('caret')], t('lang.label') + ': ' + t('lang.' + currentLang),
+    LANGS.map((l) => h('button', { type: 'button', class: 'drop-item' + (l === currentLang ? ' on' : ''), lang: l,
+      onclick: () => { setLang(l); fetched.clear(); render(); } }, h('span', {}, t('lang.' + l)), l === currentLang ? icon('check') : '')));
+}
+
+// The person signed in: their initials in a circle; the menu has their name and Sign out.
+function initials(name) {
+  const w = String(name || '?').trim().split(/\s+/).filter(Boolean);
+  return ((w[0] || '?')[0] + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+}
+function userMenu(who) {
+  return dropdown('user', h('span', { class: 'avatar' }, initials(who.name)), who.name,
+    h('div', { class: 'who' }, h('strong', {}, who.name), who.email ? h('span', { class: 'muted small' }, who.email) : ''),
+    h('button', { type: 'button', class: 'ghost signout', onclick: signOut }, icon('logout'), h('span', {}, t('header.sign_out'))));
 }
 
 // ---- building blocks -------------------------------------------------------------------------------------------------
@@ -428,9 +473,24 @@ async function pageOrg(r, org) {
   if (org.plan) return go(`/o/${enc(r.org)}/p/${enc(org.plan)}`);  // a link to one plan: that plan is all there is
   const plans = await get(base + '/plans');
 
-  // Rename (the address stays) or delete. Deleting needs the organisation to have no plans, and its name typed in.
-  function orgDialog() {
-    let dlg;
+  const root = h('div', { class: 'org-page' },
+    h('h1', {}, org.name),
+    h('h2', {}, t('org.plans')),
+    h('div', { class: 'plans' },
+      plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
+        : h('p', { class: 'muted' }, t('org.no_plans')),
+      org.level === 'view' ? '' : addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
+    viewOnly(org));
+  return root;
+}
+
+// The organisation's settings (admins): rename (the address stays) or delete. Deleting needs the organisation to have no
+// plans, and its name typed in.
+async function pageSettings(r, org) {
+  const base = `/orgs/${enc(r.org)}`;
+  if (org.role !== 'admin') return go('/o/' + enc(r.org));
+  const plans = await get(base + '/plans');
+  {
     const name = h('input', { type: 'text', value: org.name, maxlength: '80', 'aria-label': t('org.rename_label') });
     let del;
     if (plans.length) del = h('p', { class: 'muted small' }, t('org.delete_has_plans'));
@@ -441,30 +501,18 @@ async function pageOrg(r, org) {
       del = h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         if (typed.value.trim() !== org.name) return;
-        if (await write(() => api('DELETE', `${base}?confirm=${enc(r.org)}`))) { dlg.close(); store.set('org', ''); go('/?switch'); say(t('org.deleted', { name: org.name })); }
+        if (await write(() => api('DELETE', `${base}?confirm=${enc(r.org)}`))) { store.set('org', ''); go('/?switch'); say(t('org.deleted', { name: org.name })); }
       } }, h('p', { class: 'muted small' }, t('org.delete_hint')), h('div', { class: 'row-inline' }, typed, button));
     }
-    dlg = modal(org.name,
+    return h('div', { class: 'org-page settings-page' },
+      h('h1', {}, t('settings.title')),
+      h('h2', {}, t('org.rename_label')),
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (await write(() => api('PATCH', base, { name: name.value }))) { dlg.close(); await render(); say(t('org.renamed')); }
+        if (await write(() => api('PATCH', base, { name: name.value }))) { await render(); say(t('org.renamed')); }
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
-      h('h3', {}, t('org.delete_title')), del,
-      foot('', closeBtn()));
+      h('h2', {}, t('org.delete_title')), del);
   }
-
-  const root = h('div', { class: 'org-page' },
-    h('h1', {}, org.name),
-    h('h2', {}, t('org.plans')),
-    h('div', { class: 'plans' },
-      plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
-        : h('p', { class: 'muted' }, t('org.no_plans')),
-      org.level === 'view' ? '' : addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
-    viewOnly(org),
-    h('p', { class: 'small muted org-foot' },
-      org.role === 'admin' ? h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage')) : '',
-      ME && ME.login && org.role ? h('button', { type: 'button', class: 'link-button', onclick: () => membersDialog(r.org, org) }, t('members.open')) : ''));
-  return root;
 }
 
 // ---- sharing: links and members ------------------------------------------------------------------------------------
@@ -536,43 +584,42 @@ async function shareDialog(orgSlug, org, plan) {
   await build();
 }
 
-// The members: everyone sees who they are, the links to the plans (and may delete them) and may leave; an admin changes
-// roles, removes people, and invites with a link.
-async function membersDialog(orgSlug, org) {
-  const base = `/orgs/${enc(orgSlug)}`;
-  const owner = org.role === 'admin';
-  let dlg;
-  const build = async (key) => {
-    const [members, links] = await Promise.all([api('GET', base + '/members'), api('GET', base + '/links')]);
-    const invites = links.filter((l) => l.level === 'join');
-    const shared = links.filter((l) => l.level !== 'join');
-    const row = (m) => h('li', { class: 'member' },
-      h('span', { class: 'what' }, m.name, m.you ? h('span', { class: 'muted small' }, ' ' + t('members.you')) : '', m.email ? h('span', { class: 'muted small' }, ' · ' + m.email) : ''),
-      owner ? h('select', { 'aria-label': t('members.role_aria', { name: m.name }), onchange: async (e) => {
-        if (await write(() => api('PATCH', `${base}/members/${m.id}`, { role: e.target.value }))) redraw(dlg, build); else e.target.value = m.role;
-      } }, ['admin', 'member'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted' }, t(ROLE[m.role])),
-      owner || m.you ? h('button', { type: 'button', class: 'ghost sm danger', onclick: async () => {
-        if (!confirm(m.you ? t('members.leave_confirm', { name: org.name }) : t('members.remove_confirm', { name: m.name }))) return;
-        if (await write(() => api('DELETE', `${base}/members/${m.id}`))) { if (m.you) { dlg.close(); store.set('org', ''); fetched.clear(); go('/?switch'); } else redraw(dlg, build); }
-      } }, m.you ? t('members.leave') : t('members.remove')) : '');
-    const expires = expirySelect(7);
-    if (key) refreshKey = key;
-    dlg = modal(t('members.title', { name: org.name }), { info: [t('members.info')] },
-      h('ul', { class: 'plain members' }, members.map(row)),
-      shared.length ? [h('h3', {}, t('members.plan_links')), h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, () => redraw(dlg, build), true)))] : '',
-      owner ? [h('h3', {}, t('members.invite')), h('p', { class: 'muted small' }, t('members.invite_hint')),
-        invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : '',
-        h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
-          e.preventDefault();
-          let made;
-          if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: '', expires_days: Number(expires.value) }); })) {
-            redraw(dlg, build);
-            try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
-          }
-        } }, expires, h('button', { type: 'submit' }, t('members.invite_create')))] : '',
-      foot('', closeBtn()));
-  };
-  await build();
+// The members page: everyone sees who they are, the links to the plans (and may delete them) and may leave; an admin
+// changes roles, removes people, and invites with a link.
+async function pageMembers(r, org) {
+  const base = `/orgs/${enc(r.org)}`;
+  if (!org.role) return go('/o/' + enc(r.org));
+  const admin = org.role === 'admin';
+  const [members, links] = await Promise.all([api('GET', base + '/members'), api('GET', base + '/links')]);
+  const again = () => render();
+  const invites = links.filter((l) => l.level === 'join');
+  const shared = links.filter((l) => l.level !== 'join');
+  const row = (m) => h('li', { class: 'member' },
+    h('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(m.name)),
+    h('span', { class: 'what' }, m.name, m.you ? h('span', { class: 'muted small' }, ' ' + t('members.you')) : '', m.email ? h('span', { class: 'muted small' }, ' · ' + m.email) : ''),
+    admin ? h('select', { 'aria-label': t('members.role_aria', { name: m.name }), onchange: async (e) => {
+      if (await write(() => api('PATCH', `${base}/members/${m.id}`, { role: e.target.value }))) again(); else e.target.value = m.role;
+    } }, ['admin', 'member'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted' }, t(ROLE[m.role])),
+    admin || m.you ? h('button', { type: 'button', class: 'ghost sm danger', onclick: async () => {
+      if (!confirm(m.you ? t('members.leave_confirm', { name: org.name }) : t('members.remove_confirm', { name: m.name }))) return;
+      if (await write(() => api('DELETE', `${base}/members/${m.id}`))) { if (m.you) { store.set('org', ''); fetched.clear(); go('/?switch'); } else again(); }
+    } }, m.you ? t('members.leave') : t('members.remove')) : '');
+  const expires = expirySelect(7);
+  return h('div', { class: 'org-page members-page' },
+    h('h1', {}, t('nav.members'), infoBtn(t('nav.members'), [t('members.info')])),
+    h('ul', { class: 'plain members' }, members.map(row)),
+    admin ? [h('h2', {}, t('members.invite'), infoBtn(t('members.invite'), [t('members.invite_hint')])),
+      invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, base, again))) : '',
+      h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
+        e.preventDefault();
+        let made;
+        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: '', expires_days: Number(expires.value) }); })) {
+          again();
+          try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
+        }
+      } }, expires, h('button', { type: 'submit' }, t('members.invite_create')))] : '',
+    h('h2', {}, t('members.plan_links')),
+    shared.length ? h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, again, true))) : h('p', { class: 'muted' }, t('share.none')));
 }
 
 // ---- the plan page: one table ----------------------------------------------------------------------------------------
@@ -765,8 +812,8 @@ async function pagePlan(r, org, people) {
     return { n, items, open: Math.max(0, n - filled), why: rc && rc.missing > 0 ? rc.explanation || '' : '' };
   };
   const itemText = (x) => x.name + (x.fills > 1 ? ' ×' + x.fills : '');
-  const slot = (x) => h('span', { class: 'slot' + (x.hand ? ' hand' : '') }, itemText(x),
-    x.locked ? h('span', { class: 'chip' }, t('draft.locked')) : '', x.weak ? h('span', { class: 'chip poor' }, t('draft.maybe')) : '');
+  const slot = (x) => h('span', { class: 'slot' + (x.hand ? ' hand' : '') + (x.locked ? ' locked' : '') },
+    x.locked ? mark('lock') : x.hand ? mark('hand') : '', itemText(x), x.weak ? h('span', { class: 'chip poor' }, t('draft.maybe')) : '');
 
   // ---- the draft: make one or try again, and what the draft on show is
   const runsPath = pbase + '/runs';
@@ -811,8 +858,8 @@ async function pagePlan(r, org, people) {
       if (run.checked && run.violations.length) notes.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
       if (view.warnings.length) notes.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
     }
-    const legend = h('span', { class: 'legend small' }, h('span', { class: 'slot hand' }, t('draft.key_hand')),
-      h('span', {}, h('span', { class: 'chip' }, t('draft.locked')), ' ' + t('draft.key_locked')));
+    const legend = h('span', { class: 'legend small' }, h('span', {}, mark('hand'), ' ' + t('draft.key_hand')),
+      h('span', {}, mark('lock'), ' ' + t('draft.key_locked')));
     bar.replaceChildren(h('div', { class: 'row-inline' }, line, legend), ...notes);
     bar.prepend(h('span', { class: 'bar-title' }, t('draft.title'), infoBtn(t('draft.title'), [t('draft.info')])));
   }
@@ -1450,7 +1497,8 @@ async function render() {
       store.set('org', r.org);
     }
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });
-    const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org) : pagePlan(r, org, people)]);
+    const [, body] = await Promise.all([renderHeader(r), r.page === 'home' ? pageHome() : r.page === 'org' ? pageOrg(r, org) : r.page === 'members' ? pageMembers(r, org)
+      : r.page === 'settings' ? pageSettings(r, org) : pagePlan(r, org, people)]);
     if (seq !== renderSeq || !body) return;
     // The same page again (after a change): stay where we are, sideways in the tables too, with the focus where it was.
     const same = location.pathname === lastPath;

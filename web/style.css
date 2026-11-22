@@ -254,3 +254,48 @@ ul.links, ul.members { display: grid; gap: .35rem; margin: .4rem 0 .8rem; }
 .link-row .lvl.edit { border-color: var(--accent); color: var(--accent); }
 .row-inline.wrap { flex-wrap: wrap; }
 .org-foot { display: flex; gap: .75rem; flex-wrap: wrap; }
+
+/* ---- header: icon links, language and the person signed in (like Sermon Studio's header) ---- */
+header { min-height: 3.25rem; }
+header .icon-btn, .dropdown > summary { display: inline-flex; align-items: center; justify-content: center; gap: .25rem; height: 2.25rem;
+  min-width: 2.25rem; padding: 0 .5rem; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--fg);
+  cursor: pointer; text-decoration: none; box-sizing: border-box; }
+header .icon-btn { width: 2.25rem; padding: 0; }
+header .icon-btn:hover, .dropdown > summary:hover { border-color: var(--accent); color: var(--accent); }
+header .icon-btn.on { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); border-color: var(--accent); color: var(--accent); }
+header .icon-btn .ic svg, .dropdown > summary .ic svg { width: 1.1rem; height: 1.1rem; }
+.dropdown { position: relative; }
+.dropdown > summary { list-style: none; min-height: 0; font-weight: 400; color: var(--fg); }
+.dropdown > summary::-webkit-details-marker { display: none; }
+.dropdown.lang > summary { font-weight: 600; font-size: .85rem; letter-spacing: .03em; }
+.dropdown.lang > summary .ic svg { width: .9rem; height: .9rem; transition: transform .15s; }
+.dropdown[open].lang > summary .ic svg { transform: rotate(180deg); }
+.dropdown.user > summary { padding: 0; width: 2.25rem; border: none; background: none; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: .85rem; letter-spacing: .02em; flex: none; }
+.avatar.sm { width: 1.9rem; height: 1.9rem; font-size: .75rem; }
+.dropdown.user > summary:hover .avatar { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+.drop-panel { position: absolute; right: 0; top: calc(100% + .4rem); z-index: 30; min-width: 12rem; padding: .4rem; display: grid; gap: .25rem;
+  background: var(--bg); border: 1px solid var(--line); border-radius: .6rem; box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+.drop-item { display: flex; justify-content: space-between; align-items: center; gap: 1rem; width: 100%; background: none; border: none;
+  color: var(--fg); text-align: left; padding: .45rem .6rem; border-radius: .4rem; font-weight: 400; }
+.drop-item:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.drop-item.on { font-weight: 600; color: var(--accent); }
+.drop-item .ic svg { width: 1rem; height: 1rem; }
+.dropdown.user .who { display: grid; gap: .1rem; padding: .35rem .6rem .5rem; border-bottom: 1px solid var(--line); margin-bottom: .2rem; }
+.signout { display: flex; align-items: center; justify-content: center; gap: .5rem; width: 100%; }
+.signout .ic svg { width: 1rem; height: 1rem; }
+
+/* ---- the members page ---- */
+.members-page ul.members li { display: flex; align-items: center; gap: .75rem; padding: .4rem 0; border-bottom: 1px solid var(--line); }
+.members-page ul.members .what { flex: 1; }
+
+/* ---- the draft: a square says locked or set by hand ---- */
+.mark { display: inline-flex; align-items: center; justify-content: center; width: 1.15rem; height: 1.15rem; border-radius: .25rem; flex: none;
+  border: 1.5px solid currentColor; }
+.mark .ic svg { width: .75rem; height: .75rem; display: block; }
+.mark.lock { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, var(--bg)); }
+.mark.hand { color: var(--hand-fg); background: var(--hand-bg); }
+.slot.locked { font-weight: 600; }
+.legend .mark { vertical-align: -.2rem; }
+.members-page h1 .info, .members-page h2 .info { margin-left: .35rem; }

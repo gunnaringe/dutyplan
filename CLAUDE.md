@@ -72,6 +72,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
   in the transaction that creates), and a rate limit on changes per person or address in `internal/api/ratelimit.go` (only with a login;
   `--client-ip-header` names the proxy's header; `costly()` lists the dearer creations). Only `/` with a login may be indexed. The
   `limits:` and `index:` mutations guard them.
+- **The header** (2026-11-22, the user, "align the design to be similar to sermon studio"): brand, organisation, then round icon links
+  to the organisation's **Members** page (`/o/<org>/members`, members with a login) and **Settings** page (`/o/<org>/settings`: rename and
+  delete, admins), the language button (`EN`/`NB`, a menu) and the person signed in as initials (a menu with their name and a Sign out
+  button). Buttons in the header are one height (`app:ui` checks it). Members and settings are pages, not dialogs.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
 - **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a
@@ -97,8 +101,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
     dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
     names set by hand as chosen; answers and drafts are never copied).
-  - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background; a planner name that was locked is a cell with `locked` and shows a
-    «locked» chip; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
+  - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background and a ✎ square (`mark('hand')`); a planner name that was locked is
+    a cell with `locked` and shows a lock square (`mark('lock')`, 2026-11-22, the user: "a square with lock"); the legend uses the same squares; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank (thumb up, ?, thumb down).
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.

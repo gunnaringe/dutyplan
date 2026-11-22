@@ -77,7 +77,7 @@ const { spawn } = require('child_process');
     await page.fill('form.row input', 'Other Org');
     await page.click('form.row button');
     await page.waitForURL('**/o/other-org');
-    await page.selectOption('header select:not(#lang)', 'sports-club');
+    await page.selectOption('header select', 'sports-club');
     await page.waitForURL('**/o/sports-club');
     await until(page, () => document.body.innerText.includes('Autumn 2026'), null, 'plans follow the organisation');
     let before = errors.length;  // an unknown organisation is a 404 from the API, which is right
@@ -398,11 +398,12 @@ const { spawn } = require('child_process');
     ok((await dialog.innerText()).includes('Unlock'), 'a locked name can be unlocked');
     await closeDialog();
     sound0 = await draft('Sound', ev[0]).innerText();
-    ok(sound0.includes(lockedName) && sound0.includes('locked'), 'the locked name has the label: ' + sound0);
+    const lockMark = () => draft('Sound', ev[0]).locator('.slot.locked .mark.lock[aria-label="Locked: kept from the planner"]').count();
+    ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name has the lock square: ' + sound0);
     await page.getByRole('button', { name: 'Try again' }).click();
     await barHas('Draft #2', 'try again makes a second draft');
     sound0 = await draft('Sound', ev[0]).innerText();
-    ok(sound0.includes(lockedName) && sound0.includes('locked'), 'the locked name is kept: ' + sound0);
+    ok(sound0.includes(lockedName) && (await lockMark()) === 1, 'the locked name is kept: ' + sound0);
 
     await page.getByRole('button', { name: 'Make it the current plan' }).click();
     await msgHas(page, 'Draft #2 is now the current plan.');
@@ -459,9 +460,14 @@ const { spawn } = require('child_process');
     await dialog.getByRole('button', { name: 'Delete the plan' }).click();
     await page.waitForURL('**/o/sports-club');
     await msgHas(page, 'The plan “Spring 2027 (draft)” was deleted.');
-    await page.getByRole('button', { name: 'Rename or delete the organisation' }).click();
-    ok((await dialog.innerText()).includes('cannot be deleted'), 'an organisation with plans cannot be deleted');
-    await closeDialog();
+    await page.click('header a[aria-label="Settings"]');
+    await h1is(page, 'Settings');
+    ok((await page.innerText('main')).includes('cannot be deleted'), 'an organisation with plans cannot be deleted');
+    ok(!(await page.locator('header a[aria-label="Members"]').count()), 'no Members without a login');
+    {
+      const sizes = await page.evaluate(() => [...document.querySelectorAll('header .icon-btn, header .dropdown > summary')].map((e) => Math.round(e.getBoundingClientRect().height)));
+      ok(sizes.length >= 2 && sizes.every((x) => x === sizes[0]), 'the header buttons are the same height: ' + sizes);
+    }
 
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---
     await page.setViewportSize({ width: 390, height: 844 });
@@ -502,7 +508,8 @@ const { spawn } = require('child_process');
     // --- Norwegian: the switch, what the server writes, the errors ---
     await page.goto(base + '/o/sports-club');
     await h1is(page, 'Sports Club');
-    await page.selectOption('#lang', 'nb');
+    await page.click('header .dropdown.lang summary');
+    await page.click('header .drop-item[lang=nb]');
     await page.waitForSelector('h2:has-text("Planer")');
     ok((await page.getAttribute('html', 'lang')) === 'nb', 'the page language becomes Norwegian');
     ok((await page.textContent('header .brand')) === 'Tjenesteplan', 'the brand is Tjenesteplan in Norwegian');
@@ -529,7 +536,9 @@ const { spawn } = require('child_process');
     await nbPage.goto(base + '/?switch');
     await h1is(nbPage, 'Velg organisasjon');
     ok((await nbPage.getAttribute('html', 'lang')) === 'nb', 'a Norwegian browser gets a Norwegian page');
-    await nbPage.selectOption('#lang', 'en');
+    ok((await nbPage.innerText('header .dropdown.lang summary')).trim() === 'NB', 'the language button says NB');
+    await nbPage.click('header .dropdown.lang summary');
+    await nbPage.click('header .drop-item[lang=en]');
     await h1is(nbPage, 'Choose organisation');
     await nbContext.close();
 
@@ -555,9 +564,10 @@ const { spawn } = require('child_process');
       await pg.route('**/auth/logout', (route) => { signedOut = route.request().method() === 'POST'; return route.fulfill({ json: { to: '/?bye' } }); });
       await pg.goto(base + '/?switch');
       await h1is(pg, 'Choose organisation');
-      ok((await pg.innerText('header')).includes('Kari Test'), 'the header shows who is signed in');
+      ok((await pg.innerText('header .avatar')) === 'KT' && (await pg.getAttribute('header .dropdown.user summary', 'aria-label')) === 'Kari Test', 'the header shows who is signed in, as initials');
       ok(!(await pg.innerText('main')).includes('There is no login'), 'no «no login» warning with a login');
-      await pg.click('header button:has-text("Sign out")');
+      await pg.click('header .dropdown.user summary');
+      await pg.click('header button.signout');
       await pg.waitForURL('**/?bye');
       ok(signedOut, 'signing out posts to /auth/logout and goes where it says');
       await c.close();
@@ -590,11 +600,11 @@ const { spawn } = require('child_process');
       await pg.keyboard.press('Escape');
       // the members: the plans' links, and an invitation
       await pg.goto(base + '/o/sports-club');
-      await pg.click('.org-foot button:has-text("Members")');
-      await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed under the members');
-      await dlg.locator('button:has-text("Make invitation link")').click();
-      await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row .lvl')].some((x) => x.textContent === 'Invitation'), null, 'the invitation is listed');
-      await pg.keyboard.press('Escape');
+      await pg.click('header a[aria-label="Members"]');
+      await pg.waitForURL('**/o/sports-club/members');
+      await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed on the members page');
+      await pg.click('main button:has-text("Make invitation link")');
+      await until(pg, () => [...document.querySelectorAll('main .link-row .lvl')].some((x) => x.textContent === 'Invitation'), null, 'the invitation is listed');
       // someone with a view link to the plan: a note, and nothing to share
       const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
       await pg.route('**/api/orgs/sports-club', asLink({ level: 'view', plan: 'autumn-2026' }));
