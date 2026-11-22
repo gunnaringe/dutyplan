@@ -46,6 +46,7 @@ const ICONS = {
   trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
   eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
   join: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/>',
+  rowsel: '<line x1="3" y1="12" x2="15" y2="12"/><polyline points="10 7 15 12 10 17"/><line x1="20" y1="5" x2="20" y2="19"/>',
   code: '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
   message: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
   file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
@@ -1253,8 +1254,6 @@ async function pagePlan(r, org, people) {
     let dlg;
     const changed = () => render();
     const name = h('input', { type: 'text', value: tk.name, maxlength: '80', 'aria-label': t('common.name') });
-    const planned = h('input', { type: 'checkbox', checked: tk.planned, 'aria-label': t('task.planned_aria', { name: tk.name }) });
-    planned.addEventListener('change', async () => { if (await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { planned: planned.checked }))) changed(); else planned.checked = tk.planned; });
     const others = tasks.filter((x) => x.id !== tk.id);
     const levelWith = (o) => (combos.find((c) => c.a === Math.min(tk.id, o.id) && c.b === Math.max(tk.id, o.id)) || { level: 'standard' }).level;
     const alone = others.length > 0 && others.every((o) => levelWith(o) === 'cannot');
@@ -1277,27 +1276,15 @@ async function pagePlan(r, org, people) {
     where.addEventListener('change', async () => {
       if (await write(() => api('PUT', `${base}/tasks/${tk.id}/position`, { position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
     });
-    // Fill row: the same number of places on every event of this plan; empty takes the task off them all.
-    const fillN = h('input', { type: 'number', min: '0', max: '50', inputmode: 'numeric', 'aria-label': t('task.fill_aria', { name: tk.name }) });
-    const fillForm = h('form', { class: 'row', onsubmit: async (e) => {
-      e.preventDefault();
-      const raw = fillN.value.trim();
-      const n = raw === '' ? 0 : parseInt(raw, 10);
-      if (Number.isNaN(n)) return;
-      if (await write(() => api('PUT', `${pbase}/tasks/${tk.id}/places`, { slots: n }))) changed();
-    } }, fillN, h('button', { type: 'submit' }, t('task.fill')));
-    dlg = keyed(modal(tk.name, { info: [t('task.org_wide', { org: org.name }), t('task.planned_off'), t('task.combine_hint'), t('task.fill_hint', { plan: plan.name })] },
+    dlg = keyed(modal(tk.name, { info: [t('task.org_wide', { org: org.name }), t('task.auto_hint'), t('task.combine_hint')] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
         if (name.value.trim() !== tk.name && await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: name.value }))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       others.length ? field(t('task.where'), where) : '',
-      h('label', { class: 'check' }, planned, ' ' + t('task.planned')),
       h('h3', {}, t('task.combine')),
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
       pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
-      h('h3', {}, t('task.fill_title')),
-      fillForm,
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
         if (await write(async () => { confirmed(t('task.delete_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
       } }, t('task.delete')), closeBtn())), 'task', tk.id);
@@ -1425,6 +1412,9 @@ async function pagePlan(r, org, people) {
   // ---- the table
   const cols = events.length;
   const filler = () => h('td', { class: 'addcol' });
+  // ⇥ at the end of a row: selects the whole row, as dragging over it would (Shift stretches, Ctrl/⌘ adds or takes away).
+  const rowPick = (grid, id, name) => h('td', { class: 'addcol' }, h('button', { type: 'button', class: 'rowpick', title: t('sel.row'),
+    'aria-label': t('sel.row_aria', { name }), onclick: (e) => selectLine(grid, e, (c) => c.row === id) }, icon('rowsel')));
   const sect = (key, title, info) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn(key, title), title, info ? infoBtn(title, info) : '')),
     h('td', { colspan: String(cols + 1) }));
   const addLine = (form) => h('tr', { class: 'adds' }, h('th', { scope: 'row' }, form), h('td', { colspan: String(cols + 1) }));
@@ -1496,8 +1486,8 @@ async function pagePlan(r, org, people) {
   const putDraftCell = (ev, tk) => { const td = draftCell(ev, tk); if (draftTd[at(ev, tk)]) draftTd[at(ev, tk)].replaceWith(td); draftTd[at(ev, tk)] = td; return td; };
 
   // ---- selecting cells like in a spreadsheet (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a
-  // whole Row"): drag over cells, Shift+click to stretch, Ctrl/⌘+click to add or take away one, a click on ⋮⋮ for the
-  // whole row, a click on an event's count for everyone that day. Two grids: places (tasks × events) and answers (people ×
+  // whole Row"): drag over cells, Shift+click to stretch, Ctrl/⌘+click to add or take away one, ⇥ at the end of a row for
+  // the whole row (⋮⋮ only drags), a click on an event's count for everyone that day. Two grids: places (tasks × events) and answers (people ×
   // events); a selection is in one of them. A bar at the bottom sets every selected cell at once (one request); Escape
   // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Dragging needs a mouse; a touch scrolls the table.
   const grids = { places: { rows: [], cells: new Map() }, answers: { rows: [], cells: new Map() } };
@@ -1696,12 +1686,12 @@ async function pagePlan(r, org, people) {
   // Tasks: ⋮⋮ drags a task to another row (the organisation's order, the same in every plan); the name opens it.
   const taskRow = (tk, i) => {
     const g = grip(t('task.drag'));
+    // ⚡: whether the planner fills the task (off: only what is set by hand); the draft and the titles change with it
+    const zap = zapBtn(tk, 'planned', (on) => t(on ? 'task.auto_on' : 'task.auto_off', { name: tk.name }),
+      t('task.planned_aria', { name: tk.name }), `${base}/tasks/${tk.id}`, () => render());
     const row = h('tr', { class: 'task-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g,
-      h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) },
-        tk.name, tk.planned ? '' : h('span', { class: 'sub' }, t('table.by_hand'))))),
-    events.map((ev) => placesCell(tk, ev)), filler());
-    g.title = t('task.drag') + ' · ' + t('sel.row_hint');
-    g.addEventListener('click', (e) => selectLine('places', e, (c) => c.row === tk.id));
+      h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) }, tk.name), zap)),
+    events.map((ev) => placesCell(tk, ev)), rowPick('places', tk.id, tk.name));
     return dragRow(row, g, 'task', tk, i, (d, pos) => api('PUT', `${base}/tasks/${d.id}/position`, { position: pos }));
   };
 
@@ -1820,37 +1810,34 @@ async function pagePlan(r, org, people) {
   // headings with their people below, the organisation's own; those without a section come first. Only placement.
   const inSection = (id) => people.filter((p) => p.section === id);
   const movePerson = (d, section, position) => api('PUT', `${base}/people/${d.id}/position`, { section, position });
-  // ⚡ by a name: whether the planner may pick the person (one click; manual cells are fine either way).
-  const autoBtn = (p) => {
-    const b = h('button', { type: 'button', class: 'auto' });
-    const paint = () => {
-      b.setAttribute('aria-pressed', String(!!p.proposable));
-      b.title = t(p.proposable ? 'person.auto_on' : 'person.auto_off', { name: p.name });
-      b.setAttribute('aria-label', t('person.proposable_aria', { name: p.name }));
-    };
+  // ⚡ by a name: whether the planner may pick the person, or fills the task (one click; set by hand works either way).
+  const zapBtn = (obj, key, title, aria, path, after) => {
+    const b = h('button', { type: 'button', class: 'auto', 'aria-label': aria });
+    const paint = () => { b.setAttribute('aria-pressed', String(!!obj[key])); b.title = title(!!obj[key]); };
     b.append(icon('auto'));
     let busy = false;
     b.addEventListener('click', async () => {
       if (busy) return;
       busy = true;
-      p.proposable = !p.proposable;
+      obj[key] = !obj[key];
       paint();
-      if (!(await write(() => api('PATCH', `${base}/people/${p.id}`, { proposable: p.proposable })))) { p.proposable = !p.proposable; paint(); }
+      if (!(await write(() => api('PATCH', path, { [key]: obj[key] })))) { obj[key] = !obj[key]; paint(); } else if (after) after();
       busy = false;
     });
     paint();
     return b;
   };
+  const autoBtn = (p) => zapBtn(p, 'proposable', (on) => t(on ? 'person.auto_on' : 'person.auto_off', { name: p.name }),
+    t('person.proposable_aria', { name: p.name }), `${base}/people/${p.id}`);
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
-    const g = grip(t('person.drag') + ' · ' + t('sel.row_hint'));
-    g.addEventListener('click', (e) => selectLine('answers', e, (c) => c.row === p.id));
+    const g = grip(t('person.drag'));
     handleFor(g, 'person', p);
     const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase(), 'data-person': String(p.id) },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name), autoBtn(p))),
-      events.map((ev) => answerCell(p, ev)), filler());
+      events.map((ev) => answerCell(p, ev)), rowPick('answers', p.id, p.name));
     return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
   };
   const sectionRow = (x, i) => {
@@ -1869,7 +1856,9 @@ async function pagePlan(r, org, people) {
     view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
     runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
 
-  const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
+  // «Add a person» where the person lands: after those without a section, and at the end of each section
+  const addPerson = (x) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
+    (name) => api('POST', base + '/people', x ? { name, section: x.id } : { name }));
   const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
@@ -1886,8 +1875,8 @@ async function pagePlan(r, org, people) {
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         folds('avail', [
           inSection(0).map(personRow),
-          sections.flatMap((x, i) => [sectionRow(x, i), ...folds('s' + x.id, inSection(x.id).map(personRow))]),
           addLine(addPerson()),
+          sections.flatMap((x, i) => [sectionRow(x, i), ...folds('s' + x.id, [...inSection(x.id).map(personRow), addLine(addPerson(x))])]),
           addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])])));
   applyFolds(table);
   table.addEventListener('pointerdown', onCellDown);

@@ -47,8 +47,9 @@ You add them yourself, type straight into the cells, drag ⋮⋮ to move a row, 
 never reads them.
 
 **Each event has its own places.** A *task* is something to do (Sound, Video, Doors, Coffee). For every task and event you
-type how many places there are: a concert needs two on the door, a rehearsal none. Nothing is built in. *Fill row* in a
-task's dialog puts the same number on every event at once, and ⋮⋮ drags a task to another row (the order is the same in
+type how many places there are: a concert needs two on the door, a rehearsal none. Nothing is built in. ⇥ at the end of a
+row selects the whole row, so the bar at the bottom puts the same number on every event at once; ⚡ by a task's name says
+whether the planner fills it (off: only what is set by hand); ⋮⋮ drags a task to another row (the order is the same in
 every plan).
 
 ![Event details and the places each event needs](docs/img/03-details-places.png)
@@ -71,7 +72,7 @@ cell with a note has an amber corner; hovering shows the note, and a click on th
 answer changes, and everyone who sees the answers sees them.
 
 **Select many cells at once, as in a spreadsheet.** Drag over answers (or over the places of tasks) to select a block; Shift+click
-extends it, Ctrl+click adds or takes away one cell, a click on ⋮⋮ selects a whole row, and a click on a day's count selects
+extends it, Ctrl+click adds or takes away one cell, a click on ⇥ at the end of a row selects the whole row, and a click on a day's count selects
 everyone that day. A bar at the bottom then sets them all: 👍 ? 👎 or *Clear* for answers (or the keys 1, 2, 3 and Delete), a
 number for places. Escape lets go. With more than eight people a *Filter names* box finds someone quickly, and the 👥 button
 under *Availability* picks who the table shows: tick anyone you like (kept in your browser; the counts, the planner and the draft
@@ -97,7 +98,7 @@ stay in view while the table scrolls; move sideways with ‹ ›, the calendar b
 the arrow keys, or by dragging the table. Explanations are behind the ⓘ buttons instead of on the page. Each section of the table (and each section of people) folds with the arrow before its heading, to fit more on the screen; the page remembers it.
 
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
-and whether the planner fills it: one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of
+(⚡ by its name says whether the planner fills it): one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of
 a person opens the tasks they take part in: one click per task goes red thumb down (*can’t*) → yellow ? (*if needed*) → green
 thumb up (*good*), and every task starts as *can’t*. A date opens the event's times and details.
 

@@ -393,11 +393,17 @@ type Person struct {
 }
 
 func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person, error) {
+	return s.CreatePersonIn(ctx, orgSlug, name, 0)
+}
+
+// CreatePersonIn adds a person last in a section (0: last among those without one), where the page's «Add a person»
+// line for that section is.
+func (s *Store) CreatePersonIn(ctx context.Context, orgSlug, name string, section int64) (Person, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Person{}, err
 	}
-	p := Person{Name: name, Proposable: true}
+	p := Person{Name: name, Proposable: true, Section: section}
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -406,11 +412,21 @@ func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person,
 		if err := atMost(ctx, tx, MaxPeoplePerOrg, "people", `SELECT COUNT(*) FROM person WHERE org_id = ?`, oid); err != nil {
 			return err
 		}
-		var n int // a new person goes last among those without a section
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE org_id = ? AND section_id IS NULL`, oid).Scan(&n); err != nil {
+		var sec any // NULL: no section
+		if section != 0 {
+			var one int
+			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM person_section WHERE id = ? AND org_id = ?`, section, oid).Scan(&one); errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			} else if err != nil {
+				return err
+			}
+			sec = section
+		}
+		var n int // a new person goes last in their section
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE org_id = ? AND section_id IS ?`, oid, sec).Scan(&n); err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, position, created_at) VALUES (?, ?, ?, ?)`, oid, p.Name, n, s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, position, section_id, created_at) VALUES (?, ?, ?, ?, ?)`, oid, p.Name, n, sec, s.stamp())
 		if isUnique(err) {
 			return exists("person", p.Name)
 		}

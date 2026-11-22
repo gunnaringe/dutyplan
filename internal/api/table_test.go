@@ -144,36 +144,9 @@ func TestTheTablesDataIs404AcrossPlansAndOrganisations(t *testing.T) {
 	}
 }
 
-func TestFillingARowAndMovingATaskOverHTTP(t *testing.T) {
+func TestMovingATaskOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	a := e.cellsWorld("Org A")
-	base := "/api/orgs/" + a.org + "/plans/" + a.plan
-	fill := base + "/tasks/" + itoa(a.sound.ID) + "/places"
-	e.mustDo(204, "PUT", fill, map[string]int{"slots": 3})
-	var places []store.EventPlaces
-	e.mustDo(200, "GET", base+"/places", nil).json(&places)
-	if len(places) != len(a.events) {
-		t.Fatalf("one row per event: %+v", places)
-	}
-	for _, p := range places {
-		if p.TaskID != a.sound.ID || p.Slots != 3 {
-			t.Errorf("filled: %+v", places)
-		}
-	}
-	for name, body := range map[string]any{"too many": map[string]int{"slots": 51}, "missing": map[string]any{}, "the same": map[string]int{"slots": 3}} {
-		if r := e.do("PUT", fill, body); r.code != 400 {
-			t.Errorf("fill %s: %d %s", name, r.code, r.body)
-		}
-	}
-	if r := e.do("PUT", base+"/tasks/x/places", map[string]int{"slots": 1}); r.code != 404 {
-		t.Errorf("a malformed task: %d", r.code)
-	}
-	e.mustDo(204, "PUT", fill, map[string]int{"slots": 0})
-	e.mustDo(200, "GET", base+"/places", nil).json(&places)
-	if len(places) != 0 {
-		t.Errorf("0 clears the row: %+v", places)
-	}
-
 	tasks := "/api/orgs/" + a.org + "/tasks"
 	e.mustDo(204, "PUT", tasks+"/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0})
 	var list []store.Task
@@ -246,6 +219,35 @@ func TestSectionsAndMovingPeopleOverHTTP(t *testing.T) {
 	for _, p := range people {
 		if p.Section != 0 {
 			t.Errorf("after the delete nobody is in a section: %+v", people)
+		}
+	}
+}
+
+// «Add a person» under a section puts the new person last in that section; another organisation's section is not found.
+func TestAddingAPersonInASection(t *testing.T) {
+	e := newEnv(t)
+	a := e.cellsWorld("Org A")
+	b := e.cellsWorld("Org B")
+	var guests, away store.Section
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/sections", map[string]string{"name": "Guests"}).json(&guests)
+	e.mustDo(201, "POST", "/api/orgs/"+b.org+"/sections", map[string]string{"name": "Away"}).json(&away)
+	var p store.Person
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Pia Demo", "section": guests.ID}).json(&p)
+	if p.Section != guests.ID {
+		t.Fatalf("the new person is not in the section: %+v", p)
+	}
+	var people []store.Person
+	e.mustDo(200, "GET", "/api/orgs/"+a.org+"/people", nil).json(&people)
+	if last := people[len(people)-1]; last.ID != p.ID || last.Section != guests.ID {
+		t.Fatalf("not last, in the section: %+v", people)
+	}
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Jon Demo"}).json(&p)
+	if p.Section != 0 {
+		t.Fatalf("without a section: %+v", p)
+	}
+	for _, sec := range []int64{away.ID, 99999} {
+		if r := e.do("POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Ola Sample", "section": sec}); r.code != 404 {
+			t.Errorf("section %d: %d %s, want 404", sec, r.code, r.body)
 		}
 	}
 }
