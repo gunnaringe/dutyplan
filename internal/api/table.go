@@ -24,6 +24,15 @@ func (s *server) tableRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}", s.setFieldValue)
 
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/answers", s.listAnswers)
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/notes/{person}", func(w http.ResponseWriter, r *http.Request) {
+		ev, person, ok := s.idAnd(w, r, "person")
+		var b struct {
+			Note string `json:"note"`
+		}
+		if ok && decode(w, r, &b) {
+			noContent(w, s.st.SetAnswerNote(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, person, b.Note), s)
+		}
+	})
 	// a selection of cells on the page, set at once
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/answers", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {

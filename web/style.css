@@ -162,7 +162,7 @@ button.draftbtn:hover { border-color: var(--line); }
 .ic-down { color: var(--no); }
 .count { white-space: nowrap; vertical-align: middle; }
 .count b { display: inline-flex; align-items: center; gap: .1rem; margin-right: .45rem; font-weight: 600; color: var(--fg); }
-td.answer { text-align: center; padding: .1rem .2rem; vertical-align: middle; }
+td.answer { text-align: center; padding: .1rem .2rem; vertical-align: middle; position: relative; }
 /* An answer and a cycle() level: an icon on a light wash of its colour; empty = not answered */
 button.ans, button.cyc { display: inline-flex; justify-content: center; align-items: center; background: transparent; color: var(--fg); border-color: var(--line); padding: 0 .4rem; font-size: 1rem; }
 button.ans { width: 100%; min-height: 1.75rem; }
@@ -176,20 +176,12 @@ button.auto[aria-pressed="false"] { color: var(--muted); opacity: .45; }
 button.auto[aria-pressed="false"] svg { fill: none; }
 button.auto[aria-pressed="true"] svg { fill: currentColor; }
 button.auto:hover { border-color: var(--line); opacity: 1; }
-.dp-table.turned thead button.auto { margin: .1rem auto 0; display: block; }
 /* ⓘ: the explanation of something, in a dialog */
 button.info { background: transparent; border: none; color: var(--muted); padding: 0 .15rem; line-height: 0; }
 button.info:hover { color: var(--accent); }
 .info-text p { margin: .25rem 0 .6rem; }
-.dp-table tr.inactive th, .dp-table tr.inactive td, .dp-table.turned .inactive { opacity: .6; }
+.dp-table tr.inactive th, .dp-table tr.inactive td { opacity: .6; }
 
-/* A phone: the availability turned (option A), events down and people across; the event column stays put, people scroll sideways. */
-.turned-wrap h2 { margin: .75rem 0 .25rem; font-size: 1rem; }
-.dp-table.turned th[scope=row] { min-width: 6.5rem; max-width: 7.5rem; }
-.dp-table.turned thead th, .dp-table.turned td { min-width: 3.75rem; max-width: 5.5rem; text-align: center; }
-.dp-table.turned thead th.corner { text-align: left; }
-.dp-table.turned thead .cellbtn { font-size: .8rem; text-align: center; overflow-wrap: anywhere; }
-.dp-table.turned .got { display: flex; flex-wrap: wrap; justify-content: center; gap: .15rem; margin-top: .25rem; }
 span.chip.task { border-color: var(--accent); color: var(--accent); }
 
 /* ---- dialogs ---- */
@@ -229,8 +221,10 @@ input.wide { width: 100%; }
   header select { max-width: 11rem; padding: .25rem .4rem; }
   header .spacer { display: none; }
   .title-bar h1 { font-size: 1.1rem; }
-  .dp-table th[scope=row] { min-width: 7.5rem; max-width: 9rem; }
-  .dp-table th, .dp-table td { min-width: 6rem; }
+  /* a phone gets the same table: a narrower name column and narrower days, so more of them fit */
+  .dp-table th[scope=row] { min-width: 6.5rem; max-width: 7.5rem; font-size: .8rem; }
+  .dp-table th, .dp-table td { min-width: 4.75rem; }
+  .grid-scroll.main { scroll-padding-left: 7rem; }
   .legend { margin-left: 0; }
 }
 
@@ -335,3 +329,28 @@ body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
 .selbar input[type=number] { width: 4.5rem; }
 .selbar form { margin: 0; }
 .dp-table input.filter { width: 100%; margin-top: .3rem; padding: .2rem .4rem; font-size: .85rem; min-height: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+/* who is shown in the table: a ✓ per person, in a dialog */
+.dp-table button.who { display: flex; align-items: center; gap: .35rem; width: 100%; margin-top: .3rem; padding: .2rem .4rem; min-height: 0; font-size: .85rem;
+  text-transform: none; letter-spacing: 0; font-weight: 400; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+.dp-table button.who.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.who-head { display: flex; gap: .3rem; align-items: center; margin-bottom: .4rem; }
+.who-list { display: grid; max-height: 55vh; overflow: auto; }
+.who-item { display: flex; align-items: center; gap: .5rem; padding: .3rem; border-radius: .3rem; cursor: pointer; }
+.who-item:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.who-item[hidden] { display: none; }
+
+/* a note on an answer: a tab in the cell's corner (amber when there is a note, faint on hover to add one) and one popover */
+td.answer .note-tab { position: absolute; top: 0; right: 0; width: 1.1rem; height: 1.1rem; min-height: 0; min-width: 0; padding: 0; border: none;
+  border-radius: 0; background: transparent; cursor: pointer; opacity: 0; }
+td.answer .note-tab::after { content: ''; position: absolute; top: .1rem; right: .15rem; border-style: solid; border-width: 0 .7rem .7rem 0;
+  border-color: transparent var(--muted) transparent transparent; }
+td.answer:hover .note-tab, td.answer .note-tab:focus-visible { opacity: .55; }
+td.answer.has-note .note-tab { opacity: 1; }
+td.answer.has-note .note-tab::after { border-color: transparent #d97706 transparent transparent; }
+@media (hover: none) { td.answer .note-tab { width: 1.5rem; height: 1.5rem; opacity: .18; } }
+.note-pop { position: fixed; z-index: 60; width: min(18rem, calc(100vw - 1rem)); padding: .5rem .6rem; background: var(--bg); border: 1px solid var(--line);
+  border-left: 3px solid #d97706; border-radius: .4rem; box-shadow: 0 6px 20px rgb(0 0 0 / .15); display: grid; gap: .35rem; }
+.note-pop[hidden] { display: none; }
+.note-pop .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-pop textarea { width: 100%; resize: vertical; font: inherit; }

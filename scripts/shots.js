@@ -227,9 +227,9 @@ const CHOICES = {
     await save(tall, '11-settings', dialog(tall));
     await closeDialog(tall);
 
-    // On a phone the availability is turned: events down, people across, with each person's tasks in the draft under the answer.
+    // On a phone: the same table, narrower, scrolling sideways under the names.
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
-    await go(phone, planPath, '.dp-table.turned');
+    await go(phone, planPath, '.dp-table');
     await phone.screenshot({ path: path.join(OUT, '14-phone.png') });
 
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));

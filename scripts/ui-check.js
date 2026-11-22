@@ -541,6 +541,48 @@ const { spawn } = require('child_process');
     await page.click('button.fold[data-key=tasks]');
     ok((await taskRows()) > 0, 'and unfold');
 
+    // --- a note on an answer: the corner tab opens it, hovering shows it, empty removes it; the answer stays as it was ---
+    {
+      const cellOf = (person, e) => page.locator('td.answer', { has: answer(person, e) });
+      const levelBefore = await answer('Kari Test', ev[1]).getAttribute('data-level');
+      await cellOf('Kari Test', ev[1]).hover();
+      await cellOf('Kari Test', ev[1]).locator('.note-tab').click();
+      await page.fill('.note-pop textarea', 'Can come after 12');
+      await page.click('.note-pop button:has-text("Save")');
+      await until(page, () => document.querySelectorAll('td.answer.has-note').length === 1, null, 'saving a note marks the cell');
+      ok((await answer('Kari Test', ev[1]).getAttribute('data-level')) === levelBefore, 'the tab does not change the answer');
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      await page.mouse.move(1, 1);
+      await answer('Kari Test', ev[1]).hover();
+      await until(page, () => { const p = document.querySelector('.note-pop'); return p && !p.hidden && p.innerText.includes('Can come after 12'); }, null, 'hovering the cell shows the note after a reload');
+      await page.mouse.move(1, 1);
+      ok(await page.locator('.note-pop').isHidden(), 'and it goes when the mouse leaves');
+      await cellOf('Kari Test', ev[1]).hover();
+      await cellOf('Kari Test', ev[1]).locator('.note-tab').click();
+      await page.click('.note-pop button:has-text("Delete")');
+      await until(page, () => !document.querySelector('td.answer.has-note'), null, 'Delete removes the note');
+    }
+
+    // --- who is shown: a ✓ per person in a dialog, kept after a reload; the counts still have everyone ---
+    {
+      const rowOf = (name) => page.locator('tr.person-row', { has: answer(name, ev[0]) });
+      const countBefore = await page.locator('td.count').first().getAttribute('aria-label');
+      await page.click('button.who');
+      await dialog.locator('label.who-item:has-text("Ola Sample") input').uncheck();
+      ok(await rowOf('Ola Sample').isHidden(), 'unticking a person hides their row');
+      ok((await page.locator('td.count').first().getAttribute('aria-label')) === countBefore, 'the counts still have everyone');
+      await closeDialog();
+      ok((await page.innerText('button.who')).includes('of'), 'the button says how many are shown: ' + (await page.innerText('button.who')));
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok(await rowOf('Ola Sample').isHidden(), 'and stays hidden after a reload');
+      await page.click('button.who');
+      await dialog.locator('.who-head button', { hasText: 'All' }).click();
+      ok(await rowOf('Ola Sample').isVisible(), 'All shows everyone again');
+      await closeDialog();
+    }
+
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---
     await page.setViewportSize({ width: 390, height: 844 });
     for (const url of ['/o/sports-club', planUrl]) {
@@ -550,32 +592,32 @@ const { spawn } = require('child_process');
       const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
       ok(w[0] <= w[1], `the page ${url} is ${w[0]} px wide on a ${w[1]} px screen (scrolls sideways)`);
     }
-    // the availability is turned (events down, people across) above the rest; the answers are only there
-    await page.waitForSelector('.dp-table.turned');
-    ok((await page.locator('.dp-table.turned button.ans').count()) === 9 && (await page.locator('button.ans').count()) === 9, 'on a phone the answers are in the turned table only');
-    ok((await page.locator('.dp-table.turned th[scope=row]').first().evaluate((e) => getComputedStyle(e).position)) === 'sticky', 'the event column stays put');
+    // the same table as on a wide screen: dates across, people down; the names stay put while the days scroll sideways
+    ok((await page.locator('button.ans').count()) === 9, 'on a phone the answers are in the ordinary table');
     const stuck = await page.evaluate(() => {
-      const box = document.querySelectorAll('.grid-scroll')[1];
+      const box = document.querySelector('.grid-scroll.main');
       const th = box.querySelector('tbody th[scope=row]');
       const x0 = th.getBoundingClientRect().left;
       box.scrollLeft = 300;
       return [box.scrollLeft > 0, Math.abs(th.getBoundingClientRect().left - x0) < 1];
     });
-    ok(stuck[0] && stuck[1], 'the rest of the table scrolls sideways and the row names stay put: ' + stuck);
-    const gotAt = (person, e) => answer(person, e).locator('xpath=..').locator('.got').innerText().catch(() => '');
-    ok((await gotAt(lockedName, ev[0])).includes('Sound'), 'under the answer: the task the person has in the draft (the locked name)');
-    const countOf = (e) => page.locator('.dp-table.turned tbody tr', { has: answer('Jon Demo', e) }).locator('.count').getAttribute('aria-label');
+    ok(stuck[0] && stuck[1], 'the table scrolls sideways and the row names stay put: ' + stuck);
+    const countOf = (e) => page.locator('td.count').nth(ev.indexOf(e)).getAttribute('aria-label');
     const before0 = await answer('Jon Demo', ev[0]).getAttribute('data-level');
     const count0 = await countOf(ev[0]);
     await answer('Jon Demo', ev[0]).click();
     const next0 = { none: 'good', good: 'poor', poor: 'never', never: 'none' }[before0];
     await until(page, ([x, l]) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === l, ['Jon Demo, ' + ev[0], next0], 'a tap moves the answer on');
     ok((await countOf(ev[0])) !== count0, 'the count of the event follows: ' + count0 + ' -> ' + (await countOf(ev[0])));
+    await page.locator('td.answer', { has: answer('Jon Demo', ev[1]) }).locator('.note-tab').click({ force: true });
+    ok(await page.locator('.note-pop textarea').isVisible(), 'on a phone the corner tab opens the note too');
+    const pop = await page.locator('.note-pop').boundingBox();
+    ok(pop.x >= 0 && pop.x + pop.width <= 390, 'and the note fits on the screen: ' + JSON.stringify(pop));
+    await page.click('.note-pop button:has-text("Cancel")');
     await page.click('button[aria-label="Open Kari Test"]');
     ok((await dialog.locator('h2').innerText()) === 'Kari Test', 'a person’s name at the top opens the person');
     await closeDialog();
     await page.setViewportSize({ width: 1280, height: 900 });
-    await until(page, () => !document.querySelector('.dp-table.turned') && document.querySelectorAll('.dp-table button.ans').length === 9, null, 'a wide screen gets the table with people as rows again');
 
     // --- Norwegian: the switch, what the server writes, the errors ---
     await page.goto(base + '/o/sports-club');

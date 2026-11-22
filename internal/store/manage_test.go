@@ -65,6 +65,7 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
 		must(s.SetFieldValue(ctx, slug, p.Slug, evs[1].ID, field.ID, "Light"))
+		must(s.SetAnswerNote(ctx, slug, p.Slug, evs[1].ID, r.people[0].ID, "After the meeting"))
 		_, err = s.SetWeights(ctx, slug, p.Slug, map[string]any{"w_fair": 12.0})
 		must(err)
 		done, err := s.CreateRun(ctx, slug, p.Slug, 1, 5, "h", []byte("{}"), []byte("{}"))
@@ -149,10 +150,10 @@ func sameCounts(t *testing.T, what string, before, after map[string]int) {
 func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	s := open(t)
 	got := func(column string) string { return strings.Join(tablesWith(t, s, column), " ") }
-	if want := "event event_field event_task manual_cell person_event plan_field plan_run pool_member share_link"; got("plan_id") != want {
+	if want := "answer_note event event_field event_task manual_cell person_event plan_field plan_run pool_member share_link"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination"
+	want := "answer_note event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}

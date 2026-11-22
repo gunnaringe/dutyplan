@@ -152,6 +152,7 @@ function changedBy(method, path) {
     if (rest.length === 2) return method === 'DELETE' ? null : ['plan', 'plans'];  // a new plan may get the address again
     const x = rest[2];
     if (x === 'events') {
+      if (rest.includes('notes')) return ['answers'];  // a note on an answer: never in the planner's input
       if (rest.includes('places')) return with_('places');
       if (rest.includes('fields')) return ['fields'];
       return with_('events', 'places', 'fields', 'cells', 'pools', 'answers');
@@ -715,13 +716,8 @@ function weightsForm(path, wr, saved) {
 // What the page keeps between redraws of the same plan: the draft picked under the earlier drafts.
 const planState = { key: '', runId: null };
 
-// A phone gets the availability turned (the sketch's option A, chosen 2026-11-20): events down, people across, the event column
-// stays put. The same width as the phone rule in style.css, and width only, so the keyboard coming up never redraws the page.
-const PHONE = matchMedia('(max-width: 40rem)');
-PHONE.addEventListener('change', () => { if (route().page === 'plan') render(); });
-
 // Sideways through the events: ◀ ▶ move a screenful, «Next» goes to the first event from today. Over the dates the wheel scrolls
-// sideways too. grid is the table's scroll box (null on a phone, where the events go down).
+// sideways too. grid is the table's scroll box.
 function sideways(grid, events) {
   if (!grid) return '';
   const firstCol = () => (grid.querySelector('tbody th[scope=row]') || { offsetWidth: 0 }).offsetWidth;
@@ -795,6 +791,8 @@ async function pagePlan(r, org, people) {
   const at = (ev, tk) => ev.id + '/' + tk.id;
   const ans = {};  // person -> event -> never | poor | good ('' or missing = not answered)
   answers.events.forEach((a) => { (ans[a.person_id] ||= {})[a.event_id] = a.level; });
+  const notes = {};  // person -> event -> the note on that answer
+  (answers.notes || []).forEach((n) => { (notes[n.person_id] ||= {})[n.event_id] = n.note; });
   const chosen = {};  // person -> the tasks they take part in, with how willingly
   answers.tasks.forEach((a) => { (chosen[a.person_id] ||= []).push(a); });
   const placesAt = {};  // 'event/task' -> places (missing = not needed)
@@ -844,7 +842,9 @@ async function pagePlan(r, org, people) {
   const folds = (key, rows) => [rows].flat(Infinity).filter((x) => x instanceof Element)
     .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
   const applyFolds = (table) => {
-    table.querySelectorAll('tr[data-fold]').forEach((tr) => { tr.hidden = tr.dataset.filtered === '1' || tr.dataset.fold.split(' ').some((k) => folded.has(k)); });
+    table.querySelectorAll('tr[data-fold]').forEach((tr) => {
+      tr.hidden = tr.dataset.filtered === '1' || hidden.has(Number(tr.dataset.person)) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
+    });
     table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
   };
   const foldBtn = (key, title) => h('button', { type: 'button', class: 'fold', 'data-key': key, 'aria-expanded': String(!folded.has(key)),
@@ -853,6 +853,42 @@ async function pagePlan(r, org, people) {
       store.set(foldKey, JSON.stringify([...folded]));
       applyFolds(e.currentTarget.closest('table'));
     } }, icon('caret'));
+  // Who is shown (2026-11-22, the user: "La det være mulig å filtrere hvem du ønsker å vise i plan. Dette skal være en avkryssing, så
+  // du kan velge et fritt utvalg."): a ✓ per person, kept in this browser per plan. Only what the table shows: the counts, the
+  // planner and the draft still have everyone. The hidden ids are kept, so someone new is shown.
+  const hideKey = 'hide:' + r.org + '/' + r.plan;
+  const hidden = new Set((() => { try { return JSON.parse(store.get(hideKey) || '[]'); } catch { return []; } })()
+    .filter((id) => people.some((p) => p.id === id)));
+  const whoLabel = () => (hidden.size ? t('who.shown', { shown: people.length - hidden.size, all: people.length }) : t('who.all'));
+  const whoBtn = h('button', { type: 'button', class: 'who' + (hidden.size ? ' on' : ''), title: t('who.label'), onclick: () => whoDialog() },
+    icon('users'), h('span', { class: 'lbl' }, whoLabel()));
+  const whoSave = () => {
+    store.set(hideKey, JSON.stringify([...hidden]));
+    whoBtn.querySelector('.lbl').textContent = whoLabel();
+    whoBtn.classList.toggle('on', hidden.size > 0);
+    applyFolds(table.querySelector('table'));
+  };
+  const whoDialog = () => {
+    const boxes = people.map((p) => h('input', { type: 'checkbox', checked: !hidden.has(p.id), onchange: (e) => {
+      if (e.target.checked) hidden.delete(p.id); else hidden.add(p.id);
+      whoSave();
+    } }));
+    const items = people.map((p, i) => h('label', { class: 'who-item', 'data-name': p.name.toLowerCase() }, boxes[i], h('span', {}, p.name)));
+    const find = h('input', { type: 'search', class: 'wide', placeholder: t('table.filter'), 'aria-label': t('table.filter'), oninput: (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      items.forEach((it) => { it.hidden = !!q && !it.dataset.name.includes(q); });
+    } });
+    // All / None act on the names the search shows, so «find "an", None» hides just those.
+    const all = (show) => () => {
+      people.forEach((p, i) => { if (!items[i].hidden) { if (show) hidden.delete(p.id); else hidden.add(p.id); boxes[i].checked = show; } });
+      whoSave();
+    };
+    modal(t('who.label'), { info: [t('who.info')] },
+      h('div', { class: 'who-head' }, find,
+        h('button', { type: 'button', class: 'ghost sm', onclick: all(true) }, t('who.select_all')),
+        h('button', { type: 'button', class: 'ghost sm', onclick: all(false) }, t('who.select_none'))),
+      h('div', { class: 'who-list' }, items), foot('', closeBtn()));
+  };
   // With many people: a filter on the names (only the rows; the sections stay). A selection keeps to the rows shown.
   let filterText = '';
   const filterBox = () => h('input', { type: 'search', class: 'filter', value: filterText, placeholder: t('table.filter'), 'aria-label': t('table.filter'),
@@ -1341,14 +1377,14 @@ async function pagePlan(r, org, people) {
   // whole Row"): drag over cells, Shift+click to stretch, Ctrl/⌘+click to add or take away one, a click on ⋮⋮ for the
   // whole row, a click on an event's count for everyone that day. Two grids: places (tasks × events) and answers (people ×
   // events); a selection is in one of them. A bar at the bottom sets every selected cell at once (one request); Escape
-  // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Not on a phone (the turned table).
+  // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Dragging needs a mouse; a touch scrolls the table.
   const grids = { places: { rows: [], cells: new Map() }, answers: { rows: [], cells: new Map() } };
   const evIndex = new Map(events.map((ev, i) => [ev.id, i]));
   let sel = null;  // { grid, keys: Set('row/event'), anchor: { row, ev } }
   const selbar = h('div', { class: 'selbar', hidden: true, role: 'region', 'aria-label': t('sel.bar') });
   const cellKey = (row, ev) => row + '/' + ev;
   const reg = (grid, row, ev, td, paint) => {
-    if (PHONE.matches || org.level === 'view') return;
+    if (org.level === 'view') return;
     const g = grids[grid];
     if (!g.rows.includes(row)) g.rows.push(row);
     g.cells.set(cellKey(row, ev.id), { td, row, ev, paint });
@@ -1445,7 +1481,7 @@ async function pagePlan(r, org, people) {
   const onCellDown = (e) => {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;
     const td = e.target.closest('td[data-cell]');
-    if (!td) return;
+    if (!td || e.target.closest('.note-tab')) return;
     const [grid, row, ev] = td.dataset.cell.split('|').map((x, i) => (i ? Number(x) : x));
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleCell(grid, row, ev); swallowClick(); return; }
     if (e.shiftKey && sel && sel.grid === grid) { e.preventDefault(); selectRect(grid, sel.anchor, { row, ev }, false); swallowClick(); return; }
@@ -1555,7 +1591,77 @@ async function pagePlan(r, org, people) {
     countCells[evId].replaceChildren(h('b', { class: 'good' }, icon('up'), c.good), h('b', { class: 'poor' }, icon('maybe'), c.poor), h('b', { class: 'never' }, icon('down'), c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
-  const answerCell = (p, ev, got) => {
+  // A note on an answer (2026-11-22, the user: "notat/kommentar i hver celle … vises som en flik i hjørnet når du klikker eller
+  // på hover"): a tab in the cell's corner. Hovering a cell with a note shows it; a click on the tab opens it, to write in it
+  // (or only to read it, with a view link). One popover for the whole page.
+  const notePop = h('div', { class: 'note-pop', hidden: true, role: 'dialog' });
+  let noteOpen = null;  // { td, edit } of the popover on show
+  const placePop = (td) => {
+    const r = td.getBoundingClientRect();
+    notePop.hidden = false;
+    const w = notePop.offsetWidth, hgt = notePop.offsetHeight;
+    const left = Math.max(8, Math.min(r.right - 8, innerWidth - w - 8));
+    const top = r.top - hgt - 6 > 8 ? r.top - hgt - 6 : Math.min(r.bottom + 6, innerHeight - hgt - 8);
+    notePop.style.left = left + 'px';
+    notePop.style.top = top + 'px';
+  };
+  const closeNote = () => { notePop.hidden = true; notePop.replaceChildren(); noteOpen = null; };
+  const peekNote = (td, p, ev) => {
+    if (noteOpen && noteOpen.edit) return;
+    const text = (notes[p.id] || {})[ev.id];
+    if (!text) return;
+    notePop.replaceChildren(h('div', { class: 'note-who small muted' }, p.name + ' · ' + label(ev)), h('div', { class: 'note-text' }, text));
+    notePop.classList.remove('editing');
+    noteOpen = { td, edit: false };
+    placePop(td);
+  };
+  const openNote = (td, p, ev, repaint) => {
+    const text = (notes[p.id] || {})[ev.id] || '';
+    const head = h('div', { class: 'note-who small muted' }, p.name + ' · ' + label(ev));
+    if (org.level === 'view') { if (text) peekNote(td, p, ev); return; }
+    const area = h('textarea', { rows: '3', maxlength: '300', placeholder: t('note.placeholder'), 'aria-label': t('note.aria', { name: p.name, label: label(ev) }) });
+    area.value = text;
+    const save = async (value) => {
+      const was = text;
+      value = value.trim();
+      closeNote();
+      if (value === was) return;
+      if (value) (notes[p.id] ||= {})[ev.id] = value; else if (notes[p.id]) delete notes[p.id][ev.id];
+      repaint();
+      if (!(await write(() => api('PUT', `${pbase}/events/${ev.id}/notes/${p.id}`, { note: value })))) {
+        if (was) (notes[p.id] ||= {})[ev.id] = was; else if (notes[p.id]) delete notes[p.id][ev.id];
+        repaint();
+      }
+    };
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeNote(); }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(area.value); }
+    });
+    notePop.replaceChildren(head, area, h('div', { class: 'row-inline' },
+      h('button', { type: 'button', class: 'sm', onclick: () => save(area.value) }, t('common.save')),
+      text ? h('button', { type: 'button', class: 'ghost sm', onclick: () => save('') }, t('note.delete')) : '',
+      h('button', { type: 'button', class: 'ghost sm', onclick: closeNote }, t('note.cancel'))));
+    notePop.classList.add('editing');
+    noteOpen = { td, edit: true };
+    placePop(td);
+    area.focus();
+  };
+  const onNoteAway = (e) => {
+    if (!noteOpen || !noteOpen.edit) return;
+    if (!notePop.isConnected) { document.removeEventListener('pointerdown', onNoteAway, true); return; }
+    if (!notePop.contains(e.target) && !e.target.closest('.note-tab')) closeNote();
+  };
+  document.addEventListener('pointerdown', onNoteAway, true);
+  const noteTab = (td, p, ev, repaint) => {
+    const tab = h('button', { type: 'button', class: 'note-tab', onclick: (e) => {
+      e.stopPropagation();
+      if (noteOpen && noteOpen.td === td && noteOpen.edit) closeNote(); else openNote(td, p, ev, repaint);
+    } });
+    td.addEventListener('mouseenter', () => peekNote(td, p, ev));
+    td.addEventListener('mouseleave', () => { if (noteOpen && !noteOpen.edit && noteOpen.td === td) closeNote(); });
+    return tab;
+  };
+  const answerCell = (p, ev) => {
     const b = h('button', { type: 'button', class: 'ans' });
     let busy = false;  // a second click while the first is on its way would send the same answer twice
     const paint = () => {
@@ -1576,8 +1682,17 @@ async function pagePlan(r, org, people) {
       busy = false;
     });
     paint();
-    const td = h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
-    if (!got) reg('answers', p.id, ev, td, paint);
+    const td = h('td', { class: 'answer' }, b);
+    const paintNote = () => {
+      const text = (notes[p.id] || {})[ev.id] || '';
+      td.classList.toggle('has-note', !!text);
+      tab.title = text || t('note.add');
+      tab.setAttribute('aria-label', text ? t('note.open_aria', { name: p.name, label: label(ev) }) : t('note.add_aria', { name: p.name, label: label(ev) }));
+    };
+    const tab = noteTab(td, p, ev, paintNote);
+    if (org.level !== 'view' || (notes[p.id] || {})[ev.id]) td.append(tab);
+    paintNote();
+    reg('answers', p.id, ev, td, paint);
     return td;
   };
   // People: ⋮⋮ drags a person to another row, also into another section (or onto its heading: the top of it). Sections are
@@ -1610,7 +1725,7 @@ async function pagePlan(r, org, people) {
     const g = grip(t('person.drag') + ' · ' + t('sel.row_hint'));
     g.addEventListener('click', (e) => selectLine('answers', e, (c) => c.row === p.id));
     handleFor(g, 'person', p);
-    const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase() },
+    const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase(), 'data-person': String(p.id) },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name), autoBtn(p))),
@@ -1633,9 +1748,8 @@ async function pagePlan(r, org, people) {
     view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
     runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
 
-  const phone = PHONE.matches;
   const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
-  const table = h('div', { class: 'grid-scroll' + (phone ? '' : ' main') }, h('table', { class: 'dp-table' },
+  const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
       sect('details', t('table.details'), [t('table.details_hint')]),
@@ -1644,9 +1758,9 @@ async function pagePlan(r, org, people) {
       folds('tasks', [tasks.map(taskRow), addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name })))]),
       h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler()))]),
-      phone ? '' : [
+      [
         dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
-          people.length > 8 ? filterBox() : ''),
+          people.length > 1 ? whoBtn : '', people.length > 8 ? filterBox() : ''),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         folds('avail', [
@@ -1657,43 +1771,22 @@ async function pagePlan(r, org, people) {
   applyFolds(table);
   table.addEventListener('pointerdown', onCellDown);
 
-  // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
-  // (as the draft rows show them: set by hand, locked or from the planner).
-  const firstName = (p) => p.name.split(/\s+/)[0];
-  const shortName = (p) => (people.some((o) => o.id !== p.id && firstName(o) === firstName(p)) ? firstName(p) + ' ' + p.name.split(/\s+/).pop()[0] + '.' : firstName(p));
-  const turned = () => {
-    const got = {};  // 'event/person' -> the names of the tasks they have in the draft
-    for (const ev of events) for (const tk of tasks) for (const x of slotsAt(ev, tk).items) {
-      if (x.kind === 'person') (got[ev.id + '/' + x.id] ||= []).push(tk.name);
-    }
-    const cols = people;
-    return h('section', { class: 'turned-wrap' },
-      h('h2', {}, t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')])),
-      h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table turned' },
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'corner' }, t('table.date')),
-          cols.map((p) => (h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p)), autoBtn(p)))))),
-        h('tbody', {}, events.map((ev) => h('tr', {},
-          h('th', { scope: 'row' }, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', (countCells[ev.id] = h('span', { class: 'sub count' }))),
-          cols.map((p) => (answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
-      addPerson());
-  };
-  const availability = phone ? turned() : '';
   events.forEach((ev) => recount(ev.id));
 
   const root = h('div', { class: 'plan-page' },
     h('div', { class: 'title-bar' },
       link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }),
       h('h1', {}, plan.name),
-      infoBtn(plan.name, [t(phone ? 'table.hint_phone' : 'table.hint')]),
-      events.length ? sideways(phone ? null : table, events) : '',
+      infoBtn(plan.name, [t('table.hint')]),
+      events.length ? sideways(table, events) : '',
       ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
       h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
-    availability,
     table,
-    selbar);
-  if (!phone) dragScroll(table);
+    selbar,
+    notePop);
+  dragScroll(table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },
