@@ -49,6 +49,7 @@ th { color: var(--muted); font-weight: 600; font-size: .875rem; }
 .small { font-size: .875rem; }
 .err { color: var(--err); }
 .warn { color: var(--warn); }
+p.notice { padding: .5rem .8rem; border: 1px solid var(--warn); border-radius: .4rem; background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }
 #msg { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
 #msg:empty { display: none; }
 /* signed out, or the server out of reach: a bar at the top with the way back */

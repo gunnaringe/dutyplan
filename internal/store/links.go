@@ -82,6 +82,9 @@ func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label 
 		if err != nil {
 			return err
 		}
+		if err := atMost(ctx, tx, MaxLinksPerOrg, "links", `SELECT COUNT(*) FROM share_link WHERE org_id = ?`, oid); err != nil {
+			return err
+		}
 		var pid any
 		if planSlug != "" {
 			var p int64

@@ -37,6 +37,7 @@ func main() {
 	secretFile := flag.String("oidc-client-secret-file", os.Getenv("DUTYPLAN_OIDC_CLIENT_SECRET_FILE"), "file with the client secret (default $DUTYPLAN_OIDC_CLIENT_SECRET_FILE)")
 	publicURL := flag.String("public-url", os.Getenv("DUTYPLAN_PUBLIC_URL"), "the app's address as people open it, e.g. https://dutyplan.example.org/ (default $DUTYPLAN_PUBLIC_URL)")
 	signupURL := flag.String("oidc-signup-url", os.Getenv("DUTYPLAN_OIDC_SIGNUP_URL"), "optional: where to make an account at the provider, offered on the start page (default $DUTYPLAN_OIDC_SIGNUP_URL)")
+	ipHeader := flag.String("client-ip-header", os.Getenv("DUTYPLAN_CLIENT_IP_HEADER"), "header with the visitor's address set by a proxy in front, e.g. CF-Connecting-IP, for the rate limits (default $DUTYPLAN_CLIENT_IP_HEADER)")
 	noLogin := flag.Bool("no-login", os.Getenv("DUTYPLAN_NO_LOGIN") == "1", "no signing in: everyone who reaches the address may do everything (default $DUTYPLAN_NO_LOGIN=1)")
 	flag.Parse()
 
@@ -79,7 +80,7 @@ func main() {
 			}
 		}
 		handler, err = api.NewWithLogin(st, pl, web.Files, log, api.Login{Issuer: *issuer, ClientID: *clientID,
-			ClientSecret: strings.TrimSpace(string(secret)), PublicURL: *publicURL, SignupURL: *signupURL})
+			ClientSecret: strings.TrimSpace(string(secret)), PublicURL: *publicURL, SignupURL: *signupURL, ClientIPHeader: *ipHeader})
 		if err != nil {
 			log.Error("login", "err", err)
 			os.Exit(1)

@@ -147,6 +147,12 @@ change **everything**. That is for your own machine, or behind a reverse proxy t
 server refuses to start without one or the other. The server refuses writes from other sites (`Sec-Fetch-Site: cross-site`), and sends
 `X-Robots-Tag: noindex` and a strict Content-Security-Policy.
 
+**Limits.** With a login anyone with an account may sign up, so there are caps: one person owns at most 20 organisations; an
+organisation has at most 100 plans, 1000 people, 200 tasks and 200 links; a plan at most 1000 events. Changes are rate limited per
+person (or per address, for someone using a link): bursts of 300, then 5 a second; making an organisation or a link, or starting a
+planning run, 20 at once and then one every 30 seconds. Beyond that the answer is `429` with `Retry-After`. Reading is not rate limited, and
+without a login neither are changes. With a login the start page may be indexed by search engines; nothing else is.
+
 ## Requirements
 
 | What | For | Version |
@@ -212,6 +218,8 @@ To build it yourself from `Dockerfile`: `podman build -t dutyplan .`, or `mise r
 | `--oidc-client-id` | `$DUTYPLAN_OIDC_CLIENT_ID` | the app's client at the provider. |
 | `--oidc-client-secret-file` | `$DUTYPLAN_OIDC_CLIENT_SECRET_FILE` | a file with the client's secret. |
 | `--public-url` | `$DUTYPLAN_PUBLIC_URL` | the address people open, e.g. `https://plan.example.org/`; the callback is `<address>auth/callback`. |
+| `--oidc-signup-url` | `$DUTYPLAN_OIDC_SIGNUP_URL` | where someone without an account makes one (Pocket ID: `<issuer>/signup`); the start page links it. |
+| `--client-ip-header` | `$DUTYPLAN_CLIENT_IP_HEADER` | the header a proxy in front puts the visitor's address in (`CF-Connecting-IP` behind Cloudflare), for the rate limits. Set it only when every request comes through that proxy. |
 | `--no-login` | `$DUTYPLAN_NO_LOGIN=1` | no signing in: everyone who reaches the address may do everything (see *Signing in*). |
 
 `dutyplan health [url]` asks a running server whether it is well (exit 0) or not (1), by default `http://127.0.0.1:8080/api/health`: a

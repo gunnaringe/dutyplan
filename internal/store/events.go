@@ -236,6 +236,9 @@ func (s *Store) AddEvents(ctx context.Context, orgSlug, planSlug string, in NewE
 }
 
 func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, oid, pid int64, e Event) (Event, error) {
+	if err := atMost(ctx, tx, MaxEventsPerPlan, "events", `SELECT COUNT(*) FROM event WHERE plan_id = ?`, pid); err != nil {
+		return Event{}, err
+	}
 	res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, start_time, end_time, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		oid, pid, e.Date, e.StartTime, e.EndTime, e.Description, s.stamp())
 	if err != nil {
