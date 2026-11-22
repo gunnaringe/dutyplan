@@ -51,9 +51,9 @@ const { spawn } = require('child_process');
       const text = await dialog.innerText();
       ok(!text.includes('[object'), 'a dialog shows a list as «[object …]»: ' + text.slice(0, 200));
     };
-    // addRow: a dashed line with a name and «Add»
+    // addRow (a dashed line with a name and «Add»), or a new plan (a field and «Create»)
     const addNamed = async (placeholder, name) => {
-      const form = page.locator(`form.addrow:has(input[placeholder="${placeholder}"])`);
+      const form = page.locator(`form:is(.addrow, .row):has(input[placeholder="${placeholder}"])`);
       await form.locator('input').fill(name);
       await form.locator('button').click();
     };
@@ -473,6 +473,23 @@ const { spawn } = require('child_process');
     // --- selecting like a spreadsheet: drag, the bar, Ctrl+click, a whole row, a whole day, the keys; then put it all back ---
     await page.goto(base + planUrl);
     await page.waitForSelector('.dp-table');
+    // --- alignment: one height for the title bar's buttons, one for those in the table; a date that snaps into place is clear of the names ---
+    const clearOfNames = () => page.evaluate(() => {
+      const box = document.querySelector('.grid-scroll.main');
+      return [parseFloat(getComputedStyle(box).scrollPaddingLeft), box.querySelector('th.corner').getBoundingClientRect().width,
+        ...[...box.querySelectorAll('tbody th[scope=row]')].map((th) => th.getBoundingClientRect().width)].map(Math.round);
+    });
+    {
+      const a = await page.evaluate(() => {
+        const hs = (sel) => [...document.querySelectorAll(sel)].map((e) => Math.round(e.getBoundingClientRect().height));
+        return { title: hs('.title-bar > button:not(.info), .title-bar .sideways button'),
+          table: hs('.dp-table form.addrow button, .dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table button.edit') };
+      });
+      ok(a.title.length >= 4 && a.title.every((x) => x === a.title[0]), 'the title bar’s buttons are one height: ' + a.title);
+      ok(a.table.length >= 4 && a.table.every((x) => x === a.table[0]), 'the buttons in the table are one height: ' + a.table);
+      const [pad, ...names] = await clearOfNames();
+      ok(names.every((w) => w === names[0] && w <= pad), `the names have one width (${names}) and the dates snap clear of them (${pad})`);
+    }
     {
       const who = ['Kari Test', 'Ola Sample'];
       const levelOf = (person, e) => page.evaluate((x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level, person + ', ' + e);
@@ -602,6 +619,10 @@ const { spawn } = require('child_process');
       return [box.scrollLeft > 0, Math.abs(th.getBoundingClientRect().left - x0) < 1];
     });
     ok(stuck[0] && stuck[1], 'the table scrolls sideways and the row names stay put: ' + stuck);
+    {
+      const [pad, ...names] = await clearOfNames();
+      ok(names.every((w) => w === names[0] && w <= pad), `on a phone too the names have one width (${names}) and the dates snap clear of them (${pad})`);
+    }
     const countOf = (e) => page.locator('td.count').nth(ev.indexOf(e)).getAttribute('aria-label');
     const before0 = await answer('Jon Demo', ev[0]).getAttribute('data-level');
     const count0 = await countOf(ev[0]);

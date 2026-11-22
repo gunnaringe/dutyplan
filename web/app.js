@@ -53,10 +53,16 @@ function icon(name) {
 // The three levels every choice has: can't (red thumb down), if needed (yellow ?), good (green thumb up).
 const LEVEL_ICON = { never: 'down', '': 'down', cannot: 'down', poor: 'maybe', standard: 'maybe', good: 'up', practical: 'up' };
 
+// A message: in the open dialog, else over the page (#msg), which goes away by itself (a click also hides it).
+let sayTimer = 0;
 function say(text, kind) {
   const m = document.querySelector('dialog[open] [data-msg]') || document.getElementById('msg');
   m.textContent = text || '';
   m.className = text ? kind || 'ok' : '';
+  if (m.id !== 'msg') return;
+  clearTimeout(sayTimer);
+  m.onclick = () => say('');
+  if (text) sayTimer = setTimeout(() => { m.textContent = ''; m.className = ''; }, kind === 'err' ? 8000 : 4000);
 }
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -331,7 +337,7 @@ async function renderHeader(r) {
   if (r.org && role === 'admin') tools.push(nav('settings', 'settings', t('nav.settings')));
   document.getElementById('top').replaceChildren(
     brand('/?switch'),
-    h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select),
+    orgs.length ? h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select) : '',
     h('span', { class: 'spacer' }),
     ...tools,
     langMenu(),
@@ -487,13 +493,21 @@ async function pageOrg(r, org) {
   if (org.plan) return go(`/o/${enc(r.org)}/p/${enc(org.plan)}`);  // a link to one plan: that plan is all there is
   const plans = await get(base + '/plans');
 
+  function newPlanForm() {
+    const name = h('input', { type: 'text', placeholder: t('org.new_plan_placeholder'), maxlength: '80', required: true, 'aria-label': t('org.new_plan_placeholder') });
+    return h('form', { class: 'row', onsubmit: async (e) => {
+      e.preventDefault();
+      let p;
+      if (await write(async () => { p = await api('POST', base + '/plans', { name: name.value }); })) go(`/o/${enc(r.org)}/p/${enc(p.slug)}`);
+    } }, name, h('button', { type: 'submit' }, t('common.create')));
+  }
   const root = h('div', { class: 'org-page' },
     h('h1', {}, org.name),
     h('h2', {}, t('org.plans')),
     h('div', { class: 'plans' },
       plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
         : h('p', { class: 'muted' }, t('org.no_plans')),
-      org.level === 'view' ? '' : addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
+      org.level === 'view' ? '' : newPlanForm()),
     viewOnly(org));
   return root;
 }
@@ -885,8 +899,8 @@ async function pagePlan(r, org, people) {
     };
     modal(t('who.label'), { info: [t('who.info')] },
       h('div', { class: 'who-head' }, find,
-        h('button', { type: 'button', class: 'ghost sm', onclick: all(true) }, t('who.select_all')),
-        h('button', { type: 'button', class: 'ghost sm', onclick: all(false) }, t('who.select_none'))),
+        h('button', { type: 'button', class: 'ghost', onclick: all(true) }, t('who.select_all')),
+        h('button', { type: 'button', class: 'ghost', onclick: all(false) }, t('who.select_none'))),
       h('div', { class: 'who-list' }, items), foot('', closeBtn()));
   };
   // With many people: a filter on the names (only the rows; the sections stay). A selection keeps to the rows shown.
@@ -916,7 +930,9 @@ async function pagePlan(r, org, people) {
       let id;
       if (await write(async () => { id = (await api('POST', runsPath, { time_limit: parseInt(limitSel.value, 10) })).id; })) { planState.runId = id; render(); }
     };
-    const line = [h('button', { type: 'button', disabled: !health.planner || running, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel];
+    const nothing = !events.length || !people.length || !Object.values(placesAt).some(Boolean);  // no event, person or place: nothing to plan
+    const line = [h('button', { type: 'button', disabled: !health.planner || running || nothing, title: nothing && !running ? t('run.nothing') : null, onclick: start },
+      running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel];
     const notes = [];
     if (!health.planner) line.push(h('span', { class: 'small' }, t('run.no_planner')));
     if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.time_limit }))); setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000); }
@@ -978,8 +994,10 @@ async function pagePlan(r, org, people) {
     const until = h('input', { type: 'date', disabled: true, 'aria-label': t('copy.until') });
     const count = h('span', { class: 'small muted', 'aria-live': 'polite' });
     const every = () => Number(sel.value);
+    let untilField;
     const update = () => {
       until.disabled = !every();
+      untilField.hidden = !every();
       until.required = !!every();
       const n = repeatDates(dates(), until.value, every()).length;
       count.textContent = n ? '→ ' + tn('copy.count', n) : '';
@@ -987,7 +1005,7 @@ async function pagePlan(r, org, people) {
     sel.addEventListener('change', () => { if (onEvery) onEvery(every()); update(); });
     until.addEventListener('input', update);
     return {
-      el: h('div', { class: 'row-inline repeat' }, field(t('copy.repeat'), sel), field(t('copy.until'), until), count),
+      el: h('div', { class: 'row-inline repeat' }, field(t('copy.repeat'), sel), untilField = field(t('copy.until'), until), count),
       until: () => (every() ? until.value : ''), every, update,
     };
   }
@@ -1050,7 +1068,7 @@ async function pagePlan(r, org, people) {
     const week = repeat(() => [date.value], (n) => { if (suggested) date.value = addDays(last.date, 7 * Math.max(n, 1)); });
     date.addEventListener('input', () => { suggested = false; week.update(); });
     const timesHint = h('p', { class: 'muted small' });
-    const hint = () => { timesHint.textContent = from.value ? t('event.times_from_copy') : ''; };
+    const hint = () => { timesHint.textContent = from.value ? t('event.times_from_copy') : ''; timesHint.hidden = !from.value; };
     from.addEventListener('change', hint);
     dlg = modal(t('event.new'),
       h('form', { class: 'stack', onsubmit: async (e) => {
@@ -1063,7 +1081,7 @@ async function pagePlan(r, org, people) {
             : await api('POST', epath, { date: date.value, until: week.until(), every: week.every(), ...times });
         })) { dlg.close(); await render(); say(tn('event.added', made.length)); }
       } },
-        h('div', { class: 'row-inline' }, field(t('event.date'), date), field(t('event.start_from'), from)),
+        h('div', { class: 'row-inline' }, field(t('event.date'), date), events.length ? field(t('event.start_from'), from) : ''),
         h('div', { class: 'row-inline' }, field(t('event.starts'), start), field(t('event.ends'), end)),
         timesHint,
         week.el,
@@ -1308,7 +1326,7 @@ async function pagePlan(r, org, people) {
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.event_aria', { label: label(ev) }), onclick: () => eventDialog(ev) }, fmtShortDate(ev.date)),
       h('button', { type: 'button', class: 'edit', title: t('copy.title'), 'aria-label': t('copy.aria', { label: label(ev) }), onclick: () => copyDialog(ev) }, '⧉')),
       clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '')),
-    h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), onclick: newEventDialog }, '+')));
+    h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), onclick: newEventDialog }, events.length ? '+' : '+ ' + t('table.add_event'))));  // with no event yet it says what it does
 
   // A text in a cell is saved when the field is left, without redrawing the page (so the next field keeps the focus).
   const textCell = (cur, placeholder, aria, save) => {
