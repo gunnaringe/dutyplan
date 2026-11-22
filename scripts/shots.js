@@ -185,7 +185,7 @@ const CHOICES = {
 
     // The organisation and its plans.
     await go(page, `/o/${ORG.slug}`);
-    await fromTop(page, '01-organisation', page.locator('.org-foot'));
+    await fromTop(page, '01-organisation', page.locator('.plans'));
 
     // The sections of the table, one by one.
     await go(page, planPath, '.dp-table');

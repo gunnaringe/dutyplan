@@ -8,7 +8,7 @@ const MESSAGES = {
 
     'lang.label': 'Language',
     'lang.en': 'English',
-    'lang.nb': 'Norsk',
+    'lang.nb': 'Norsk bokmål',
 
     'header.org': 'Organisation',
     'header.switch_org': 'Switch organisation…',
@@ -184,6 +184,9 @@ const MESSAGES = {
     'landing.open_source': 'Open source:',
     'landing.failed': 'Signing in did not work. Try again.',
     'header.sign_out': 'Sign out',
+    'nav.members': 'Members',
+    'nav.settings': 'Settings',
+    'settings.title': 'Settings',
     'share.open': 'Share',
     'share.title_plan': 'Share «{name}»',
     'share.info': 'Whoever opens a link gets into this plan without an account, until you delete the link or it runs out. It also reaches the people and tasks the table needs.',
@@ -383,7 +386,7 @@ const MESSAGES = {
 
     'draft.title': 'Draft allocation',
     'draft.key_hand': 'Set by hand',
-    'draft.key_locked': 'kept from the planner',
+    'draft.key_locked': 'Locked: kept from the planner',
     'draft.info': 'Who got what: the draft on show, with what is set by hand on top (violet). Click a place to set someone by hand, lock a name from the planner, or say whom the planner may pick there. «Make a draft» makes a new one; «maybe» marks a place given against a ?.',
     'draft.locked': 'locked',
     'draft.maybe': 'maybe',
@@ -462,7 +465,7 @@ const MESSAGES = {
 
     'lang.label': 'Språk',
     'lang.en': 'English',
-    'lang.nb': 'Norsk',
+    'lang.nb': 'Norsk bokmål',
 
     'header.org': 'Organisasjon',
     'header.switch_org': 'Bytt organisasjon…',
@@ -638,6 +641,9 @@ const MESSAGES = {
     'landing.open_source': 'Åpen kildekode:',
     'landing.failed': 'Innloggingen virket ikke. Prøv igjen.',
     'header.sign_out': 'Logg ut',
+    'nav.members': 'Medlemmer',
+    'nav.settings': 'Innstillinger',
+    'settings.title': 'Innstillinger',
     'share.open': 'Del',
     'share.title_plan': 'Del «{name}»',
     'share.info': 'Den som åpner en lenke, kommer inn i denne planen uten konto, til du sletter lenken eller den går ut. Den gir også personene og oppgavene tabellen trenger.',
@@ -837,7 +843,7 @@ const MESSAGES = {
 
     'draft.title': 'Utkast til fordeling',
     'draft.key_hand': 'Satt for hånd',
-    'draft.key_locked': 'beholdt fra planleggeren',
+    'draft.key_locked': 'Låst: beholdt fra planleggeren',
     'draft.info': 'Hvem som fikk hva: utkastet som vises, med det som er satt for hånd over (fiolett). Klikk på en plass for å sette noen for hånd, låse et navn fra planleggeren eller si hvem planleggeren kan velge der. «Lag et utkast» lager et nytt; «kanskje» merker en plass gitt mot et ?.',
     'draft.locked': 'låst',
     'draft.maybe': 'kanskje',

@@ -41,8 +41,8 @@ every plan).
 ![Event details and the places each event needs](docs/img/03-details-places.png)
 
 **The draft allocation.** Between the tasks and the answers is the draft: who has each place. What you set yourself has a
-violet background: a person, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
-planner can be **locked** with one click, and *Try again* keeps it. A place given against a *?* is marked *maybe*, and a place
+violet background and a ✎ square: a person, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
+planner can be **locked** with one click (a 🔒 square), and *Try again* keeps it. A place given against a *?* is marked *maybe*, and a place
 that cannot be filled says *Not filled · Why?*. The planner is checked afterwards by a second, independent program, and the
 page says if a rule was broken (it should never be).
 
@@ -139,7 +139,7 @@ provider), and then they create an organisation, of which they are the admin. No
 | **View link** to a plan | look at that plan |
 
 **Sharing.** A member shares a plan with a link (**Share** on the plan): *view* or *edit*. It works until it is deleted or runs out,
-shows only that plan, and never lets whoever has it make links. Under **Members** everyone sees the plans' links; an admin also makes
+shows only that plan, and never lets whoever has it make links. On the **Members** page (the people icon in the header) everyone sees the plans' links; an admin also makes
 invitation links (whoever opens one and signs in becomes a member). Everyone may leave; there is always one admin.
 
 Make a client at your OpenID Connect provider: confidential, with PKCE, the redirect address `<your address>/auth/callback` and,
