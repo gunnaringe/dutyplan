@@ -56,12 +56,54 @@ async function api(method, path, body) {
   const headers = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') headers['X-Dutyplan-Client'] = CLIENT;  // the stream tells this tab's own changes apart
-  const res = await fetch('/api' + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  let res;
+  try {
+    // A sign-in in front of the app (forward auth) answers an expired session with a redirect to its own site, which a fetch
+    // cannot follow (another origin): «manual» turns that into an answer the page can recognise.
+    res = await fetch('/api' + path, { method, headers, redirect: 'manual', body: body === undefined ? undefined : JSON.stringify(body) });
+  } catch (e) {
+    connection('offline');
+    throw Object.assign(new Error(t('net.offline')), { connection: 'offline' });
+  }
+  // Signed out: a redirect, a refusal from the sign-in, or a page that is not ours (the API always answers JSON).
+  const json = (res.headers.get('Content-Type') || '').startsWith('application/json');
+  if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !json && res.status !== 204)) {
+    connection('signed_out');
+    throw Object.assign(new Error(t('net.signed_out')), { connection: 'signed_out' });
+  }
+  connection('');
   const data = await res.json().catch(() => ({}));
   if (method !== 'GET') forget(method, path.split('?')[0]);  // also when refused: what is shown may be out of date
   if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { kind: data.error, apiCode: data.code, params: data.params, status: res.status });
   return data;
 }
+
+// ---- the connection: signed out, or the server out of reach ----------------------------------------------------------
+// A bar at the top that says so and offers the way back: sign in again (a reload goes through the sign-in and comes back to
+// this address) or try again. The page stays as it was under it.
+let connState = '';
+function connection(state) {
+  if (state === connState) return;
+  connState = state;
+  let bar = document.getElementById('conn');
+  if (!state) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = h('div', { id: 'conn', role: 'alert' });
+    document.body.prepend(bar);
+  }
+  bar.className = state;
+  bar.replaceChildren(connectionLine(state));
+}
+// What is wrong, and the button that puts it right.
+function connectionLine(state) {
+  const retry = () => { connection(''); fetched.clear(); if (!live) follow(route().org); render(); };
+  return h('span', { class: 'conn-line' }, h('span', {}, t(state === 'signed_out' ? 'net.signed_out' : 'net.offline')), ' ',
+    state === 'signed_out'
+      ? h('button', { type: 'button', onclick: () => location.reload() }, t('net.sign_in'))
+      : h('button', { type: 'button', onclick: (e) => { const d = e.currentTarget.closest('dialog'); if (d) d.close(); retry(); } }, t('net.retry')));
+}
+// Is the server still there, and are we still signed in? Asked when the stream breaks.
+const probe = () => api('GET', '/health').then(() => true, () => false);
 
 // ---- what has been fetched ------------------------------------------------------------------------------------------
 // The page keeps what it has fetched (GET path -> the answer), and a redraw takes it from here. A write (this tab's, or one
@@ -148,6 +190,11 @@ async function write(action) {
     return true;
   } catch (e) {
     if (e.cancelled) return false;
+    if (e.connection) {  // the bar at the top says it, and how to get back; a dialog covers it, so the dialog says it too
+      const m = document.querySelector('dialog[open] [data-msg]');
+      if (m) { m.className = 'err'; m.replaceChildren(connectionLine(e.connection)); } else say('');
+      return false;
+    }
     say(errorText(e), 'err');
     return false;
   }
@@ -237,8 +284,10 @@ function modal(title, ...kids) {
   const old = key && [...document.querySelectorAll('dialog.modal[open]')].find((d) => d.dataset.key === key);
   const dlg = old || h('dialog', { class: 'modal', 'aria-label': title });
   const msg = old ? old.querySelector('[data-msg]') : h('p', { 'data-msg': '', role: 'status' });
+  // flat and without the empty '' of conditional parts, as h() does: append() would write a list as «[object …],…»
   const content = [h('div', { class: 'modal-head' }, h('h2', {}, title), info ? infoBtn(title, info) : '',
-    h('button', { type: 'button', class: 'ghost x', 'aria-label': t('common.close'), onclick: () => dlg.close() }, '×')), msg, ...kids];
+    h('button', { type: 'button', class: 'ghost x', 'aria-label': t('common.close'), onclick: () => dlg.close() }, '×')), msg, ...kids.flat(3)]
+    .filter((x) => x !== '' && x != null && x !== false);
   if (old) {
     const top = old.scrollTop;
     const focus = focusKey(old);
@@ -1238,6 +1287,7 @@ async function render() {
     document.title = t('brand') + (org ? ' · ' + org.name : '');
   } catch (e) {
     if (seq !== renderSeq) return;
+    if (e.connection && main.firstChild) return;  // keep what is shown; the bar at the top says what is wrong
     if (e.status === 404 && r.org && !e.keepOrg) store.set('org', '');
     main.replaceChildren(h('div', {}, h('h1', {}, e.status === 404 ? t('page.not_found') : t('page.error')), h('p', {}, link('/?switch', t('page.choose_org'))), h('p', { class: 'muted small' }, errorText(e))));
   }
@@ -1265,6 +1315,7 @@ function follow(org) {
   });
   es.addEventListener('error', () => {
     broken = true;
+    if (fails === 0) probe();  // shows the bar at once if the sign-in has expired or the server is gone
     // Give up after a few tries instead of knocking every 3 s; try again when the tab is looked at, or in a minute.
     if (++fails < 5 || !live || live.es !== es) return;
     es.close();
