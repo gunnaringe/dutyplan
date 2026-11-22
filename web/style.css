@@ -348,7 +348,7 @@ td.answer .note-tab::after { content: ''; position: absolute; top: .1rem; right:
 td.answer:hover .note-tab, td.answer .note-tab:focus-visible { opacity: .55; }
 td.answer.has-note .note-tab { opacity: 1; }
 td.answer.has-note .note-tab::after { border-color: transparent #d97706 transparent transparent; }
-@media (hover: none) { td.answer .note-tab { width: 1.5rem; height: 1.5rem; opacity: .35; } }
+@media (hover: none) { td.answer .note-tab { width: 1.5rem; height: 1.5rem; opacity: .18; } }
 .note-pop { position: fixed; z-index: 60; width: min(18rem, calc(100vw - 1rem)); padding: .5rem .6rem; background: var(--bg); border: 1px solid var(--line);
   border-left: 3px solid #d97706; border-radius: .4rem; box-shadow: 0 6px 20px rgb(0 0 0 / .15); display: grid; gap: .35rem; }
 .note-pop[hidden] { display: none; }
