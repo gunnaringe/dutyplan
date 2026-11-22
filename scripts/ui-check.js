@@ -728,6 +728,7 @@ const { spawn } = require('child_process');
       await pg.waitForSelector('.landing video.demo');
       ok((await film()).src === '/demo-nb.mp4', 'the film in Norwegian on the Norwegian page');
       ok((await aboutOf()).h === 'Om Tjenesteplan', 'the About section in Norwegian');
+      ok(await pg.evaluate(async () => { await document.fonts.ready; return document.fonts.check('1.7rem "signature"', 'Gunnar'); }), 'the signature font loads');
       await pg.evaluate(() => localStorage.setItem('tp.lang', 'en'));
       await pg.reload();
       await h1is(pg, 'Plan who does what, fairly');

@@ -298,7 +298,11 @@ main:has(> .landing) { max-width: 68rem; }
 .landing footer.about { max-width: 44rem; margin: 1rem auto 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
 .landing footer.about h2 { margin-top: 0; }
 .landing footer.about p { margin: .5rem 0; }
-.landing footer.about .signature { font-style: italic; font-weight: 600; color: var(--fg); text-decoration: none; }
+/* the author's handwriting, cut down to the letters of the name (web/signature.woff2: not under the licence, see NOTICE) */
+@font-face { font-family: "signature"; src: url("/signature.woff2") format("woff2"); font-display: swap; }
+.landing footer.about .signature { display: inline-block; font: 1.7rem/1.2 "signature", "Segoe Print", "Bradley Hand", cursive; color: var(--fg);
+  text-decoration: none; opacity: .8; transition: opacity .15s, transform .15s; }
+.landing footer.about .signature:hover, .landing footer.about .signature:focus-visible { opacity: 1; transform: translateY(-1px); }
 .landing .about-links { list-style: none; padding: 0; margin: 1rem 0 0; display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; }
 .landing .about-links a { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); text-decoration: none; font-size: .9rem; }
 .landing .about-links a:hover { color: var(--accent); }

@@ -313,4 +313,5 @@ Security problems: see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache License 2.0, see `LICENSE`.
+Apache License 2.0, see `LICENSE`, except the signature font in the About section (`web/signature.woff2`, the author's
+handwriting): see `NOTICE`.
