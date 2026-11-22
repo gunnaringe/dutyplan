@@ -311,6 +311,7 @@ func (s *server) linkRoutes(mux *http.ServeMux) {
 			Level       string `json:"level"`
 			Label       string `json:"label"`
 			ExpiresDays int    `json:"expires_days"`
+			SingleUse   bool   `json:"single_use"`
 		}
 		if !decode(w, r, &b) {
 			return
@@ -323,7 +324,7 @@ func (s *server) linkRoutes(mux *http.ServeMux) {
 		if u, ok := userFrom(r); ok {
 			by = u.ID
 		}
-		l, err := s.st.CreateLink(r.Context(), r.PathValue("org"), b.Plan, b.Level, b.Label, b.ExpiresDays, by)
+		l, err := s.st.CreateLink(r.Context(), r.PathValue("org"), b.Plan, b.Level, b.Label, b.ExpiresDays, b.SingleUse, by)
 		if err != nil {
 			writeErr(w, s.log, err)
 			return

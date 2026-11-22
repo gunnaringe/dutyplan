@@ -31,9 +31,10 @@ type Link struct {
 	CreatedBy string `json:"created_by,omitempty"`
 	CreatedAt string `json:"created_at"`
 	ExpiresAt string `json:"expires_at,omitempty"`
+	SingleUse bool   `json:"single_use"` // an invitation for one person: it ends when someone joins with it
 }
 
-const linkColumns = `l.id, o.slug, o.name, COALESCE(p.slug, ''), COALESCE(p.name, ''), l.level, l.label, l.token, COALESCE(u.name, ''), l.created_at, COALESCE(l.expires_at, '')`
+const linkColumns = `l.id, o.slug, o.name, COALESCE(p.slug, ''), COALESCE(p.name, ''), l.level, l.label, l.token, COALESCE(u.name, ''), l.created_at, COALESCE(l.expires_at, ''), l.single_use`
 const linkFrom = ` FROM share_link l JOIN organization o ON o.id = l.org_id LEFT JOIN plan p ON p.id = l.plan_id LEFT JOIN app_user u ON u.id = l.created_by`
 
 func scanLinks(rows *sql.Rows, err error) ([]Link, error) {
@@ -44,7 +45,7 @@ func scanLinks(rows *sql.Rows, err error) ([]Link, error) {
 	out := []Link{}
 	for rows.Next() {
 		var l Link
-		if err := rows.Scan(&l.ID, &l.Org, &l.OrgName, &l.Plan, &l.PlanName, &l.Level, &l.Label, &l.Token, &l.CreatedBy, &l.CreatedAt, &l.ExpiresAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.Org, &l.OrgName, &l.Plan, &l.PlanName, &l.Level, &l.Label, &l.Token, &l.CreatedBy, &l.CreatedAt, &l.ExpiresAt, &l.SingleUse); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -59,7 +60,8 @@ func newToken() string {
 }
 
 // CreateLink makes a view or edit link to one plan, or an invitation (join, planSlug ""). expiresDays 0: it never runs out.
-func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label string, expiresDays int, userID int64) (Link, error) {
+// singleUse: an invitation that ends when someone becomes a member with it.
+func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label string, expiresDays int, singleUse bool, userID int64) (Link, error) {
 	if level != LevelView && level != LevelEdit && level != LevelJoin {
 		return Link{}, Invalid("link_level", nil, "the level must be view, edit or join")
 	}
@@ -68,6 +70,9 @@ func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label 
 	}
 	if level != LevelJoin && planSlug == "" {
 		return Link{}, Invalid("link_plan", nil, "a view or edit link is to one plan")
+	}
+	if singleUse && level != LevelJoin {
+		return Link{}, Invalid("link_single_use", nil, "only an invitation can be for one person")
 	}
 	label = strings.TrimSpace(label)
 	if len([]rune(label)) > 80 || !validText(label) {
@@ -103,8 +108,8 @@ func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label 
 		if userID != 0 {
 			by = userID
 		}
-		return tx.QueryRowContext(ctx, `INSERT INTO share_link (org_id, plan_id, token, level, label, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-			oid, pid, newToken(), level, label, by, s.stamp(), expires).Scan(&id)
+		return tx.QueryRowContext(ctx, `INSERT INTO share_link (org_id, plan_id, token, level, label, created_by, created_at, expires_at, single_use) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			oid, pid, newToken(), level, label, by, s.stamp(), expires, singleUse).Scan(&id)
 	})
 	if err != nil {
 		return Link{}, err
@@ -221,20 +226,28 @@ func (s *Store) RemoveMember(ctx context.Context, orgSlug string, userID int64) 
 }
 
 // Join makes the person a member of the organisation an invitation is to (a member already keeps their role), and
-// returns that organisation; ErrNotFound when the token is no invitation or has run out.
+// returns that organisation; ErrNotFound when the token is no invitation or has run out. An invitation for one person
+// ends when someone becomes a member with it (not when a member opens it: that uses nothing).
 func (s *Store) Join(ctx context.Context, token string, userID int64) (Org, error) {
 	var o Org
 	err := s.write(ctx, func(tx *sql.Tx) error {
-		var oid int64
-		err := tx.QueryRowContext(ctx, `SELECT o.id, o.slug, o.name, o.created_at FROM share_link l JOIN organization o ON o.id = l.org_id
-			WHERE l.token = ? AND l.level = 'join' AND (l.expires_at IS NULL OR l.expires_at > ?)`, token, s.stamp()).Scan(&oid, &o.Slug, &o.Name, &o.CreatedAt)
+		var oid, lid int64
+		var once bool
+		err := tx.QueryRowContext(ctx, `SELECT o.id, o.slug, o.name, o.created_at, l.id, l.single_use FROM share_link l JOIN organization o ON o.id = l.org_id
+			WHERE l.token = ? AND l.level = 'join' AND (l.expires_at IS NULL OR l.expires_at > ?)`, token, s.stamp()).Scan(&oid, &o.Slug, &o.Name, &o.CreatedAt, &lid, &once)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING`, oid, userID, s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO membership (org_id, user_id, role, created_at) VALUES (?, ?, 'member', ?) ON CONFLICT DO NOTHING`, oid, userID, s.stamp())
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 1 && once {
+			_, err = tx.ExecContext(ctx, `DELETE FROM share_link WHERE id = ?`, lid)
+		}
 		return err
 	})
 	return o, err

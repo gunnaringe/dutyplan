@@ -305,3 +305,40 @@ func TestDeletingAPlanEndsItsLinks(t *testing.T) {
 		t.Fatalf("the link to the deleted plan: %d", r.code)
 	}
 }
+
+// An invitation for one person ends when someone joins with it; a member opening it uses nothing up. One for anyone stays.
+func TestAnInvitationForOnePersonEndsWhenSomeoneJoins(t *testing.T) {
+	e, kari := sharedOrg(t)
+	var once, many store.Link
+	if r := e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": "join", "label": "Ola", "single_use": true}); r.code != 201 {
+		t.Fatalf("create: %d %s", r.code, r.body)
+	} else {
+		r.json(&once)
+	}
+	if !once.SingleUse {
+		t.Fatalf("the invitation does not say it is for one person: %+v", once)
+	}
+	e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": "join", "label": "anyone"}).json(&many)
+	if r := e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": "view", "plan": "autumn", "single_use": true}); r.code != 400 || !strings.Contains(string(r.body), "link_single_use") {
+		t.Fatalf("a view link for one person = %d %s, want 400 link_single_use", r.code, r.body)
+	}
+	e.open(once.Token, kari) // the admin is a member already: nothing is used up
+	ola := e.signIn("ola", "/")
+	if to, _ := e.open(once.Token, ola); to != "/o/choir?joined" {
+		t.Fatalf("Ola joins: to %q", to)
+	}
+	per := e.signIn("per", "/")
+	if to, _ := e.open(once.Token, per); to != "/?link=invalid" {
+		t.Fatalf("a second person with the same invitation: to %q, want it ended", to)
+	}
+	for _, who := range []*http.Cookie{per, ola} {
+		if to, _ := e.open(many.Token, who); to != "/o/choir?joined" {
+			t.Fatalf("an invitation for anyone works again: to %q", to)
+		}
+	}
+	var left []store.Link
+	e.as(kari, "GET", "/api/orgs/choir/links", nil).json(&left)
+	if len(left) != 1 || left[0].ID != many.ID {
+		t.Fatalf("links left: %+v", left)
+	}
+}

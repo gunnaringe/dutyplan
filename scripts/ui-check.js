@@ -774,10 +774,11 @@ const { spawn } = require('child_process');
       await pg.waitForURL('**/o/sports-club/members');
       await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed on the members page');
       // an invitation is for a person: whom it is for, as its name in the list
+      ok((await pg.inputValue('main form.new-link select[aria-label="Who can use it"]')) === 'once', 'an invitation is for one person unless chosen otherwise');
       await pg.fill('main form.new-link input[type=text]', 'the new treasurer');
       ok((await pg.innerText('main form.new-link')).includes('Who are you inviting?'), 'the invitation asks whom it is for');
       await pg.click('main form.new-link button[type=submit]:text-is("Invite")');
-      await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.querySelector('.title').textContent === 'Invitation for the new treasurer' && li.querySelector('.lvl').textContent === 'Becomes a member'), null, 'the invitation is listed with whom it is for');
+      await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.querySelector('.title').textContent === 'Invitation for the new treasurer' && li.querySelector('.lvl').textContent === 'Becomes a member' && li.querySelector('.uses').textContent === 'one person'), null, 'the invitation is listed with whom it is for, for one person by default');
       ok(await pg.evaluate(() => navigator.clipboard.readText()).then((x) => /\/s\/[\w-]{20,}$/.test(x)), 'the new invitation is copied');
       // signed in on a phone: the header (members, settings, language, initials) and the pages stay inside the screen
       await pg.setViewportSize({ width: 390, height: 844 });
