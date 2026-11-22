@@ -53,6 +53,12 @@ a cell for a green thumb up (*yes*), again for a yellow ? (*maybe*), again for a
 an empty cell is not answered and counts as neutral. The ⚡ by a name says whether the planner may pick the person (off: only by
 hand); one click switches it.
 
+**Select many cells at once, as in a spreadsheet.** Drag over answers (or over the places of tasks) to select a block; Shift+click
+extends it, Ctrl+click adds or takes away one cell, a click on ⋮⋮ selects a whole row, and a click on a day's count selects
+everyone that day. A bar at the bottom then sets them all: 👍 ? 👎 or *Clear* for answers (or the keys 1, 2, 3 and Delete), a
+number for places. Escape lets go. With more than eight people a *Filter names* box finds someone quickly. Selecting is for a
+mouse; on a phone you answer one cell at a time.
+
 People are in the order you put them: ⋮⋮ drags a person to another row. *Sections* (for example *Guests* or *Not this term*)
 are headings with their people below; drag a person onto one, or pick it in the person's dialog. They only place people in
 the table, the same in every plan, and the planner never sees them. Deleting a section puts its people back at the top.

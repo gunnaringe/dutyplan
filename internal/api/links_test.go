@@ -84,7 +84,8 @@ func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 			t.Errorf("GET %s with a view link: %d", path, r.code)
 		}
 	}
-	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"}} {
+	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"},
+		{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
 			t.Errorf("%s %s with a view link: %d, want 403", req[0], req[1], r.code)
 		}
@@ -134,7 +135,7 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 		t.Errorf("renaming its plan: %d", r.code)
 	}
 	for _, req := range [][2]string{{"GET", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans"}, {"GET", "/api/orgs/choir/plans/spring"},
-		{"PATCH", "/api/orgs/choir/plans/spring"}, {"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
+		{"PATCH", "/api/orgs/choir/plans/spring"}, {"PUT", "/api/orgs/choir/plans/spring/answers"}, {"PUT", "/api/orgs/choir/plans/spring/places"}, {"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code < 400 {
 			t.Errorf("%s %s with a link to another plan: %d", req[0], req[1], r.code)
 		}

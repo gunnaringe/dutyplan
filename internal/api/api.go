@@ -237,12 +237,15 @@ func writeErr(w http.ResponseWriter, log *slog.Logger, err error) {
 }
 
 // decode reads a small JSON body; unknown fields are an error so typos do not pass silently.
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+func decode(w http.ResponseWriter, r *http.Request, v any) bool { return decodeMax(w, r, v, 64<<10) }
+
+// decodeMax is decode with another limit on the body (the bulk writes of a selection are bigger).
+func decodeMax(w http.ResponseWriter, r *http.Request, v any, max int64) bool {
 	if ct := r.Header.Get("Content-Type"); len(ct) < 16 || ct[:16] != "application/json" {
 		writeJSON(w, 415, apiError{Error: "unsupported_media_type", Message: "send Content-Type: application/json"})
 		return false
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, max)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
