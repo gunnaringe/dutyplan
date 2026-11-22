@@ -248,6 +248,11 @@ failed at the next start.
 Only one planner run goes at a time. A draft has a time limit (10, 20 or 60 seconds on the page); the planner stops when it has
 found the best plan or runs out of time, and the draft says which.
 
+## For AI agents
+
+[`web/llms.txt`](web/llms.txt), also served at `/llms.txt`, tells an AI agent how to use a server: getting access with a
+share link, putting a whole semester in with the API, and every route. It only describes what any user can do.
+
 ## Data and backups
 
 All data is one SQLite file (plus the `-wal`/`-shm` files while the server runs). The program is not released yet: the schema is

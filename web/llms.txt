@@ -1,0 +1,116 @@
+# Tjenesteplan (dutyplan)
+
+> A duty planner for any group (a church, a choir, a club): who does which task on which day. Organisations have plans;
+> a plan has events (dates), tasks with a number of places per event, and everyone's answers per event. A planner makes a
+> fair draft; people can be set by hand. This file is for agents (LLMs) that use a Tjenesteplan server: what is in it,
+> how to get access, how to put a whole plan in, and the API. Everything here is what any user can do. Source and docs: https://github.com/gunnaringe/dutyplan
+
+## The ideas
+
+- **Organisation** (`org`, addressed by its slug): has members, tasks, people and plans. Members are `admin` (members,
+  invitations, renaming and deleting the organisation) or `member` (everything else).
+- **Task**: a job, e.g. «Sound», «Coffee». The organisation's own, the same in every plan, in an order.
+- **Person**: someone who can be given tasks (a name only; no contact details are stored). Per task: `good` (gladly),
+  `poor` (if needed) or not at all. `proposable: false` = the planner never picks them.
+- **Plan**: e.g. «Spring 2027». Has **events** (a date, optional start/end time `HH:MM`, a description), **places** (how
+  many people a task needs on an event; 0 = not needed), **details rows** (`fields`: one text per event, e.g. «Theme»),
+  **answers** (per person and event: `good`, `poor`, `never`, or none) with an optional **note**, and **hand-set cells**.
+- **Draft**: a run of the planner (`runs`); one can be pinned as the current plan.
+- **Links**: a `view` or `edit` link gives access to one plan without an account; a `join` link invites a member.
+
+## Getting access
+
+An agent uses the same API as the page, with the same rights as the person who gave it access. Nothing here needs the
+server's owner.
+
+- **A share link (simplest).** Someone with a login opens the plan, *Share* → *Edit* (or *View*), and gives the link
+  `https://<server>/s/<token>` to the agent. Open it once without following the redirect and keep the cookie
+  `dutyplan-links` it sets; send that cookie with every API call. An edit link reaches its own plan and the
+  organisation's tasks and people; it cannot make plans, links or members. Delete the link when the agent is done.
+- **A login.** Signing in goes through the server's OpenID Connect provider in a browser; the session cookie works for the
+  API too. A member can do everything in the organisation; an admin also members and invitations.
+
+There are no API keys. Writes from a script are fine (send `Content-Type: application/json`; no `Origin` header needed).
+Too many changes too fast gives 429 with `Retry-After`: wait and go on. A proxy in front of a server may refuse some HTTP
+libraries' default `User-Agent` (for example Python's `urllib`, as 403 «error code: 1010»); send a plain one of your own,
+such as `my-agent/1.0`.
+
+## Putting a whole plan in (a semester from a spreadsheet)
+
+1. A member makes the plan on the page and shares an edit link to it (making plans needs a login).
+2. `GET /api/orgs/{org}/tasks`; `POST /api/orgs/{org}/tasks` `{"name"}` for each role that is missing (one per row of
+   the spreadsheet). Keep the order: new tasks go last.
+3. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}` for each details row (for example «Theme», «Note»).
+4. For each date column: `POST /api/orgs/{org}/plans/{plan}/events` `{"date": "2027-01-10", "start_time": "11:00"}`
+   (it answers with a list holding the new event), then `PATCH .../events/{id}` `{"description"}` and
+   `PUT .../events/{id}/fields/{field}` `{"value"}` where there is text.
+5. Places in one call: `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}`.
+6. Leave names out unless the people agreed: people are added by the group and answer for themselves.
+7. Check with `GET .../events` and `GET .../places`, then delete the link.
+
+Dates: a spreadsheet may store dates from a copied year; check the weekdays against the events' real days.
+
+## The API
+
+JSON over HTTP under `/api`. Writes send `Content-Type: application/json`. Access is by a login or a share link (see above). A `view` link may
+only read; an `edit` link reaches its own plan only. Errors are `{"error": "...", "code": "...", "params": {...}, "message": "..."}` with a status:
+400 invalid (`code` says why, e.g. `name_invalid`, `nothing_to_change`), 401 signed out, 403 not allowed (`read_only`,
+`admin_only`), 404 not found (also for what belongs to another organisation), 409 conflict, 429 too many changes.
+Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{plan}` are slugs.
+
+### Server and you
+- `GET /api/health` — `{"ok": true, "planner": bool}`.
+- `GET /api/me` — who is signed in, and the share links in this browser.
+- `GET /api/orgs` — the organisations you reach. `POST /api/orgs` `{"name"}` — make one (you become its admin).
+- `GET /api/orgs/{org}` — the organisation, with your `role`, or a link's `level` and `plan`.
+- `PATCH /api/orgs/{org}` `{"name"}` — rename (admin). `DELETE /api/orgs/{org}?confirm={org}` — delete it and everything (admin).
+- `GET /api/orgs/{org}/stream` — server-sent events: a line per change, so a page can fetch again.
+
+### Members and links
+- `GET /api/orgs/{org}/members` — members with a login. `PATCH /api/orgs/{org}/members/{id}` `{"role"}` (admin).
+  `DELETE /api/orgs/{org}/members/{id}` — remove (admin), or leave (yourself).
+- `GET /api/orgs/{org}/links` — the share links. `POST /api/orgs/{org}/links` `{"plan", "level": "view"|"edit"|"join", "label", "expires_days"}`
+  (`join` is for admins and has no plan). `DELETE /api/orgs/{org}/links/{id}`.
+
+### Tasks, people, sections (the organisation's own)
+- `GET /api/orgs/{org}/tasks`, `POST /api/orgs/{org}/tasks` `{"name"}`, `PATCH /api/orgs/{org}/tasks/{id}` `{"name", "planned"}`,
+  `DELETE /api/orgs/{org}/tasks/{id}`, `PUT /api/orgs/{org}/tasks/{id}/position` `{"position"}`.
+- `GET /api/orgs/{org}/combinations` — which tasks one person can do on the same event.
+  `PUT /api/orgs/{org}/combinations` `{"a", "b", "level": "cannot"|"practical"|"standard"}`;
+  `PUT /api/orgs/{org}/tasks/{id}/combinations` `{"level"}` — one task against all others.
+- `GET /api/orgs/{org}/people`, `POST /api/orgs/{org}/people` `{"name"}`, `PATCH /api/orgs/{org}/people/{id}` `{"name", "proposable"}`,
+  `PUT /api/orgs/{org}/people/{id}/position` `{"section", "position"}`.
+- `PUT /api/orgs/{org}/people/{id}/tasks/{task}` `{"level": "good"|"poor"}`, `DELETE /api/orgs/{org}/people/{id}/tasks/{task}`.
+- `GET /api/orgs/{org}/sections`, `POST /api/orgs/{org}/sections` `{"name"}`, `PATCH /api/orgs/{org}/sections/{id}` `{"name"}`,
+  `PUT /api/orgs/{org}/sections/{id}/position` `{"position"}`, `DELETE /api/orgs/{org}/sections/{id}` — headings for people; placement only.
+
+### Plans and events
+- `GET /api/orgs/{org}/plans`, `POST /api/orgs/{org}/plans` `{"name"}`, `GET /api/orgs/{org}/plans/{plan}`,
+  `PATCH /api/orgs/{org}/plans/{plan}` `{"name"}` (the slug stays), `DELETE /api/orgs/{org}/plans/{plan}`.
+- `GET /api/orgs/{org}/plans/{plan}/events`, `POST /api/orgs/{org}/plans/{plan}/events` `{"date", "until", "every", "start_time", "end_time"}`
+  (`every` N weeks until `until` makes a series, at most every 8 weeks), `PATCH /api/orgs/{org}/plans/{plan}/events/{id}` `{"start_time", "end_time", "description"}`,
+  `DELETE /api/orgs/{org}/plans/{plan}/events/{id}`.
+- `POST /api/orgs/{org}/plans/{plan}/events/{id}/copy` `{"dates" | "until"+"every", "times", "start_time", "end_time", "details", "places", "hand"}` — copies of an event.
+
+### The table
+- `GET /api/orgs/{org}/plans/{plan}/places` — places per event and task.
+  `PUT /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` `{"slots"}`,
+  `DELETE /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` — back to none.
+  `PUT /api/orgs/{org}/plans/{plan}/tasks/{id}/places` `{"slots"}` — every event of the plan.
+  `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}` — many at once (at most 5000).
+- `GET /api/orgs/{org}/plans/{plan}/fields` — details rows and their values. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}`,
+  `PATCH /api/orgs/{org}/plans/{plan}/fields/{id}` `{"name"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position` `{"position"}`,
+  `DELETE /api/orgs/{org}/plans/{plan}/fields/{id}`, `PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}` `{"value"}` ("" removes).
+- `GET /api/orgs/{org}/plans/{plan}/answers` — `{"events": [{"person_id", "event_id", "level"}], "tasks": [...], "notes": [{"person_id", "event_id", "note"}]}`.
+  `PUT /api/orgs/{org}/plans/{plan}/people/{id}/availability` `{"levels": {"<event id>": "good"|"poor"|"never"|""}}` — one person.
+  `PUT /api/orgs/{org}/plans/{plan}/answers` `{"answers": [{"person", "event", "level"}]}` — many at once (at most 5000).
+  `PUT /api/orgs/{org}/plans/{plan}/events/{id}/notes/{person}` `{"note"}` — a note on an answer, at most 300 characters ("" removes).
+- `GET /api/orgs/{org}/plans/{plan}/cells`, `POST /api/orgs/{org}/plans/{plan}/cells` `{"event", "task", "person" | "label", "fills", "locked"}`,
+  `DELETE /api/orgs/{org}/plans/{plan}/cells/{id}` — places set by hand.
+- `GET /api/orgs/{org}/plans/{plan}/pools`, `PUT /api/orgs/{org}/plans/{plan}/pools` `{"event", "task", "people"}` — choose only among these.
+
+### The planner
+- `GET /api/orgs/{org}/plans/{plan}/weights`, `PUT /api/orgs/{org}/plans/{plan}/weights` `{"values"}` — what the planner weighs.
+- `POST /api/orgs/{org}/plans/{plan}/runs` `{"time_limit"}` — make a draft. `GET /api/orgs/{org}/plans/{plan}/runs` — the drafts;
+  `GET /api/orgs/{org}/plans/{plan}/runs/{id}` (`latest` works as an id; `?lang=nb` for Norwegian explanations).
+  `PUT /api/orgs/{org}/plans/{plan}/runs/{id}/pin`, `DELETE /api/orgs/{org}/plans/{plan}/runs/{id}/pin` — the current plan.

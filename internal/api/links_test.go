@@ -134,6 +134,16 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 	if r := e.as(c, "PATCH", "/api/orgs/choir/plans/autumn", map[string]string{"name": "Autumn 2026"}); r.code != 200 {
 		t.Errorf("renaming its plan: %d", r.code)
 	}
+	// what web/llms.txt tells an agent with an edit link to do: tasks, details rows, events, places
+	if r := e.as(c, "POST", "/api/orgs/choir/tasks", map[string]string{"name": "Coffee"}); r.code != 201 {
+		t.Errorf("adding a task: %d %s", r.code, r.body)
+	}
+	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/fields", map[string]string{"name": "Theme"}); r.code != 201 {
+		t.Errorf("adding a details row: %d %s", r.code, r.body)
+	}
+	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/events", map[string]string{"date": "2031-01-12", "start_time": "11:00"}); r.code != 201 || !strings.HasPrefix(string(r.body), "[") {
+		t.Errorf("adding an event: %d %s (the guide says it answers with a list)", r.code, r.body)
+	}
 	for _, req := range [][2]string{{"GET", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans"}, {"GET", "/api/orgs/choir/plans/spring"},
 		{"PATCH", "/api/orgs/choir/plans/spring"}, {"PUT", "/api/orgs/choir/plans/spring/answers"}, {"PUT", "/api/orgs/choir/plans/spring/places"}, {"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code < 400 {

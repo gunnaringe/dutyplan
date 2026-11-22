@@ -120,6 +120,8 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("notes: not trimmed", "internal/store/notes.go", "\tnote = strings.TrimSpace(note)\n", ""),
     ("notes: the same note again is a change", "internal/store/notes.go", "if before == note {", "if false {"),
     ("notes: listed across plans", "internal/store/table.go", "FROM answer_note WHERE org_id = ? AND plan_id = ?", "FROM answer_note WHERE org_id = ? AND ? != 0"),
+    ("guide: /llms.txt is not served", "internal/api/api.go", "\"logo.svg\", \"llms.txt\"}", "\"logo.svg\"}"),
+    ("guide: /llms.txt is served as a page", "internal/api/api.go", "\tcase strings.HasSuffix(name, \".txt\"):\n", "\tcase name == \"-\":\n"),
     ("index: every page may be indexed", "internal/api/api.go", "return s.auth != nil && r.URL.Path == \"/\"", "return s.auth != nil"),
     ("index: without a login the start page may be indexed", "internal/api/api.go", "return s.auth != nil && r.URL.Path == \"/\"", "return r.URL.Path == \"/\""),
     ("access: the maker of an organisation is not its admin", "internal/store/access.go", "id, userID, RoleAdmin, o.CreatedAt)", "id, userID, RoleMember, o.CreatedAt)"),
