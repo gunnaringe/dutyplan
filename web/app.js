@@ -1756,23 +1756,22 @@ async function pagePlan(r, org, people) {
   };
   const answerCell = (p, ev) => {
     const b = h('button', { type: 'button', class: 'ans' });
-    let busy = false;  // a second click while the first is on its way would send the same answer twice
+    let saving = Promise.resolve();  // the clicks' writes, one after the other: every click counts, in the order made
     const paint = () => {
       const l = (ans[p.id] || {})[ev.id] || '';
       b.replaceChildren(answerMark(l));
       b.dataset.level = l || 'none';
       b.setAttribute('aria-label', t('table.answer_aria', { name: p.name, label: label(ev), answer: t('answer.' + (l || 'none')) }));
     };
-    b.addEventListener('click', async () => {
-      if (busy) return;
-      busy = true;
+    b.addEventListener('click', () => {
       const was = (ans[p.id] || {})[ev.id] || '';
       const next = ANSWER_NEXT[was];
       (ans[p.id] ||= {})[ev.id] = next;  // shown at once, taken back if the server refuses
       paint();
       recount(ev.id);
-      if (!(await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } })))) { ans[p.id][ev.id] = was; paint(); recount(ev.id); }
-      busy = false;
+      saving = saving.then(async () => {
+        if (!(await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } })))) { ans[p.id][ev.id] = was; paint(); recount(ev.id); }
+      });
     });
     paint();
     const td = h('td', { class: 'answer' }, b);

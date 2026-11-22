@@ -236,6 +236,19 @@ const { spawn } = require('child_process');
     await answer('Jon Demo', ev[1]).click();
     await answer('Jon Demo', ev[1]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'never', 'Jon Demo, ' + ev[1], 'three clicks give ✗');
+    // On a slow line, quick clicks while the first answer is on its way all count, and reach the server in order (four go
+    // round to empty again, as later steps expect).
+    {
+      await page.route('**/availability', async (route) => { await new Promise((r) => setTimeout(r, 400)); await route.continue(); });
+      for (let i = 0; i < 4; i++) await answer('Jon Demo', ev[2]).click();
+      await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'none', 'Jon Demo, ' + ev[2], 'four quick clicks go round to empty at once');
+      await page.waitForTimeout(2000);
+      await page.unroute('**/availability');
+      const fresh = await context.newPage();  // a new tab reads what the server has (a reload here would show in the next check)
+      await fresh.goto(page.url());
+      await until(fresh, (x) => (document.querySelector(`button.ans[aria-label^="${x}:"]`) || {}).dataset?.level === 'none', 'Jon Demo, ' + ev[2], 'the server has all four clicks');
+      await fresh.close();
+    }
     // An answer is shown at once and only sent: nothing is fetched again, so nothing flickers.
     {
       const gets = [];
