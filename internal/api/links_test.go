@@ -85,7 +85,7 @@ func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 		}
 	}
 	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"},
-		{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"}} {
+		{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"}, {"PUT", "/api/orgs/choir/plans/autumn/events/1/notes/1"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
 			t.Errorf("%s %s with a view link: %d, want 403", req[0], req[1], r.code)
 		}

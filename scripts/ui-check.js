@@ -541,6 +541,29 @@ const { spawn } = require('child_process');
     await page.click('button.fold[data-key=tasks]');
     ok((await taskRows()) > 0, 'and unfold');
 
+    // --- a note on an answer: the corner tab opens it, hovering shows it, empty removes it; the answer stays as it was ---
+    {
+      const cellOf = (person, e) => page.locator('td.answer', { has: answer(person, e) });
+      const levelBefore = await answer('Kari Test', ev[1]).getAttribute('data-level');
+      await cellOf('Kari Test', ev[1]).hover();
+      await cellOf('Kari Test', ev[1]).locator('.note-tab').click();
+      await page.fill('.note-pop textarea', 'Can come after 12');
+      await page.click('.note-pop button:has-text("Save")');
+      await until(page, () => document.querySelectorAll('td.answer.has-note').length === 1, null, 'saving a note marks the cell');
+      ok((await answer('Kari Test', ev[1]).getAttribute('data-level')) === levelBefore, 'the tab does not change the answer');
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      await page.mouse.move(1, 1);
+      await answer('Kari Test', ev[1]).hover();
+      await until(page, () => { const p = document.querySelector('.note-pop'); return p && !p.hidden && p.innerText.includes('Can come after 12'); }, null, 'hovering the cell shows the note after a reload');
+      await page.mouse.move(1, 1);
+      ok(await page.locator('.note-pop').isHidden(), 'and it goes when the mouse leaves');
+      await cellOf('Kari Test', ev[1]).hover();
+      await cellOf('Kari Test', ev[1]).locator('.note-tab').click();
+      await page.click('.note-pop button:has-text("Delete")');
+      await until(page, () => !document.querySelector('td.answer.has-note'), null, 'Delete removes the note');
+    }
+
     // --- who is shown: a ✓ per person in a dialog, kept after a reload; the counts still have everyone ---
     {
       const rowOf = (name) => page.locator('tr.person-row', { has: answer(name, ev[0]) });
@@ -586,6 +609,11 @@ const { spawn } = require('child_process');
     const next0 = { none: 'good', good: 'poor', poor: 'never', never: 'none' }[before0];
     await until(page, ([x, l]) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === l, ['Jon Demo, ' + ev[0], next0], 'a tap moves the answer on');
     ok((await countOf(ev[0])) !== count0, 'the count of the event follows: ' + count0 + ' -> ' + (await countOf(ev[0])));
+    await page.locator('td.answer', { has: answer('Jon Demo', ev[1]) }).locator('.note-tab').click({ force: true });
+    ok(await page.locator('.note-pop textarea').isVisible(), 'on a phone the corner tab opens the note too');
+    const pop = await page.locator('.note-pop').boundingBox();
+    ok(pop.x >= 0 && pop.x + pop.width <= 390, 'and the note fits on the screen: ' + JSON.stringify(pop));
+    await page.click('.note-pop button:has-text("Cancel")');
     await page.click('button[aria-label="Open Kari Test"]');
     ok((await dialog.locator('h2').innerText()) === 'Kari Test', 'a person’s name at the top opens the person');
     await closeDialog();

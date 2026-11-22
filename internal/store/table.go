@@ -368,6 +368,7 @@ func (s *Store) SetFieldValue(ctx context.Context, orgSlug, planSlug string, eve
 type Answers struct {
 	Events []EventAnswer `json:"events"`
 	Tasks  []TaskAnswer  `json:"tasks"`
+	Notes  []AnswerNote  `json:"notes"`
 }
 
 type EventAnswer struct {
@@ -383,7 +384,7 @@ type TaskAnswer struct {
 }
 
 func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answers, error) {
-	out := Answers{Events: []EventAnswer{}, Tasks: []TaskAnswer{}}
+	out := Answers{Events: []EventAnswer{}, Tasks: []TaskAnswer{}, Notes: []AnswerNote{}}
 	oid, err := orgID(ctx, s.db, orgSlug)
 	if err != nil {
 		return out, err
@@ -397,6 +398,15 @@ func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answ
 			var a EventAnswer
 			err := r.Scan(&a.PersonID, &a.EventID, &a.Level)
 			out.Events = append(out.Events, a)
+			return err
+		}); err != nil {
+		return out, err
+	}
+	if err := scanAll(ctx, s.db, `SELECT person_id, event_id, note FROM answer_note WHERE org_id = ? AND plan_id = ? ORDER BY person_id, event_id`, []any{oid, pid},
+		func(r *sql.Rows) error {
+			var n AnswerNote
+			err := r.Scan(&n.PersonID, &n.EventID, &n.Note)
+			out.Notes = append(out.Notes, n)
 			return err
 		}); err != nil {
 		return out, err

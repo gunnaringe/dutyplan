@@ -152,6 +152,7 @@ function changedBy(method, path) {
     if (rest.length === 2) return method === 'DELETE' ? null : ['plan', 'plans'];  // a new plan may get the address again
     const x = rest[2];
     if (x === 'events') {
+      if (rest.includes('notes')) return ['answers'];  // a note on an answer: never in the planner's input
       if (rest.includes('places')) return with_('places');
       if (rest.includes('fields')) return ['fields'];
       return with_('events', 'places', 'fields', 'cells', 'pools', 'answers');
@@ -790,6 +791,8 @@ async function pagePlan(r, org, people) {
   const at = (ev, tk) => ev.id + '/' + tk.id;
   const ans = {};  // person -> event -> never | poor | good ('' or missing = not answered)
   answers.events.forEach((a) => { (ans[a.person_id] ||= {})[a.event_id] = a.level; });
+  const notes = {};  // person -> event -> the note on that answer
+  (answers.notes || []).forEach((n) => { (notes[n.person_id] ||= {})[n.event_id] = n.note; });
   const chosen = {};  // person -> the tasks they take part in, with how willingly
   answers.tasks.forEach((a) => { (chosen[a.person_id] ||= []).push(a); });
   const placesAt = {};  // 'event/task' -> places (missing = not needed)
@@ -1478,7 +1481,7 @@ async function pagePlan(r, org, people) {
   const onCellDown = (e) => {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;
     const td = e.target.closest('td[data-cell]');
-    if (!td) return;
+    if (!td || e.target.closest('.note-tab')) return;
     const [grid, row, ev] = td.dataset.cell.split('|').map((x, i) => (i ? Number(x) : x));
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleCell(grid, row, ev); swallowClick(); return; }
     if (e.shiftKey && sel && sel.grid === grid) { e.preventDefault(); selectRect(grid, sel.anchor, { row, ev }, false); swallowClick(); return; }
@@ -1588,6 +1591,76 @@ async function pagePlan(r, org, people) {
     countCells[evId].replaceChildren(h('b', { class: 'good' }, icon('up'), c.good), h('b', { class: 'poor' }, icon('maybe'), c.poor), h('b', { class: 'never' }, icon('down'), c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
+  // A note on an answer (2026-11-22, the user: "notat/kommentar i hver celle … vises som en flik i hjørnet når du klikker eller
+  // på hover"): a tab in the cell's corner. Hovering a cell with a note shows it; a click on the tab opens it, to write in it
+  // (or only to read it, with a view link). One popover for the whole page.
+  const notePop = h('div', { class: 'note-pop', hidden: true, role: 'dialog' });
+  let noteOpen = null;  // { td, edit } of the popover on show
+  const placePop = (td) => {
+    const r = td.getBoundingClientRect();
+    notePop.hidden = false;
+    const w = notePop.offsetWidth, hgt = notePop.offsetHeight;
+    const left = Math.max(8, Math.min(r.right - 8, innerWidth - w - 8));
+    const top = r.top - hgt - 6 > 8 ? r.top - hgt - 6 : Math.min(r.bottom + 6, innerHeight - hgt - 8);
+    notePop.style.left = left + 'px';
+    notePop.style.top = top + 'px';
+  };
+  const closeNote = () => { notePop.hidden = true; notePop.replaceChildren(); noteOpen = null; };
+  const peekNote = (td, p, ev) => {
+    if (noteOpen && noteOpen.edit) return;
+    const text = (notes[p.id] || {})[ev.id];
+    if (!text) return;
+    notePop.replaceChildren(h('div', { class: 'note-who small muted' }, p.name + ' · ' + label(ev)), h('div', { class: 'note-text' }, text));
+    notePop.classList.remove('editing');
+    noteOpen = { td, edit: false };
+    placePop(td);
+  };
+  const openNote = (td, p, ev, repaint) => {
+    const text = (notes[p.id] || {})[ev.id] || '';
+    const head = h('div', { class: 'note-who small muted' }, p.name + ' · ' + label(ev));
+    if (org.level === 'view') { if (text) peekNote(td, p, ev); return; }
+    const area = h('textarea', { rows: '3', maxlength: '300', placeholder: t('note.placeholder'), 'aria-label': t('note.aria', { name: p.name, label: label(ev) }) });
+    area.value = text;
+    const save = async (value) => {
+      const was = text;
+      value = value.trim();
+      closeNote();
+      if (value === was) return;
+      if (value) (notes[p.id] ||= {})[ev.id] = value; else if (notes[p.id]) delete notes[p.id][ev.id];
+      repaint();
+      if (!(await write(() => api('PUT', `${pbase}/events/${ev.id}/notes/${p.id}`, { note: value })))) {
+        if (was) (notes[p.id] ||= {})[ev.id] = was; else if (notes[p.id]) delete notes[p.id][ev.id];
+        repaint();
+      }
+    };
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeNote(); }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(area.value); }
+    });
+    notePop.replaceChildren(head, area, h('div', { class: 'row-inline' },
+      h('button', { type: 'button', class: 'sm', onclick: () => save(area.value) }, t('common.save')),
+      text ? h('button', { type: 'button', class: 'ghost sm', onclick: () => save('') }, t('note.delete')) : '',
+      h('button', { type: 'button', class: 'ghost sm', onclick: closeNote }, t('note.cancel'))));
+    notePop.classList.add('editing');
+    noteOpen = { td, edit: true };
+    placePop(td);
+    area.focus();
+  };
+  const onNoteAway = (e) => {
+    if (!noteOpen || !noteOpen.edit) return;
+    if (!notePop.isConnected) { document.removeEventListener('pointerdown', onNoteAway, true); return; }
+    if (!notePop.contains(e.target) && !e.target.closest('.note-tab')) closeNote();
+  };
+  document.addEventListener('pointerdown', onNoteAway, true);
+  const noteTab = (td, p, ev, repaint) => {
+    const tab = h('button', { type: 'button', class: 'note-tab', onclick: (e) => {
+      e.stopPropagation();
+      if (noteOpen && noteOpen.td === td && noteOpen.edit) closeNote(); else openNote(td, p, ev, repaint);
+    } });
+    td.addEventListener('mouseenter', () => peekNote(td, p, ev));
+    td.addEventListener('mouseleave', () => { if (noteOpen && !noteOpen.edit && noteOpen.td === td) closeNote(); });
+    return tab;
+  };
   const answerCell = (p, ev) => {
     const b = h('button', { type: 'button', class: 'ans' });
     let busy = false;  // a second click while the first is on its way would send the same answer twice
@@ -1610,6 +1683,15 @@ async function pagePlan(r, org, people) {
     });
     paint();
     const td = h('td', { class: 'answer' }, b);
+    const paintNote = () => {
+      const text = (notes[p.id] || {})[ev.id] || '';
+      td.classList.toggle('has-note', !!text);
+      tab.title = text || t('note.add');
+      tab.setAttribute('aria-label', text ? t('note.open_aria', { name: p.name, label: label(ev) }) : t('note.add_aria', { name: p.name, label: label(ev) }));
+    };
+    const tab = noteTab(td, p, ev, paintNote);
+    if (org.level !== 'view' || (notes[p.id] || {})[ev.id]) td.append(tab);
+    paintNote();
     reg('answers', p.id, ev, td, paint);
     return td;
   };
@@ -1702,7 +1784,8 @@ async function pagePlan(r, org, people) {
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
     table,
-    selbar);
+    selbar,
+    notePop);
   dragScroll(table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },

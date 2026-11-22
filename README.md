@@ -53,6 +53,10 @@ a cell for a green thumb up (*yes*), again for a yellow ? (*maybe*), again for a
 an empty cell is not answered and counts as neutral. The ⚡ by a name says whether the planner may pick the person (off: only by
 hand); one click switches it.
 
+**A note on an answer.** Hover over a cell and click the small tab in its corner to write a note, such as *can come after 12*. A
+cell with a note has an amber corner; hovering shows the note, and a click on the tab changes or deletes it. Notes stay when the
+answer changes, and everyone who sees the answers sees them.
+
 **Select many cells at once, as in a spreadsheet.** Drag over answers (or over the places of tasks) to select a block; Shift+click
 extends it, Ctrl+click adds or takes away one cell, a click on ⋮⋮ selects a whole row, and a click on a day's count selects
 everyone that day. A bar at the bottom then sets them all: 👍 ? 👎 or *Clear* for answers (or the keys 1, 2, 3 and Delete), a

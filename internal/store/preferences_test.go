@@ -248,6 +248,8 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'good')`, []any{orgA, personB.ID, a.sound.ID}},
 		{"person_event with an event of another plan", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
 		{"person_event for another organisation's person", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
+		{"answer_note with an event of another plan", `INSERT INTO answer_note (org_id, plan_id, person_id, event_id, note) VALUES (?, ?, ?, ?, 'x')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
+		{"answer_note for another organisation's person", `INSERT INTO answer_note (org_id, plan_id, person_id, event_id, note) VALUES (?, ?, ?, ?, 'x')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
 	} {
 		if _, err := db.Exec(c.stmt, c.args...); err == nil || !strings.Contains(err.Error(), "FOREIGN KEY") {
 			t.Errorf("%s must fail at the foreign key, got %v", c.name, err)
