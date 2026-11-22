@@ -31,7 +31,9 @@ server's owner.
   API too. A member can do everything in the organisation; an admin also members and invitations.
 
 There are no API keys. Writes from a script are fine (send `Content-Type: application/json`; no `Origin` header needed).
-Too many changes too fast gives 429 with `Retry-After`: wait and go on.
+Too many changes too fast gives 429 with `Retry-After`: wait and go on. A proxy in front of a server may refuse some HTTP
+libraries' default `User-Agent` (for example Python's `urllib`, as 403 «error code: 1010»); send a plain one of your own,
+such as `my-agent/1.0`.
 
 ## Putting a whole plan in (a semester from a spreadsheet)
 
