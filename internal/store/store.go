@@ -174,7 +174,14 @@ func (s *Store) migrate(ctx context.Context) error {
 func (s *Store) stamp() string { return s.now().Format(time.RFC3339) }
 
 // write runs fn in one transaction: a change is either all there or not at all.
+// txKey carries a transaction in a context: a write made with it joins that transaction instead of starting its own, so
+// an import of many writes is all or nothing (Import).
+type txKey struct{}
+
 func (s *Store) write(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	if outer, ok := ctx.Value(txKey{}).(*sql.Tx); ok {
+		return fn(outer)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

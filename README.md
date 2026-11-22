@@ -248,6 +248,19 @@ failed at the next start.
 Only one planner run goes at a time. A draft has a time limit (10, 20 or 60 seconds on the page); the planner stops when it has
 found the best plan or runs out of time, and the draft says which.
 
+## Importing a plan
+
+The one who runs the server can put a whole plan in at once, for example a semester from a spreadsheet: events with times
+and descriptions, tasks, places and details rows. All or nothing, and `--dry-run` only checks:
+
+```sh
+dutyplan import --org my-choir --db dutyplan.db --dry-run spring.json
+dutyplan import --org my-choir --db dutyplan.db spring.json
+```
+
+The format, and the whole API, are in [`web/llms.txt`](web/llms.txt), also served at `/llms.txt`: a guide written for AI
+agents, but readable for anyone.
+
 ## Data and backups
 
 All data is one SQLite file (plus the `-wal`/`-shm` files while the server runs). The program is not released yet: the schema is

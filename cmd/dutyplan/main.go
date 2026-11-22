@@ -28,6 +28,11 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "health" {
 		os.Exit(health(os.Args[2:]))
 	}
+	// dutyplan import --org <slug> [--db file] [--dry-run] <file.json|->: puts a whole plan into an organisation, all or
+	// nothing (store.Import; the format is in docs/llms.md). For the one who runs the server, next to the running app.
+	if len(os.Args) > 1 && os.Args[1] == "import" {
+		os.Exit(importCmd(os.Args[2:]))
+	}
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on (port 0 picks a free one)")
 	dbPath := flag.String("db", "dutyplan.db", "SQLite database file (created if missing)")
 	solverCmd := flag.String("solver", os.Getenv("DUTYPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m dutyplan_solver\" (default $DUTYPLAN_SOLVER; empty = no planning)")
