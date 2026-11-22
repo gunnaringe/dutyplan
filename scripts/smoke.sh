@@ -74,8 +74,8 @@ code 204 PUT "/api/orgs/org-a/plans/autumn-2026/events/$ev/places/$task" '{"slot
 code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09"}'   # two events on the same day
 code 201 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"11:00","end_time":"12:30"}'
 timed=$(sed -n 's/^\[{"id":\([0-9]*\),.*/\1/p' "$tmp/body")
-code 200 PATCH "/api/orgs/org-a/plans/autumn-2026/events/$timed" '{"description":"Doors at 10:30"}'
-grep -q '"start_time":"11:00"' "$tmp/body" && grep -q '"description":"Doors at 10:30"' "$tmp/body" || fail "the time and the description did not come back: $(cat "$tmp/body")"
+code 200 PATCH "/api/orgs/org-a/plans/autumn-2026/events/$timed" '{"end_time":"13:00"}'
+grep -q '"start_time":"11:00"' "$tmp/body" && grep -q '"end_time":"13:00"' "$tmp/body" || fail "the times did not come back: $(cat "$tmp/body")"
 code 400 POST /api/orgs/org-a/plans/autumn-2026/events '{"date":"2026-08-09","start_time":"25:00"}'
 grep -q '"code":"start_time_invalid"' "$tmp/body" || fail "a bad time gave the wrong answer: $(cat "$tmp/body")"
 code 200 GET /api/orgs/org-a/plans/autumn-2026/events

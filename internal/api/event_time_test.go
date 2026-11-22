@@ -2,13 +2,12 @@ package api
 
 import (
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
+func TestEventTimesOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	orgA, orgB := "org-a", "org-b"
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
@@ -27,7 +26,7 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 		return evs[0]
 	}
 	ev := add(map[string]any{"date": "2026-08-09", "start_time": "11:00", "end_time": "12:30"})
-	if ev.StartTime != "11:00" || ev.EndTime != "12:30" || ev.Description != "" {
+	if ev.StartTime != "11:00" || ev.EndTime != "12:30" {
 		t.Errorf("created: %+v", ev)
 	}
 	plain := add(map[string]any{"date": "2026-08-09"})
@@ -61,14 +60,12 @@ func TestEventTimesAndDescriptionsOverHTTP(t *testing.T) {
 
 	// changing
 	one := events + "/" + itoa(plain.ID)
-	e.mustDo(200, "PATCH", one, map[string]any{"start_time": "19:00", "end_time": "21:00", "description": "Evening session"}).json(&plain)
-	if plain.StartTime != "19:00" || plain.EndTime != "21:00" || plain.Description != "Evening session" {
+	e.mustDo(200, "PATCH", one, map[string]any{"start_time": "19:00", "end_time": "21:00"}).json(&plain)
+	if plain.StartTime != "19:00" || plain.EndTime != "21:00" {
 		t.Errorf("patched: %+v", plain)
 	}
-	for name, d := range map[string]string{"bad text": "a\x01b", "too long text": strings.Repeat("x", 2001)} {
-		if got := e.refused(400, "PATCH", one, map[string]any{"description": d}); got.Code != "description_invalid" {
-			t.Errorf("%s: %+v", name, got)
-		}
+	if got := e.refused(400, "PATCH", one, map[string]any{"description": "Evening session"}); got.Error != "invalid" {
+		t.Errorf("an event has no description (a details row holds it): %+v", got)
 	}
 	if got := e.refused(400, "PATCH", one, map[string]any{"start_time": ""}); got.Code != "end_without_start" {
 		t.Errorf("clearing only the start: %+v", got)

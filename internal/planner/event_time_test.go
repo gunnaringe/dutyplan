@@ -8,10 +8,10 @@ import (
 
 func ptr(s string) *string { return &s }
 
-func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
+func TestTheViewShowsTheCurrentTimeOfAnEvent(t *testing.T) {
 	w := newWorld(t, "Club")
 	// event 0 gets a time before the run (so the snapshot has it), the others later
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("10:00"), EndTime: ptr("11:00"), Description: ptr("Doors at 9:30")}); err != nil {
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("10:00"), EndTime: ptr("11:00")}); err != nil {
 		t.Fatal(err)
 	}
 	s := w.runWith(t, cannedAnswer(w))
@@ -26,20 +26,20 @@ func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 		return v
 	}
 	v := view()
-	if v.Events[0].StartTime != "10:00" || v.Events[0].EndTime != "11:00" || v.Events[0].Description != "Doors at 9:30" {
+	if v.Events[0].StartTime != "10:00" || v.Events[0].EndTime != "11:00" {
 		t.Errorf("as it was when the run was made: %+v", v.Events[0])
 	}
 
-	// changing a time or a description afterwards shows in the plan at once and does not make the run out of date
-	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("18:00"), EndTime: ptr("19:00"), Description: ptr("Moved to the evening")}); err != nil {
+	// changing a time afterwards shows in the plan at once and does not make the run out of date
+	if _, err := w.st.UpdateEvent(ctx, w.org.Slug, w.plan.Slug, w.events[0].ID, store.EventPatch{StartTime: ptr("18:00"), EndTime: ptr("19:00")}); err != nil {
 		t.Fatal(err)
 	}
 	v = view()
-	if v.Events[0].StartTime != "18:00" || v.Events[0].EndTime != "19:00" || v.Events[0].Description != "Moved to the evening" {
-		t.Errorf("the current time and description: %+v", v.Events[0])
+	if v.Events[0].StartTime != "18:00" || v.Events[0].EndTime != "19:00" {
+		t.Errorf("the current time: %+v", v.Events[0])
 	}
 	if v.Run.Stale {
-		t.Error("a time or a description does not change the plan, so the run is not out of date")
+		t.Error("a time does not change the plan, so the run is not out of date")
 	}
 
 	// an event that is gone keeps the time it had in the run
@@ -47,7 +47,7 @@ func TestTheViewShowsTheCurrentTimeAndDescriptionOfAnEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	v = view()
-	if v.Events[0].ID != w.events[0].ID || v.Events[0].StartTime != "10:00" || v.Events[0].Description != "Doors at 9:30" {
+	if v.Events[0].ID != w.events[0].ID || v.Events[0].StartTime != "10:00" {
 		t.Errorf("a deleted event shows as in the run: %+v", v.Events[0])
 	}
 }

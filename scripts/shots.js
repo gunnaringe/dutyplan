@@ -84,8 +84,7 @@ const CHOICES = {
     const on = (d) => events.find((e) => e.date === d);
     const concerts = ['2015-12-05', '2015-12-12', '2015-12-19'].map(on), rehearsals = ['2015-12-09', '2015-12-16'].map(on);
     const gala = concerts[2];
-    await api('PATCH', `${p}/events/${gala.id}`, { start_time: '18:30', end_time: '22:00', description: 'Doors at 18:00. Load-in from 15:00 through the side entrance.\nThe stage plot is on the notice board by the kitchen.' });
-    await api('PATCH', `${p}/events/${concerts[0].id}`, { description: 'Opening night. Two extra chairs for the guest quartet.' });
+    await api('PATCH', `${p}/events/${gala.id}`, { start_time: '18:30', end_time: '22:00' });
     await api('PUT', `${p}/events/${gala.id}/places/${task.Doors}`, { slots: 3 });
 
     // the plan's own details rows: text for people, which the planner never reads

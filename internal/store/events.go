@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // Limits for adding events several at a time (every week or every few weeks until a date, or a copy to several dates), so
@@ -18,29 +17,26 @@ const (
 	maxEveryWeeks    = 8
 )
 
-// Limits for the free text of an event.
-const maxDescriptionRunes = 2000
-
-// Event is one occasion in a plan: a date, and optionally a time of day and a description. It is the unit that people are
-// available for. What else is said about it is in the plan's details rows (event_field), and its places in event_task.
+// Event is one occasion in a plan: a date, and optionally a time of day. It is the unit that people are available for.
+// What is said about it is in the plan's details rows (event_field; an event has no description of its own since
+// 2026-11-22), and its places in event_task.
 type Event struct {
-	ID          int64  `json:"id"`
-	Date        string `json:"date"`        // YYYY-MM-DD
-	StartTime   string `json:"start_time"`  // HH:MM, 24-hour, or "" when not set
-	EndTime     string `json:"end_time"`    // HH:MM after StartTime, or "" (never set without a start time)
-	Description string `json:"description"` // longer text, several lines allowed
+	ID        int64  `json:"id"`
+	Date      string `json:"date"`       // YYYY-MM-DD
+	StartTime string `json:"start_time"` // HH:MM, 24-hour, or "" when not set
+	EndTime   string `json:"end_time"`   // HH:MM after StartTime, or "" (never set without a start time)
 }
 
 // eventCols are the columns of an Event for a query on «event d»; scanEvent reads them. eventOrder puts the events of a date
 // in time order, those with a start time first, the rest in the order they were created.
 const (
-	eventCols  = `d.id, d.date, d.start_time, d.end_time, d.description`
+	eventCols  = `d.id, d.date, d.start_time, d.end_time`
 	eventOrder = `d.date, CASE WHEN d.start_time = '' THEN 1 ELSE 0 END, d.start_time, d.id`
 )
 
 func scanEvent(sc interface{ Scan(...any) error }) (Event, error) {
 	var e Event
-	err := sc.Scan(&e.ID, &e.Date, &e.StartTime, &e.EndTime, &e.Description)
+	err := sc.Scan(&e.ID, &e.Date, &e.StartTime, &e.EndTime)
 	return e, err
 }
 
@@ -79,15 +75,6 @@ func cleanTimes(start, end string) (string, string, error) {
 		return "", "", Invalid("end_not_after_start", nil, "the end time must be after the start time")
 	}
 	return st, en, nil
-}
-
-// cleanDescription keeps line breaks and tabs, refuses other control characters, and trims.
-func cleanDescription(raw string) (string, error) {
-	d := strings.TrimSpace(strings.ReplaceAll(raw, "\r\n", "\n"))
-	if utf8.RuneCountInString(d) > maxDescriptionRunes || !validText(strings.NewReplacer("\n", " ", "\t", " ").Replace(d)) {
-		return "", Invalid("description_invalid", map[string]any{"max": maxDescriptionRunes}, "the description can be at most %d characters, without control characters", maxDescriptionRunes)
-	}
-	return d, nil
 }
 
 func (s *Store) ListEvents(ctx context.Context, orgSlug, planSlug string) ([]Event, error) {
@@ -239,8 +226,8 @@ func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, oid, pid int64, e E
 	if err := atMost(ctx, tx, MaxEventsPerPlan, "events", `SELECT COUNT(*) FROM event WHERE plan_id = ?`, pid); err != nil {
 		return Event{}, err
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, start_time, end_time, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		oid, pid, e.Date, e.StartTime, e.EndTime, e.Description, s.stamp())
+	res, err := tx.ExecContext(ctx, `INSERT INTO event (org_id, plan_id, date, start_time, end_time, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		oid, pid, e.Date, e.StartTime, e.EndTime, s.stamp())
 	if err != nil {
 		return Event{}, err
 	}
@@ -250,7 +237,7 @@ func (s *Store) insertEvent(ctx context.Context, tx *sql.Tx, oid, pid int64, e E
 
 // CopyOf says what a copy of an event takes along. Dates are the new dates (and with Until each of them every week, or
 // every Every weeks, up to and including that date). Times copies the start and end time; without it the copies get StartTime and EndTime.
-// Details copies the values of the details rows and the description, Places the places, and Hand the cells set by hand
+// Details copies the values of the details rows, Places the places, and Hand the cells set by hand
 // (never the planner's names that were locked: a copy has no draft yet). Answers are never copied.
 type CopyOf struct {
 	Dates     []string `json:"dates"`
@@ -295,9 +282,6 @@ func (s *Store) CopyEvent(ctx context.Context, orgSlug, planSlug string, id int6
 		if in.Times {
 			tmpl.StartTime, tmpl.EndTime = src.StartTime, src.EndTime
 		}
-		if in.Details {
-			tmpl.Description = src.Description
-		}
 		for _, d := range dates {
 			e := tmpl
 			e.Date = d
@@ -330,22 +314,14 @@ func (s *Store) CopyEvent(ctx context.Context, orgSlug, planSlug string, id int6
 	return out, err
 }
 
-// EventPatch changes the time of day or the description of an event. The date stays: copy the event to move it.
+// EventPatch changes the time of day of an event. The date stays: copy the event to move it.
 type EventPatch struct {
-	StartTime   *string `json:"start_time"`
-	EndTime     *string `json:"end_time"`
-	Description *string `json:"description"`
+	StartTime *string `json:"start_time"`
+	EndTime   *string `json:"end_time"`
 }
 
 func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id int64, patch EventPatch) (Event, error) {
 	var out Event
-	if patch.Description != nil {
-		d, err := cleanDescription(*patch.Description)
-		if err != nil {
-			return out, err
-		}
-		patch.Description = &d
-	}
 	err := s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -360,7 +336,7 @@ func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id in
 			return err
 		}
 		changed := false
-		start, end, desc := cur.StartTime, cur.EndTime, cur.Description
+		start, end := cur.StartTime, cur.EndTime
 		if patch.StartTime != nil || patch.EndTime != nil {
 			ns, ne := start, end
 			if patch.StartTime != nil {
@@ -378,14 +354,10 @@ func (s *Store) UpdateEvent(ctx context.Context, orgSlug, planSlug string, id in
 				changed = true
 			}
 		}
-		if patch.Description != nil && *patch.Description != desc {
-			desc = *patch.Description
-			changed = true
-		}
 		if !changed {
 			return errNothingToChange()
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE event SET start_time = ?, end_time = ?, description = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, start, end, desc, id, oid, pid); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE event SET start_time = ?, end_time = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, start, end, id, oid, pid); err != nil {
 			return err
 		}
 		if out, err = getEvent(ctx, tx, oid, pid, id); err != nil {

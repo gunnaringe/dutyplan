@@ -86,11 +86,11 @@ the arrow keys, or by dragging the table. Explanations are behind the ⓘ button
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
 and whether the planner fills it: one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of
 a person opens the tasks they take part in: one click per task goes red thumb down (*can’t*) → yellow ? (*if needed*) → green
-thumb up (*good*), and every task starts as *can’t*. A date opens the event's times, details and description.
+thumb up (*good*), and every task starts as *can’t*. A date opens the event's times and details.
 
 ![A task: what it can be combined with](docs/img/06-task.png)
 ![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)
-![An event: times, details and description](docs/img/07-event.png)
+![An event: times and details](docs/img/07-event.png)
 
 **Events are easy to copy.** ⧉ on an event copies it to other dates, or repeats it until a date: every week, every other week,
 or every 3 to 8 weeks. The times, the details, the places and the names set by hand come along if you want them. Answers are

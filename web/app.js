@@ -945,7 +945,6 @@ async function pagePlan(r, org, people) {
     let dlg;
     const start = h('input', { type: 'time', value: ev.start_time, 'aria-label': t('event.starts') });
     const end = h('input', { type: 'time', value: ev.end_time, 'aria-label': t('event.ends') });
-    const desc = h('textarea', { rows: '3', maxlength: '2000', placeholder: t('event.description_placeholder'), 'aria-label': t('event.description') }, ev.description);
     const values = fields.fields.map((f) => ({ f, input: h('input', { type: 'text', maxlength: '200', value: fieldValue[ev.id + '/' + f.id] || '', 'aria-label': f.name }) }));
     dlg = modal(fmtDate(ev.date), { info: [t('event.planner_ignores')] },
       h('form', { class: 'stack', onsubmit: async (e) => {
@@ -954,7 +953,6 @@ async function pagePlan(r, org, people) {
         const endWanted = start.value ? end.value : '';  // an end time needs a start time
         if (start.value !== ev.start_time) body.start_time = start.value;
         if (endWanted !== ev.end_time) body.end_time = endWanted;
-        if (desc.value.trim() !== ev.description) body.description = desc.value;
         const todo = values.filter(({ f, input }) => input.value.trim() !== (fieldValue[ev.id + '/' + f.id] || ''));
         if (!Object.keys(body).length && !todo.length) { dlg.close(); return; }
         if (await write(async () => {
@@ -964,7 +962,6 @@ async function pagePlan(r, org, people) {
       } },
         h('div', { class: 'row-inline' }, field(t('event.starts'), start), field(t('event.ends'), end)),
         values.map(({ f, input }) => field(f.name, input)),
-        field(t('event.description'), desc),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
           if (await write(async () => { confirmed(t('event.delete_confirm', { date: fmtDate(ev.date) })); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
         } }, t('event.delete')),
@@ -1017,7 +1014,6 @@ async function pagePlan(r, org, people) {
       return { box, el: h('label', { class: 'check' }, box, ' ' + text, detail ? h('span', { class: 'muted small' }, ' ' + detail) : '') };
     };
     const details = fields.fields.filter((f) => fieldValue[ev.id + '/' + f.id]).map((f) => f.name);
-    if (ev.description) details.push(t('event.description'));
     const placeText = tasks.filter((tk) => placesAt[at(ev, tk)]).map((tk) => `${tk.name} ${placesAt[at(ev, tk)]}`).join(', ');
     const times = check(true, t('copy.times'), clock(ev) || t('copy.none'));
     const det = check(true, t('copy.details'), details.join(', ') || t('copy.none'));
@@ -1311,7 +1307,7 @@ async function pagePlan(r, org, people) {
     events.map((ev) => h('th', { scope: 'col' }, h('div', { class: 'rl' },
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.event_aria', { label: label(ev) }), onclick: () => eventDialog(ev) }, fmtShortDate(ev.date)),
       h('button', { type: 'button', class: 'edit', title: t('copy.title'), 'aria-label': t('copy.aria', { label: label(ev) }), onclick: () => copyDialog(ev) }, '⧉')),
-      clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', ev.description ? h('span', { class: 'sub' }, t('table.has_description')) : '')),
+      clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '')),
     h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), onclick: newEventDialog }, '+')));
 
   // A text in a cell is saved when the field is left, without redrawing the page (so the next field keeps the focus).

@@ -114,10 +114,10 @@ func (s Snapshot) SlotsFor(e SnapEvent) map[int64]int { return s.Places[e.ID] }
 type SnapEvent struct {
 	ID   int64  `json:"id"`
 	Date string `json:"date"`
-	// The time of day and the description as they were when the run was made; the view shows the current ones while the event exists.
-	StartTime   string `json:"start_time,omitempty"`
-	EndTime     string `json:"end_time,omitempty"`
-	Description string `json:"description,omitempty"`
+	// The time of day as it was when the run was made; the view shows the current one while the event exists. (Runs made
+	// before 2026-11-22 also hold a "description", which is no longer read.)
+	StartTime string `json:"start_time,omitempty"`
+	EndTime   string `json:"end_time,omitempty"`
 }
 type SnapTask struct {
 	ID      int64  `json:"id"`
@@ -191,7 +191,7 @@ func BuildInput(d store.PlanningData, p Params) (input []byte, hash string, snap
 			ID   string `json:"id"`
 			Type string `json:"type"`
 		}{eid(e.ID), typ})
-		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.StartTime, e.EndTime, e.Description})
+		snap.Events = append(snap.Events, SnapEvent{e.ID, e.Date, e.StartTime, e.EndTime})
 	}
 	in.PersonTasks = map[string]map[string]string{}
 	in.PersonDates = map[string]map[string]string{}

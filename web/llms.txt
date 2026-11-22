@@ -12,7 +12,7 @@
 - **Task**: a job, e.g. «Sound», «Coffee». The organisation's own, the same in every plan, in an order.
 - **Person**: someone who can be given tasks (a name only; no contact details are stored). Per task: `good` (gladly),
   `poor` (if needed) or not at all. `proposable: false` = the planner never picks them.
-- **Plan**: e.g. «Spring 2027». Has **events** (a date, optional start/end time `HH:MM`, a description), **places** (how
+- **Plan**: e.g. «Spring 2027». Has **events** (a date, optional start/end time `HH:MM`; what is said about it goes in a details row), **places** (how
   many people a task needs on an event; 0 = not needed), **details rows** (`fields`: one text per event, e.g. «Theme»),
   **answers** (per person and event: `good`, `poor`, `never`, or none) with an optional **note**, and **hand-set cells**.
 - **Draft**: a run of the planner (`runs`); one can be pinned as the current plan.
@@ -40,10 +40,11 @@ such as `my-agent/1.0`.
 1. A member makes the plan on the page and shares an edit link to it (making plans needs a login).
 2. `GET /api/orgs/{org}/tasks`; `POST /api/orgs/{org}/tasks` `{"name"}` for each role that is missing (one per row of
    the spreadsheet). Keep the order: new tasks go last.
-3. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}` for each details row (for example «Theme», «Note»).
+3. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}` for each details row (for example «Theme», «Note»,
+   «Description»: an event has no description of its own).
 4. For each date column: `POST /api/orgs/{org}/plans/{plan}/events` `{"date": "2027-01-10", "start_time": "11:00"}`
-   (it answers with a list holding the new event), then `PATCH .../events/{id}` `{"description"}` and
-   `PUT .../events/{id}/fields/{field}` `{"value"}` where there is text.
+   (it answers with a list holding the new event), then `PUT .../events/{id}/fields/{field}` `{"value"}` where there
+   is text.
 5. Places in one call: `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}`.
 6. Leave names out unless the people agreed: people are added by the group and answer for themselves.
 7. Check with `GET .../events` and `GET .../places`, then delete the link.
@@ -88,7 +89,7 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `GET /api/orgs/{org}/plans`, `POST /api/orgs/{org}/plans` `{"name"}`, `GET /api/orgs/{org}/plans/{plan}`,
   `PATCH /api/orgs/{org}/plans/{plan}` `{"name"}` (the slug stays), `DELETE /api/orgs/{org}/plans/{plan}`.
 - `GET /api/orgs/{org}/plans/{plan}/events`, `POST /api/orgs/{org}/plans/{plan}/events` `{"date", "until", "every", "start_time", "end_time"}`
-  (`every` N weeks until `until` makes a series, at most every 8 weeks), `PATCH /api/orgs/{org}/plans/{plan}/events/{id}` `{"start_time", "end_time", "description"}`,
+  (`every` N weeks until `until` makes a series, at most every 8 weeks), `PATCH /api/orgs/{org}/plans/{plan}/events/{id}` `{"start_time", "end_time"}`,
   `DELETE /api/orgs/{org}/plans/{plan}/events/{id}`.
 - `POST /api/orgs/{org}/plans/{plan}/events/{id}/copy` `{"dates" | "until"+"every", "times", "start_time", "end_time", "details", "places", "hand"}` — copies of an event.
 

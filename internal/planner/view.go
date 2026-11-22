@@ -84,12 +84,11 @@ type Cell struct {
 type EventRow struct {
 	ID   int64  `json:"id"`
 	Date string `json:"date"`
-	// The time of day and the description are the event's current ones while it exists (they do not change the plan, so
-	// they do not make a run out of date), else the ones from when the run was made. Events of a date are in time order.
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Description string `json:"description"`
-	Cells       []Cell `json:"cells"` // in the order of RunView.Tasks; a task with nothing in this event is omitted
+	// The time of day is the event's current one while it exists (it does not change the plan, so it does not make a run
+	// out of date), else the one from when the run was made. Events of a date are in time order.
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	Cells     []Cell `json:"cells"` // in the order of RunView.Tasks; a task with nothing in this event is omitted
 }
 
 type LoadRow struct {
@@ -263,9 +262,9 @@ func (s *Service) View(ctx context.Context, orgSlug, planSlug string, runID int6
 		}
 	}
 	for _, e := range snap.Events {
-		row := EventRow{ID: e.ID, Date: e.Date, StartTime: e.StartTime, EndTime: e.EndTime, Description: e.Description, Cells: []Cell{}}
+		row := EventRow{ID: e.ID, Date: e.Date, StartTime: e.StartTime, EndTime: e.EndTime, Cells: []Cell{}}
 		if cur, ok := live[e.ID]; ok {
-			row.StartTime, row.EndTime, row.Description = cur.StartTime, cur.EndTime, cur.Description
+			row.StartTime, row.EndTime = cur.StartTime, cur.EndTime
 		}
 		for _, t := range v.Tasks {
 			a := cells[key{eid(e.ID), tid(t.ID)}]
