@@ -637,6 +637,7 @@ function linkRow(l, base, again, withPlan) {
       h('span', { class: 'title' }, withPlan && l.plan_name ? h('strong', {}, l.plan_name) : '', withPlan && l.plan_name ? ' · ' : '',
         h('span', { class: l.label || l.level === 'join' ? '' : 'muted' }, name)),
       h('span', { class: 'meta muted small' }, h('span', { class: 'lvl ' + l.level }, t(LINK_ACCESS[l.level])), ' · ',
+        join ? [h('span', { class: 'uses' }, t(l.single_use ? 'members.invite_once_meta' : 'members.invite_many_meta')), ' · '] : '',
         gone ? t('share.ran_out') : l.expires_at ? t('share.until', { date: new Date(l.expires_at).toLocaleDateString(locale()) }) : t('share.forever'),
         l.created_by ? ' · ' + t('share.by', { name: l.created_by }) : '')),
     h('span', { class: 'acts' }, share,
@@ -709,6 +710,9 @@ async function pageMembers(r, org) {
   const expires = expirySelect(7);
   // an invitation is for a person: whom it is for, as its label (a name, or a role), so the list says who has not joined yet
   const who = h('input', { type: 'text', maxlength: '80', placeholder: t('members.invite_who_placeholder') });
+  // for one person (ends when someone joins with it), or for anyone who has it until it runs out
+  const uses = h('select', { 'aria-label': t('members.invite_uses') },
+    h('option', { value: 'once', selected: true }, t('members.invite_once')), h('option', { value: 'many' }, t('members.invite_many')));
   return h('div', { class: 'org-page members-page' },
     h('h1', {}, t('nav.members'), infoBtn(t('nav.members'), [t('members.info')])),
     h('ul', { class: 'plain members' }, members.map(row)),
@@ -718,11 +722,11 @@ async function pageMembers(r, org) {
       h('form', { class: 'new-link', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: who.value.trim(), expires_days: Number(expires.value) }); })) {
+        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: who.value.trim(), single_use: uses.value === 'once', expires_days: Number(expires.value) }); })) {
           again();
           try { await navigator.clipboard.writeText(linkURL(made)); say(t('members.invite_made_copied')); } catch (err) { say(t('members.invite_made')); }
         }
-      } }, field(t('members.invite_who'), who), field(t('share.expires'), expires), h('button', { type: 'submit' }, t('members.invite_create')))] : '',
+      } }, field(t('members.invite_who'), who), field(t('members.invite_uses'), uses), field(t('share.expires'), expires), h('button', { type: 'submit' }, t('members.invite_create')))] : '',
     h('h2', {}, t('members.plan_links')),
     h('p', { class: 'muted small lead' }, t('members.plan_links_hint')),
     shared.length ? h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, again, true))) : h('p', { class: 'muted' }, t('share.none')));

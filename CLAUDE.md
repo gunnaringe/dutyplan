@@ -80,7 +80,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   on each plan, listed here to see and delete in one place). A link is a row: an icon for what it gives, its name with «Can view / Can edit /
   Becomes a member», expiry and maker under it, then round icon buttons (share where `navigator.share` exists, copy, delete).
   An invitation is worded as being for a person, never as «a link»: the form asks «Who are you inviting?» (stored as the link's label)
-  and the row reads «Invitation for <label>».
+  and the row reads «Invitation for <label>». «Who can use it»: one person (the default; `single_use`, migration 007: the invitation is
+  deleted in the same transaction as someone becoming a member with it; a member opening it uses nothing) or anyone who has it.
   Deleting a link, removing a member, leaving and changing one's own role are asked first in the
   page's own dialog (`ask()`).
 - **Selecting cells** (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a whole Row. Kinda like you would in a

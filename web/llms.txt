@@ -16,7 +16,7 @@
   many people a task needs on an event; 0 = not needed), **details rows** (`fields`: one text per event, e.g. «Theme»),
   **answers** (per person and event: `good`, `poor`, `never`, or none) with an optional **note**, and **hand-set cells**.
 - **Draft**: a run of the planner (`runs`); one can be pinned as the current plan.
-- **Links**: a `view` or `edit` link gives access to one plan without an account; a `join` link invites a member.
+- **Links**: a `view` or `edit` link gives access to one plan without an account; a `join` link invites a member (for one person, or for anyone who has it).
 
 ## Getting access
 
@@ -70,8 +70,8 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 ### Members and links
 - `GET /api/orgs/{org}/members` — members with a login. `PATCH /api/orgs/{org}/members/{id}` `{"role"}` (admin).
   `DELETE /api/orgs/{org}/members/{id}` — remove (admin), or leave (yourself).
-- `GET /api/orgs/{org}/links` — the share links. `POST /api/orgs/{org}/links` `{"plan", "level": "view"|"edit"|"join", "label", "expires_days"}`
-  (`join` is for admins and has no plan). `DELETE /api/orgs/{org}/links/{id}`.
+- `GET /api/orgs/{org}/links` — the share links. `POST /api/orgs/{org}/links` `{"plan", "level": "view"|"edit"|"join", "label", "expires_days", "single_use"}`
+  (`join` is for admins and has no plan; `single_use: true`, for an invitation only, ends it when someone joins with it). `DELETE /api/orgs/{org}/links/{id}`.
 
 ### Tasks, people, sections (the organisation's own)
 - `GET /api/orgs/{org}/tasks`, `POST /api/orgs/{org}/tasks` `{"name"}`, `PATCH /api/orgs/{org}/tasks/{id}` `{"name", "planned"}`,
