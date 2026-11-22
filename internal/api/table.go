@@ -13,7 +13,6 @@ func (s *server) tableRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/places", s.listPlaces)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}", s.setPlaces)
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}", s.resetPlaces)
-	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/tasks/{id}/places", s.fillPlaces)
 
 	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}/fields", s.listFields)
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/fields", s.addField)
@@ -92,25 +91,6 @@ func (s *server) setPlaces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noContent(w, s.st.SetEventPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), ev, task, *b.Slots), s)
-}
-
-// fillPlaces sets a task's places on every event of the plan («Fill row»); 0 takes the task off them all.
-func (s *server) fillPlaces(w http.ResponseWriter, r *http.Request) {
-	task, ok := s.idParam(w, r)
-	if !ok {
-		return
-	}
-	var b struct {
-		Slots *int `json:"slots"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	if b.Slots == nil {
-		writeErr(w, s.log, store.Invalid("places_invalid", map[string]any{"max": 50}, "send the number of places in slots"))
-		return
-	}
-	noContent(w, s.st.SetTaskPlaces(r.Context(), r.PathValue("org"), r.PathValue("plan"), task, *b.Slots), s)
 }
 
 func (s *server) resetPlaces(w http.ResponseWriter, r *http.Request) {

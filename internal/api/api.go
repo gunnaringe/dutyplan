@@ -382,11 +382,14 @@ func (s *server) listPeople(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) createPerson(w http.ResponseWriter, r *http.Request) {
-	var b nameBody
+	var b struct {
+		Name    string `json:"name"`
+		Section int64  `json:"section"` // 0: none
+	}
 	if !decode(w, r, &b) {
 		return
 	}
-	p, err := s.st.CreatePerson(r.Context(), r.PathValue("org"), b.Name)
+	p, err := s.st.CreatePersonIn(r.Context(), r.PathValue("org"), b.Name, b.Section)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return

@@ -556,65 +556,6 @@ func TestMovingATask(t *testing.T) {
 	}
 }
 
-func TestFillingARowOfPlaces(t *testing.T) {
-	w := newTableWorld(t)
-	s, org, plan := w.s, w.org.Slug, w.plan.Slug
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.sound.ID, 3); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev.ID, w.camera.ID, 1); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetTaskPlaces(ctx, org, plan, w.sound.ID, 2); err != nil {
-		t.Fatal(err)
-	}
-	want := fmt.Sprintf("%d/%d=2 %d/%d=1 %d/%d=2", w.ev.ID, w.sound.ID, w.ev.ID, w.camera.ID, w.ev2.ID, w.sound.ID)
-	if got := w.places(t, org, plan); got != want {
-		t.Errorf("every event of the plan, only this task: got %q, want %q", got, want)
-	}
-	if got := w.places(t, org, w.other.Slug); got != "" {
-		t.Errorf("another plan's events are left alone: %q", got)
-	}
-	if err := s.SetTaskPlaces(ctx, org, plan, w.sound.ID, 2); !codeIs(err, "nothing_to_change") {
-		t.Errorf("the same again: %v", err)
-	}
-	if err := s.SetEventPlaces(ctx, org, plan, w.ev2.ID, w.sound.ID, 5); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.SetTaskPlaces(ctx, org, plan, w.sound.ID, 2); err != nil {
-		t.Errorf("one event differs, so there is something to change: %v", err)
-	}
-	if err := s.SetTaskPlaces(ctx, org, plan, w.sound.ID, 0); err != nil || w.places(t, org, plan) != fmt.Sprintf("%d/%d=1", w.ev.ID, w.camera.ID) {
-		t.Errorf("0 clears the row: %q %v", w.places(t, org, plan), err)
-	}
-	for _, n := range []int{-1, maxSlots + 1} {
-		if err := s.SetTaskPlaces(ctx, org, plan, w.sound.ID, n); !codeIs(err, "places_invalid") {
-			t.Errorf("places %d: %v", n, err)
-		}
-	}
-	for name, c := range map[string]struct {
-		org, plan string
-		task      int64
-	}{
-		"task of another organisation": {org, plan, w.foreignTask.ID},
-		"own task through another org": {w.otherOrg.Slug, w.away.Slug, w.sound.ID},
-		"unknown plan":                 {org, "nope", w.sound.ID},
-	} {
-		if err := s.SetTaskPlaces(ctx, c.org, c.plan, c.task, 2); !errors.Is(err, ErrNotFound) {
-			t.Errorf("%s: want not found, got %v", name, err)
-		}
-	}
-	if err := s.SetTaskPlaces(ctx, w.otherOrg.Slug, w.away.Slug, w.foreignTask.ID, 4); err != nil {
-		t.Fatal(err)
-	}
-	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=1", w.ev.ID, w.camera.ID) {
-		t.Errorf("the other organisation's fill reached this plan: %q", got)
-	}
-	if got := w.places(t, w.otherOrg.Slug, w.away.Slug); got != fmt.Sprintf("%d/%d=4", w.awayEv.ID, w.foreignTask.ID) {
-		t.Errorf("other organisation: %q", got)
-	}
-}
-
 func mustTask(t *testing.T, s *Store, org, name string) int64 {
 	t.Helper()
 	list, err := s.ListTasks(ctx, org)

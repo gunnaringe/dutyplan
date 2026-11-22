@@ -135,6 +135,10 @@ table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
 .dp-table form.addrow input { flex: 1; width: auto; }
 .dp-table thead th { font-size: .8rem; color: var(--fg); }
 .dp-table th.addcol, .dp-table td.addcol { min-width: 0; border-right: none; }
+/* ⇥ at the end of a row: select the whole row */
+.dp-table td.addcol button.rowpick { background: transparent; border: 1px solid transparent; color: var(--muted); padding: 0; width: var(--ctl-sm); height: var(--ctl-sm); line-height: 0; opacity: .55; }
+.dp-table td.addcol button.rowpick:hover, .dp-table td.addcol button.rowpick:focus-visible { opacity: 1; border-color: var(--line); color: var(--accent); }
+.dp-table td.addcol button.rowpick svg { width: 1rem; height: 1rem; }
 .dp-table .sub { display: block; font-weight: 400; font-size: .75rem; color: var(--muted); line-height: 1.25; }
 .dp-table .rl { display: flex; align-items: center; gap: .35rem; }
 .dp-table thead .rl .edit { margin-left: auto; }

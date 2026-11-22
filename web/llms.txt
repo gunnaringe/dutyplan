@@ -79,7 +79,7 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `GET /api/orgs/{org}/combinations` — which tasks one person can do on the same event.
   `PUT /api/orgs/{org}/combinations` `{"a", "b", "level": "cannot"|"practical"|"standard"}`;
   `PUT /api/orgs/{org}/tasks/{id}/combinations` `{"level"}` — one task against all others.
-- `GET /api/orgs/{org}/people`, `POST /api/orgs/{org}/people` `{"name"}`, `PATCH /api/orgs/{org}/people/{id}` `{"name", "proposable"}`,
+- `GET /api/orgs/{org}/people`, `POST /api/orgs/{org}/people` `{"name", "section"}`, `PATCH /api/orgs/{org}/people/{id}` `{"name", "proposable"}`,
   `PUT /api/orgs/{org}/people/{id}/position` `{"section", "position"}`.
 - `PUT /api/orgs/{org}/people/{id}/tasks/{task}` `{"level": "good"|"poor"}`, `DELETE /api/orgs/{org}/people/{id}/tasks/{task}`.
 - `GET /api/orgs/{org}/sections`, `POST /api/orgs/{org}/sections` `{"name"}`, `PATCH /api/orgs/{org}/sections/{id}` `{"name"}`,
@@ -97,7 +97,6 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `GET /api/orgs/{org}/plans/{plan}/places` — places per event and task.
   `PUT /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` `{"slots"}`,
   `DELETE /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` — back to none.
-  `PUT /api/orgs/{org}/plans/{plan}/tasks/{id}/places` `{"slots"}` — every event of the plan.
   `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}` — many at once (at most 5000).
 - `GET /api/orgs/{org}/plans/{plan}/fields` — details rows and their values. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}`,
   `PATCH /api/orgs/{org}/plans/{plan}/fields/{id}` `{"name"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position` `{"position"}`,

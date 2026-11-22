@@ -121,14 +121,16 @@ const { spawn } = require('child_process');
 
     // places: typed straight in; Enter moves on to the next event
     const places = (task, e) => page.locator(`input[aria-label="Places for ${task} on ${e}"]`);
-    // Fill row (in the task's dialog): the same number on every event
-    await page.getByRole('button', { name: 'Open the task Sound' }).click();
-    await reopens(async () => {
-      await dialog.locator('input[aria-label="Places for Sound on every event"]').fill('1');
-      await dialog.getByRole('button', { name: 'Fill row' }).click();
-    }, 'Fill row draws the page again');
-    await closeDialog();
-    for (const e of ev) ok((await places('Sound', e).inputValue()) === '1', 'Fill row puts 1 on ' + e);
+    // the same number on every event: ⇥ at the end of the row selects it, the bar at the bottom sets them
+    await page.click('button[aria-label="Select the row Sound"]');
+    await page.fill('.selbar input[type=number]', '1');
+    await page.click('.selbar button:has-text("Set")');
+    await until(page, () => [...document.querySelectorAll('tr.task-row')].find((r) => r.querySelector('.cellbtn').textContent === 'Sound')
+      .querySelectorAll('input[type=number]').length === [...document.querySelectorAll('tr.task-row')].find((r) => r.querySelector('.cellbtn').textContent === 'Sound')
+      .querySelectorAll('td.sel').length, null, 'the row is selected');
+    for (const e of ev) await until(page, (x) => document.querySelector(`input[aria-label="${x}"]`).value === '1', 'Places for Sound on ' + e, 'the row puts 1 on ' + e);
+    await page.keyboard.press('Escape');
+    ok(!(await page.locator('dialog.modal input[aria-label^="Places for Sound on every"]').count()), 'no Fill row in the task dialog any more');
     await places('Café', ev[0]).fill('2');
     await places('Café', ev[0]).press('Enter');
     await places('Café', ev[1]).fill('1');
@@ -143,6 +145,20 @@ const { spawn } = require('child_process');
     ok((await places('Café', ev[0]).inputValue()) === '2' && (await places('Video', ev[1]).inputValue()) === '', 'places stay after a reload; empty = not needed');
     ok((await page.locator('td.draft.none').count()) > 0, 'no places: nothing to fill in the draft');
 
+    // ⚡ by a task: whether the planner fills it, as by a person; it is kept
+    {
+      const zap = () => page.locator('tr.task-row', { has: page.locator('button[aria-label="Open the task Video"]') }).locator('button.auto');
+      ok((await zap().getAttribute('aria-pressed')) === 'true', 'the planner fills a new task');
+      await zap().click();
+      await until(page, () => document.querySelector('tr.task-row:has(button[aria-label="Open the task Video"]) button.auto').getAttribute('aria-pressed') === 'false', null, '⚡ off: only by hand');
+      ok((await zap().getAttribute('title')).startsWith('Only by hand'), 'the title says so');
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok((await zap().getAttribute('aria-pressed')) === 'false', 'it is kept');
+      await zap().click();
+      await until(page, () => document.querySelector('tr.task-row:has(button[aria-label="Open the task Video"]) button.auto').getAttribute('aria-pressed') === 'true', null, '⚡ on again');
+      await page.waitForTimeout(300);
+    }
     // tasks: new ones go last; ⋮⋮ drags one, and the dialog's «Place in the table» moves one too (for phones)
     const taskOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(','));
     ok((await taskOrder()) === 'Sound,Video,Café', 'tasks in the order they were added: ' + await taskOrder());
@@ -202,11 +218,17 @@ const { spawn } = require('child_process');
     await reopens(() => dialog.locator('select[aria-label="Section in the table"]').selectOption({ label: 'Not this term' }), 'the person dialog opens again');
     await closeDialog();
     ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo', 'the dialog puts a person last in the section: ' + await peopleOrder());
+    // «Add a person» lines: one after those without a section, one at the end of each section; the new person lands there
+    ok(await page.evaluate(() => { const rows = [...document.querySelectorAll('tr.person-row, tr.person-sect, tr.adds:has(input[placeholder^="Add a person"])')];
+      return rows.map((r) => (r.classList.contains('adds') ? '+' : r.classList.contains('person-sect') ? '|' : 'p')).join(''); }) === 'p+|pp+', 'an add line after the people without a section and at the end of the section');
+    await addNamed('Add a person to Not this term', 'Pia Demo');
+    await until(page, () => document.querySelectorAll('tr.person-row').length === 4, null, 'the new person is added');
+    ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo,Pia Demo', 'added in the section, last: ' + await peopleOrder());
     // deleting the section puts its people back, without a section
     await page.click('button[aria-label="Change the section Not this term"]');
     await dialog.getByRole('button', { name: 'Delete the section' }).click();
     await until(page, () => !document.querySelector('tr.person-sect'), null, 'the section is gone');
-    ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'its people come back in their order: ' + await peopleOrder());
+    ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo,Pia Demo', 'its people come back in their order: ' + await peopleOrder());
     const takes = async (person, list) => {
       await page.click(`button[aria-label="Open ${person}"]`);
       // one click per step: can’t → if needed → good
@@ -529,7 +551,9 @@ const { spawn } = require('child_process');
       await page.keyboard.press('Escape');
       ok((await page.locator('td.sel').count()) === 0 && (await page.locator('.selbar').isHidden()), 'Escape lets go');
       await page.locator('tr.person-row', { has: answer(who[1], ev[0]) }).locator('.grip').click();
-      ok((await page.locator('td.sel').count()) === ev.length, 'a click on ⋮⋮ selects the whole row');
+      ok((await page.locator('td.sel').count()) === 0, '⋮⋮ only drags: a click selects nothing');
+      await page.click(`button[aria-label="Select the row ${who[1]}"]`);
+      ok((await page.locator('td.sel').count()) === ev.length, '⇥ selects the whole row');
       await page.keyboard.press('Escape');
       await page.locator('td.count').nth(2).click();
       ok((await page.locator('td.sel').count()) === (await page.locator('tr.person-row').count()), 'a click on a count selects everyone that day');
@@ -546,8 +570,8 @@ const { spawn } = require('child_process');
       // places: a row of a task, set at once, then cleared with Delete, then put back
       const placesWas = [];
       for (const e of ev) placesWas.push(await places('Sound', e).inputValue());
-      await page.locator('tr.task-row', { has: places('Sound', ev[0]) }).locator('.grip').click();
-      ok((await page.locator('td.sel input[type=number]').count()) === ev.length, 'a click on ⋮⋮ selects a task row');
+      await page.click('button[aria-label="Select the row Sound"]');
+      ok((await page.locator('td.sel input[type=number]').count()) === ev.length, '⇥ selects a task row');
       await page.fill('.selbar input[type=number]', '3');
       await page.click('.selbar button:has-text("Set")');
       await until(page, () => [...document.querySelectorAll('td.sel input[type=number]')].every((i) => i.value === '3'), null, 'Set gives every selected place 3');
@@ -623,7 +647,7 @@ const { spawn } = require('child_process');
       ok(w[0] <= w[1], `the page ${url} is ${w[0]} px wide on a ${w[1]} px screen (scrolls sideways)`);
     }
     // the same table as on a wide screen: dates across, people down; the names stay put while the days scroll sideways
-    ok((await page.locator('button.ans').count()) === 9, 'on a phone the answers are in the ordinary table');
+    ok((await page.locator('button.ans').count()) === 12, 'on a phone the answers are in the ordinary table (4 people × 3 events)');
     const stuck = await page.evaluate(() => {
       const box = document.querySelector('.grid-scroll.main');
       const th = box.querySelector('tbody th[scope=row]');

@@ -86,7 +86,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   page's own dialog (`ask()`).
 - **Selecting cells** (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a whole Row. Kinda like you would in a
   spreedsheet… Make sure the ux fits having a big number of volunteers"): on the plan page (not on phones, not with a view link) drag,
-  Shift/Ctrl+click, ⋮⋮ (a row) and a count (a day) select answers or places; the `.selbar` at the bottom sets them, with keys 1/2/3/Delete/Escape.
+  Shift/Ctrl+click, ⇥ at a row's end (a row; ⋮⋮ only drags) and a count (a day) select answers or places; the `.selbar` at the bottom sets them, with keys 1/2/3/Delete/Escape.
   One request per change: `PUT .../plans/{plan}/answers` and `PUT .../plans/{plan}/places` (`internal/store/bulk.go`, at most
   `MaxCellsPerCall`, all or nothing, every person/task of the organisation and every event of the plan, else 404). The `bulk:` mutations
   guard them; `app:ui` checks the selection. A name filter shows with more than 8 people.
@@ -117,13 +117,13 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **One table per plan, one view** (2026-11-19, from the sketches): events across (date, time, ⧉ copy; **+** adds one), then four sections:
   *Event details* (the plan's rows, `plan_field`/`event_field`: ⋮⋮ drags a row, ✎ renames/moves/deletes it; text for people, never sent to the planner, not in the hash),
   *Tasks* (the places per event, typed into the cells; empty = not needed; ⋮⋮ drags a task, in the organisation's order `task.position`, not in the planner's input;
-  *Fill row* in the task's dialog sets every event of the plan), the green *Draft allocation* (the run on show merged with what is set by hand), and
-  *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; organisation-wide *sections* (`person_section`)
+  ⇥ selects the row for the bar at the bottom: no «Fill row» since 2026-11-22; ⚡ by the name = `task.planned`, as by a person), the green *Draft allocation* (the run on show merged with what is set by hand), and
+  *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; «Add a person» lines after those without a section and at the end of each section, `POST /people {name, section}`; organisation-wide *sections* (`person_section`)
   are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone too). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
   - **On a phone** the same table as on a wide screen, narrower (2026-11-22, the user: "La vertikal visning på mobil vises som vanlig. Den
     løsningen som er i dag er litt forvirrende." — the turned availability of 2026-11-20 is gone; do not bring it back). Names stay put, the days
-    scroll sideways; a tap answers. Dragging a selection needs a mouse (a touch scrolls), but ⋮⋮ and a count still select.
+    scroll sideways; a tap answers. Dragging a selection needs a mouse (a touch scrolls), but ⇥ and a count still select.
   - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
     dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
     names set by hand as chosen; answers and drafts are never copied).
