@@ -812,7 +812,7 @@ const MESSAGES = {
     'members.remove_confirm': 'Fjerne {name} fra organisasjonen?',
     'members.leave_confirm': 'Du trenger en ny invitasjon for å komme tilbake til {name}.',
     'members.invite': 'Inviter et medlem',
-    'members.invite_hint': 'En invitasjon er for én person som skal bli medlem. Send den selv; når personen åpner den og logger inn, blir hen med. Vil du bare la noen se eller endre én plan, bruk «Del» på planen i stedet.',
+    'members.invite_hint': 'En invitasjon er for én person som skal bli medlem. Send den selv; når den inviterte åpner den og logger inn, blir de medlem. Vil du bare la noen se eller endre én plan, bruk «Del» på planen i stedet.',
     'members.invite_create': 'Inviter',
     'members.plan_links': 'Lenker til planer',
     'err.link_plan': 'En se- eller endre-lenke gjelder én plan.',
