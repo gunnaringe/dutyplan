@@ -68,8 +68,8 @@ Weak spots the planner had to accept are listed as *compromises*.
 
 **Live, compact, and explained on request.** A click shows at once and is saved in the background; the page never reloads.
 When someone else changes the plan (or a draft is ready) the page updates by itself, kept where it was. The dates and the names
-stay in view while the table scrolls; move sideways with ‹ ›, *Next* (the next event from today), the mouse wheel over the dates,
-the arrow keys, or by dragging the table. Explanations are behind the ⓘ buttons instead of on the page.
+stay in view while the table scrolls; move sideways with ‹ ›, the calendar button (the next event from today), the mouse wheel over the dates,
+the arrow keys, or by dragging the table. Explanations are behind the ⓘ buttons instead of on the page. Each section of the table (and each section of people) folds with the arrow before its heading, to fit more on the screen; the page remembers it.
 
 **The rest is one click away.** The name of a task opens what it can be combined with on the same event (or *nothing at all*)
 and whether the planner fills it: one click per pair goes *can’t* → *bad* → *good*, and a pair that is not set is *bad*. The name of

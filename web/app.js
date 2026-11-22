@@ -39,6 +39,8 @@ const ICONS = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
   check: '<path d="M20 6L9 17l-5-5"/>', caret: '<path d="M6 9l6 6 6-6"/>',
+  today: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1.6" fill="currentColor"/>',
+  pin: '<path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/>',
 };
 // mark: the square that says a place is locked (kept by the planner) or set by hand.
 const mark = (kind) => h('span', { class: 'mark ' + kind, title: t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), 'aria-label': t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), role: 'img' }, icon(kind));
@@ -270,6 +272,7 @@ function pageLanding() {
   const point = (k) => h('li', {}, h('h3', {}, t('landing.' + k + '_title')), h('p', {}, t('landing.' + k)));
   return h('div', { class: 'landing' },
     deadLink(),
+    h('img', { class: 'logo', src: '/logo.svg', alt: '', width: '72', height: '72' }),
     h('h1', {}, t('landing.title')),
     h('p', { class: 'lead' }, t('landing.lead')),
     h('p', { class: 'row-inline' }, h('button', { type: 'button', onclick: signIn }, t('landing.sign_in')),
@@ -280,9 +283,16 @@ function pageLanding() {
     h('p', { class: 'muted small' }, t('landing.open_source'), ' ', h('a', { href: 'https://github.com/gunnaringe/dutyplan' }, 'GitHub'), '.'));
 }
 
+// brand: the logo and the app's name, linking home.
+function brand(to) {
+  const a = link(to, '', { class: 'brand' });
+  a.append(h('img', { src: '/logo.svg', alt: '', width: '28', height: '28' }), h('span', {}, t('brand')));
+  return a;
+}
+
 function headerSignedOut() {
   document.getElementById('top').replaceChildren(
-    h('a', { href: '/', class: 'brand' }, t('brand')),
+    brand('/'),
     h('span', { class: 'spacer' }),
     langMenu(),
     h('button', { type: 'button', class: 'sm', onclick: signIn }, t('landing.sign_in')));
@@ -316,7 +326,7 @@ async function renderHeader(r) {
   if (r.org && role && ME && ME.login) tools.push(nav('members', 'users', t('nav.members')));
   if (r.org && role === 'admin') tools.push(nav('settings', 'settings', t('nav.settings')));
   document.getElementById('top').replaceChildren(
-    link('/?switch', t('brand'), { class: 'brand' }),
+    brand('/?switch'),
     h('label', {}, h('span', { class: 'lbl' }, t('header.org')), select),
     h('span', { class: 'spacer' }),
     ...tools,
@@ -732,7 +742,7 @@ function sideways(grid, events) {
   grid.setAttribute('aria-label', t('table.scroll_aria'));
   return h('span', { class: 'sideways' },
     h('button', { type: 'button', class: 'ghost icon', title: t('table.earlier'), 'aria-label': t('table.earlier'), onclick: () => by(-1) }, icon('left')),
-    h('button', { type: 'button', class: 'ghost sm', title: t('table.next_aria'), onclick: toNext }, t('table.next')),
+    h('button', { type: 'button', class: 'ghost icon', title: t('table.next_aria'), 'aria-label': t('table.next_aria'), onclick: toNext }, icon('today')),
     h('button', { type: 'button', class: 'ghost icon', title: t('table.later'), 'aria-label': t('table.later'), onclick: () => by(1) }, icon('right')));
 }
 
@@ -825,6 +835,22 @@ async function pagePlan(r, org, people) {
     await render();
     say(on ? t('run.pin_done', { id }) : t('run.unpin_done'));
   };
+  // ---- folding: a section of the table, or of the people, folds to its heading; remembered per plan in this browser
+  const foldKey = 'fold:' + r.org + '/' + r.plan;
+  const folded = new Set((() => { try { return JSON.parse(store.get(foldKey) || '[]'); } catch (e) { return []; } })());
+  const folds = (key, rows) => [rows].flat(Infinity).filter((x) => x instanceof Element)
+    .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
+  const applyFolds = (table) => {
+    table.querySelectorAll('tr[data-fold]').forEach((tr) => { tr.hidden = tr.dataset.fold.split(' ').some((k) => folded.has(k)); });
+    table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
+  };
+  const foldBtn = (key, title) => h('button', { type: 'button', class: 'fold', 'data-key': key, 'aria-expanded': String(!folded.has(key)),
+    title: t('table.fold'), 'aria-label': t('table.fold_aria', { name: title }), onclick: (e) => {
+      if (folded.has(key)) folded.delete(key); else folded.add(key);
+      store.set(foldKey, JSON.stringify([...folded]));
+      applyFolds(e.currentTarget.closest('table'));
+    } }, icon('caret'));
+
   const bar = h('div', { class: 'draft-bar' });
   const poll = async () => {
     if (!bar.isConnected) return;  // the page has been replaced
@@ -850,9 +876,11 @@ async function pagePlan(r, org, people) {
     else if (view.run.status === 'failed') notes.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: view.run.error || t('run.unknown_error') })));
     else if (done) {
       const run = view.run;
-      line.push(h('span', { class: 'small' }, t('run.label', { id: run.id, time: fmtTime(run.finished_at || run.started_at) }) + ' · ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'))));
-      line.push(run.pinned ? [h('span', { class: 'pinned' }, '✓ ' + t('run.current')), linkBtn(t('run.unpin'), () => pin(run.id, false))]
-        : h('button', { type: 'button', class: 'ghost sm', onclick: () => pin(run.id, true) }, t('run.pin')));
+      const about = t('run.label', { id: run.id, time: fmtTime(run.finished_at || run.started_at) }) + ' · ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'));
+      line.push(h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solver_status === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')));
+      line.push(h('button', { type: 'button', class: 'ghost icon pin' + (run.pinned ? ' on' : ''), 'aria-pressed': String(!!run.pinned),
+        title: run.pinned ? t('run.current') + ' · ' + t('run.unpin') : t('run.pin'), 'aria-label': run.pinned ? t('run.unpin') : t('run.pin'),
+        onclick: () => pin(run.id, !run.pinned) }, icon('pin')));
       if (run.id !== newest.id) line.push(linkBtn(t('run.show_newest'), () => { planState.runId = newest.id; render(); }));
       if (run.stale) notes.push(h('p', { class: 'warn small', role: 'status' }, t('run.stale')));
       if (run.checked && run.violations.length) notes.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
@@ -861,7 +889,7 @@ async function pagePlan(r, org, people) {
     const legend = h('span', { class: 'legend small' }, h('span', {}, mark('hand'), ' ' + t('draft.key_hand')),
       h('span', {}, mark('lock'), ' ' + t('draft.key_locked')));
     bar.replaceChildren(h('div', { class: 'row-inline' }, line, legend), ...notes);
-    bar.prepend(h('span', { class: 'bar-title' }, t('draft.title'), infoBtn(t('draft.title'), [t('draft.info')])));
+    bar.prepend(h('span', { class: 'bar-title' }, foldBtn('draft', t('draft.title')), t('draft.title'), infoBtn(t('draft.title'), [t('draft.info')])));
   }
 
   // ---- dialogs
@@ -1227,7 +1255,7 @@ async function pagePlan(r, org, people) {
   // ---- the table
   const cols = events.length;
   const filler = () => h('td', { class: 'addcol' });
-  const sect = (title, info) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, title, info ? infoBtn(title, info) : '')),
+  const sect = (key, title, info) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn(key, title), title, info ? infoBtn(title, info) : '')),
     h('td', { colspan: String(cols + 1) }));
   const addLine = (form) => h('tr', { class: 'adds' }, h('th', { scope: 'row' }, form), h('td', { colspan: String(cols + 1) }));
 
@@ -1385,49 +1413,49 @@ async function pagePlan(r, org, people) {
     const g = grip(t('person.drag'));
     handleFor(g, 'person', p);
     const row = h('tr', { class: 'person-row' },
-      h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
-        p.name, h('span', { class: 'sub' + (mine.length ? '' : ' prompt') }, mine.length ? mine.join(', ') : t('table.choose_tasks'))), autoBtn(p))),
+      h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
+        title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
+        p.name), autoBtn(p))),
       events.map((ev) => answerCell(p, ev)), filler());
     return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
   };
   const sectionRow = (x, i) => {
     const g = grip(t('section.drag'));
     const n = inSection(x.id).length;
-    const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('span', { class: 'nm' }, x.name),
+    const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('s' + x.id, x.name), h('span', { class: 'nm' }, x.name),
       h('button', { type: 'button', class: 'edit', 'aria-label': t('section.edit_aria', { name: x.name }), onclick: () => sectionDialog(x) }, '✎'))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
     dragRow(row, g, 'section', x, i, (d, pos) => api('PUT', `${base}/sections/${d.id}/position`, { position: pos }));
     return dropOn(row, (k) => k === 'person', (d) => movePerson(d, x.id, 0));
   };
 
-  const draftFoot = done && (view.weak.length || view.load.length || runs.length > 1)
-    ? h('tr', { class: 'draft-row foot' }, h('th', { scope: 'row' }), h('td', { colspan: String(cols + 1) }, h('div', { class: 'row-inline small' },
-      view.weak.length ? linkBtn(tn('draft.compromises', view.weak.length), () => listDialog(tn('draft.compromises', view.weak.length), view.weak)) : '',
-      view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
-      runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : ''))) : '';
+  // The draft's extras, in its bar: compromises, distribution and the earlier drafts.
+  if (done) bar.querySelector('.row-inline').append(
+    view.weak.length ? linkBtn(tn('draft.compromises', view.weak.length), () => listDialog(tn('draft.compromises', view.weak.length), view.weak)) : '',
+    view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
+    runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
 
   const phone = PHONE.matches;
   const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
   const table = h('div', { class: 'grid-scroll' + (phone ? '' : ' main') }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
-      sect(t('table.details'), [t('table.details_hint')]),
-      fields.fields.map(fieldRow),
-      addLine(addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))),
-      sect(t('table.tasks'), [t('table.tasks_hint')]),
-      tasks.map(taskRow),
-      addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name }))),
+      sect('details', t('table.details'), [t('table.details_hint')]),
+      folds('details', [fields.fields.map(fieldRow), addLine(addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name })))]),
+      sect('tasks', t('table.tasks'), [t('table.tasks_hint')]),
+      folds('tasks', [tasks.map(taskRow), addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name })))]),
       h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
-      tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler())),
-      draftFoot,
+      folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler()))]),
       phone ? '' : [
-        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')]))),
+        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')]))),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small' }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
-        inSection(0).map(personRow),
-        sections.flatMap((x, i) => [sectionRow(x, i), ...inSection(x.id).map(personRow)]),
-        addLine(addPerson()),
-        addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])));
+        folds('avail', [
+          inSection(0).map(personRow),
+          sections.flatMap((x, i) => [sectionRow(x, i), ...folds('s' + x.id, inSection(x.id).map(personRow))]),
+          addLine(addPerson()),
+          addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])])));
+  applyFolds(table);
 
   // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
   // (as the draft rows show them: set by hand, locked or from the planner).

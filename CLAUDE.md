@@ -140,7 +140,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
   Never show a raw error («Failed to fetch») for these. modal() flattens its parts like h(): `append()` writes a list as «[object …]».
 - **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
   Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).
-  The main table scrolls inside the window (dates and names stay put); ‹ › / *Next* / wheel over the dates / arrow keys / dragging move sideways.
+  The main table scrolls inside the window (dates and names stay put); ‹ › / the calendar button (next event from today) / wheel over the dates / arrow keys / dragging move sideways.
+- **Folding and less text** (2026-11-22, the user: "collapsible sections and less text"): every table section and every section of people folds
+  (`foldBtn`/`folds`/`applyFolds`, rows tagged `data-fold`, remembered per plan in localStorage `fold:<org>/<plan>`). Detail goes into
+  hover titles instead of text: the tasks a person takes are the name's title, the draft bar shows `#<id>` (its title the time and
+  quality) and a pin toggle, the copy ⧉ shows on hovering its date. The draft's compromises/distribution/earlier drafts sit in its bar.
+- **The logo** is `web/logo.svg` (a green rota tile; favicon, header, landing page), drawn 2026-11-22 at the user's request.
 - **Assets are versioned** (2026-11-20): the server links `app.js`, `i18n.js` and `style.css` from `index.html` as `?v=<hash of the content>`
   and lets only that exact address be cached (a year, immutable); the page and bare or old addresses are `no-cache`. A new asset must be
   added to `assets` in `internal/api/api.go`. Why: a browser (or Cloudflare's Browser Cache TTL) kept an old `app.js` after a deploy, which

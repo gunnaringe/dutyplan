@@ -124,7 +124,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 // assets are the files the page links; each gets ?v=<hash of its content> where index.html links it.
 const robotsMeta = `<meta name="robots" content="noindex, nofollow">`
 
-var assets = []string{"i18n.js", "app.js", "style.css", "landing.png"}
+var assets = []string{"i18n.js", "app.js", "style.css", "landing.png", "logo.svg"}
 
 // serveFile sends one embedded file. index.html gets the assets' versions in its links. An asset asked for with its
 // current version never changes, so it may be cached for a year; anything else (the page, an asset without or with an
@@ -152,6 +152,8 @@ func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) 
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	case strings.HasSuffix(name, ".png"):
 		w.Header().Set("Content-Type", "image/png")
+	case strings.HasSuffix(name, ".svg"):
+		w.Header().Set("Content-Type", "image/svg+xml")
 	default:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
