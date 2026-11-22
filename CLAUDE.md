@@ -76,6 +76,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
   to the organisation's **Members** page (`/o/<org>/members`, members with a login) and **Settings** page (`/o/<org>/settings`: rename and
   delete, admins), the language button (`EN`/`NB`, a menu) and the person signed in as initials (a menu with their name and a Sign out
   button). Buttons in the header are one height (`app:ui` checks it). Members and settings are pages, not dialogs.
+  The Members page (2026-11-22) has three parts: the members, inviting new ones (invitation links) and the links to plans (made under Share
+  on each plan, listed here to see and delete in one place). A link is a row: an icon for what it gives, its name with «Can view / Can edit /
+  Becomes a member», expiry and maker under it, then round icon buttons (share where `navigator.share` exists, copy, delete).
+  Deleting a link, removing a member, leaving and changing one's own role are asked first in the
+  page's own dialog (`ask()`).
 - **Selecting cells** (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a whole Row. Kinda like you would in a
   spreedsheet… Make sure the ux fits having a big number of volunteers"): on the plan page (not on phones, not with a view link) drag,
   Shift/Ctrl+click, ⋮⋮ (a row) and a count (a day) select answers or places; the `.selbar` at the bottom sets them, with keys 1/2/3/Delete/Escape.
@@ -120,7 +125,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
     dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
     names set by hand as chosen; answers and drafts are never copied).
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background and a ✎ square (`mark('hand')`); a planner name that was locked is
-    a cell with `locked` and shows a lock square (`mark('lock')`, 2026-11-22, the user: "a square with lock"); the legend uses the same squares; «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
+    a cell with `locked` and shows a lock square (`mark('lock')`, 2026-11-22, the user: "a square with lock"); what the squares mean is in the draft's ⓘ, not on the bar (2026-11-22, the user: the legend was «messy»); «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank (thumb up, ?, thumb down).
 - **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.

@@ -92,6 +92,15 @@ form.addrow button { padding: .05rem .7rem; font-size: .8rem; }
 .box { border: 1px solid var(--line); border-radius: .6rem; padding: .5rem .8rem; }
 .box form.addrow { margin: .6rem 0 .2rem; }
 .org-foot { margin-top: 2rem; }
+/* the start page: the organisations as cards */
+.org-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .6rem; margin: .5rem 0 1rem; }
+a.org-card { display: flex; align-items: center; gap: .75rem; padding: .75rem .9rem; border: 1px solid var(--line); border-radius: .6rem;
+  color: var(--fg); text-decoration: none; background: var(--bg); transition: border-color .1s, box-shadow .1s; }
+a.org-card:hover, a.org-card:focus-visible { border-color: var(--accent); box-shadow: 0 2px 10px rgb(0 0 0 / .07); }
+a.org-card .nm { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+a.org-card > .ic { color: var(--muted); }
+.org-tile { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .55rem; flex: none;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); font-weight: 700; font-size: .9rem; }
 
 /* ---- the plan page: one table, events across, the first column stays put ---- */
 main:has(.plan-page) { max-width: 100rem; }
@@ -99,6 +108,8 @@ main:has(.plan-page) { max-width: 100rem; }
 .title-bar h1 { margin: 0; font-size: 1.25rem; }
 .title-bar .back { color: var(--muted); text-decoration: none; }
 .title-bar .settings { margin-left: auto; }
+.title-bar .share { margin-left: auto; }
+.title-bar .share + .settings { margin-left: 0; }
 .sideways { display: inline-flex; gap: .25rem; align-items: center; }
 button.icon { padding: .2rem .35rem; line-height: 0; }
 .title-bar > button:not(.info), .title-bar .sideways button { height: var(--ctl); }
@@ -159,7 +170,6 @@ button.cellbtn.inline { display: inline; }
 .draft-bar .pin { width: var(--ctl-sm); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .draft-bar p, .draft-bar ul { margin: .25rem 0; }
 .draft-bar .pinned { border: 1px solid var(--accent); color: var(--accent); border-radius: .4rem; padding: 0 .5rem; font-weight: 700; white-space: nowrap; }
-.legend { margin-left: auto; display: inline-flex; gap: .75rem; align-items: center; color: var(--fg); }
 button.draftbtn { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; width: 100%; min-height: 1.5rem; background: none; border: 1px solid transparent; color: var(--fg); padding: .1rem; text-align: left; font-size: .85rem; }
 button.draftbtn:hover { border-color: var(--line); }
 .slot { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem; line-height: 1.3; }
@@ -233,7 +243,11 @@ input.wide { width: 100%; }
   main { padding: .5rem .5rem; }
   header { flex-wrap: nowrap; gap: .5rem; padding: .25rem .5rem; }
   header .lbl, .title-bar .settings .lbl { display: none; }
-  header select { max-width: 11rem; padding: .25rem .4rem; }
+  header .org-pick { flex: 1 1 auto; min-width: 0; }
+  header .org-pick select { width: 100%; min-width: 0; padding: .25rem .4rem; }
+  header > .spacer + * { margin-left: auto; }
+  ul.plain .link-row { flex-wrap: wrap; }
+  ul.plain .link-row .acts { margin-left: auto; }
   header .spacer { display: none; }
   .title-bar h1 { font-size: 1.1rem; }
   /* a phone gets the same table: a narrower name column and narrower days, so more of them fit */
@@ -244,10 +258,16 @@ input.wide { width: 100%; }
   .dp-table form.addrow input { flex-basis: 100%; }
   .dp-table th[scope=row] { font-size: .8rem; }
   .dp-table th, .dp-table td { min-width: 4.75rem; }
-  .legend { margin-left: 0; }
 }
 
 /* the start for someone not signed in */
+.invited { display: flex; gap: 1rem; align-items: flex-start; padding: 1rem 1.2rem; margin: 1rem 0 1.5rem; border: 1px solid var(--accent); border-radius: .6rem;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+.invited > .ic { color: var(--accent); margin-top: .2rem; }
+.invited > .ic svg { width: 1.6rem; height: 1.6rem; }
+.invited h2 { margin: 0 0 .3rem; font-size: 1.2rem; }
+.invited p { margin: .3rem 0; }
+a.button.solid { background: var(--accent); color: #fff; }
 .landing { max-width: 60rem; }
 .landing h1 { font-size: 1.9rem; margin-bottom: .4rem; }
 .landing .lead { font-size: 1.1rem; max-width: 42rem; }
@@ -259,12 +279,36 @@ header .who { display: flex; gap: .5rem; align-items: center; }
 
 /* sharing */
 .view-only { background: var(--maybe-bg, #fdf6e3); border: 1px solid var(--line); border-radius: .4rem; padding: .35rem .7rem; display: inline-flex; gap: .3rem; align-items: center; }
-ul.links, ul.members { display: grid; gap: .35rem; margin: .4rem 0 .8rem; }
-.link-row, .member { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.link-row .what, .member .what { flex: 1; min-width: 12rem; }
+/* a link or a member: an icon (or initials), what it is with a line under it, then its buttons at the end */
+ul.links, ul.members { display: grid; gap: 0; margin: .4rem 0 .8rem; }
+ul.plain .link-row, ul.plain .member { display: flex; gap: .75rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--line); }
+.link-row .what, .member .what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.link-row .title, .member .title { overflow-wrap: anywhere; }
+.link-row .meta, .member .meta { overflow-wrap: anywhere; }
+.link-row .acts, .member .acts { display: flex; gap: .35rem; align-items: center; flex: none; }
 .link-row.gone { opacity: .6; }
-.link-row .lvl { font-size: .8rem; font-weight: 600; padding: .05rem .45rem; border-radius: .3rem; border: 1px solid var(--line); }
-.link-row .lvl.edit { border-color: var(--accent); color: var(--accent); }
+.link-ic { display: inline-flex; align-items: center; justify-content: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; flex: none;
+  background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); }
+.link-ic.edit { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); }
+.link-ic.join { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); }
+.link-ic .ic svg { width: 1rem; height: 1rem; }
+.link-row .lvl { font-weight: 600; color: var(--fg); }
+.link-row .lvl.edit { color: var(--accent); }
+/* a round button with an icon (copy, share, delete, leave) */
+button.iconbtn { display: inline-flex; align-items: center; justify-content: center; width: var(--ctl); height: var(--ctl); padding: 0; border-radius: 50%;
+  background: transparent; color: var(--fg); border: 1px solid var(--line); flex: none; }
+button.iconbtn:hover { border-color: var(--accent); color: var(--accent); }
+button.iconbtn.danger { color: var(--err); }
+button.iconbtn.danger:hover { border-color: var(--err); color: var(--err); }
+button.iconbtn.done { color: var(--accent); border-color: var(--accent); }
+button.iconbtn .ic svg { width: 1.05rem; height: 1.05rem; }
+button.danger.solid { background: var(--err); border-color: var(--err); color: #fff; }
+@media (prefers-color-scheme: dark) { button.danger.solid { color: #1a0b0b; } }
+/* a new link: the fields side by side, the button level with the boxes */
+form.new-link { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin: .4rem 0 .8rem; }
+form.new-link label.field:first-child:has(input) { flex: 1 1 12rem; }
+form.new-link input { width: 100%; }
+p.lead { margin: -.2rem 0 .5rem; max-width: 40rem; }
 .row-inline.wrap { flex-wrap: wrap; }
 .org-foot { display: flex; gap: .75rem; flex-wrap: wrap; }
 
@@ -300,8 +344,8 @@ header .icon-btn .ic svg, .dropdown > summary .ic svg { width: 1.1rem; height: 1
 .signout .ic svg { width: 1rem; height: 1rem; }
 
 /* ---- the members page ---- */
-.members-page ul.members li { display: flex; align-items: center; gap: .75rem; padding: .4rem 0; border-bottom: 1px solid var(--line); }
-.members-page ul.members .what { flex: 1; }
+.members-page ul.members .avatar.sm { width: 1.9rem; height: 1.9rem; }
+.members-page .acts select { width: auto; }
 
 /* ---- the draft: a square says locked or set by hand ---- */
 .mark { display: inline-flex; align-items: center; justify-content: center; width: 1.15rem; height: 1.15rem; border-radius: .25rem; flex: none;
@@ -310,7 +354,8 @@ header .icon-btn .ic svg, .dropdown > summary .ic svg { width: 1.1rem; height: 1
 .mark.lock { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, var(--bg)); }
 .mark.hand { color: var(--hand-fg); background: var(--hand-bg); }
 .slot.locked { font-weight: 600; }
-.legend .mark { vertical-align: -.2rem; }
+.info-text .key { display: flex; gap: .5rem; align-items: flex-start; }
+.info-text .key .mark { margin-top: .1rem; }
 .members-page h1 .info, .members-page h2 .info { margin-left: .35rem; }
 
 /* ---- folding sections (2026-11-22): a caret before the heading; folded = pointing right ---- */
@@ -331,7 +376,7 @@ button.cellbtn.no-tasks { color: var(--muted); }
 .draft-bar .run-id { font-weight: 600; cursor: help; }
 header .brand { display: inline-flex; align-items: center; gap: .5rem; }
 header .brand img { display: block; }
-.landing img.logo { display: block; margin: 1rem 0 0; }
+.landing img.logo { display: block; width: 72px; height: 72px; border: none; border-radius: 0; margin: 1rem 0 0; }
 @media (max-width: 40rem) { header .brand span { display: none; } header .icon-btn, .dropdown > summary { min-width: 2.25rem; } }
 
 /* ---- selecting cells (2026-11-22) ---- */

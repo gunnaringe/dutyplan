@@ -714,7 +714,7 @@ const { spawn } = require('child_process');
       const c = await browser.newContext({ locale: 'en-GB', permissions: ['clipboard-read', 'clipboard-write'] });
       const pg = await c.newPage();
       watch(pg);
-      const dlg = pg.locator('dialog.modal');
+      const dlg = pg.locator('dialog.modal:not(.ask)');
       await pg.route('**/api/me', (route) => route.fulfill({ json: { login: true, user: { name: 'Kari Test' }, links: [] } }));
       await pg.goto(base + '/o/sports-club');
       ok(!(await pg.locator('button:has-text("Share the organisation")').count()), 'no link to the whole organisation');
@@ -727,8 +727,9 @@ const { spawn } = require('child_process');
       await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row')].some((li) => li.textContent.includes('For the volunteers')), null, 'the new link is listed');
       const copied = await pg.evaluate(() => navigator.clipboard.readText());
       ok(/^http:\/\/127\.0\.0\.1:\d+\/s\/[\w-]{20,}$/.test(copied), 'the new link is copied: ' + copied);
-      ok((await dlg.locator('.link-row .lvl').first().innerText()) === 'Edit', 'the link says what it allows');
+      ok((await dlg.locator('.link-row .lvl').first().innerText()) === 'Can edit', 'the link says what it allows');
       await dlg.locator('button[aria-label="Delete the link For the volunteers"]').click();
+      await pg.click('dialog.ask button.yes');  // asked first
       await until(pg, () => !document.querySelector('dialog[open] .link-row'), null, 'the deleted link is gone');
       await dlg.locator('button:has-text("Make link")').click();
       await until(pg, () => document.querySelectorAll('dialog[open] .link-row').length === 1, null, 'a view link to the plan');
@@ -739,7 +740,17 @@ const { spawn } = require('child_process');
       await pg.waitForURL('**/o/sports-club/members');
       await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed on the members page');
       await pg.click('main button:has-text("Make invitation link")');
-      await until(pg, () => [...document.querySelectorAll('main .link-row .lvl')].some((x) => x.textContent === 'Invitation'), null, 'the invitation is listed');
+      await until(pg, () => [...document.querySelectorAll('main .link-row .lvl')].some((x) => x.textContent === 'Becomes a member'), null, 'the invitation is listed');
+      // signed in on a phone: the header (members, settings, language, initials) and the pages stay inside the screen
+      await pg.setViewportSize({ width: 390, height: 844 });
+      for (const url of ['/o/sports-club', '/o/sports-club/members', '/o/sports-club/p/autumn-2026']) {
+        await pg.goto(base + url);
+        await pg.waitForSelector('h1');
+        await pg.waitForTimeout(150);
+        const w = await pg.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+        ok(w[0] <= w[1], `signed in, the page ${url} is ${w[0]} px wide on a ${w[1]} px screen`);
+      }
+      await pg.setViewportSize({ width: 1280, height: 720 });
       // someone with a view link to the plan: a note, and nothing to share
       const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
       await pg.route('**/api/orgs/sports-club', asLink({ level: 'view', plan: 'autumn-2026' }));

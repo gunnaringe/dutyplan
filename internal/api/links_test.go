@@ -182,12 +182,12 @@ func TestADeletedOrRunOutLinkStopsWorking(t *testing.T) {
 func TestAdminsChangeMembersAndMembersSharePlans(t *testing.T) {
 	e, kari := sharedOrg(t)
 	invite := e.link(kari, "", "join")
-	// opening an invitation without signing in goes to the sign-in, and back to the invitation
-	if to, _ := e.open(invite.Token); to != "/auth/login?next=%2Fs%2F"+invite.Token {
+	// opening an invitation without signing in goes to a page that names the organisation and signs in back to the invitation
+	if to, _ := e.open(invite.Token); to != "/?invite="+invite.Token+"&org=Choir" {
 		t.Fatalf("an invitation without a session: to %q", to)
 	}
 	ola := e.signIn("ola", "/")
-	if to, _ := e.open(invite.Token, ola); to != "/o/choir" {
+	if to, _ := e.open(invite.Token, ola); to != "/o/choir?joined" {
 		t.Fatalf("joining: to %q", to)
 	}
 	var members []struct {
