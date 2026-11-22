@@ -23,6 +23,11 @@ import (
 )
 
 func main() {
+	// dutyplan health [url]: asks a running server whether it is well (exit 0) or not (1), for a container's health check,
+	// which then needs no shell, curl or wget in the image.
+	if len(os.Args) > 1 && os.Args[1] == "health" {
+		os.Exit(health(os.Args[2:]))
+	}
 	addr := flag.String("addr", "127.0.0.1:8080", "address to listen on (port 0 picks a free one)")
 	dbPath := flag.String("db", "dutyplan.db", "SQLite database file (created if missing)")
 	solverCmd := flag.String("solver", os.Getenv("DUTYPLAN_SOLVER"), "command that starts the planner, e.g. \"python -m dutyplan_solver\" (default $DUTYPLAN_SOLVER; empty = no planning)")
@@ -117,4 +122,23 @@ func main() {
 func loopback(a net.Addr) bool {
 	t, ok := a.(*net.TCPAddr)
 	return ok && t.IP.IsLoopback()
+}
+
+func health(args []string) int {
+	url := "http://127.0.0.1:8080/api/health"
+	if len(args) > 0 {
+		url = args[0]
+	}
+	c := http.Client{Timeout: 5 * time.Second}
+	res, err := c.Get(url)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "health:", err)
+		return 1
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "health:", res.Status)
+		return 1
+	}
+	return 0
 }
