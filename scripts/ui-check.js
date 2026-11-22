@@ -713,7 +713,7 @@ const { spawn } = require('child_process');
     await until(page, ([x, l]) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === l, ['Jon Demo, ' + ev[0], next0], 'a tap moves the answer on');
     ok((await countOf(ev[0])) !== count0, 'the count of the event follows: ' + count0 + ' -> ' + (await countOf(ev[0])));
     await page.locator('td.answer', { has: answer('Jon Demo', ev[1]) }).locator('.note-tab').click({ force: true });
-    ok(await page.locator('.note-pop textarea').isVisible(), 'on a phone the corner tab opens the note too');
+    await until(page, () => { const x = document.querySelector('.note-pop textarea'); return !!x && x.offsetParent !== null; }, null, 'on a phone the corner tab opens the note too');
     const pop = await page.locator('.note-pop').boundingBox();
     ok(pop.x >= 0 && pop.x + pop.width <= 390, 'and the note fits on the screen: ' + JSON.stringify(pop));
     await page.click('.note-pop button:has-text("Cancel")');
