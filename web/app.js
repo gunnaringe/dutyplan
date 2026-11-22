@@ -715,13 +715,8 @@ function weightsForm(path, wr, saved) {
 // What the page keeps between redraws of the same plan: the draft picked under the earlier drafts.
 const planState = { key: '', runId: null };
 
-// A phone gets the availability turned (the sketch's option A, chosen 2026-11-20): events down, people across, the event column
-// stays put. The same width as the phone rule in style.css, and width only, so the keyboard coming up never redraws the page.
-const PHONE = matchMedia('(max-width: 40rem)');
-PHONE.addEventListener('change', () => { if (route().page === 'plan') render(); });
-
 // Sideways through the events: ◀ ▶ move a screenful, «Next» goes to the first event from today. Over the dates the wheel scrolls
-// sideways too. grid is the table's scroll box (null on a phone, where the events go down).
+// sideways too. grid is the table's scroll box.
 function sideways(grid, events) {
   if (!grid) return '';
   const firstCol = () => (grid.querySelector('tbody th[scope=row]') || { offsetWidth: 0 }).offsetWidth;
@@ -1341,14 +1336,14 @@ async function pagePlan(r, org, people) {
   // whole Row"): drag over cells, Shift+click to stretch, Ctrl/⌘+click to add or take away one, a click on ⋮⋮ for the
   // whole row, a click on an event's count for everyone that day. Two grids: places (tasks × events) and answers (people ×
   // events); a selection is in one of them. A bar at the bottom sets every selected cell at once (one request); Escape
-  // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Not on a phone (the turned table).
+  // or ✕ lets go. Hidden rows (folded, filtered) are never selected. Dragging needs a mouse; a touch scrolls the table.
   const grids = { places: { rows: [], cells: new Map() }, answers: { rows: [], cells: new Map() } };
   const evIndex = new Map(events.map((ev, i) => [ev.id, i]));
   let sel = null;  // { grid, keys: Set('row/event'), anchor: { row, ev } }
   const selbar = h('div', { class: 'selbar', hidden: true, role: 'region', 'aria-label': t('sel.bar') });
   const cellKey = (row, ev) => row + '/' + ev;
   const reg = (grid, row, ev, td, paint) => {
-    if (PHONE.matches || org.level === 'view') return;
+    if (org.level === 'view') return;
     const g = grids[grid];
     if (!g.rows.includes(row)) g.rows.push(row);
     g.cells.set(cellKey(row, ev.id), { td, row, ev, paint });
@@ -1555,7 +1550,7 @@ async function pagePlan(r, org, people) {
     countCells[evId].replaceChildren(h('b', { class: 'good' }, icon('up'), c.good), h('b', { class: 'poor' }, icon('maybe'), c.poor), h('b', { class: 'never' }, icon('down'), c.never));
     countCells[evId].setAttribute('aria-label', t('table.count', c));
   };
-  const answerCell = (p, ev, got) => {
+  const answerCell = (p, ev) => {
     const b = h('button', { type: 'button', class: 'ans' });
     let busy = false;  // a second click while the first is on its way would send the same answer twice
     const paint = () => {
@@ -1576,8 +1571,8 @@ async function pagePlan(r, org, people) {
       busy = false;
     });
     paint();
-    const td = h('td', { class: 'answer' }, b, got && got.length ? h('div', { class: 'got' }, got.map((name) => h('span', { class: 'chip task' }, name))) : '');
-    if (!got) reg('answers', p.id, ev, td, paint);
+    const td = h('td', { class: 'answer' }, b);
+    reg('answers', p.id, ev, td, paint);
     return td;
   };
   // People: ⋮⋮ drags a person to another row, also into another section (or onto its heading: the top of it). Sections are
@@ -1633,9 +1628,8 @@ async function pagePlan(r, org, people) {
     view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
     runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
 
-  const phone = PHONE.matches;
   const addPerson = () => addRow(t('table.new_person'), (name) => api('POST', base + '/people', { name }));
-  const table = h('div', { class: 'grid-scroll' + (phone ? '' : ' main') }, h('table', { class: 'dp-table' },
+  const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' },
     h('thead', {}, head),
     h('tbody', {},
       sect('details', t('table.details'), [t('table.details_hint')]),
@@ -1644,7 +1638,7 @@ async function pagePlan(r, org, people) {
       folds('tasks', [tasks.map(taskRow), addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name })))]),
       h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler()))]),
-      phone ? '' : [
+      [
         dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
           people.length > 8 ? filterBox() : ''),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
@@ -1657,43 +1651,21 @@ async function pagePlan(r, org, people) {
   applyFolds(table);
   table.addEventListener('pointerdown', onCellDown);
 
-  // On a phone: the availability turned, above the rest of the table. Under each answer, the tasks the person has in the draft
-  // (as the draft rows show them: set by hand, locked or from the planner).
-  const firstName = (p) => p.name.split(/\s+/)[0];
-  const shortName = (p) => (people.some((o) => o.id !== p.id && firstName(o) === firstName(p)) ? firstName(p) + ' ' + p.name.split(/\s+/).pop()[0] + '.' : firstName(p));
-  const turned = () => {
-    const got = {};  // 'event/person' -> the names of the tasks they have in the draft
-    for (const ev of events) for (const tk of tasks) for (const x of slotsAt(ev, tk).items) {
-      if (x.kind === 'person') (got[ev.id + '/' + x.id] ||= []).push(tk.name);
-    }
-    const cols = people;
-    return h('section', { class: 'turned-wrap' },
-      h('h2', {}, t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info')])),
-      h('div', { class: 'grid-scroll' }, h('table', { class: 'dp-table turned' },
-        h('thead', {}, h('tr', {}, h('th', { scope: 'col', class: 'corner' }, t('table.date')),
-          cols.map((p) => (h('th', { scope: 'col' }, h('button', { type: 'button', class: 'cellbtn', title: p.name, 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) }, shortName(p)), autoBtn(p)))))),
-        h('tbody', {}, events.map((ev) => h('tr', {},
-          h('th', { scope: 'row' }, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '', (countCells[ev.id] = h('span', { class: 'sub count' }))),
-          cols.map((p) => (answerCell(p, ev, got[ev.id + '/' + p.id])))))))),
-      addPerson());
-  };
-  const availability = phone ? turned() : '';
   events.forEach((ev) => recount(ev.id));
 
   const root = h('div', { class: 'plan-page' },
     h('div', { class: 'title-bar' },
       link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }),
       h('h1', {}, plan.name),
-      infoBtn(plan.name, [t(phone ? 'table.hint_phone' : 'table.hint')]),
-      events.length ? sideways(phone ? null : table, events) : '',
+      infoBtn(plan.name, [t('table.hint')]),
+      events.length ? sideways(table, events) : '',
       ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
       h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
-    availability,
     table,
     selbar);
-  if (!phone) dragScroll(table);
+  dragScroll(table);
   root.shown = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },

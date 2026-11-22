@@ -110,11 +110,10 @@ with the weighting and the plan's name.
 ![An organisation and its plans](docs/img/01-organisation.png)
 
 **English and Norwegian, on a phone.** The page follows the browser's language and has a switch in the header; the
-explanations the planner writes follow it too. On a phone the availability is turned: events go down and people across, so a
-tap answers, and under each answer are the tasks that person has in the draft. The rest of the table follows below it and scrolls
-sideways under the row names.
+explanations the planner writes follow it too. On a phone it is the same table, narrower: the names stay put while the days
+scroll sideways, and a tap answers.
 
-![The plan on a phone: the availability turned, events down and people across](docs/img/14-phone.png)
+![The plan on a phone: the same table, scrolling sideways](docs/img/14-phone.png)
 ![The same plan in Norwegian](docs/img/15-norwegian.png)
 
 **Small to run.** One Go binary with the web page inside it and a SQLite file; the planner is a separate Python program that the

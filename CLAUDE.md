@@ -99,11 +99,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
   *Tasks* (the places per event, typed into the cells; empty = not needed; ⋮⋮ drags a task, in the organisation's order `task.position`, not in the planner's input;
   *Fill row* in the task's dialog sets every event of the plan), the green *Draft allocation* (the run on show merged with what is set by hand), and
   *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; organisation-wide *sections* (`person_section`)
-  are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone the order stays, without headings). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
+  are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone too). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
-  - **On a phone** (the sketch's option A, chosen 2026-11-20): the same page with *Availability* turned and moved above the rest: events down, people across
-    (first names; the event column stays put), the person's tasks in the draft under each answer. The rest of the table follows, sideways-scrolling. One layout is
-    in the page at a time (`PHONE` in `web/app.js`, the same 40rem as the phone rule in `style.css`); there is no «my» column and no list of one's own.
+  - **On a phone** the same table as on a wide screen, narrower (2026-11-22, the user: "La vertikal visning på mobil vises som vanlig. Den
+    løsningen som er i dag er litt forvirrende." — the turned availability of 2026-11-20 is gone; do not bring it back). Names stay put, the days
+    scroll sideways; a tap answers. Dragging a selection needs a mouse (a touch scrolls), but ⋮⋮ and a count still select.
   - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
     dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
     names set by hand as chosen; answers and drafts are never copied).

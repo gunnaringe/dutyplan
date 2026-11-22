@@ -550,21 +550,17 @@ const { spawn } = require('child_process');
       const w = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
       ok(w[0] <= w[1], `the page ${url} is ${w[0]} px wide on a ${w[1]} px screen (scrolls sideways)`);
     }
-    // the availability is turned (events down, people across) above the rest; the answers are only there
-    await page.waitForSelector('.dp-table.turned');
-    ok((await page.locator('.dp-table.turned button.ans').count()) === 9 && (await page.locator('button.ans').count()) === 9, 'on a phone the answers are in the turned table only');
-    ok((await page.locator('.dp-table.turned th[scope=row]').first().evaluate((e) => getComputedStyle(e).position)) === 'sticky', 'the event column stays put');
+    // the same table as on a wide screen: dates across, people down; the names stay put while the days scroll sideways
+    ok((await page.locator('button.ans').count()) === 9, 'on a phone the answers are in the ordinary table');
     const stuck = await page.evaluate(() => {
-      const box = document.querySelectorAll('.grid-scroll')[1];
+      const box = document.querySelector('.grid-scroll.main');
       const th = box.querySelector('tbody th[scope=row]');
       const x0 = th.getBoundingClientRect().left;
       box.scrollLeft = 300;
       return [box.scrollLeft > 0, Math.abs(th.getBoundingClientRect().left - x0) < 1];
     });
-    ok(stuck[0] && stuck[1], 'the rest of the table scrolls sideways and the row names stay put: ' + stuck);
-    const gotAt = (person, e) => answer(person, e).locator('xpath=..').locator('.got').innerText().catch(() => '');
-    ok((await gotAt(lockedName, ev[0])).includes('Sound'), 'under the answer: the task the person has in the draft (the locked name)');
-    const countOf = (e) => page.locator('.dp-table.turned tbody tr', { has: answer('Jon Demo', e) }).locator('.count').getAttribute('aria-label');
+    ok(stuck[0] && stuck[1], 'the table scrolls sideways and the row names stay put: ' + stuck);
+    const countOf = (e) => page.locator('td.count').nth(ev.indexOf(e)).getAttribute('aria-label');
     const before0 = await answer('Jon Demo', ev[0]).getAttribute('data-level');
     const count0 = await countOf(ev[0]);
     await answer('Jon Demo', ev[0]).click();
@@ -575,7 +571,6 @@ const { spawn } = require('child_process');
     ok((await dialog.locator('h2').innerText()) === 'Kari Test', 'a person’s name at the top opens the person');
     await closeDialog();
     await page.setViewportSize({ width: 1280, height: 900 });
-    await until(page, () => !document.querySelector('.dp-table.turned') && document.querySelectorAll('.dp-table button.ans').length === 9, null, 'a wide screen gets the table with people as rows again');
 
     // --- Norwegian: the switch, what the server writes, the errors ---
     await page.goto(base + '/o/sports-club');
