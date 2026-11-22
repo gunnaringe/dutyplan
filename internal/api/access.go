@@ -267,8 +267,8 @@ func (s *server) openLink(w http.ResponseWriter, r *http.Request) {
 	l := ls[0]
 	if l.Level == store.LevelJoin {
 		u, ok := s.auth.user(r)
-		if !ok {
-			http.Redirect(w, r, "/auth/login?next="+url.QueryEscape("/s/"+token), http.StatusSeeOther)
+		if !ok { // first a page that says who invites, with the way to sign in (back to this link) or make an account
+			http.Redirect(w, r, "/?"+url.Values{"invite": {token}, "org": {l.OrgName}}.Encode(), http.StatusSeeOther)
 			return
 		}
 		o, err := s.st.Join(r.Context(), token, u.ID)
@@ -277,7 +277,7 @@ func (s *server) openLink(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.hub.publish(o.Slug, change{Method: "POST", Path: "/orgs/" + o.Slug + "/members"})
-		http.Redirect(w, r, "/o/"+url.PathEscape(o.Slug), http.StatusSeeOther)
+		http.Redirect(w, r, "/o/"+url.PathEscape(o.Slug)+"?joined", http.StatusSeeOther) // the page says welcome
 		return
 	}
 	tokens := []string{token}
