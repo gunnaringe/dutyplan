@@ -708,6 +708,12 @@ const { spawn } = require('child_process');
       const f = await film();
       ok(f && f.src === '/demo-en.mp4' && f.poster === '/landing.png' && f.muted, 'the start page has the film: ' + JSON.stringify(f));
       if (f.h264) await until(pg, () => document.querySelector('.landing video.demo').readyState >= 1, null, 'the film loads');
+      // About: why it exists, free, and how to reach the maker: e-mail and GitHub issues
+      const aboutOf = () => pg.evaluate(() => { const a = document.querySelector('.landing footer.about'); return a && { h: a.querySelector('h2').textContent,
+        mail: [...a.querySelectorAll('a[href^="mailto:"]')].map((x) => x.getAttribute('href')), issues: !!a.querySelector('a[href="https://github.com/gunnaringe/dutyplan/issues"]'),
+        free: (document.querySelector('.landing .hero .free') || {}).textContent }; });
+      const ab = await aboutOf();
+      ok(ab && ab.h === 'About Dutyplan' && ab.mail.join() === 'mailto:contact@sermon-studio.app' && ab.issues && ab.free === 'Free, with no ads and no tracking.', 'the start page says who makes it and how to reach them: ' + JSON.stringify(ab));
       // the logo stays small, and nothing is wider than the screen, on a computer and on a phone
       for (const width of [1280, 390]) {
         await pg.setViewportSize({ width, height: 800 });
@@ -721,6 +727,7 @@ const { spawn } = require('child_process');
       await pg.reload();
       await pg.waitForSelector('.landing video.demo');
       ok((await film()).src === '/demo-nb.mp4', 'the film in Norwegian on the Norwegian page');
+      ok((await aboutOf()).h === 'Om Tjenesteplan', 'the About section in Norwegian');
       await pg.evaluate(() => localStorage.setItem('tp.lang', 'en'));
       await pg.reload();
       await h1is(pg, 'Plan who does what, fairly');

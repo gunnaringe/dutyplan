@@ -17,6 +17,17 @@ A 50-second film shows a plan made from nothing to a draft: it plays on the star
 *Dutyplan* (*Tjenesteplan* in Norwegian) is a general tool. Tasks, people, events and the details shown for them are
 all things you create yourself. The pictures here show a made-up community hall, *Maple Hall*, with invented people.
 
+## Why this exists
+
+I made Dutyplan to make my own life simpler. A rota for volunteers takes a lot of time to make by hand, so I made a tool
+that does most of the work. I use it myself, and I intend to keep it running.
+
+It is free, and always will be, with no ads and no tracking. I make it in my spare time, without guarantees. But do let
+me know if you use it, so I can help you and give you notice well in advance if anything is going to change.
+
+Everyone is welcome to use it. Write to [contact@sermon-studio.app](mailto:contact@sermon-studio.app). Found a bug, or
+have an idea? Make an [issue on GitHub](https://github.com/gunnaringe/dutyplan/issues), or send it by email.
+
 ## The problem
 
 A rota made by hand is a puzzle that never stays solved. Some people cannot on some days, some would rather not, two jobs
