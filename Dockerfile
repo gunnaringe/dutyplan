@@ -1,9 +1,10 @@
 # Build: mise run app:image   (or: podman build -t dutyplan .)
-# Run:   podman run --rm -p 8080:8080 -v dutyplan-data:/data dutyplan
+# Run:   podman run --rm -p 127.0.0.1:8080:8080 -e DUTYPLAN_NO_LOGIN=1 -v dutyplan-data:/data dutyplan   (no login: see «Signing in» in README.md)
 # CI publishes it for amd64 and arm64 as ghcr.io/gunnaringe/dutyplan (.github/workflows/image.yml).
 #
 # One image with the server and the planner. The database is /data/dutyplan.db; /data must be writable by uid 10001
-# (SQLite keeps its -wal and -shm files next to the database). There is no login: read «No login» in README.md first.
+# (SQLite keeps its -wal and -shm files next to the database). It listens on 0.0.0.0, so it starts only with a login
+# (DUTYPLAN_OIDC_*) or DUTYPLAN_NO_LOGIN=1.
 
 # The Go build runs on the build machine and cross-compiles (no emulation for arm64).
 FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.4-trixie AS app

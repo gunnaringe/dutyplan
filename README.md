@@ -112,29 +112,35 @@ sideways under the row names.
 ![The same plan in Norwegian](docs/img/15-norwegian.png)
 
 **Small to run.** One Go binary with the web page inside it and a SQLite file; the planner is a separate Python program that the
-server starts when you make a draft. **No login**: read the warning below before you put it anywhere other people can reach.
+server starts when you make a draft. People sign in with OpenID Connect (any provider: Pocket ID, Keycloak, Authentik, Google, ...),
+and each sees only the organisations they are a member of.
 
 ## How it works
 
 1. An **organisation** holds everything that is shared: people, sections, tasks and which tasks can be combined.
 2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**, shown as one table.
-3. Everyone answers in the plan's table (there are no user accounts: a person is a row, and anyone with the address can fill it in).
+3. Everyone answers in the plan's table (a person is a row; the people who plan fill it in).
 4. **Make a draft** runs the planner. Set places by hand, lock names, choose whom the planner picks from, change the weighting,
    and try again.
 5. Each draft is kept. **Pin** the one you want to use.
 
 Everything you create can be renamed, and plans and organisations can be deleted (an organisation only when it has no plans).
 
-## No login: where to run it
+## Signing in
 
-Anyone who can reach the address can read and change **everything**, and nothing records who did it. So:
+Someone who is not signed in sees a page that explains what this is, and **Sign in**. The first sign-in makes the account (at the
+provider), and then they create an organisation, which they own. Members of an organisation are its **owner** (may also delete it)
+or **editors**; nobody else sees that it exists.
 
-- run it on a network you trust (a home or office LAN), or
-- put it behind a reverse proxy that does the authentication (HTTP basic auth, an identity-aware proxy, a VPN), and do not
-  expose the port itself to the internet.
+Make a client at your OpenID Connect provider: confidential, with PKCE, the redirect address `<your address>/auth/callback` and,
+for signing out at the provider too, the address `<your address>/` after logout. Then start the server with `--oidc-issuer`,
+`--oidc-client-id`, `--oidc-client-secret-file` and `--public-url` (or the `DUTYPLAN_OIDC_*` and `DUTYPLAN_PUBLIC_URL`
+variables). Sessions last 30 days, in a cookie of this host only.
 
-The server refuses writes from other sites (`Sec-Fetch-Site: cross-site`), and sends `X-Robots-Tag: noindex` and a strict
-Content-Security-Policy, but that only keeps other pages and search engines out; it is not authentication.
+**Without a login** (`--no-login`, or listening on `127.0.0.1` without `--oidc-issuer`) anyone who can reach the address can read and
+change **everything**. That is for your own machine, or behind a reverse proxy that does the authentication; on any other address the
+server refuses to start without one or the other. The server refuses writes from other sites (`Sec-Fetch-Site: cross-site`), and sends
+`X-Robots-Tag: noindex` and a strict Content-Security-Policy.
 
 ## Requirements
 
@@ -182,7 +188,7 @@ As a container: the server and the planner in one image, for amd64 and arm64. Ev
 `ghcr.io/gunnaringe/dutyplan:main` (and as `main-<UTC time>-<commit>` and `sha-<commit>`, which never move):
 
 ```sh
-podman run --rm -p 127.0.0.1:8080:8080 -v dutyplan-data:/data ghcr.io/gunnaringe/dutyplan:main
+podman run --rm -p 127.0.0.1:8080:8080 -e DUTYPLAN_NO_LOGIN=1 -v dutyplan-data:/data ghcr.io/gunnaringe/dutyplan:main
 ```
 
 The database is `/data/dutyplan.db`, and the image runs as uid 10001, so a directory mounted at `/data` must be writable by it.
@@ -193,10 +199,15 @@ To build it yourself from `Dockerfile`: `podman build -t dutyplan .`, or `mise r
 
 | Flag | Default | |
 | --- | --- | --- |
-| `--addr` | `127.0.0.1:8080` | where to listen; port `0` picks a free one. Use `0.0.0.0:8080` to be reachable from other machines (see the warning above). |
+| `--addr` | `127.0.0.1:8080` | where to listen; port `0` picks a free one. Use `0.0.0.0:8080` to be reachable from other machines (with a login, see *Signing in*). |
 | `--db` | `dutyplan.db` | the SQLite file; created if missing. Its directory must be writable (SQLite keeps `-wal` and `-shm` files next to it). |
 | `--solver` | `$DUTYPLAN_SOLVER` | the command that starts the planner, split on spaces (no quoting). Empty means no planning. |
 | `--workers` | CPUs, at most 8 | threads the planner may use. |
+| `--oidc-issuer` | `$DUTYPLAN_OIDC_ISSUER` | the OpenID Connect provider to sign in with, e.g. `https://id.example.org`. |
+| `--oidc-client-id` | `$DUTYPLAN_OIDC_CLIENT_ID` | the app's client at the provider. |
+| `--oidc-client-secret-file` | `$DUTYPLAN_OIDC_CLIENT_SECRET_FILE` | a file with the client's secret. |
+| `--public-url` | `$DUTYPLAN_PUBLIC_URL` | the address people open, e.g. `https://plan.example.org/`; the callback is `<address>auth/callback`. |
+| `--no-login` | `$DUTYPLAN_NO_LOGIN=1` | no signing in: everyone who reaches the address may do everything (see *Signing in*). |
 
 `DUTYPLAN_SOLVER` is the same as `--solver`. The server writes one line with its address to standard output and logs to
 standard error. It stops cleanly on `SIGINT` and `SIGTERM`. A planner run that was going when the server stopped is marked as

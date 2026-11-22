@@ -243,6 +243,7 @@ const CHOICES = {
         spawnSync('pngquant', ['--quality', '65-95', '--strip', '--force', '--ext', '.png', path.join(OUT, f)]);
       }
     }
+    fs.copyFileSync(path.join(OUT, 'hero.png'), path.join(__dirname, '../web/landing.png')); // the picture on the start page for people not signed in
     console.log('shots: ok, ' + fs.readdirSync(OUT).filter((f) => f.endsWith('.png')).length + ' pictures in ' + OUT);
   } finally {
     if (browserNb) await browserNb.close();
