@@ -72,19 +72,19 @@ func (e *loginEnv) link(owner *http.Cookie, plan, level string) store.Link {
 	return l
 }
 
-func TestAViewLinkToTheOrganisationReadsButNeverWrites(t *testing.T) {
+func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 	e, kari := sharedOrg(t)
-	l := e.link(kari, "", "view")
+	l := e.link(kari, "autumn", "view")
 	to, c := e.open(l.Token)
-	if to != "/o/choir" || c == nil || !c.Secure || !c.HttpOnly {
+	if to != "/o/choir/p/autumn" || c == nil || !c.Secure || !c.HttpOnly {
 		t.Fatalf("opening the link: to %q, cookie %+v", to, c)
 	}
-	for _, path := range []string{"/api/orgs", "/api/orgs/choir", "/api/orgs/choir/plans", "/api/orgs/choir/plans/autumn/events", "/api/orgs/choir/people"} {
+	for _, path := range []string{"/api/orgs", "/api/orgs/choir", "/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/events", "/api/orgs/choir/people"} {
 		if r := e.as(c, "GET", path, nil); r.code != 200 {
 			t.Errorf("GET %s with a view link: %d", path, r.code)
 		}
 	}
-	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"POST", "/api/orgs/choir/plans"}, {"PATCH", "/api/orgs/choir"}} {
+	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
 			t.Errorf("%s %s with a view link: %d, want 403", req[0], req[1], r.code)
 		}
@@ -99,6 +99,18 @@ func TestAViewLinkToTheOrganisationReadsButNeverWrites(t *testing.T) {
 	e.as(c, "GET", "/api/me", nil).json(&me)
 	if len(me.Links) != 1 || me.Links[0].Org != "choir" || me.Links[0].Level != "view" || me.Links[0].Token != "" {
 		t.Fatalf("me with a link: %+v", me.Links)
+	}
+}
+
+func TestAViewOrEditLinkIsToOnePlan(t *testing.T) {
+	e, kari := sharedOrg(t)
+	for _, level := range []string{"view", "edit"} {
+		if r := e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": level}); r.code != 400 || r.errCode() != "invalid" {
+			t.Errorf("a %s link to the whole organisation: %d %s", level, r.code, r.body)
+		}
+	}
+	if r := e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": "join", "plan": "autumn"}); r.code != 400 {
+		t.Errorf("an invitation to a plan: %d", r.code)
 	}
 }
 
@@ -122,7 +134,7 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 		t.Errorf("renaming its plan: %d", r.code)
 	}
 	for _, req := range [][2]string{{"GET", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans"}, {"GET", "/api/orgs/choir/plans/spring"},
-		{"PATCH", "/api/orgs/choir/plans/spring"}, {"GET", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
+		{"PATCH", "/api/orgs/choir/plans/spring"}, {"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code < 400 {
 			t.Errorf("%s %s with a link to another plan: %d", req[0], req[1], r.code)
 		}
@@ -137,7 +149,7 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 
 func TestADeletedOrRunOutLinkStopsWorking(t *testing.T) {
 	e, kari := sharedOrg(t)
-	l := e.link(kari, "", "edit")
+	l := e.link(kari, "autumn", "edit")
 	_, c := e.open(l.Token)
 	if r := e.as(kari, "DELETE", "/api/orgs/choir/links/"+itoa(l.ID), nil); r.code != 204 {
 		t.Fatalf("delete: %d", r.code)
@@ -145,7 +157,7 @@ func TestADeletedOrRunOutLinkStopsWorking(t *testing.T) {
 	if r := e.as(c, "GET", "/api/orgs/choir", nil); r.code != 401 {
 		t.Fatalf("a deleted link still works: %d", r.code)
 	}
-	l = e.link(kari, "", "edit")
+	l = e.link(kari, "autumn", "edit")
 	_, c = e.open(l.Token)
 	e.st.DB().Exec(`UPDATE share_link SET expires_at = '2000-01-01T00:00:00Z'`)
 	if r := e.as(c, "GET", "/api/orgs/choir", nil); r.code != 401 {
@@ -156,7 +168,7 @@ func TestADeletedOrRunOutLinkStopsWorking(t *testing.T) {
 	}
 }
 
-func TestOnlyTheOwnerSharesAndChangesMembers(t *testing.T) {
+func TestAdminsChangeMembersAndMembersSharePlans(t *testing.T) {
 	e, kari := sharedOrg(t)
 	invite := e.link(kari, "", "join")
 	// opening an invitation without signing in goes to the sign-in, and back to the invitation
@@ -172,21 +184,36 @@ func TestOnlyTheOwnerSharesAndChangesMembers(t *testing.T) {
 		You bool
 	}
 	e.as(ola, "GET", "/api/orgs/choir/members", nil).json(&members)
-	if len(members) != 2 || members[0].Role != "owner" || members[1].Role != "editor" || !members[1].You {
+	if len(members) != 2 || members[0].Role != "admin" || members[1].Role != "member" || !members[1].You {
 		t.Fatalf("members: %+v", members)
 	}
 	kariID, olaID := itoa(members[0].ID), itoa(members[1].ID)
-	for _, req := range [][2]string{{"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir/members/" + kariID}, {"DELETE", "/api/orgs/choir/members/" + kariID}} {
-		if r := e.as(ola, req[0], req[1], map[string]string{"level": "view", "role": "editor"}); r.code != 403 {
-			t.Errorf("%s %s by an editor: %d, want 403", req[0], req[1], r.code)
+	// a member shares plans: makes, lists and deletes plan links
+	pl := e.link(ola, "autumn", "edit")
+	if r := e.as(ola, "GET", "/api/orgs/choir/links", nil); r.code != 200 {
+		t.Errorf("a member lists the links: %d", r.code)
+	}
+	if r := e.as(ola, "DELETE", "/api/orgs/choir/links/"+itoa(pl.ID), nil); r.code != 204 {
+		t.Errorf("a member deletes a plan link: %d", r.code)
+	}
+	// but invitations and members are the admin's
+	if r := e.as(ola, "POST", "/api/orgs/choir/links", map[string]string{"level": "join"}); r.code != 403 {
+		t.Errorf("a member invites: %d, want 403", r.code)
+	}
+	if r := e.as(ola, "DELETE", "/api/orgs/choir/links/"+itoa(invite.ID), nil); r.code != 403 {
+		t.Errorf("a member deletes an invitation: %d, want 403", r.code)
+	}
+	for _, req := range [][2]string{{"PATCH", "/api/orgs/choir/members/" + kariID}, {"DELETE", "/api/orgs/choir/members/" + kariID}} {
+		if r := e.as(ola, req[0], req[1], map[string]string{"role": "member"}); r.code != 403 {
+			t.Errorf("%s %s by a member: %d, want 403", req[0], req[1], r.code)
 		}
 	}
-	// the last owner stays
-	if r := e.as(kari, "PATCH", "/api/orgs/choir/members/"+kariID, map[string]string{"role": "editor"}); r.code != 409 {
-		t.Fatalf("the last owner made editor: %d", r.code)
+	// the last admin stays
+	if r := e.as(kari, "PATCH", "/api/orgs/choir/members/"+kariID, map[string]string{"role": "member"}); r.code != 409 {
+		t.Fatalf("the last admin made member: %d", r.code)
 	}
-	if r := e.as(kari, "PATCH", "/api/orgs/choir/members/"+olaID, map[string]string{"role": "owner"}); r.code != 204 {
-		t.Fatalf("make ola owner: %d %s", r.code, r.body)
+	if r := e.as(kari, "PATCH", "/api/orgs/choir/members/"+olaID, map[string]string{"role": "admin"}); r.code != 204 {
+		t.Fatalf("make ola admin: %d %s", r.code, r.body)
 	}
 	if r := e.as(kari, "DELETE", "/api/orgs/choir/members/"+kariID, nil); r.code != 204 {
 		t.Fatalf("kari leaves: %d", r.code)
@@ -194,12 +221,11 @@ func TestOnlyTheOwnerSharesAndChangesMembers(t *testing.T) {
 	if r := e.as(kari, "GET", "/api/orgs/choir", nil); r.code != 404 {
 		t.Fatalf("after leaving: %d", r.code)
 	}
-	// an editor may leave too
+	// a member may leave too
 	l := e.link(ola, "", "join")
 	e.open(l.Token, kari)
-	e.as(ola, "GET", "/api/orgs/choir/members", nil).json(&members)
 	if r := e.as(kari, "DELETE", "/api/orgs/choir/members/"+kariID, nil); r.code != 204 {
-		t.Fatalf("an editor leaves: %d %s", r.code, r.body)
+		t.Fatalf("a member leaves: %d %s", r.code, r.body)
 	}
 }
 
@@ -208,11 +234,11 @@ func TestAMemberKeepsTheirRoleWhenOpeningAnInvitation(t *testing.T) {
 	invite := e.link(kari, "", "join")
 	e.open(invite.Token, kari)
 	if r := e.as(kari, "DELETE", "/api/orgs/choir/plans/spring", nil); r.code != 204 {
-		t.Fatalf("the owner is still owner: %d", r.code)
+		t.Fatalf("the admin is still admin: %d", r.code)
 	}
 	var role string
 	e.st.DB().QueryRow(`SELECT role FROM membership`).Scan(&role)
-	if role != "owner" {
+	if role != "admin" {
 		t.Fatalf("role %q", role)
 	}
 }
@@ -249,7 +275,7 @@ func TestALinkOpensItsOwnOrganisationOnly(t *testing.T) {
 	if r := e.as(ola, "POST", "/api/orgs", map[string]string{"name": "Band"}); r.code != 201 {
 		t.Fatalf("band: %d", r.code)
 	}
-	_, c := e.open(e.link(kari, "", "edit").Token)
+	_, c := e.open(e.link(kari, "autumn", "edit").Token)
 	for _, req := range [][2]string{{"GET", "/api/orgs/band"}, {"GET", "/api/orgs/band/people"}, {"POST", "/api/orgs/band/people"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 401 {
 			t.Errorf("%s %s with a link to another organisation: %d, want 401", req[0], req[1], r.code)

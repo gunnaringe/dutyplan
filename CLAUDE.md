@@ -55,17 +55,19 @@ starts the Python planner, turns the answer into a view with explanations), `int
   OpenID Connect (code + PKCE, go-oidc) against one provider; in production the Pocket ID at id.sermon-studio.app, shared with sermon-studio
   ("User management and login will be the same"). Session = random token in a host-only `__Host-dutyplan` cookie, its SHA-256 in `session`.
   `access` (middleware) is the one place that decides: pages, `/api/health` and `/api/me` open; the rest needs a session (401 `signed_out`); an
-  organisation's routes need a member (`membership`: owner or editor), 404 for anyone else; deleting the organisation is owner-only (403). Whoever
-  creates an organisation owns it; a taken address gets `-2`, `-3` (never a 409 that tells the name exists). `--no-login` (or listening on
+  organisation's routes need a member (`membership`: admin or member), 404 for anyone else. **Roles** (2026-11-22, the user: "the roles are org
+  admin and org members + edit and view shared link"; migration 004): an admin renames and deletes the organisation, changes members and makes or
+  deletes invitations (403 `admin_only` for others); a member does everything else, plans and links to plans included. Whoever
+  creates an organisation is its admin; a taken address gets `-2`, `-3` (never a 409 that tells the name exists). `--no-login` (or listening on
   loopback without `--oidc-issuer`) = no login, everyone may do everything: the tests, the scripts and kate (behind its forward-auth). The
   `access:` mutations guard it.
 - **Sharing** (2026-11-22, the user: "possible to create shared links that allow access to the plan or org"): `share_link` (003), `internal/api/access.go`.
-  A link is view or edit, to the organisation or one plan; `join` is an invitation (opened signed in = editor). Opening `/s/<token>` keeps the
+  A view or edit link is to **one plan** (no links to a whole organisation since 004); `join` is an invitation (opened signed in = member). Opening `/s/<token>` keeps the
   token in the `__Host-dutyplan-links` cookie (up to 20), signed in or not; `access` lets a request through on a link when no membership does. A
   plan link reaches its plan and the organisation's shared parts (people, tasks, sections; the plan page needs them), never the plan list,
   other plans, members or links, and its stream hears nothing of other plans (`grant.sees`). A link never renames or deletes the organisation.
-  Only the owner manages links and members; anyone may leave; the last owner stays. Tokens are stored as they are, so the owner can copy a link
-  again. `GET /orgs/{org}` says `role` / `level` / `plan`, which the page uses to show or hide. The `share:` mutations guard it.
+  Members make and delete plan links; a link never makes links (it does not reach `/links`); only an admin invites and changes members; anyone may
+  leave; the last admin stays. Tokens are stored as they are, so a link can be copied again. `GET /orgs/{org}` says `role` / `level` / `plan`, which the page uses to show or hide. The `share:` mutations guard it.
 - **Limits** (2026-11-22, for the public signup): caps in `internal/store/limits.go` (`atMost`, code `too_many_<what>` with `max`; checked
   in the transaction that creates), and a rate limit on changes per person or address in `internal/api/ratelimit.go` (only with a login;
   `--client-ip-header` names the proxy's header; `costly()` lists the dearer creations). Only `/` with a login may be indexed. The
@@ -111,7 +113,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   are not taking part are placed in a section.
 - **Optimise only within one plan** (2026-11-09). No history from earlier plans: the app never sends `history` or `previous_plan` to the planner.
 - **Removed at the user's request:** a maximum of tasks per person per day, and rest between events. Do not put them back without asking.
-- **No change log** (removed 2026-11-19). Roles: owner and editor only.
+- **No change log** (removed 2026-11-19). Roles: admin and member only.
 - Each person chooses which tasks they take part in; one list per person with answers per event (*does not suit / poor / good*), an optional own list per task (not built).
 - «Even distribution» = **equal total load** (the user's answer 2026-11-09): someone who only takes Video should not end up with half of someone who takes Sound and Video.
   Distribution per task is off by default (`w_task_fair`/`w_task_range` 0). Do not make the per-task term the main term again without asking.
@@ -160,7 +162,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   commit message names the mutations and that request. A pattern that is merely hard to fix, or a rule you think is no longer needed, is not a reason.
   Used once so far: the group mutations, when groups were removed (2026-11-20, issue #9).
   History: 2026-11-19: 248 → 256 with the day types and the change log gone; 2026-11-20: 256 → 238 with the per-person API, places set when an event is
-  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 247 with the live stream. 2026-11-22: 247 → 274 with signing in and sharing, 274 → 290 with the limits.
+  created and cells for several events at once gone; 2026-11-20: 238 → 242 with repeating every few weeks; 242 → 237 with «active» and the choice weight default_combination gone (one click per setting); 237 → 250 with the task order and Fill row; 250 → 272 with the order of people and sections. 2026-11-20: groups removed (see the exception above), then 234 → 247 with the live stream. 2026-11-22: 247 → 274 with signing in and sharing, 274 → 290 with the limits, 290 → 293 with admin/member and links to plans only.
 - No real names, e-mail addresses or phone numbers in the repo, not even the church's, the programmes' or the spreadsheet's names, and no known names from the spreadsheet (scrubbed 2026-11-09, and the history was rewritten). Invented names must not be real first names from the original crew: check against the spreadsheet before using new names. Dates and event types in the test data are invented (2026-11-09). All that remains of the shape of the spreadsheet is the task names (common roles such as Sound and Video) and roughly how large the teams are. The test data has invented names and is made by `mise run fixture`.
 - The test data is `solver/fixtures/autumn2026.json`, made by `solver/fixtures/make_autumn2026.py` (`mise run fixture`).
 - **The pictures in `README.md`** are `docs/img/*.png`, made by `mise run app:shots` (about 20 s, `scripts/shots.js`) from the real app on invented data (the community hall «Maple Hall»; the people are the invented names of `scripts/seed-demo.sh`, so the rule above about names holds). Run it again, and commit the pictures, when the page changes visibly; it removes the old ones first. The day in the pictures is fixed (21 October 2015: the script rewrites the stamps in its temporary database), so a run without a visible change gives byte-identical files. `web/docs_test.go` checks that every picture the README shows exists and that none is left unused (it skips in the mutation copies).

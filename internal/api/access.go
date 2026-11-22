@@ -12,11 +12,13 @@ import (
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// Who may do what. A request about an organisation (/api/orgs/{org}/...) is let through for:
-//   - a member: owner or editor. Only the owner may delete the organisation, share it (links) and change its members.
-//   - someone with a link (a cookie holds the tokens of the links opened in this browser, signed in or not): view = read
-//     only, edit = change, both within the link's scope; a link to one plan reaches that plan and what its page needs from
-//     the organisation (people, tasks, sections), but not the other plans, the plan list, the members or the links.
+// Who may do what (2026-11-22, the user: "the roles are org admin and org members + edit and view shared link"). A request
+// about an organisation (/api/orgs/{org}/...) is let through for:
+//   - a member, admin or member. Only an admin renames or deletes the organisation, changes its members and makes or
+//     deletes invitations; members do everything else, links to plans included.
+//   - someone with a link to one plan (a cookie holds the tokens of the links opened in this browser, signed in or not):
+//     view = read only, edit = change. It reaches that plan and what its page needs from the organisation (people, tasks,
+//     sections), but not the other plans, the plan list, the members or the links: a link never makes links.
 // Anyone else gets 404, so nobody learns which organisations exist (401 «signed_out» when not signed in, so the page can
 // offer to sign in). Without a login (--no-login) everything goes through.
 
@@ -69,12 +71,12 @@ func orgPath(r *http.Request) (org string, rest []string, ok bool) {
 
 func reading(r *http.Request) bool { return r.Method == http.MethodGet || r.Method == http.MethodHead }
 
-// linkReaches: may a link (to the whole organisation, or to one plan) reach this path at all, reading or not.
+// linkReaches: may a link to one plan reach this path at all, reading or not.
 func linkReaches(l store.Link, rest []string) bool {
-	if len(rest) > 0 && (rest[0] == "links" || rest[0] == "members") {
+	if l.Plan == "" || len(rest) > 0 && (rest[0] == "links" || rest[0] == "members") {
 		return false
 	}
-	if l.Plan != "" && len(rest) > 0 && rest[0] == "plans" {
+	if len(rest) > 0 && rest[0] == "plans" {
 		return len(rest) >= 2 && rest[1] == l.Plan
 	}
 	return true
@@ -91,13 +93,12 @@ func linkAllows(l store.Link, r *http.Request, rest []string) bool {
 	return l.Level == store.LevelEdit && len(rest) > 0
 }
 
-// ownerOnly: requests only the owner may make. Leaving (removing yourself) is for everyone.
-func ownerOnly(r *http.Request, rest []string, me int64) bool {
+// adminOnly: requests only an admin may make (invitations are checked where links are made and deleted). Leaving
+// (removing yourself) is for everyone.
+func adminOnly(r *http.Request, rest []string, me int64) bool {
 	switch {
 	case len(rest) == 0:
-		return r.Method == http.MethodDelete
-	case rest[0] == "links":
-		return true
+		return !reading(r)
 	case rest[0] == "members" && len(rest) == 2 && !reading(r):
 		return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))
 	}
@@ -169,8 +170,8 @@ func (s *server) access(next http.Handler) http.Handler {
 			g.role = role
 		}
 		if g.role != store.RoleNone {
-			if g.role != store.RoleOwner && ownerOnly(r, rest, u.ID) {
-				writeJSON(w, 403, apiError{Error: "forbidden", Code: "owner_only", Message: "only the organisation's owner may do this"})
+			if g.role != store.RoleAdmin && adminOnly(r, rest, u.ID) {
+				adminOnlyErr(w)
 				return
 			}
 		} else {
@@ -205,12 +206,16 @@ func (s *server) access(next http.Handler) http.Handler {
 	})
 }
 
-// wider: a link to the whole organisation before one to a plan, and edit before view.
-func wider(a, b store.Link) bool {
-	if (a.Plan == "") != (b.Plan == "") {
-		return a.Plan == ""
-	}
-	return a.Level == store.LevelEdit && b.Level != store.LevelEdit
+// wider: edit before view.
+func wider(a, b store.Link) bool { return a.Level == store.LevelEdit && b.Level != store.LevelEdit }
+
+func adminOnlyErr(w http.ResponseWriter) {
+	writeJSON(w, 403, apiError{Error: "forbidden", Code: "admin_only", Message: "only an admin of the organisation may do this"})
+}
+
+// admin: is the asker an admin of the organisation (everyone is, without a login).
+func (s *server) admin(r *http.Request) bool {
+	return s.auth == nil || grantFrom(r).role == store.RoleAdmin
 }
 
 // sees: may a stream with this grant hear of a change (a link to one plan hears nothing of the other plans).
@@ -251,7 +256,7 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 }
 
 // openLink is the address of a link: GET /s/<token>. A view or edit link is remembered in this browser (a cookie) and
-// opens its organisation or plan; an invitation makes the person signed in an editor (after signing in, when needed).
+// opens its plan; an invitation makes the person signed in a member (after signing in, when needed).
 func (s *server) openLink(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	ls, err := s.st.LinksByTokens(r.Context(), []string{token})
@@ -310,6 +315,10 @@ func (s *server) linkRoutes(mux *http.ServeMux) {
 		if !decode(w, r, &b) {
 			return
 		}
+		if b.Level == store.LevelJoin && !s.admin(r) {
+			adminOnlyErr(w)
+			return
+		}
 		var by int64
 		if u, ok := userFrom(r); ok {
 			by = u.ID
@@ -326,6 +335,19 @@ func (s *server) linkRoutes(mux *http.ServeMux) {
 		if err != nil {
 			writeErr(w, s.log, store.ErrNotFound)
 			return
+		}
+		if !s.admin(r) {
+			ls, err := s.st.ListLinks(r.Context(), r.PathValue("org"))
+			if err != nil {
+				writeErr(w, s.log, err)
+				return
+			}
+			for _, l := range ls {
+				if l.ID == id && l.Level == store.LevelJoin {
+					adminOnlyErr(w)
+					return
+				}
+			}
 		}
 		noContent(w, s.st.DeleteLink(r.Context(), r.PathValue("org"), id), s)
 	})

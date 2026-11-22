@@ -462,19 +462,18 @@ async function pageOrg(r, org) {
       org.level === 'view' ? '' : addRow(t('org.new_plan_placeholder'), async (name) => { const p = await api('POST', base + '/plans', { name }); history.pushState({}, '', `/o/${enc(r.org)}/p/${enc(p.slug)}`); })),
     viewOnly(org),
     h('p', { class: 'small muted org-foot' },
-      org.role === 'owner' ? h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage')) : '',
-      ME && ME.login && org.role ? h('button', { type: 'button', class: 'link-button', onclick: () => membersDialog(r.org, org) }, t('members.open')) : '',
-      ME && ME.login && org.role === 'owner' ? h('button', { type: 'button', class: 'link-button', onclick: () => shareDialog(r.org, org, null) }, t('share.open_org')) : ''));
+      org.role === 'admin' ? h('button', { type: 'button', class: 'link-button', onclick: orgDialog }, t('org.manage')) : '',
+      ME && ME.login && org.role ? h('button', { type: 'button', class: 'link-button', onclick: () => membersDialog(r.org, org) }, t('members.open')) : ''));
   return root;
 }
 
 // ---- sharing: links and members ------------------------------------------------------------------------------------
-// A link lets whoever opens it in (no account needed): view or edit, the whole organisation or one plan. An invitation
-// (join) makes whoever opens it, signed in, an editor. Only the owner shares and changes members; the page asks the server
-// what this person may do (org.role, org.level, org.plan from GET /orgs/{org}).
+// A link to one plan lets whoever opens it in (no account needed): view or edit. An invitation (join) makes whoever opens
+// it, signed in, a member. Members share plans; admins change members and invite. The page asks the server what this
+// person may do (org.role, org.level, org.plan from GET /orgs/{org}); someone with a link never makes links.
 
 const LINK_LEVEL = { view: 'share.level_view', edit: 'share.level_edit', join: 'share.level_join' };
-const ROLE = { owner: 'members.role_owner', editor: 'members.role_editor' };
+const ROLE = { admin: 'members.role_admin', member: 'members.role_member' };
 const viewOnly = (org) => (org.level === 'view' ? h('p', { class: 'view-only' }, icon('info'), ' ', t('share.view_only')) : '');
 const linkURL = (l) => location.origin + '/s/' + l.token;
 // redraws an open dialog in place (modal() fills the dialog whose key is refreshKey)
@@ -493,12 +492,12 @@ async function copyLink(l, button) {
   }
 }
 
-function linkRow(l, base, again) {
+function linkRow(l, base, again, withPlan) {
   const copy = h('button', { type: 'button', class: 'sm', onclick: (e) => copyLink(l, e.currentTarget) }, t('share.copy'));
   const gone = l.expires_at && new Date(l.expires_at) < new Date();
   return h('li', { class: 'link-row' + (gone ? ' gone' : '') },
     h('span', { class: 'lvl ' + l.level }, t(LINK_LEVEL[l.level])),
-    h('span', { class: 'what' }, l.label || h('span', { class: 'muted' }, t('share.no_label')),
+    h('span', { class: 'what' }, withPlan && l.plan_name ? h('strong', {}, l.plan_name + ' ') : '', l.label || h('span', { class: 'muted' }, t('share.no_label')),
       h('span', { class: 'muted small' }, ' · ', gone ? t('share.ran_out') : l.expires_at ? t('share.until', { date: new Date(l.expires_at).toLocaleDateString(locale()) }) : t('share.forever'),
         l.created_by ? ' · ' + t('share.by', { name: l.created_by }) : '')),
     gone ? '' : copy,
@@ -509,17 +508,17 @@ function linkRow(l, base, again) {
 const expirySelect = (dflt) => h('select', { 'aria-label': t('share.expires') },
   [[0, 'share.never'], [7, 'share.days_7'], [30, 'share.days_30'], [90, 'share.days_90']].map(([d, k]) => h('option', { value: String(d), selected: d === dflt }, t(k))));
 
-// Share the organisation (plan null) or one plan: the links there are, and a new one.
+// Share one plan: its links, and a new one.
 async function shareDialog(orgSlug, org, plan) {
   const base = `/orgs/${enc(orgSlug)}`;
   let dlg;
   const build = async (key) => {
     const all = await api('GET', base + '/links');
-    const mine = all.filter((l) => l.level !== 'join' && (plan ? l.plan === plan.slug : !l.plan));
+    const mine = all.filter((l) => l.level !== 'join' && l.plan === plan.slug);
     const level = h('select', { 'aria-label': t('share.level') }, ['view', 'edit'].map((x) => h('option', { value: x }, t(LINK_LEVEL[x]))));
     const label = h('input', { type: 'text', maxlength: '80', placeholder: t('share.label_placeholder'), 'aria-label': t('share.label') });
     const expires = expirySelect(0);
-    const title = plan ? t('share.title_plan', { name: plan.name }) : t('share.title_org', { name: org.name });
+    const title = t('share.title_plan', { name: plan.name });
     if (key) refreshKey = key;
     dlg = modal(title, { info: [t('share.info'), t('share.info_levels')] },
       mine.length ? h('ul', { class: 'plain links' }, mine.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : h('p', { class: 'muted' }, t('share.none')),
@@ -527,7 +526,7 @@ async function shareDialog(orgSlug, org, plan) {
       h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        if (await write(async () => { made = await api('POST', base + '/links', { plan: plan ? plan.slug : '', level: level.value, label: label.value, expires_days: Number(expires.value) }); })) {
+        if (await write(async () => { made = await api('POST', base + '/links', { plan: plan.slug, level: level.value, label: label.value, expires_days: Number(expires.value) }); })) {
           redraw(dlg, build);
           try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
         }
@@ -537,19 +536,21 @@ async function shareDialog(orgSlug, org, plan) {
   await build();
 }
 
-// The members: everyone sees who they are and may leave; the owner changes roles, removes people, and invites with a link.
+// The members: everyone sees who they are, the links to the plans (and may delete them) and may leave; an admin changes
+// roles, removes people, and invites with a link.
 async function membersDialog(orgSlug, org) {
   const base = `/orgs/${enc(orgSlug)}`;
-  const owner = org.role === 'owner';
+  const owner = org.role === 'admin';
   let dlg;
   const build = async (key) => {
-    const [members, links] = await Promise.all([api('GET', base + '/members'), owner ? api('GET', base + '/links') : []]);
+    const [members, links] = await Promise.all([api('GET', base + '/members'), api('GET', base + '/links')]);
     const invites = links.filter((l) => l.level === 'join');
+    const shared = links.filter((l) => l.level !== 'join');
     const row = (m) => h('li', { class: 'member' },
       h('span', { class: 'what' }, m.name, m.you ? h('span', { class: 'muted small' }, ' ' + t('members.you')) : '', m.email ? h('span', { class: 'muted small' }, ' · ' + m.email) : ''),
       owner ? h('select', { 'aria-label': t('members.role_aria', { name: m.name }), onchange: async (e) => {
         if (await write(() => api('PATCH', `${base}/members/${m.id}`, { role: e.target.value }))) redraw(dlg, build); else e.target.value = m.role;
-      } }, ['owner', 'editor'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted' }, t(ROLE[m.role])),
+      } }, ['admin', 'member'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted' }, t(ROLE[m.role])),
       owner || m.you ? h('button', { type: 'button', class: 'ghost sm danger', onclick: async () => {
         if (!confirm(m.you ? t('members.leave_confirm', { name: org.name }) : t('members.remove_confirm', { name: m.name }))) return;
         if (await write(() => api('DELETE', `${base}/members/${m.id}`))) { if (m.you) { dlg.close(); store.set('org', ''); fetched.clear(); go('/?switch'); } else redraw(dlg, build); }
@@ -558,6 +559,7 @@ async function membersDialog(orgSlug, org) {
     if (key) refreshKey = key;
     dlg = modal(t('members.title', { name: org.name }), { info: [t('members.info')] },
       h('ul', { class: 'plain members' }, members.map(row)),
+      shared.length ? [h('h3', {}, t('members.plan_links')), h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, () => redraw(dlg, build), true)))] : '',
       owner ? [h('h3', {}, t('members.invite')), h('p', { class: 'muted small' }, t('members.invite_hint')),
         invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : '',
         h('form', { class: 'row-inline wrap', onsubmit: async (e) => {
@@ -1409,7 +1411,7 @@ async function pagePlan(r, org, people) {
       h('h1', {}, plan.name),
       infoBtn(plan.name, [t(phone ? 'table.hint_phone' : 'table.hint')]),
       events.length ? sideways(phone ? null : table, events) : '',
-      ME && ME.login && org.role === 'owner' ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
+      ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
       h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),

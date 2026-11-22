@@ -303,7 +303,7 @@ func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, o)
 }
 
-// getOrg also says what the asker may do there: role owner or editor (a member; without a login everyone is owner), or else
+// getOrg also says what the asker may do there: role admin or member (without a login everyone is admin), or else
 // the level of their link (view or edit) and, for a link to one plan, that plan.
 func (s *server) getOrg(w http.ResponseWriter, r *http.Request) {
 	o, err := s.st.GetOrg(r.Context(), r.PathValue("org"))
@@ -313,7 +313,7 @@ func (s *server) getOrg(w http.ResponseWriter, r *http.Request) {
 	}
 	g := grantFrom(r)
 	if s.auth == nil {
-		g.role = store.RoleOwner
+		g.role = store.RoleAdmin
 	}
 	writeJSON(w, 200, struct {
 		store.Org

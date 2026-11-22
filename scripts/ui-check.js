@@ -563,8 +563,8 @@ const { spawn } = require('child_process');
       await c.close();
     }
 
-    // Sharing (with a login; this server has none, so /api/me says there is one, and everyone is owner): links to the
-    // organisation and to a plan, an invitation, and what a view link or a link to one plan shows.
+    // Sharing (with a login; this server has none, so /api/me says there is one, and everyone is admin): links to a plan,
+    // the members with the plans' links and an invitation, and what a view link or an edit link to a plan shows.
     {
       const c = await browser.newContext({ locale: 'en-GB', permissions: ['clipboard-read', 'clipboard-write'] });
       const pg = await c.newPage();
@@ -572,8 +572,10 @@ const { spawn } = require('child_process');
       const dlg = pg.locator('dialog.modal');
       await pg.route('**/api/me', (route) => route.fulfill({ json: { login: true, user: { name: 'Kari Test' }, links: [] } }));
       await pg.goto(base + '/o/sports-club');
-      await pg.click('button:has-text("Share the organisation")');
-      await until(pg, () => (document.querySelector('dialog[open] h2') || {}).textContent === 'Share Sports Club', null, 'the share dialog opens');
+      ok(!(await pg.locator('button:has-text("Share the organisation")').count()), 'no link to the whole organisation');
+      await pg.goto(base + '/o/sports-club/p/autumn-2026');
+      await pg.click('button.share');
+      await until(pg, () => (document.querySelector('dialog[open] h2') || {}).textContent === 'Share «Autumn 2026»', null, 'the share dialog opens');
       await dlg.locator('input[aria-label="Label"]').fill('For the volunteers');
       await dlg.locator('select[aria-label="What the link allows"]').selectOption('edit');
       await dlg.locator('button:has-text("Make link")').click();
@@ -583,28 +585,24 @@ const { spawn } = require('child_process');
       ok((await dlg.locator('.link-row .lvl').first().innerText()) === 'Edit', 'the link says what it allows');
       await dlg.locator('button[aria-label="Delete the link For the volunteers"]').click();
       await until(pg, () => !document.querySelector('dialog[open] .link-row'), null, 'the deleted link is gone');
-      await pg.keyboard.press('Escape');
-      // a plan's own links, apart from the organisation's
-      await pg.goto(base + '/o/sports-club/p/autumn-2026');
-      await pg.click('button.share');
-      await until(pg, () => (document.querySelector('dialog[open] h2') || {}).textContent === 'Share «Autumn 2026»', null, 'sharing the plan');
       await dlg.locator('button:has-text("Make link")').click();
       await until(pg, () => document.querySelectorAll('dialog[open] .link-row').length === 1, null, 'a view link to the plan');
       await pg.keyboard.press('Escape');
-      // an invitation, from the members
+      // the members: the plans' links, and an invitation
       await pg.goto(base + '/o/sports-club');
       await pg.click('.org-foot button:has-text("Members")');
+      await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row')].some((li) => li.textContent.includes('Autumn 2026')), null, 'the plan link is listed under the members');
       await dlg.locator('button:has-text("Make invitation link")').click();
       await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row .lvl')].some((x) => x.textContent === 'Invitation'), null, 'the invitation is listed');
       await pg.keyboard.press('Escape');
-      // someone with a view link: a note, and nothing to share or add
+      // someone with a view link to the plan: a note, and nothing to share
       const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
-      await pg.route('**/api/orgs/sports-club', asLink({ level: 'view' }));
-      await pg.goto(base + '/o/sports-club');
+      await pg.route('**/api/orgs/sports-club', asLink({ level: 'view', plan: 'autumn-2026' }));
+      await pg.goto(base + '/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.view-only');
-      ok(!(await pg.locator('.org-foot button').count()) && !(await pg.locator('.addrow').count()), 'a view link shows no sharing, members or new plan');
+      ok(!(await pg.locator('button.share').count()), 'a view link shows no Share');
       await pg.unroute('**/api/orgs/sports-club');
-      // a link to one plan opens that plan, not the organisation
+      // an edit link to one plan opens that plan, not the organisation, and makes no links
       await pg.route('**/api/orgs/sports-club', asLink({ level: 'edit', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club');
       await pg.waitForURL('**/o/sports-club/p/autumn-2026');
