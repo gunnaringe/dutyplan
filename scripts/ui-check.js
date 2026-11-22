@@ -541,6 +541,25 @@ const { spawn } = require('child_process');
     await page.click('button.fold[data-key=tasks]');
     ok((await taskRows()) > 0, 'and unfold');
 
+    // --- who is shown: a ✓ per person in a dialog, kept after a reload; the counts still have everyone ---
+    {
+      const rowOf = (name) => page.locator('tr.person-row', { has: answer(name, ev[0]) });
+      const countBefore = await page.locator('td.count').first().getAttribute('aria-label');
+      await page.click('button.who');
+      await dialog.locator('label.who-item:has-text("Ola Sample") input').uncheck();
+      ok(await rowOf('Ola Sample').isHidden(), 'unticking a person hides their row');
+      ok((await page.locator('td.count').first().getAttribute('aria-label')) === countBefore, 'the counts still have everyone');
+      await closeDialog();
+      ok((await page.innerText('button.who')).includes('of'), 'the button says how many are shown: ' + (await page.innerText('button.who')));
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok(await rowOf('Ola Sample').isHidden(), 'and stays hidden after a reload');
+      await page.click('button.who');
+      await dialog.locator('.who-head button', { hasText: 'All' }).click();
+      ok(await rowOf('Ola Sample').isVisible(), 'All shows everyone again');
+      await closeDialog();
+    }
+
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---
     await page.setViewportSize({ width: 390, height: 844 });
     for (const url of ['/o/sports-club', planUrl]) {

@@ -329,3 +329,13 @@ body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
 .selbar input[type=number] { width: 4.5rem; }
 .selbar form { margin: 0; }
 .dp-table input.filter { width: 100%; margin-top: .3rem; padding: .2rem .4rem; font-size: .85rem; min-height: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+/* who is shown in the table: a ✓ per person, in a dialog */
+.dp-table button.who { display: flex; align-items: center; gap: .35rem; width: 100%; margin-top: .3rem; padding: .2rem .4rem; min-height: 0; font-size: .85rem;
+  text-transform: none; letter-spacing: 0; font-weight: 400; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+.dp-table button.who.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.who-head { display: flex; gap: .3rem; align-items: center; margin-bottom: .4rem; }
+.who-list { display: grid; max-height: 55vh; overflow: auto; }
+.who-item { display: flex; align-items: center; gap: .5rem; padding: .3rem; border-radius: .3rem; cursor: pointer; }
+.who-item:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.who-item[hidden] { display: none; }

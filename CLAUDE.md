@@ -82,6 +82,9 @@ starts the Python planner, turns the answer into a view with explanations), `int
   One request per change: `PUT .../plans/{plan}/answers` and `PUT .../plans/{plan}/places` (`internal/store/bulk.go`, at most
   `MaxCellsPerCall`, all or nothing, every person/task of the organisation and every event of the plan, else 404). The `bulk:` mutations
   guard them; `app:ui` checks the selection. A name filter shows with more than 8 people.
+- **Who is shown** (2026-11-22, the user: "filtrere hvem du ønsker å vise i plan … en avkryssing, så du kan velge et fritt utvalg"): the 👥 button
+  under *Availability* opens a dialog with a ✓ per person. Page only: the hidden ids in localStorage (`hide:<org>/<plan>`), so someone new is
+  shown; counts, planner and draft still have everyone. Not stored on the server.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
 - **The API covers only what the page uses** (2026-11-20: "Update api to only cover what the UI uses. We will rather start simple and expand."). Do not add an endpoint or a

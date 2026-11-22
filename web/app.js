@@ -839,7 +839,9 @@ async function pagePlan(r, org, people) {
   const folds = (key, rows) => [rows].flat(Infinity).filter((x) => x instanceof Element)
     .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
   const applyFolds = (table) => {
-    table.querySelectorAll('tr[data-fold]').forEach((tr) => { tr.hidden = tr.dataset.filtered === '1' || tr.dataset.fold.split(' ').some((k) => folded.has(k)); });
+    table.querySelectorAll('tr[data-fold]').forEach((tr) => {
+      tr.hidden = tr.dataset.filtered === '1' || hidden.has(Number(tr.dataset.person)) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
+    });
     table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
   };
   const foldBtn = (key, title) => h('button', { type: 'button', class: 'fold', 'data-key': key, 'aria-expanded': String(!folded.has(key)),
@@ -848,6 +850,42 @@ async function pagePlan(r, org, people) {
       store.set(foldKey, JSON.stringify([...folded]));
       applyFolds(e.currentTarget.closest('table'));
     } }, icon('caret'));
+  // Who is shown (2026-11-22, the user: "La det være mulig å filtrere hvem du ønsker å vise i plan. Dette skal være en avkryssing, så
+  // du kan velge et fritt utvalg."): a ✓ per person, kept in this browser per plan. Only what the table shows: the counts, the
+  // planner and the draft still have everyone. The hidden ids are kept, so someone new is shown.
+  const hideKey = 'hide:' + r.org + '/' + r.plan;
+  const hidden = new Set((() => { try { return JSON.parse(store.get(hideKey) || '[]'); } catch { return []; } })()
+    .filter((id) => people.some((p) => p.id === id)));
+  const whoLabel = () => (hidden.size ? t('who.shown', { shown: people.length - hidden.size, all: people.length }) : t('who.all'));
+  const whoBtn = h('button', { type: 'button', class: 'who' + (hidden.size ? ' on' : ''), title: t('who.label'), onclick: () => whoDialog() },
+    icon('users'), h('span', { class: 'lbl' }, whoLabel()));
+  const whoSave = () => {
+    store.set(hideKey, JSON.stringify([...hidden]));
+    whoBtn.querySelector('.lbl').textContent = whoLabel();
+    whoBtn.classList.toggle('on', hidden.size > 0);
+    applyFolds(table.querySelector('table'));
+  };
+  const whoDialog = () => {
+    const boxes = people.map((p) => h('input', { type: 'checkbox', checked: !hidden.has(p.id), onchange: (e) => {
+      if (e.target.checked) hidden.delete(p.id); else hidden.add(p.id);
+      whoSave();
+    } }));
+    const items = people.map((p, i) => h('label', { class: 'who-item', 'data-name': p.name.toLowerCase() }, boxes[i], h('span', {}, p.name)));
+    const find = h('input', { type: 'search', class: 'wide', placeholder: t('table.filter'), 'aria-label': t('table.filter'), oninput: (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      items.forEach((it) => { it.hidden = !!q && !it.dataset.name.includes(q); });
+    } });
+    // All / None act on the names the search shows, so «find "an", None» hides just those.
+    const all = (show) => () => {
+      people.forEach((p, i) => { if (!items[i].hidden) { if (show) hidden.delete(p.id); else hidden.add(p.id); boxes[i].checked = show; } });
+      whoSave();
+    };
+    modal(t('who.label'), { info: [t('who.info')] },
+      h('div', { class: 'who-head' }, find,
+        h('button', { type: 'button', class: 'ghost sm', onclick: all(true) }, t('who.select_all')),
+        h('button', { type: 'button', class: 'ghost sm', onclick: all(false) }, t('who.select_none'))),
+      h('div', { class: 'who-list' }, items), foot('', closeBtn()));
+  };
   // With many people: a filter on the names (only the rows; the sections stay). A selection keeps to the rows shown.
   let filterText = '';
   const filterBox = () => h('input', { type: 'search', class: 'filter', value: filterText, placeholder: t('table.filter'), 'aria-label': t('table.filter'),
@@ -1605,7 +1643,7 @@ async function pagePlan(r, org, people) {
     const g = grip(t('person.drag') + ' · ' + t('sel.row_hint'));
     g.addEventListener('click', (e) => selectLine('answers', e, (c) => c.row === p.id));
     handleFor(g, 'person', p);
-    const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase() },
+    const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase(), 'data-person': String(p.id) },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name), autoBtn(p))),
@@ -1640,7 +1678,7 @@ async function pagePlan(r, org, people) {
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), filler()))]),
       [
         dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
-          people.length > 8 ? filterBox() : ''),
+          people.length > 1 ? whoBtn : '', people.length > 8 ? filterBox() : ''),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         folds('avail', [
