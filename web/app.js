@@ -995,6 +995,16 @@ async function pagePlan(r, org, people) {
     render();
   };
   const everyPlace = () => events.flatMap((ev) => tasks.map((tk) => [ev, tk]));
+  // A lock for a whole row (a task) or column (an event) of the draft (2026-11-23, the user: "Let it be possible to lock a column
+  // or a row"): pressed when every planner name in it is locked; a press locks the rest, or unlocks them all.
+  const groupLock = (pairs, lockAria, unlockAria) => {
+    const toLock = lockItems(pairs, true), toUnlock = lockItems(pairs, false);
+    if (!toLock.length && !toUnlock.length) return '';
+    const on = !toLock.length;
+    const name = on ? unlockAria : lockAria;
+    return h('button', { type: 'button', class: 'lockbtn group' + (on ? ' on' : ''), 'aria-pressed': String(on), title: name, 'aria-label': name,
+      onclick: () => setLocks(on ? toUnlock : toLock, !on) }, icon(on ? 'lock' : 'unlock'));
+  };
 
   // ---- «Edit | View» (2026-11-23, the user: "Kanskje også en visning som er en penere visning uten redigering eller
   // tilgjengelighet? … Ikke egne lenker for nå, bare to moduser for samme data."): the same page, the same data. View shows what
@@ -1320,10 +1330,25 @@ async function pagePlan(r, org, people) {
         onclick: () => pin(run.id, !run.pinned) }, icon('pin')));
       if (run.id !== newest.id) line.push(linkBtn(t('run.show_newest'), () => { planState.runId = newest.id; render(); }));
       if (org.level !== 'view') {
-        // «Lock all»: every name of the draft on show stays in the next one; «Remove unlocked»: only what is set by hand and locked is left
+        // «We’re done» (2026-11-23, the user: "Maybe remove the lock all? … Maybe a more visible "we are done" button?"): locks every
+        // name of the draft on show, makes it the current plan and shows it in View. Done = pinned with nothing left to lock;
+        // «Reopen» unpins it and keeps the locks. «Remove unlocked»: only what is set by hand and locked is left.
         const toLock = lockItems(everyPlace(), true);
-        line.push(h('button', { type: 'button', class: 'ghost sm', disabled: !toLock.length, title: t('draft.lock_all_hint'), onclick: () => setLocks(toLock, true) },
-          icon('lock'), ' ' + t('draft.lock_all')));
+        if (run.pinned && !toLock.length) {
+          line.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
+          line.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
+            if (await write(() => api('DELETE', `${runsPath}/${run.id}/pin`))) { planState.runId = run.id; await render(); say(t('draft.reopened')); }
+          } }, t('draft.reopen')));
+        } else {
+          line.push(h('button', { type: 'button', class: 'done', disabled: running, title: t('draft.done_hint'), onclick: async () => {
+            if (toLock.length && !(await write(() => api('PUT', pbase + '/locks', { locks: toLock, locked: true })))) return;
+            if (!run.pinned && !(await write(() => api('PUT', `${runsPath}/${run.id}/pin`)))) return;
+            planState.runId = run.id;
+            store.set(modeKey, 'show');
+            await render();
+            say(t('draft.done_said'));
+          } }, icon('check'), ' ' + t('draft.done')));
+        }
         line.push(h('button', { type: 'button', class: 'ghost sm', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
           if (!(await ask(t('draft.aside'), t('draft.aside_confirm'), t('draft.aside_yes')))) return;
           if (await write(() => api('DELETE', pbase + '/draft'))) { planState.runId = null; await render(); say(t('draft.aside_done')); }
@@ -2482,7 +2507,12 @@ async function pagePlan(r, org, people) {
         // the task sections' headings in the draft too, so it reads as the tasks above
         tk.section && (i === 0 || tasks[i - 1].section !== tk.section)
           ? h('tr', { class: 'draft-sect' }, h('th', { scope: 'row' }, (taskSections.find((x) => x.id === tk.section) || {}).name || ''), h('td', { colspan: String(cols + 1) })) : '',
-        h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), rowPick('draft', tk.id, tk.name))])]),
+        h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, org.level !== 'view' ? h('div', { class: 'rl' }, h('span', { class: 'nm' }, tk.name),
+          groupLock(events.map((ev) => [ev, tk]), t('lock.row', { name: tk.name }), t('unlock.row', { name: tk.name }))) : tk.name),
+        events.map((ev) => putDraftCell(ev, tk)), rowPick('draft', tk.id, tk.name))]),
+        // a lock per date, under the draft
+        org.level !== 'view' && done ? h('tr', { class: 'draft-locks' }, h('th', { scope: 'row' }, h('span', { class: 'small muted' }, t('lock.col_head'))),
+          events.map((ev) => h('td', {}, groupLock(tasks.map((tk) => [ev, tk]), t('lock.col', { date: label(ev) }), t('unlock.col', { date: label(ev) })))), h('td', {})) : '']),
       [
         availHead = dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
           people.length > 1 ? whoBtn : '', people.length ? tagsBtn : '', people.length > 8 ? filterBox() : ''),

@@ -157,8 +157,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
     a cell with `locked` and shows a lock square (`mark('lock')`, 2026-11-22, the user: "a square with lock"); what the squares mean is in the draft's ⓘ, not on the bar (2026-11-22, the user: the legend was «messy»); «maybe» marks a place given against a ?; an unfilled place says «Not filled · Why?» and the place dialog explains.
   - **Locking the draft** (2026-11-22, the user: "La en planlagt celle som inneholder navn ha en lås-knapp i tillegg til en meny-knapp … Det bør kanskje være enklere å låse plan?"):
     with an edit right every planner name in a draft cell has a lock button (pressed = locked), and ⋯ opens the place dialog; a click on the cell itself does nothing,
-    so dragging over draft cells (or ⇥) selects them, with **Lock** / **Unlock** in the bar (a third grid, `draft`). **Lock all** in the draft's bar locks every
-    planner name of the draft on show ("Lås alle blir å låse alle navn, inkludert de som planleggeren har satt"; no pin). One request: `PUT .../plans/{plan}/locks`
+    so dragging over draft cells (or ⇥) selects them, with **Lock** / **Unlock** in the bar (a third grid, `draft`). A lock by each task's name in the draft locks
+    its row, and a row of locks under the draft (`tr.draft-locks`) a date (`groupLock`; 2026-11-23, the user: "lock a column or a row").
+    **Lock all is gone** (2026-11-23, the user: "Maybe remove the lock all? … Maybe a more visible "we are done" button?"): **We're done**
+    locks every planner name of the draft on show, pins it and switches to View; a pinned draft with nothing left to lock shows «✓ Done»
+    and **Reopen** (unpins, keeps the locks). One request: `PUT .../plans/{plan}/locks`
     (`internal/store/locks.go`; unlocking never removes a name set by hand). The run's snapshot keeps which names were locked (`Kept`, not in the input or hash),
     so an unlocked name stays in the draft as the planner's, and one set by hand that was removed does not.
     **Remove unlocked** ("Kanskje en fjern alle ulåste også?"): asked in `ask()`, then `DELETE .../plans/{plan}/draft` sets `plan.draft_aside` (migration 008) and unpins:
