@@ -323,7 +323,7 @@ the drafts. Deleting an organisation removes everything in it; the deletion is w
 ## Development
 
 Everything goes through mise; `mise tasks` lists the tasks. `prek install` (once per clone) runs the checks of `prek.toml`
-on every commit.
+on every commit, and the tests (`mise run test`, about 15 s) before every push.
 
 | Task | |
 | --- | --- |
