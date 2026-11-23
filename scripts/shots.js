@@ -235,13 +235,17 @@ const CHOICES = {
     await page.click('.title-bar .mode button[data-mode=edit]');
     await page.waitForSelector('.dp-table');
 
-    // ⚙: the name, the weighting (opened) and the earlier drafts, in a window tall enough for all of it.
+    // ⚙: the name, what matters (a line) and the earlier drafts, in a window tall enough for all of it.
     const tall = await open(await context({ viewport: { width: 1280, height: 2000 } }));
     await go(tall, planPath, '.dp-table');
     await tall.getByRole('button', { name: /Plan settings/ }).click();
     await dialog(tall).waitFor();
-    await dialog(tall).locator('summary').first().click();
     await save(tall, '11-settings', dialog(tall));
+    await closeDialog(tall);
+    // «What matters», from the draft's bar: the three priorities and the rules that always hold (the numbers folded away)
+    await tall.locator('.prio-link').click();
+    await dialog(tall).waitFor();
+    await save(tall, '20-what-matters', dialog(tall));
     await closeDialog(tall);
 
     // On a phone: the same table, narrower, scrolling sideways under the names.
