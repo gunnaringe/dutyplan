@@ -121,3 +121,40 @@ func TestASelectionStaysInItsOrganisationAndPlan(t *testing.T) {
 		t.Fatalf("a refused selection stored something: %q", got)
 	}
 }
+
+func TestLockingTheDraftAndSettingItAsideOverHTTP(t *testing.T) {
+	e := newEnv(t)
+	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
+	ids := prefSetup(t, e, "org-a")
+	plan := "/api/orgs/org-a/plans/autumn-2026"
+	locks := []store.Lock{{Event: ids.events[0], Task: ids.sound, Person: ids.person}, {Event: ids.events[1], Task: ids.sound, Person: ids.person}}
+	e.mustDo(204, "PUT", plan+"/locks", map[string]any{"locks": locks, "locked": true})
+	var cells []store.ManualCell
+	e.mustDo(200, "GET", plan+"/cells", nil).json(&cells)
+	if len(cells) != 2 || !cells[0].Locked || !cells[1].Locked {
+		t.Fatalf("two locked names: %+v", cells)
+	}
+	e.mustDo(204, "PUT", plan+"/locks", map[string]any{"locks": locks[:1], "locked": false})
+	e.mustDo(200, "GET", plan+"/cells", nil).json(&cells)
+	if len(cells) != 1 || cells[0].EventID != ids.events[1] {
+		t.Fatalf("one unlocked: %+v", cells)
+	}
+
+	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
+	prefSetup(t, e, "org-b")
+	if r := e.do("PUT", "/api/orgs/org-b/plans/autumn-2026/locks", map[string]any{"locks": locks, "locked": true}); r.code != 404 {
+		t.Errorf("A's names locked through B: %d %s", r.code, r.body)
+	}
+
+	var p store.Plan
+	e.mustDo(204, "DELETE", plan+"/draft", nil)
+	e.mustDo(200, "GET", plan, nil).json(&p)
+	if !p.DraftAside {
+		t.Errorf("the drafts are not set aside: %+v", p)
+	}
+	var pb store.Plan
+	e.mustDo(200, "GET", "/api/orgs/org-b/plans/autumn-2026", nil).json(&pb)
+	if pb.DraftAside {
+		t.Errorf("B's drafts were set aside: %+v", pb)
+	}
+}

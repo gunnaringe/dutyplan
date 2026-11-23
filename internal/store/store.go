@@ -319,6 +319,8 @@ type Plan struct {
 	Slug      string `json:"slug"`
 	Name      string `json:"name"`
 	CreatedAt string `json:"created_at"`
+	// DraftAside: «Remove unlocked» set the drafts aside, so the page shows none until a new run or a pin.
+	DraftAside bool `json:"draft_aside,omitempty"`
 }
 
 func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, error) {
@@ -375,8 +377,8 @@ func (s *Store) ListPlans(ctx context.Context, orgSlug string) ([]Plan, error) {
 func (s *Store) GetPlan(ctx context.Context, orgSlug, planSlug string) (Plan, error) {
 	var p Plan
 	err := s.db.QueryRowContext(ctx,
-		`SELECT p.slug, p.name, p.created_at FROM plan p JOIN organization o ON o.id = p.org_id WHERE o.slug = ? AND p.slug = ?`,
-		orgSlug, planSlug).Scan(&p.Slug, &p.Name, &p.CreatedAt)
+		`SELECT p.slug, p.name, p.created_at, p.draft_aside FROM plan p JOIN organization o ON o.id = p.org_id WHERE o.slug = ? AND p.slug = ?`,
+		orgSlug, planSlug).Scan(&p.Slug, &p.Name, &p.CreatedAt, &p.DraftAside)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Plan{}, ErrNotFound
 	}

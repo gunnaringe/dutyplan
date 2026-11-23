@@ -239,14 +239,14 @@ async function film(lang, out, base, srv) {
   await wait(600);
   keep.push([from, at()]);
   await page.waitForSelector('.draft-bar .run-id', { timeout: 60000 });
-  await page.waitForSelector('tr.draft-row button.draftbtn .slot:not(.open)');
+  await page.waitForSelector('tr.draft-row td.draft .slot:not(.open)');
   from = at() - 0.2;
   await page.locator('tr.draft-row').first().evaluate((e) => e.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   await wait(1600);
 
   // a place by hand: one more on the doors on the last date, then a new draft that keeps it
   await caption(say.hand, 300);
-  const cell = page.locator('tr.draft-row', { has: page.locator('th', { hasText: D.tasks[0] }) }).locator('button.draftbtn').nth(3);
+  const cell = page.locator('tr.draft-row', { has: page.locator('th', { hasText: D.tasks[0] }) }).locator('td.draft').nth(3).locator('button.dmenu');
   await click(cell);
   await dialog.waitFor();
   await wait(700);

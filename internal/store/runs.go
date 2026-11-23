@@ -55,6 +55,9 @@ func (s *Store) CreateRun(ctx context.Context, orgSlug, planSlug string, seed, t
 			return err
 		}
 		id, _ = res.LastInsertId()
+		if _, err := tx.ExecContext(ctx, `UPDATE plan SET draft_aside = 0 WHERE id = ? AND org_id = ?`, pid, oid); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM plan_run WHERE plan_id = ? AND pinned = 0 AND id NOT IN
 			(SELECT id FROM plan_run WHERE plan_id = ? ORDER BY id DESC LIMIT ?)`, pid, pid, maxRunsPerPlan); err != nil {
 			return err
@@ -218,6 +221,9 @@ func (s *Store) PinRun(ctx context.Context, orgSlug, planSlug string, runID int6
 				return Invalid("run_not_done", nil, "only a finished plan can be pinned")
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE plan_run SET pinned = 0 WHERE org_id = ? AND plan_id = ?`, oid, pid); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE plan SET draft_aside = 0 WHERE org_id = ? AND id = ?`, oid, pid); err != nil {
 				return err
 			}
 		}

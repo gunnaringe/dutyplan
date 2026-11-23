@@ -174,12 +174,29 @@ button.cellbtn.inline { display: inline; }
 .draft-bar .pin { width: var(--ctl-sm); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .draft-bar p, .draft-bar ul { margin: .25rem 0; }
 .draft-bar .pinned { border: 1px solid var(--accent); color: var(--accent); border-radius: .4rem; padding: 0 .5rem; font-weight: 700; white-space: nowrap; }
-button.draftbtn { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; width: 100%; min-height: 1.5rem; background: none; border: 1px solid transparent; color: var(--fg); padding: .1rem; text-align: left; font-size: .85rem; }
-button.draftbtn:hover { border-color: var(--line); }
+/* a place of the draft: the names on the left, ⋯ (and the selection mark) on the right; the cell itself does not click */
+.dcell { display: flex; align-items: flex-start; gap: .2rem; min-height: 1.5rem; font-size: .85rem; }
+.dlines { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; flex: 1; min-width: 0; padding: .1rem; }
+.dside { display: flex; flex-direction: column; align-items: center; gap: .15rem; flex: none; }
+button.dmenu, button.lockbtn { display: inline-flex; align-items: center; justify-content: center; padding: 0; background: none; border: 1px solid transparent;
+  color: var(--muted); border-radius: .25rem; cursor: pointer; flex: none; }
+button.dmenu { width: 1.4rem; height: 1.3rem; opacity: .55; }
+td.draft:hover button.dmenu, button.dmenu:focus-visible { opacity: 1; border-color: var(--line); }
+button.lockbtn { width: 1.15rem; height: 1.15rem; opacity: .45; }
+button.lockbtn .ic svg, button.dmenu .ic svg { width: .8rem; height: .8rem; display: block; }
+button.lockbtn:hover, button.lockbtn:focus-visible { opacity: 1; border-color: var(--line); color: var(--fg); }
+button.lockbtn.on { opacity: 1; color: var(--fg); border: 1.5px solid currentColor; background: color-mix(in srgb, var(--fg) 8%, var(--bg)); }
+.slot .why.link-button { color: var(--accent); text-decoration: underline; font-weight: 600; padding: 0; }
+.mark.pool { color: var(--accent); border-width: 1px; width: 1rem; height: 1rem; }
+.mark.pool .ic svg { width: .65rem; height: .65rem; }
+.dlines .slot { flex-wrap: nowrap; align-items: flex-start; }
+.dlines .slot .nm { min-width: 0; }
+.dlines .slot .chip { flex: none; }
+.pool-line { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; margin: .5rem 0 .25rem; }
+.pool-line.set { font-weight: 600; }
 .slot { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .3rem; line-height: 1.3; }
 .slot.hand { background: var(--hand-bg); color: var(--hand-fg); font-weight: 600; border-radius: .3rem; padding: .05rem .4rem; }
 .slot.empty { color: var(--err); font-weight: 600; }
-.slot.empty .why { color: var(--accent); text-decoration: underline; }
 .slot.open { color: var(--muted); font-style: italic; }
 
 /* availability */
