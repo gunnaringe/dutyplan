@@ -194,6 +194,12 @@ const CHOICES = {
     const availability = sects.nth(3);
     await range(page, '04-draft', draftHead, availability.locator('xpath=preceding-sibling::tr[1]'));
     await range(page, '05-availability', availability, page.locator('.dp-table tbody tr').last());
+    // A name typed into a cell of the draft: the suggestions (yes first, no last) and a name of its own.
+    step = '19-cell-names';
+    await page.locator('td.draft', { has: page.getByRole('button', { name: /^Sound, Sat 12 Dec .*: open the place$/ }) }).locator('.dlines').click();
+    await page.locator('td.draft.editing input.ename').pressSequentially('S');
+    await range(page, '19-cell-names', draftHead, page.locator('td.draft.editing ul.elist'));
+    await page.keyboard.press('Escape');
 
     // The dialogs behind the names.
     await shoot(page, '06-task', page.getByRole('button', { name: 'Open the task Doors' }));

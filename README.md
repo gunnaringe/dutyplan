@@ -89,6 +89,13 @@ yellow for if needed. It is off at first and kept in that browser.
 
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
 
+**Names straight into the draft.** Click a cell of the draft (or its +) and type: the people come up as you type, those who
+said yes and take the task first, those who said no last. Enter adds the name and leaves the field open for the next. A name
+that is not a person becomes a name of its own (a guest, *Choir*). Picking a name the planner put there locks it; × takes away
+a name set by hand. You can add more names than the places: that is your choice, so nothing warns about it.
+
+![Typing a name in a cell of the draft, with suggestions](docs/img/19-cell-names.png)
+
 **It says why.** Open a place in the draft (⋯) and you see what is set by hand and what came from the planner, can set people by
 hand (tick as many as you like, also more than the places: the place then shows as fuller than it needs), and can say that the planner picks only from some people (*their own sound engineer*, without any special rule; such a place has a
 small funnel in the draft). When a

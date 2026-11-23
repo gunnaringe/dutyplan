@@ -203,6 +203,11 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
   Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).
   The main table scrolls inside the window (dates and names stay put); ‹ › / the calendar button (next event from today) / wheel over the dates / arrow keys / dragging move sideways.
+- **Names in a draft cell** (2026-11-23, the user: "click a planning cell to easily add names. Show autocompletions. Adding a name that is not a
+  person makes it a custom name. Add a plus … We allow adding more people then we have spots", and "No need to warn if adding more people then
+  required"): `editCell` replaces the cell with chips + a combobox (`input.ename`, `ul.elist`); a plain click or + opens it (Ctrl/Shift
+  clicks and drags still select). The custom name is an explicit last option; a name the planner put there is posted `locked`; × only on
+  names set by hand. The field opens again after the redraw (`planState.edit`/`editInput`, typed text kept). Never a count or warning over the places.
 - **Folding and less text** (2026-11-22, the user: "collapsible sections and less text"): every table section and every section of people folds
   (`foldBtn`/`folds`/`applyFolds`, rows tagged `data-fold`, remembered per plan in localStorage `fold:<org>/<plan>`). Detail goes into
   hover titles instead of text: the tasks a person takes are the name's title, the draft bar shows `#<id>` (its title the time and
