@@ -145,7 +145,7 @@ Errors are Connect errors with an HTTP status: `{"code", "message", "details": [
   them: a key left out goes back to its default, `{}` resets all. The keys: `w_fair`, `w_fair_range` (an even total load per person),
   `w_task_fair`, `w_task_range` (even per task; 0 by default), `w_task.good`, `w_task.poor`, `w_date.good`, `w_date.poor` (people's
   wishes for tasks and dates; the `.poor` ones are negative), `w_combo.practical`, `w_combo.impractical` (two tasks on one event).
-  The page's «What matters most» sets three groups at once; Normal is the default:
+  The page's «Adjust the planner» sets three groups at once; Normal is the default:
 
   | Matters      | Less                         | Normal                        | More                            |
   |--------------|------------------------------|-------------------------------|---------------------------------|
