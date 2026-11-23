@@ -274,3 +274,59 @@ func TestAddingAPersonInASection(t *testing.T) {
 		}
 	}
 }
+
+// Task sections (2026-11-23) over HTTP: their own routes (not the people's), a task made in one or moved into one (and
+// moved within it when section is left out), 404 for another organisation's.
+func TestTaskSectionsOverHTTP(t *testing.T) {
+	e := newEnv(t)
+	a := e.cellsWorld("Org A")
+	o := "/api/orgs/" + a.org
+	var tech store.Section
+	e.mustDo(201, "POST", o+"/task-sections", map[string]string{"name": "Tech"}).json(&tech)
+	e.mustDo(200, "PATCH", o+"/task-sections/"+itoa(tech.ID), map[string]string{"name": "Technique"}).json(&tech)
+	var list []store.Section
+	e.mustDo(200, "GET", o+"/sections", nil).json(&list)
+	if len(list) != 0 {
+		t.Errorf("a task section is not a people's section: %+v", list)
+	}
+	e.mustDo(200, "GET", o+"/task-sections", nil).json(&list)
+	if len(list) != 1 || list[0].Name != "Technique" {
+		t.Errorf("task sections: %+v", list)
+	}
+	var lights store.Task
+	e.mustDo(201, "POST", o+"/tasks", map[string]any{"name": "Lights", "section": tech.ID}).json(&lights)
+	e.mustDo(204, "PUT", o+"/tasks/"+itoa(a.sound.ID)+"/position", map[string]any{"section": tech.ID, "position": 0})
+	var tasks []store.Task
+	e.mustDo(200, "GET", o+"/tasks", nil).json(&tasks)
+	got := ""
+	for _, x := range tasks {
+		got += fmt.Sprintf("%s/%v ", x.Name, x.Section == tech.ID)
+	}
+	if !strings.HasSuffix(got, "Sound/true Lights/true ") {
+		t.Errorf("the section's tasks last, Sound first in it: %s", got)
+	}
+	e.mustDo(204, "PUT", o+"/tasks/"+itoa(a.sound.ID)+"/position", map[string]any{"position": 9})
+	e.mustDo(200, "GET", o+"/tasks", nil).json(&tasks)
+	if last := tasks[len(tasks)-1]; last.ID != a.sound.ID || last.Section != tech.ID {
+		t.Errorf("section left out: moved within its section: %+v", tasks)
+	}
+	b := e.cellsWorld("Org B")
+	for what, r := range map[string]reply{
+		"A's task section through B": e.do("DELETE", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID), nil),
+		"B's task into A's section":  e.do("PUT", "/api/orgs/"+b.org+"/tasks/"+itoa(b.sound.ID)+"/position", map[string]any{"section": tech.ID, "position": 0}),
+		"a task made in A's section": e.do("POST", "/api/orgs/"+b.org+"/tasks", map[string]any{"name": "Bar", "section": tech.ID}),
+		"rename it from B":           e.do("PATCH", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID), map[string]string{"name": "X"}),
+		"move it from B":             e.do("PUT", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID)+"/position", map[string]int{"position": 0}),
+	} {
+		if r.code != 404 {
+			t.Errorf("%s: %d", what, r.code)
+		}
+	}
+	e.mustDo(204, "DELETE", o+"/task-sections/"+itoa(tech.ID), nil)
+	e.mustDo(200, "GET", o+"/tasks", nil).json(&tasks)
+	for _, x := range tasks {
+		if x.Section != 0 {
+			t.Errorf("after the delete no task is in a section: %+v", tasks)
+		}
+	}
+}

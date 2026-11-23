@@ -526,13 +526,13 @@ func TestMovingATask(t *testing.T) {
 	if got := order(org); got != "Sound Camera Video" {
 		t.Fatalf("new tasks go to the bottom, not by name: %s", got)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, 0); err != nil || order(org) != "Video Sound Camera" {
+	if err := s.MoveTask(ctx, org, video.ID, nil, 0); err != nil || order(org) != "Video Sound Camera" {
 		t.Errorf("to the top: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, 99); err != nil || order(org) != "Sound Camera Video" {
+	if err := s.MoveTask(ctx, org, video.ID, nil, 99); err != nil || order(org) != "Sound Camera Video" {
 		t.Errorf("past the end is the bottom: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, w.sound.ID, 1); err != nil || order(org) != "Camera Sound Video" {
+	if err := s.MoveTask(ctx, org, w.sound.ID, nil, 1); err != nil || order(org) != "Camera Sound Video" {
 		t.Errorf("one down: %s %v", order(org), err)
 	}
 	if err := s.DeleteTask(ctx, org, w.sound.ID); err != nil || order(org) != "Camera Video" {
@@ -545,19 +545,19 @@ func TestMovingATask(t *testing.T) {
 		t.Errorf("deleted tasks leave no gap, so a new one is last: %s %v", order(org), err)
 	}
 	lights := mustTask(t, s, org, "Lights")
-	if err := s.MoveTask(ctx, org, lights, 0); err != nil {
+	if err := s.MoveTask(ctx, org, lights, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateTask(ctx, org, "Sound"); err != nil || order(org) != "Lights Video Sound" {
 		t.Errorf("a new task goes below a moved one: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, -1); !codeIs(err, "position_invalid") {
+	if err := s.MoveTask(ctx, org, video.ID, nil, -1); !codeIs(err, "position_invalid") {
 		t.Errorf("a negative position: %v", err)
 	}
-	if err := s.MoveTask(ctx, org, w.foreignTask.ID, 0); !errors.Is(err, ErrNotFound) {
+	if err := s.MoveTask(ctx, org, w.foreignTask.ID, nil, 0); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a task of another organisation: %v", err)
 	}
-	if err := s.MoveTask(ctx, w.otherOrg.Slug, w.foreignTask.ID, 0); err != nil || order(org) != "Lights Video Sound" || order(w.otherOrg.Slug) != "Doors" {
+	if err := s.MoveTask(ctx, w.otherOrg.Slug, w.foreignTask.ID, nil, 0); err != nil || order(org) != "Lights Video Sound" || order(w.otherOrg.Slug) != "Doors" {
 		t.Errorf("each organisation has its own order: %s / %s %v", order(org), order(w.otherOrg.Slug), err)
 	}
 }

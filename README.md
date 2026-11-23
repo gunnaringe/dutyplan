@@ -89,6 +89,8 @@ drop a person on one to put them last in it, or pick it in the person's dialog. 
 (empty deletes it, after asking). They only place people in the table, the same in every plan, and the planner never sees
 them. Deleting a section puts its people back at the top. To add a person, a row, a task or a section, click the small **+**
 at the end of the last name of the list (− closes it again).
+Tasks have sections too (for example *Tech*), in the same way: drag a task onto a heading or pick it in the task's dialog.
+The draft shows the same headings. Like people's sections, they only place tasks in the table.
 *Show tasks*, in the Availability heading, puts the tasks each person is willing to take under their name: green for good,
 yellow for if needed. It is off at first and kept in that browser.
 

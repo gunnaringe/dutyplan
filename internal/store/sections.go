@@ -8,9 +8,18 @@ import (
 
 // Sections place people in the table: a heading in Availability with its people below it, in an order of their own. They
 // belong to the organisation (the same in every plan) and are only placement: the planner never sees them. People without
-// a section come first.
+// a section come first. Tasks have sections of their own the same way (task_section, since 2026-11-23): headings in Tasks
+// and in the draft. The functions below take which (People or Tasks); the exported ones without it are for people.
 
 const maxSections = 30
+
+// SectionsOf says whose sections: the people's or the tasks'.
+type SectionsOf struct{ table, items, what string }
+
+var (
+	People = SectionsOf{"person_section", "person", "section"}
+	Tasks  = SectionsOf{"task_section", "task", "task section"}
+)
 
 type Section struct {
 	ID   int64  `json:"id"`
@@ -18,12 +27,16 @@ type Section struct {
 }
 
 func (s *Store) ListSections(ctx context.Context, orgSlug string) ([]Section, error) {
+	return s.ListSectionsOf(ctx, People, orgSlug)
+}
+
+func (s *Store) ListSectionsOf(ctx context.Context, of SectionsOf, orgSlug string) ([]Section, error) {
 	oid, err := orgID(ctx, s.db, orgSlug)
 	if err != nil {
 		return nil, err
 	}
 	out := []Section{}
-	err = scanAll(ctx, s.db, `SELECT id, name FROM person_section WHERE org_id = ? ORDER BY position, id`, []any{oid}, func(r *sql.Rows) error {
+	err = scanAll(ctx, s.db, `SELECT id, name FROM `+of.table+` WHERE org_id = ? ORDER BY position, id`, []any{oid}, func(r *sql.Rows) error {
 		var x Section
 		err := r.Scan(&x.ID, &x.Name)
 		out = append(out, x)
@@ -34,6 +47,10 @@ func (s *Store) ListSections(ctx context.Context, orgSlug string) ([]Section, er
 
 // CreateSection adds a section at the bottom.
 func (s *Store) CreateSection(ctx context.Context, orgSlug, name string) (Section, error) {
+	return s.CreateSectionOf(ctx, People, orgSlug, name)
+}
+
+func (s *Store) CreateSectionOf(ctx context.Context, of SectionsOf, orgSlug, name string) (Section, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Section{}, err
@@ -45,15 +62,15 @@ func (s *Store) CreateSection(ctx context.Context, orgSlug, name string) (Sectio
 			return err
 		}
 		var n int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person_section WHERE org_id = ?`, oid).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+of.table+` WHERE org_id = ?`, oid).Scan(&n); err != nil {
 			return err
 		}
 		if n >= maxSections {
 			return Invalid("too_many_sections", map[string]any{"max": maxSections}, "at most %d sections", maxSections)
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO person_section (org_id, name, position, created_at) VALUES (?, ?, ?, ?)`, oid, name, n, s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO `+of.table+` (org_id, name, position, created_at) VALUES (?, ?, ?, ?)`, oid, name, n, s.stamp())
 		if isUnique(err) {
-			return exists("section", name)
+			return exists(of.what, name)
 		}
 		if err != nil {
 			return err
@@ -64,9 +81,9 @@ func (s *Store) CreateSection(ctx context.Context, orgSlug, name string) (Sectio
 	return x, err
 }
 
-func sectionName(ctx context.Context, q dbq, oid, id int64) (string, error) {
+func sectionName(ctx context.Context, q dbq, of SectionsOf, oid, id int64) (string, error) {
 	var name string
-	err := q.QueryRowContext(ctx, `SELECT name FROM person_section WHERE id = ? AND org_id = ?`, id, oid).Scan(&name)
+	err := q.QueryRowContext(ctx, `SELECT name FROM `+of.table+` WHERE id = ? AND org_id = ?`, id, oid).Scan(&name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", ErrNotFound
 	}
@@ -74,6 +91,10 @@ func sectionName(ctx context.Context, q dbq, oid, id int64) (string, error) {
 }
 
 func (s *Store) RenameSection(ctx context.Context, orgSlug string, id int64, name string) (Section, error) {
+	return s.RenameSectionOf(ctx, People, orgSlug, id, name)
+}
+
+func (s *Store) RenameSectionOf(ctx context.Context, of SectionsOf, orgSlug string, id int64, name string) (Section, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Section{}, err
@@ -83,15 +104,15 @@ func (s *Store) RenameSection(ctx context.Context, orgSlug string, id int64, nam
 		if err != nil {
 			return err
 		}
-		old, err := sectionName(ctx, tx, oid, id)
+		old, err := sectionName(ctx, tx, of, oid, id)
 		if err != nil {
 			return err
 		}
 		if old == name {
 			return errNothingToChange()
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE person_section SET name = ? WHERE id = ? AND org_id = ?`, name, id, oid); isUnique(err) {
-			return exists("section", name)
+		if _, err := tx.ExecContext(ctx, `UPDATE `+of.table+` SET name = ? WHERE id = ? AND org_id = ?`, name, id, oid); isUnique(err) {
+			return exists(of.what, name)
 		} else {
 			return err
 		}
@@ -101,6 +122,10 @@ func (s *Store) RenameSection(ctx context.Context, orgSlug string, id int64, nam
 
 // MoveSection puts a section at a position among the sections (0 = the first; past the end = the last).
 func (s *Store) MoveSection(ctx context.Context, orgSlug string, id int64, position int) error {
+	return s.MoveSectionOf(ctx, People, orgSlug, id, position)
+}
+
+func (s *Store) MoveSectionOf(ctx context.Context, of SectionsOf, orgSlug string, id int64, position int) error {
 	if position < 0 {
 		return Invalid("position_invalid", nil, "the position must be 0 or more")
 	}
@@ -109,34 +134,39 @@ func (s *Store) MoveSection(ctx context.Context, orgSlug string, id int64, posit
 		if err != nil {
 			return err
 		}
-		if _, err := sectionName(ctx, tx, oid, id); err != nil {
+		if _, err := sectionName(ctx, tx, of, oid, id); err != nil {
 			return err
 		}
-		return renumber(ctx, tx, "person_section", oid, nil, id, position)
+		return renumber(ctx, tx, of.table, oid, nil, id, position)
 	})
 }
 
 // DeleteSection removes a section; its people go to the end of those without a section, in their order.
 func (s *Store) DeleteSection(ctx context.Context, orgSlug string, id int64) error {
+	return s.DeleteSectionOf(ctx, People, orgSlug, id)
+}
+
+// DeleteSectionOf removes a section; its people (or tasks) go to the end of those without a section, in their order.
+func (s *Store) DeleteSectionOf(ctx context.Context, of SectionsOf, orgSlug string, id int64) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
 			return err
 		}
-		if _, err := sectionName(ctx, tx, oid, id); err != nil {
+		if _, err := sectionName(ctx, tx, of, oid, id); err != nil {
 			return err
 		}
 		var n int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE org_id = ? AND section_id IS NULL`, oid).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+of.items+` WHERE org_id = ? AND section_id IS NULL`, oid).Scan(&n); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `UPDATE person SET section_id = NULL, position = position + ? WHERE org_id = ? AND section_id = ?`, n, oid, id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE `+of.items+` SET section_id = NULL, position = position + ? WHERE org_id = ? AND section_id = ?`, n, oid, id); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM person_section WHERE id = ? AND org_id = ?`, id, oid); err != nil {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+of.table+` WHERE id = ? AND org_id = ?`, id, oid); err != nil {
 			return err
 		}
-		return renumber(ctx, tx, "person_section", oid, nil, 0, 0)
+		return renumber(ctx, tx, of.table, oid, nil, 0, 0)
 	})
 }
 
@@ -155,7 +185,7 @@ func (s *Store) MovePerson(ctx context.Context, orgSlug string, id, section int6
 			return err
 		}
 		if section != 0 {
-			if _, err := sectionName(ctx, tx, oid, section); err != nil {
+			if _, err := sectionName(ctx, tx, People, oid, section); err != nil {
 				return err
 			}
 		}
@@ -185,9 +215,9 @@ func sectionScope(section int64) []any {
 func renumber(ctx context.Context, tx *sql.Tx, table string, oid int64, section []any, moved int64, position int) error {
 	where, args := `org_id = ?`, []any{oid}
 	switch table {
-	case "person":
+	case "person", "task":
 		where, args = where+` AND section_id IS ?`, append(args, section[0])
-	case "person_section":
+	case "person_section", "task_section":
 	default:
 		panic("renumber: unknown table " + table)
 	}
@@ -210,4 +240,44 @@ func renumber(ctx context.Context, tx *sql.Tx, table string, oid int64, section 
 		}
 	}
 	return nil
+}
+
+// MoveTask puts a task in a section (nil: the one it is in; 0: none) at a position among its tasks (0 = the top; past the
+// end = the bottom). The order is the organisation's, the same in every plan; the planner does not see it.
+func (s *Store) MoveTask(ctx context.Context, orgSlug string, id int64, section *int64, position int) error {
+	if position < 0 {
+		return Invalid("position_invalid", nil, "the position must be 0 or more")
+	}
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		var was sql.NullInt64
+		err = tx.QueryRowContext(ctx, `SELECT section_id FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&was)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		to := was.Int64
+		if section != nil {
+			to = *section
+		}
+		if to != 0 {
+			if _, err := sectionName(ctx, tx, Tasks, oid, to); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE task SET section_id = ? WHERE id = ? AND org_id = ?`, sectionScope(to)[0], id, oid); err != nil {
+			return err
+		}
+		if err := renumber(ctx, tx, "task", oid, sectionScope(to), id, position); err != nil {
+			return err
+		}
+		if was.Int64 != to { // close the gap where the task was
+			return renumber(ctx, tx, "task", oid, sectionScope(was.Int64), 0, 0)
+		}
+		return nil
+	})
 }

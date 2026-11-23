@@ -74,8 +74,8 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
   (`join` is for admins and has no plan; `single_use: true`, for an invitation only, ends it when someone joins with it). `DELETE /api/orgs/{org}/links/{id}`.
 
 ### Tasks, people, sections (the organisation's own)
-- `GET /api/orgs/{org}/tasks`, `POST /api/orgs/{org}/tasks` `{"name"}`, `PATCH /api/orgs/{org}/tasks/{id}` `{"name", "planned"}`,
-  `DELETE /api/orgs/{org}/tasks/{id}`, `PUT /api/orgs/{org}/tasks/{id}/position` `{"position"}`.
+- `GET /api/orgs/{org}/tasks`, `POST /api/orgs/{org}/tasks` `{"name", "section"}`, `PATCH /api/orgs/{org}/tasks/{id}` `{"name", "planned"}`,
+  `DELETE /api/orgs/{org}/tasks/{id}`, `PUT /api/orgs/{org}/tasks/{id}/position` `{"position", "section"}` (section left out: the one it is in).
 - `GET /api/orgs/{org}/combinations` — which tasks one person can do on the same event.
   `PUT /api/orgs/{org}/combinations` `{"a", "b", "level": "cannot"|"practical"|"standard"}`;
   `PUT /api/orgs/{org}/tasks/{id}/combinations` `{"level"}` — one task against all others.
@@ -84,6 +84,9 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `PUT /api/orgs/{org}/people/{id}/tasks/{task}` `{"level": "good"|"poor"}`, `DELETE /api/orgs/{org}/people/{id}/tasks/{task}`.
 - `GET /api/orgs/{org}/sections`, `POST /api/orgs/{org}/sections` `{"name"}`, `PATCH /api/orgs/{org}/sections/{id}` `{"name"}`,
   `PUT /api/orgs/{org}/sections/{id}/position` `{"position"}`, `DELETE /api/orgs/{org}/sections/{id}` — headings for people; placement only.
+- `GET /api/orgs/{org}/task-sections`, `POST /api/orgs/{org}/task-sections` `{"name"}`, `PATCH /api/orgs/{org}/task-sections/{id}` `{"name"}`,
+  `PUT /api/orgs/{org}/task-sections/{id}/position` `{"position"}`, `DELETE /api/orgs/{org}/task-sections/{id}` — headings for tasks; placement only
+  (a task's `section`; tasks without one come first).
 
 ### Plans and events
 - `GET /api/orgs/{org}/plans`, `POST /api/orgs/{org}/plans` `{"name"}`, `GET /api/orgs/{org}/plans/{plan}`,

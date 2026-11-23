@@ -178,7 +178,7 @@ func TestTheTableOrderIsNotPartOfTheInput(t *testing.T) {
 			t.Errorf("%s changed the planner's input", what)
 		}
 	}
-	if err := w.st.MoveTask(ctx, w.org.Slug, w.camera.ID, 0); err != nil {
+	if err := w.st.MoveTask(ctx, w.org.Slug, w.camera.ID, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	same("moving a task in the table")

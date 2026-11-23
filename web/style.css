@@ -159,8 +159,8 @@ body.row-dragging, body.row-dragging * { cursor: grabbing !important; user-selec
 .dp-table button.addplus:hover, .dp-table button.addplus:focus-visible, .dp-table button.addplus[aria-expanded=true] { opacity: 1; color: var(--accent); border-color: var(--accent); }
 @media (hover: none) { .dp-table button.addplus { opacity: 1; width: 1.5rem; height: 1.5rem; } }
 .dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
-.person-sect .nm { font-weight: 700; flex: 1; }
-.dp-table tr.person-sect th, .dp-table tr.person-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
+.person-sect .nm, .task-sect .nm { font-weight: 700; flex: 1; }
+.dp-table tr.person-sect th, .dp-table tr.person-sect td, .dp-table tr.task-sect th, .dp-table tr.task-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
 .dp-table tr.sect th, .dp-table tr.sect td { background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); font-size: .75rem; padding-top: .1rem; padding-bottom: .1rem; vertical-align: middle; }
 .dp-table tr.sect th { text-transform: uppercase; letter-spacing: .04em; }
 .dp-table td input, .dp-table td select { width: 100%; min-width: 0; padding: .1rem .3rem; }
@@ -179,6 +179,7 @@ button.cellbtn.inline { display: inline; }
 .dp-table tr.sect.draft td { text-transform: none; letter-spacing: 0; font-size: .85rem; }
 .dp-table tr.draft-row th, .dp-table tr.draft-row td { background: var(--draft-row); }
 .dp-table tr.draft-row th { color: var(--muted); }
+.dp-table tr.draft-sect th, .dp-table tr.draft-sect td { background: var(--draft-row); font-size: .75rem; font-weight: 700; padding-top: .1rem; padding-bottom: .1rem; border-top: 1px solid var(--draft-line); }
 .draft-bar { position: sticky; left: 0; width: max-content; max-width: calc(100vw - 3rem); }
 .draft-bar .bar-title { display: inline-flex; align-items: center; gap: .25rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .75rem; }
 .draft-bar .row-inline { margin: 0; }

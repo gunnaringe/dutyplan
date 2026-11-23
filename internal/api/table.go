@@ -229,7 +229,8 @@ func (s *server) moveTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		Position *int `json:"position"`
+		Position *int   `json:"position"`
+		Section  *int64 `json:"section"` // a task section (0: none); left out: the one it is in
 	}
 	if !decode(w, r, &b) {
 		return
@@ -238,5 +239,5 @@ func (s *server) moveTask(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, s.log, store.Invalid("position_invalid", nil, "send the new position in position"))
 		return
 	}
-	noContent(w, s.st.MoveTask(r.Context(), r.PathValue("org"), id, *b.Position), s)
+	noContent(w, s.st.MoveTask(r.Context(), r.PathValue("org"), id, b.Section, *b.Position), s)
 }
