@@ -1057,47 +1057,114 @@ async function pagePlan(r, org, people) {
     const showTasks = tasks.filter((tk) => events.some((ev) => placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]));
     const showFields = fields.fields.filter((f) => events.some((ev) => fieldValue[ev.id + '/' + f.id]));
     const has = (ev, tk) => !!(placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]);
+    const value = (ev, f) => fieldValue[ev.id + '/' + f.id] || '';
     const names = (ev, tk) => {
       const s = slotsAt(ev, tk);
       return h('span', { class: 'names' }, s.items.map((x) => h('span', { class: 'nm', 'data-person': x.kind === 'person' ? String(x.id) : null }, itemText(x))),
         s.open ? h('span', { class: 'open' }, tn('show.open', s.open)) : '');
     };
-    const tbl = h('div', { class: 'show-scroll' }, h('table', { class: 'show-table' },
+    const hasTask = (ev, id) => showTasks.some((tk) => has(ev, tk) && slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === id));
+    const when = (ev) => [h('span', { class: 'd' }, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : ''];
+    // Remembered per plan in this browser: the name found, whether the dates go across (2026-11-23, the user: "Add option to show
+    // the table with dates on the x axis"), and whether only the dates the name has a task on are shown ("only include dates where
+    // the selected person has a task").
+    const findKey = 'find:' + key, acrossKey = 'across:' + key, onlyKey = 'only:' + key;
+    let across = store.get(acrossKey) === '1';
+    let only = store.get(onlyKey) === '1';
+    let found = 0;
+    // events down, tasks across; or the dates across, the details and the tasks down. Every cell of an event says which (data-ev).
+    const down = (evs) => h('table', { class: 'show-table' },
       h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, t('show.date')), showFields.map((f) => h('th', { scope: 'col' }, f.name)),
         showTasks.map((tk) => h('th', { scope: 'col' }, tk.name)))),
-      h('tbody', {}, events.map((ev) => h('tr', { class: 'show-ev' },
-        h('th', { scope: 'row' }, h('span', { class: 'd' }, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : ''),
-        showFields.map((f) => h('td', { class: 'detail' }, fieldValue[ev.id + '/' + f.id] || '')),
-        showTasks.map((tk) => h('td', {}, has(ev, tk) ? names(ev, tk) : '')))))));
-    const cards = h('div', { class: 'show-cards' }, events.map((ev) => h('section', { class: 'show-card show-ev' },
+      h('tbody', {}, evs.map((ev) => h('tr', { 'data-ev': String(ev.id) },
+        h('th', { scope: 'row' }, when(ev)),
+        showFields.map((f) => h('td', { class: 'detail' }, value(ev, f))),
+        showTasks.map((tk) => h('td', {}, has(ev, tk) ? names(ev, tk) : ''))))));
+    const acrossTable = (evs) => h('table', { class: 'show-table across' },
+      h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, ''), evs.map((ev) => h('th', { scope: 'col', 'data-ev': String(ev.id) }, when(ev))))),
+      h('tbody', {},
+        showFields.map((f) => h('tr', {}, h('th', { scope: 'row' }, f.name), evs.map((ev) => h('td', { class: 'detail', 'data-ev': String(ev.id) }, value(ev, f))))),
+        showTasks.map((tk) => h('tr', {}, h('th', { scope: 'row' }, tk.name), evs.map((ev) => h('td', { 'data-ev': String(ev.id) }, has(ev, tk) ? names(ev, tk) : ''))))));
+    const cards = (evs) => h('div', { class: 'show-cards' }, evs.map((ev) => h('section', { class: 'show-card', 'data-ev': String(ev.id) },
       h('h2', {}, fmtDate(ev.date), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : ''),
-      showFields.filter((f) => fieldValue[ev.id + '/' + f.id]).map((f) => h('p', { class: 'detail' }, h('span', { class: 'lbl' }, f.name), ' ', fieldValue[ev.id + '/' + f.id])),
+      showFields.filter((f) => value(ev, f)).map((f) => h('p', { class: 'detail' }, h('span', { class: 'lbl' }, f.name), ' ', value(ev, f))),
       h('dl', {}, showTasks.filter((tk) => has(ev, tk)).map((tk) => h('div', {}, h('dt', {}, tk.name), h('dd', {}, names(ev, tk))))))));
-    // «Find a name»: their names stand out, the events they are not in fade; remembered per plan in this browser
-    const findKey = 'find:' + key;
-    const found = h('span', { class: 'small found', 'aria-live': 'polite' });
-    const find = (id) => {
-      store.set(findKey, id ? String(id) : '');
-      let n = 0;
-      root.querySelectorAll('.show-ev').forEach((ev) => {
-        let hit = false;
-        ev.querySelectorAll('.nm[data-person]').forEach((x) => { const on = !!id && x.dataset.person === String(id); x.classList.toggle('hit', on); hit ||= on; });
-        ev.classList.toggle('miss', !!id && !hit);
-        if (hit && ev.closest('.show-table')) n++;
-      });
-      found.textContent = id ? tn('show.found', n) : '';
+    const body = h('div', { class: 'show-body' });
+    const count = h('span', { class: 'small found', 'aria-live': 'polite' });
+    const onlyBox = h('input', { type: 'checkbox', checked: only, onchange: (e) => { only = e.target.checked; store.set(onlyKey, only ? '1' : ''); draw(); } });
+    const onlyLabel = h('span', {});
+    const onlyField = h('label', { class: 'check only' }, onlyBox, onlyLabel);
+    const acrossBtn = h('button', { type: 'button', class: 'ghost across-btn', 'aria-pressed': String(across), title: t('show.across_hint'),
+      onclick: () => { across = !across; store.set(acrossKey, across ? '1' : ''); acrossBtn.setAttribute('aria-pressed', String(across)); draw(); } },
+    icon('check'), ' ' + t('show.across'));
+    // the name found stands out, the events without it fade (or are left out, with «only»)
+    function draw() {
+      const evs = found && only ? events.filter((ev) => hasTask(ev, found)) : events;
+      body.replaceChildren(h('div', { class: 'show-scroll' }, (across ? acrossTable : down)(evs)), cards(evs));
+      body.querySelectorAll('.nm[data-person]').forEach((x) => x.classList.toggle('hit', !!found && x.dataset.person === String(found)));
+      const hits = new Set(events.filter((ev) => found && hasTask(ev, found)).map((ev) => String(ev.id)));
+      body.querySelectorAll('[data-ev]').forEach((x) => x.classList.toggle('miss', !!found && !hits.has(x.dataset.ev)));
+      count.textContent = found ? tn('show.found', hits.size) : '';
+      const p = people.find((x) => x.id === found);
+      onlyField.hidden = !p;
+      onlyLabel.textContent = p ? ' ' + t('show.only', { name: p.name }) : '';
+    }
+    // «Find a name»: a search field with the names that match under it (arrows and Enter, or a click); empty = nobody
+    const sorted = [...people].sort((a, b) => a.name.localeCompare(b.name, locale()));
+    const input = h('input', { type: 'search', class: 'find', placeholder: t('show.find'), 'aria-label': t('show.find'), autocomplete: 'off',
+      role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': 'false', 'aria-controls': 'find-list' });
+    const list = h('ul', { class: 'find-list', id: 'find-list', role: 'listbox', hidden: true });
+    let active = -1;
+    const options = () => [...list.querySelectorAll('li[role=option]')];
+    const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
+    const pick = (p) => {
+      found = p ? p.id : 0;
+      input.value = p ? p.name : '';
+      store.set(findKey, found ? String(found) : '');
+      close();
+      draw();
     };
-    const sel = h('select', { class: 'find', 'aria-label': t('show.find'), onchange: (e) => find(Number(e.target.value)) },
-      h('option', { value: '' }, t('show.find')), [...people].sort((a, b) => a.name.localeCompare(b.name, locale())).map((p) => h('option', { value: String(p.id) }, p.name)));
+    const activate = (i) => {
+      active = i;
+      options().forEach((o, j) => o.setAttribute('aria-selected', String(j === i)));
+      if (options()[i]) { options()[i].scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', options()[i].id); }
+    };
+    const open = () => {
+      const q = input.value.trim().toLowerCase();
+      const hits = sorted.filter((p) => p.name.toLowerCase().includes(q))
+        .sort((a, b) => Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)));
+      list.replaceChildren(...(hits.length ? hits.map((p, i) => h('li', { role: 'option', id: 'find-' + i, 'aria-selected': 'false',
+        onmousedown: (e) => { e.preventDefault(); pick(p); } }, p.name)) : [h('li', { class: 'none' }, t('show.find_none'))]));
+      list.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      if (q && hits.length) activate(0); else active = -1;
+    };
+    input.addEventListener('focus', () => { input.select(); open(); });
+    input.addEventListener('input', () => { if (!input.value.trim()) { pick(null); input.focus(); } open(); });
+    input.addEventListener('blur', () => {
+      close();
+      const p = people.find((x) => x.id === found);
+      input.value = p ? p.name : '';  // what is typed but not picked is let go
+    });
+    input.addEventListener('keydown', (e) => {
+      const n = options().length;
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) open(); activate(Math.min(n - 1, active + 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activate(Math.max(0, active - 1)); }
+      else if (e.key === 'Enter') { e.preventDefault(); const o = options()[active]; if (o) pick(sorted.find((p) => p.name === o.textContent)); }
+      else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); close(); } }
+    });
     const source = done ? t('show.source', { id: view.run.id, time: fmtTime(view.run.finished_at || view.run.started_at) }) + (view.run.pinned ? ' · ' + t('run.current') : '')
       : t('show.no_draft');
     const root = h('div', { class: 'plan-page show' },
       h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [t('show.info')]), modeSwitch, shareBtn()),
-      events.length ? h('div', { class: 'show-tools' }, sel, found, h('span', { class: 'small muted source' }, source),
+      events.length ? h('div', { class: 'show-tools' }, h('div', { class: 'findbox' }, input, list), count, onlyField, acrossBtn,
+        h('span', { class: 'small muted source' }, source),
         h('button', { type: 'button', class: 'ghost print', onclick: () => window.print() }, t('show.print'))) : h('p', { class: 'muted small' }, t('show.no_events')),
-      events.length ? [tbl, cards] : '');
+      events.length ? body : '');
     const was = Number(store.get(findKey) || (org.level === 'answer' ? store.get('me:' + key) : ''));  // an answer link: the name chosen
-    if (people.some((p) => p.id === was)) { sel.value = String(was); find(was); }
+    const p = people.find((x) => x.id === was);
+    if (p) { found = p.id; input.value = p.name; }
+    draw();
     return root;
   }
 

@@ -135,7 +135,9 @@ starts the Python planner, turns the answer into a view with explanations), `int
   - **Edit | View** (2026-11-23, the user: "Kanskje også en visning som er en penere visning uten redigering eller tilgjengelighet? … Ikke egne lenker for nå,
     bare to moduser for samme data."): a switch in the title bar (`modeSwitch`; `showPage()` in `pagePlan`), kept per plan in localStorage (`mode:`), no
     route of its own. View = events down, tasks across, what each place holds now (`slotsAt`, from the pinned run, else the newest `done` one: never the draft
-    picked in Edit), the details; a card per event on a phone, print CSS for the table, «Find a name» (`find:` in localStorage). A view-only link starts in View
+    picked in Edit), the details; a card per event on a phone, print CSS for the table, «Find a name» (`find:` in localStorage; a search field with
+    a list under it, 2026-11-23: "let the name selector be a nice search field"), «Dates across» (`across:`, "show the table with dates on the x axis") and
+    «Only the dates <name> has a task» (`only:`, "only include dates where the selected person has a task"). Every cell of an event has `data-ev` (fading). A view-only link starts in View
     («Table» is the other mode). Covered by ui-check only (no Go in it).
   - **On a phone** the same table as on a wide screen, narrower (2026-11-22, the user: "La vertikal visning på mobil vises som vanlig. Den
     løsningen som er i dag er litt forvirrende." — the turned availability of 2026-11-20 is gone; do not bring it back). Names stay put, the days

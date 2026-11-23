@@ -222,7 +222,9 @@ const CHOICES = {
     step = '16-view';
     await page.click('.title-bar .mode button[data-mode=show]');
     await page.waitForSelector('.show-tools');
-    await page.selectOption('select.find', { label: 'Kari Test' });
+    await page.fill('input.find', 'Kari');
+    await page.keyboard.press('Enter');
+    await page.locator('input.find').blur();
     await range(page, '16-view', page.locator('main h1'), page.locator('.show-table tbody tr').last());
     await page.click('.title-bar .mode button[data-mode=edit]');
     await page.waitForSelector('.dp-table');
@@ -243,7 +245,9 @@ const CHOICES = {
     step = '17-view-phone';
     await phone.click('.title-bar .mode button[data-mode=show]');
     await phone.waitForSelector('.show-cards');
-    await phone.selectOption('select.find', { label: 'Kari Test' });
+    await phone.fill('input.find', 'Kari');
+    await phone.keyboard.press('Enter');
+    await phone.locator('input.find').blur();
     await phone.screenshot({ path: path.join(OUT, '17-view-phone.png') });
 
     // «My answers», what an answer link opens (this server has no login: the organisation is made to say level answer)
