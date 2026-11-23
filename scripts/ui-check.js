@@ -636,8 +636,10 @@ const { spawn } = require('child_process');
       const a = await page.evaluate(() => {
         const hs = (sel) => [...document.querySelectorAll(sel)].map((e) => Math.round(e.getBoundingClientRect().height));
         return { title: hs('.title-bar > button:not(.info), .title-bar .sideways button'),
-          table: hs('.dp-table form.addrow button, .dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table button.edit') };
+          table: hs('.dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table thead button.edit'),
+          slim: hs('.dp-table tr.adds form.addrow button, .dp-table tr.field-row button.edit') };  // the add lines and the details rows are slimmer
       });
+      ok(a.slim.length >= 3 && a.slim.every((x) => x === a.slim[0]) && a.slim[0] < a.table[0], 'the add lines and details rows have one smaller height: ' + a.slim);
       ok(a.title.length >= 4 && a.title.every((x) => x === a.title[0]), 'the title bar’s buttons are one height: ' + a.title);
       ok(a.table.length >= 4 && a.table.every((x) => x === a.table[0]), 'the buttons in the table are one height: ' + a.table);
       const [pad, ...names] = await clearOfNames();
@@ -753,7 +755,19 @@ const { spawn } = require('child_process');
       await page.click('button.who');
       await dialog.locator('.who-head button', { hasText: 'All' }).click();
       ok(await rowOf('Ola Sample').isVisible(), 'All shows everyone again');
+      // by task: only those who take Video (Kari Test if needed, Jon Demo good; Ola Sample only takes Sound)
+      await dialog.locator('label.who-task:has-text("Video") input').check();
+      ok(await rowOf('Ola Sample').isHidden() && await rowOf('Kari Test').isVisible() && await rowOf('Jon Demo').isVisible(), 'a task ticked shows only those who take it');
       await closeDialog();
+      ok((await page.innerText('button.who')).startsWith('Video · '), 'the button says which task: ' + (await page.innerText('button.who')));
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok(await rowOf('Ola Sample').isHidden() && await rowOf('Kari Test').isVisible(), 'and the task stays ticked after a reload');
+      await page.click('button.who');
+      await dialog.locator('label.who-task:has-text("Video") input').uncheck();
+      ok(await rowOf('Ola Sample').isVisible(), 'no task ticked: everyone again');
+      await closeDialog();
+      ok((await page.innerText('button.who')) === 'Everyone', 'the button says everyone');
     }
 
     // --- «Show tasks»: the tasks a person is willing to take, as tags under the name; off by default, kept after a reload ---

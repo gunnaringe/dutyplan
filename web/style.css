@@ -585,3 +585,15 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
   .me-btns { display: grid; grid-template-columns: repeat(3, 1fr); }
   .me-btns .me-ans { justify-content: center; }
 }
+/* Space (2026-11-23, the user: "Use less padding around the about the events field. We want to be more considerate about ensuring we use our
+   space efficiently"): the details rows and the add lines are slim, a field or button a little lower than elsewhere in the table */
+.dp-table tr.field-row th, .dp-table tr.field-row td, .dp-table tr.task-row th, .dp-table tr.task-row td, .dp-table tr.adds th, .dp-table tr.adds td { padding-top: .1rem; padding-bottom: .1rem; }
+.dp-table tr.field-row td input, .dp-table tr.task-row td input { height: 1.5rem; padding-top: 0; padding-bottom: 0; }
+.dp-table tr.field-row button.edit { width: 1.4rem; height: 1.4rem; }
+.dp-table tr.adds form.addrow { padding: 0 .3rem; }
+.dp-table tr.adds form.addrow input { padding-top: 0; padding-bottom: 0; }
+.dp-table tr.adds form.addrow button { height: 1.4rem; }
+/* the filter: tasks to tick, then the people */
+.who-tasks { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .4rem; }
+.who-tasks label.chip:has(input:checked) { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+dialog .who-tasks + h3, dialog h3 + p.muted { margin-top: .2rem; }

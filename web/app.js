@@ -1185,7 +1185,7 @@ async function pagePlan(r, org, people) {
     .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
   const applyFolds = (table) => {
     table.querySelectorAll('tr[data-fold]').forEach((tr) => {
-      tr.hidden = tr.dataset.filtered === '1' || hidden.has(Number(tr.dataset.person)) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
+      tr.hidden = tr.dataset.filtered === '1' || (tr.dataset.person && !shown(Number(tr.dataset.person))) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
     });
     table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
   };
@@ -1201,13 +1201,27 @@ async function pagePlan(r, org, people) {
   const hideKey = 'hide:' + r.org + '/' + r.plan;
   const hidden = new Set((() => { try { return JSON.parse(store.get(hideKey) || '[]'); } catch { return []; } })()
     .filter((id) => people.some((p) => p.id === id)));
-  const whoLabel = () => (hidden.size ? t('who.shown', { shown: people.length - hidden.size, all: people.length }) : t('who.all'));
-  const whoBtn = h('button', { type: 'button', class: 'who' + (hidden.size ? ' on' : ''), title: t('who.label'), onclick: () => whoDialog() },
-    icon('users'), h('span', { class: 'lbl' }, whoLabel()));
+  // … and by task (2026-11-23, the user: "be a filter that also can filter on tasks"): with tasks ticked, only the people who take one
+  // of them (good or if needed) are shown. Kept per plan in this browser, like the ticks on people.
+  const taskKey = 'whotasks:' + r.org + '/' + r.plan;
+  const byTask = new Set((() => { try { return JSON.parse(store.get(taskKey) || '[]'); } catch { return []; } })()
+    .filter((id) => tasks.some((tk) => tk.id === id && tk.planned)));
+  const takes = (p) => (chosen[p.id] || []).some((x) => byTask.has(x.task_id) && (x.level === 'good' || x.level === 'poor'));
+  const shown = (id) => { const p = people.find((x) => x.id === id); return !p || (!hidden.has(id) && (!byTask.size || takes(p))); };
+  const filtering = () => hidden.size > 0 || byTask.size > 0;
+  const whoLabel = () => {
+    const n = people.filter((p) => shown(p.id)).length;
+    const of = t('who.shown', { shown: n, all: people.length });
+    if (!byTask.size) return hidden.size ? of : t('who.all');
+    return tasks.filter((tk) => byTask.has(tk.id)).map((tk) => tk.name).join(', ') + ' · ' + of;
+  };
+  const whoBtn = h('button', { type: 'button', class: 'who' + (filtering() ? ' on' : ''), title: t('who.label'), onclick: () => whoDialog() },
+    icon('filter'), h('span', { class: 'lbl' }, whoLabel()));
   const whoSave = () => {
     store.set(hideKey, JSON.stringify([...hidden]));
+    store.set(taskKey, JSON.stringify([...byTask]));
     whoBtn.querySelector('.lbl').textContent = whoLabel();
-    whoBtn.classList.toggle('on', hidden.size > 0);
+    whoBtn.classList.toggle('on', filtering());
     applyFolds(table.querySelector('table'));
   };
   const whoDialog = () => {
@@ -1225,7 +1239,13 @@ async function pagePlan(r, org, people) {
       people.forEach((p, i) => { if (!items[i].hidden) { if (show) hidden.delete(p.id); else hidden.add(p.id); boxes[i].checked = show; } });
       whoSave();
     };
+    const planned = tasks.filter((tk) => tk.planned);
+    const taskChips = planned.map((tk) => h('label', { class: 'chip who-task' }, h('input', { type: 'checkbox', checked: byTask.has(tk.id), onchange: (e) => {
+      if (e.target.checked) byTask.add(tk.id); else byTask.delete(tk.id);
+      whoSave();
+    } }), ' ' + tk.name));
     modal(t('who.label'), { info: [t('who.info')] },
+      planned.length ? [h('h3', {}, t('who.tasks')), h('p', { class: 'muted small' }, t('who.tasks_hint')), h('div', { class: 'who-tasks' }, taskChips), h('h3', {}, t('who.people'))] : '',
       h('div', { class: 'who-head' }, find,
         h('button', { type: 'button', class: 'ghost', onclick: all(true) }, t('who.select_all')),
         h('button', { type: 'button', class: 'ghost', onclick: all(false) }, t('who.select_none'))),
