@@ -476,3 +476,56 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 .note-pop[hidden] { display: none; }
 .note-pop .note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .note-pop textarea { width: 100%; resize: vertical; font: inherit; }
+
+/* «Edit | View»: two modes of the same plan, side by side like one control */
+.title-bar .mode { display: inline-flex; border: 1px solid var(--line); border-radius: .4rem; overflow: hidden; }
+.title-bar .mode button { height: calc(var(--ctl) - 2px); border: 0; border-radius: 0; background: transparent; color: var(--fg); padding: 0 .8rem; }
+.title-bar .mode button + button { border-left: 1px solid var(--line); }
+.title-bar .mode button[aria-pressed=true] { background: var(--accent); color: var(--bg); font-weight: 600; }
+/* View: the plan as it stands, a table on a wide screen (events down, tasks across), a card per event on a phone */
+.show-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin: .6rem 0; }
+.show-tools .print { margin-left: auto; }
+.show-scroll { overflow-x: auto; }
+.show-table { border-collapse: collapse; min-width: 100%; }
+.show-table th, .show-table td { border-bottom: 1px solid var(--line); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+.show-table thead th { font-size: .85rem; color: var(--muted); border-bottom: 2px solid var(--line); white-space: nowrap; }
+.show-table th[scope=row] { white-space: nowrap; font-weight: 600; }
+.show-table th[scope=row] .tm, .show-card h2 .tm { display: block; font-weight: 400; font-size: .85rem; color: var(--muted); }
+.show-table td.detail { color: var(--muted); font-size: .9rem; max-width: 16rem; }
+.show-table tbody tr:nth-child(even) { background: var(--draft-row); }
+.show .names { display: flex; flex-direction: column; align-items: flex-start; gap: .1rem; }
+.show .names .open { color: var(--warn); font-size: .85rem; }
+.show .nm.hit { background: var(--accent); color: var(--bg); border-radius: .3rem; padding: 0 .35rem; margin: 0 -.35rem; font-weight: 600; }
+.show .show-ev.miss { opacity: .4; }
+.show-cards { display: none; }
+.show-card { border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .8rem; margin: .6rem 0; }
+.show-card h2 { margin: 0 0 .3rem; font-size: 1.05rem; }
+.show-card h2 .tm { display: inline; margin-left: .4rem; }
+.show-card .detail { margin: .15rem 0; font-size: .9rem; }
+.show-card .detail .lbl { color: var(--muted); }
+.show-card dl { margin: .4rem 0 0; display: grid; gap: .35rem; }
+.show-card dl > div { display: grid; grid-template-columns: minmax(6rem, 40%) 1fr; gap: .5rem; }
+.show-card dt { color: var(--muted); }
+.show-card dd { margin: 0; }
+@media (max-width: 40rem) {
+  .show .show-scroll { display: none; }
+  .show .show-cards { display: block; }
+  .show-tools .find { flex: 1 1 100%; }
+  .show-tools .print { display: none; }
+  .title-bar .mode button { padding: 0 .6rem; }
+}
+/* printed: the table only, black on white, without the page around it */
+@media print {
+  header, .title-bar .info, .title-bar .mode, .title-bar .share, .title-bar .back, .show-tools select, .show-tools .found, .show-tools .print, #msg, #conn { display: none !important; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+  main, main:has(.plan-page) { max-width: none; padding: 0; }
+  .show .show-scroll { display: block !important; overflow: visible; }
+  .show .show-cards { display: none !important; }
+  .show-table thead th { position: static; background: none; }
+  .show-table th, .show-table td, .show-table td.detail { color: #000; }
+  .show-table th, .show-table td { border-color: #999; padding: .25rem .5rem; }
+  .show-table tbody tr:nth-child(even) { background: none; }
+  .show-table tr { break-inside: avoid; }
+  .show .show-ev.miss { opacity: 1; }
+  .show .nm.hit { background: none; color: #000; text-decoration: underline; }
+}

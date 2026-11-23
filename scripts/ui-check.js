@@ -508,6 +508,48 @@ const { spawn } = require('child_process');
       await closeDialog();
     }
 
+    // --- «Edit | View»: the plan as it stands, without editing; a name found stands out; a card per event on a phone; print ---
+    {
+      // an earlier draft picked in Edit does not follow into View: View shows the current plan (#2)
+      await page.getByRole('button', { name: 'Plan settings' }).click();
+      await dialog.getByRole('button', { name: 'Show draft #1' }).click();
+      await runIs(1, 'an earlier draft is on show in Edit');
+      await page.click('.title-bar .mode button[data-mode=show]');
+      await page.waitForSelector('.show-tools');
+      ok((await page.locator('.dp-table').count()) === 0 && (await page.locator('.title-bar .settings').count()) === 0, 'View has no table to edit and no settings');
+      ok((await page.innerText('.show-tools .source')).startsWith('From draft #2') && (await page.innerText('.show-tools .source')).includes('Current plan'), 'View shows the current plan: ' + await page.innerText('.show-tools .source'));
+      const shown = await page.innerText('.show-table');
+      ok(shown.includes('Outside guest ×2') && shown.includes('Café') && /\d+ open/.test(shown), 'View has what is set by hand, the tasks and what is open: ' + shown.slice(0, 300));
+      ok((await page.locator('.show-table tbody tr').count()) === (await page.locator('.show-cards .show-card').count()), 'a row and a card per event');
+      await page.selectOption('select.find', { label: 'Kari Test' });
+      const hits = await page.locator('.show-table .nm.hit').count();
+      ok(hits > 0 && (await page.locator('.show-table .nm.hit').first().innerText()) === 'Kari Test', 'the name found stands out');
+      ok((await page.innerText('.show-tools .found')) === (hits === 1 ? 'in 1 event' : `in ${hits} events`), 'how many events: ' + await page.innerText('.show-tools .found'));
+      const fades = await page.locator('.show-table tr.show-ev.miss').count();
+      ok(fades > 0 && fades + hits === (await page.locator('.show-table tbody tr').count()), 'the events without the name fade: ' + fades);
+      await page.reload();
+      await page.waitForSelector('.show-tools');
+      ok((await page.locator('.show-table .nm.hit').count()) === hits && (await page.inputValue('select.find')) !== '', 'View and the name found are kept after a reload');
+      // a phone: a card per event instead of the table; printed: the table, without the page around it
+      await page.setViewportSize({ width: 390, height: 844 });
+      ok(await page.locator('.show-cards').isVisible() && !(await page.locator('.show-scroll').isVisible()), 'a phone gets a card per event');
+      ok((await page.locator('.show-cards .nm.hit').count()) === hits, 'the name found stands out on the cards too');
+      const pw = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+      ok(pw[0] <= pw[1], `View on a phone is ${pw[0]} px wide on a ${pw[1]} px screen`);
+      await page.emulateMedia({ media: 'print' });
+      ok(await page.locator('.show-scroll').isVisible() && !(await page.locator('.show-cards').isVisible()), 'printed: the table, also from a phone');
+      ok(!(await page.locator('header').isVisible()) && !(await page.locator('.title-bar .mode').isVisible()) && !(await page.locator('select.find').isVisible()), 'printed: no header, mode or find');
+      await page.emulateMedia({ media: 'screen' });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.selectOption('select.find', '');
+      ok((await page.locator('.show .nm.hit, .show .miss').count()) === 0 && (await page.innerText('.show-tools .found')) === '', 'no name: nothing stands out');
+      await page.click('.title-bar .mode button[data-mode=edit]');
+      await page.waitForSelector('.dp-table');
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok((await page.getAttribute('.title-bar .mode button[data-mode=edit]', 'aria-pressed')) === 'true', 'Edit is kept after a reload');
+    }
+
     // --- copy an event, delete one ---
     await page.click(`button[aria-label="Copy the event ${ev[2]}"]`);
     const newDate = () => dialog.locator('input[aria-label="New date"]').inputValue();
@@ -743,6 +785,12 @@ const { spawn } = require('child_process');
     ok((await dialog.innerText()).includes('Ikke fylt:') && (await dialog.innerText()).includes('har ikke valgt oppgaven'), 'the server explains in Norwegian too: ' + (await dialog.innerText()));
     await closeDialog();
     ok((await page.locator('button.ans[aria-label^="Kari Test, søn. 2. aug. 11:00:"]').getAttribute('aria-label')).endsWith(': kanskje'), 'the answers are Norwegian');
+    await page.click('.title-bar .mode button[data-mode=show]');
+    await page.waitForSelector('.show-tools');
+    ok((await page.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'Rediger Vis' && (await page.innerText('select.find option:first-child')) === 'Finn et navn'
+      && (await page.innerText('.show-table thead')).includes('Dato') && (await page.innerText('.show-tools .source')).startsWith('Fra utkast #2'), 'View is Norwegian');
+    await page.click('.title-bar .mode button[data-mode=edit]');
+    await page.waitForSelector('.dp-table');
     before = errors.length;
     await addNamed('Ny oppgave', 'Sound');
     await msgHas(page, 'Oppgave «Sound» finnes allerede');  // an error code from the server, written in Norwegian
@@ -873,6 +921,9 @@ const { spawn } = require('child_process');
       const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
       await pg.route('**/api/orgs/sports-club', asLink({ level: 'view', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
+      await pg.waitForSelector('.show-tools');  // one who may only view starts in View; «Table» is the table, with a note
+      ok((await pg.locator('.title-bar .mode button[data-mode=edit]').innerText()) === 'Table', 'a view link has View and Table');
+      await pg.click('.title-bar .mode button[data-mode=edit]');
       await pg.waitForSelector('.view-only');
       ok(!(await pg.locator('button.share').count()), 'a view link shows no Share');
       await pg.unroute('**/api/orgs/sports-club');

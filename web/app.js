@@ -180,6 +180,7 @@ function changedBy(method, path) {
     if (x === 'places') return with_('places');  // a selection of places
     if (x === 'locks') return with_('cells');  // names of the draft locked or unlocked
     if (x === 'draft') return ['plan', 'runs'];  // «Remove unlocked»: no draft on show
+    if (x === 'runs') return ['runs', 'plan'];  // a new draft or a pin ends «Remove unlocked» (the plan's draft_aside)
     if (['fields', 'cells', 'pools', 'weights', 'runs'].includes(x)) return x === 'fields' ? ['fields'] : with_(x);
     return null;
   }
@@ -912,7 +913,11 @@ async function pagePlan(r, org, people) {
   planState.aside = plan.draft_aside;
   const pinned = runs.find((x) => x.pinned);
   const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : plan.draft_aside ? null : pinned ? pinned.id : runs.length ? runs[0].id : null;
-  const view = shownId ? await get(`${pbase}/runs/${shownId}`) : null;
+  // «Edit | View» (see showPage): View always shows the current plan, else the newest finished draft, not one picked in Edit
+  const modeKey = 'mode:' + key;
+  const mode = store.get(modeKey) || (org.level === 'view' ? 'show' : 'edit');
+  const viewId = mode !== 'show' ? shownId : plan.draft_aside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
+  const view = viewId ? await get(`${pbase}/runs/${viewId}`) : null;
   const done = !!view && view.run.status === 'done';
 
   const label = (ev) => fmtShortDate(ev.date) + (ev.start_time ? ' ' + ev.start_time : '');
@@ -965,6 +970,65 @@ async function pagePlan(r, org, people) {
     render();
   };
   const everyPlace = () => events.flatMap((ev) => tasks.map((tk) => [ev, tk]));
+
+  // ---- «Edit | View» (2026-11-23, the user: "Kanskje også en visning som er en penere visning uten redigering eller
+  // tilgjengelighet? … Ikke egne lenker for nå, bare to moduser for samme data."): the same page, the same data. View shows what
+  // each place holds now (as the draft shows it: the current plan, else the newest finished draft), with the event details, and
+  // nothing to change. Remembered per plan in this browser; one who may only view starts in View.
+  const modeSwitch = h('div', { class: 'mode', role: 'group', 'aria-label': t('mode.aria') },
+    ['edit', 'show'].map((m) => h('button', { type: 'button', 'aria-pressed': String(mode === m), 'data-mode': m,
+      onclick: () => { if (m !== mode) { store.set(modeKey, m); render(); } } }, t(m === 'edit' && org.level === 'view' ? 'mode.table' : 'mode.' + m))));
+  const shareBtn = () => (ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '');
+  const back = () => link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) });
+  if (mode === 'show') return showPage();
+  function showPage() {
+    // only tasks some event needs or has a name in, and details some event has
+    const showTasks = tasks.filter((tk) => events.some((ev) => placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]));
+    const showFields = fields.fields.filter((f) => events.some((ev) => fieldValue[ev.id + '/' + f.id]));
+    const has = (ev, tk) => !!(placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]);
+    const names = (ev, tk) => {
+      const s = slotsAt(ev, tk);
+      return h('span', { class: 'names' }, s.items.map((x) => h('span', { class: 'nm', 'data-person': x.kind === 'person' ? String(x.id) : null }, itemText(x))),
+        s.open ? h('span', { class: 'open' }, tn('show.open', s.open)) : '');
+    };
+    const tbl = h('div', { class: 'show-scroll' }, h('table', { class: 'show-table' },
+      h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, t('show.date')), showFields.map((f) => h('th', { scope: 'col' }, f.name)),
+        showTasks.map((tk) => h('th', { scope: 'col' }, tk.name)))),
+      h('tbody', {}, events.map((ev) => h('tr', { class: 'show-ev' },
+        h('th', { scope: 'row' }, h('span', { class: 'd' }, fmtShortDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : ''),
+        showFields.map((f) => h('td', { class: 'detail' }, fieldValue[ev.id + '/' + f.id] || '')),
+        showTasks.map((tk) => h('td', {}, has(ev, tk) ? names(ev, tk) : '')))))));
+    const cards = h('div', { class: 'show-cards' }, events.map((ev) => h('section', { class: 'show-card show-ev' },
+      h('h2', {}, fmtDate(ev.date), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : ''),
+      showFields.filter((f) => fieldValue[ev.id + '/' + f.id]).map((f) => h('p', { class: 'detail' }, h('span', { class: 'lbl' }, f.name), ' ', fieldValue[ev.id + '/' + f.id])),
+      h('dl', {}, showTasks.filter((tk) => has(ev, tk)).map((tk) => h('div', {}, h('dt', {}, tk.name), h('dd', {}, names(ev, tk))))))));
+    // «Find a name»: their names stand out, the events they are not in fade; remembered per plan in this browser
+    const findKey = 'find:' + key;
+    const found = h('span', { class: 'small found', 'aria-live': 'polite' });
+    const find = (id) => {
+      store.set(findKey, id ? String(id) : '');
+      let n = 0;
+      root.querySelectorAll('.show-ev').forEach((ev) => {
+        let hit = false;
+        ev.querySelectorAll('.nm[data-person]').forEach((x) => { const on = !!id && x.dataset.person === String(id); x.classList.toggle('hit', on); hit ||= on; });
+        ev.classList.toggle('miss', !!id && !hit);
+        if (hit && ev.closest('.show-table')) n++;
+      });
+      found.textContent = id ? tn('show.found', n) : '';
+    };
+    const sel = h('select', { class: 'find', 'aria-label': t('show.find'), onchange: (e) => find(Number(e.target.value)) },
+      h('option', { value: '' }, t('show.find')), [...people].sort((a, b) => a.name.localeCompare(b.name, locale())).map((p) => h('option', { value: String(p.id) }, p.name)));
+    const source = done ? t('show.source', { id: view.run.id, time: fmtTime(view.run.finished_at || view.run.started_at) }) + (view.run.pinned ? ' · ' + t('run.current') : '')
+      : t('show.no_draft');
+    const root = h('div', { class: 'plan-page show' },
+      h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [t('show.info')]), modeSwitch, shareBtn()),
+      events.length ? h('div', { class: 'show-tools' }, sel, found, h('span', { class: 'small muted source' }, source),
+        h('button', { type: 'button', class: 'ghost print', onclick: () => window.print() }, t('show.print'))) : h('p', { class: 'muted small' }, t('show.no_events')),
+      events.length ? [tbl, cards] : '');
+    const was = Number(store.get(findKey));
+    if (people.some((p) => p.id === was)) { sel.value = String(was); find(was); }
+    return root;
+  }
 
   // ---- the draft: make one or try again, and what the draft on show is
   const runsPath = pbase + '/runs';
@@ -1949,11 +2013,12 @@ async function pagePlan(r, org, people) {
 
   const root = h('div', { class: 'plan-page' },
     h('div', { class: 'title-bar' },
-      link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }),
+      back(),
       h('h1', {}, plan.name),
       infoBtn(plan.name, [t('table.hint')]),
+      modeSwitch,
       events.length ? sideways(table, events) : '',
-      ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '',
+      shareBtn(),
       h('button', { type: 'button', class: 'ghost settings', 'aria-label': t('settings.open'), onclick: settingsDialog }, '⚙', h('span', { class: 'lbl' }, ' ' + t('settings.open')))),
     viewOnly(org),
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
