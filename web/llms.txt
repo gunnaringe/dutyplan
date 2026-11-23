@@ -51,6 +51,20 @@ such as `my-agent/1.0`.
 
 Dates: a spreadsheet may store dates from a copied year; check the weekdays against the events' real days.
 
+## Making and finishing a draft
+
+1. `GET .../plans/{plan}/weights` and, if asked («fairness matters more»), `PUT` them (see *The planner*; send every value you keep).
+2. `POST .../plans/{plan}/runs` `{"time_limit": 20}` starts the planner (seconds; 0 = the server's default) and answers 202 `{"id"}`.
+3. Poll `GET .../plans/{plan}/runs/{id}` every few seconds until `run.status` is `done` (or `failed`, with `run.error`).
+4. Read it: `events[].cells[]` (by `task_id`, in the order of `tasks`) hold `people` (`locked`: kept from before, `weak`: given
+   against a «poor»), `texts` (names set by hand that are not people) and `missing` (places not filled). `weak` lists the
+   compromises in plain words (`?lang=nb` for Norwegian), `load` each person's count against their fair `target`. `run.stale`
+   says the plan has changed since.
+5. Fix by hand where needed: `POST .../cells` puts a person (or a text) in a place; `DELETE .../cells/{id}` takes one away.
+6. Finish («We're done» on the page): `PUT .../plans/{plan}/locks` `{"locked": true, "locks": [{"event", "task", "person"}]}` with every
+   name the planner put in the run (so a new draft keeps them), then `PUT .../runs/{id}/pin`. Pinned = the current plan,
+   what everyone sees. To reopen: `DELETE .../runs/{id}/pin` (the locks stay).
+
 ## The API
 
 JSON over HTTP under `/api`. Writes send `Content-Type: application/json`. Access is by a login or a share link (see above). A `view` link may
@@ -113,12 +127,23 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `GET /api/orgs/{org}/plans/{plan}/pools`, `PUT /api/orgs/{org}/plans/{plan}/pools` `{"event", "task", "people"}` — choose only among these.
 
 ### The planner
-- `GET /api/orgs/{org}/plans/{plan}/weights`, `PUT /api/orgs/{org}/plans/{plan}/weights` `{"values"}` — what the planner weighs.
+- `GET /api/orgs/{org}/plans/{plan}/weights` — what the planner weighs: `{"specs": [{"key", "default", "min", "max"}], "values": {...}}`
+  (`values` holds only what differs from the default). `PUT /api/orgs/{org}/plans/{plan}/weights` `{"values": {"<key>": n}}` **replaces**
+  them: a key left out goes back to its default, `{}` resets all. The keys: `w_fair`, `w_fair_range` (an even total load per person),
+  `w_task_fair`, `w_task_range` (even per task; 0 by default), `w_task.good`, `w_task.poor`, `w_date.good`, `w_date.poor` (people's
+  wishes for tasks and dates; the `.poor` ones are negative), `w_combo.practical`, `w_combo.impractical` (two tasks on one event).
+  The page's «What matters most» sets three groups at once; Normal is the default:
+
+  | Matters      | Less                         | Normal                        | More                            |
+  |--------------|------------------------------|-------------------------------|---------------------------------|
+  | Fair shares  | `w_fair` 4, `w_fair_range` 4 | 10, 10                        | 25, 25                          |
+  | Wishes       | `w_task.good` 1, `w_task.poor` -2, `w_date.good` 1, `w_date.poor` -3 | 2, -4, 3, -6 | 5, -10, 8, -15 |
+  | Combinations | `w_combo.practical` 1, `w_combo.impractical` -2 | 2, -5             | 5, -12                          |
 - `POST /api/orgs/{org}/plans/{plan}/runs` `{"time_limit"}` — make a draft. `GET /api/orgs/{org}/plans/{plan}/runs` — the drafts;
   `GET /api/orgs/{org}/plans/{plan}/runs/{id}` (`latest` works as an id; `?lang=nb` for Norwegian explanations).
   `PUT /api/orgs/{org}/plans/{plan}/runs/{id}/pin`, `DELETE /api/orgs/{org}/plans/{plan}/runs/{id}/pin` — the current plan.
 - `PUT /api/orgs/{org}/plans/{plan}/locks` `{"locks": [{"event", "task", "person"}], "locked": true|false}` — lock the planner's
   names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays as it is).
 - `DELETE /api/orgs/{org}/plans/{plan}/draft` — set the drafts aside: the plan shows only what is set by hand and locked
-- `PUT /api/orgs/{org}/plans/{plan}/draft` — bring the drafts back after that (pinning a draft does it too)
   (`"draft_aside": true` in `GET /api/orgs/{org}/plans/{plan}`) until a new draft or a pin.
+- `PUT /api/orgs/{org}/plans/{plan}/draft` — bring the drafts back after that (pinning a draft does it too).
