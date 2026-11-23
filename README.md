@@ -128,6 +128,15 @@ with the weighting and the plan's name.
 
 ![Plan settings: the name, the weighting and the earlier drafts](docs/img/11-settings.png)
 
+**Edit or View.** The same page has two modes, a switch by the title: *Edit* is the table above, *View* is the plan as it stands
+and nothing else: the events down the page, the tasks across, with who has each place (the current plan, else the newest
+draft, with the names set by hand) and the event details. *Find a name* makes one person's tasks stand out and fades the
+events they are not in; *Print* prints the table. On a phone it is a card per event. The mode and the name are kept in that
+browser; someone with a link that may only view starts in View.
+
+![View: the plan as it stands, with one person's tasks standing out](docs/img/16-view.png)
+![View on a phone: a card per event](docs/img/17-view-phone.png)
+
 **The organisation.** An organisation's page lists its plans, and is where it is renamed or deleted.
 
 ![An organisation and its plans](docs/img/01-organisation.png)

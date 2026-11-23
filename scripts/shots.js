@@ -217,6 +217,16 @@ const CHOICES = {
     await save(page, '12-distribution', dialog(page));
     await closeDialog(page);
 
+    // «Edit | View»: the plan as it stands, with a name found; on a phone a card per event (the choice is kept in that browser,
+    // so back to Edit after).
+    step = '16-view';
+    await page.click('.title-bar .mode button[data-mode=show]');
+    await page.waitForSelector('.show-tools');
+    await page.selectOption('select.find', { label: 'Kari Test' });
+    await range(page, '16-view', page.locator('main h1'), page.locator('.show-table tbody tr').last());
+    await page.click('.title-bar .mode button[data-mode=edit]');
+    await page.waitForSelector('.dp-table');
+
     // ⚙: the name, the weighting (opened) and the earlier drafts, in a window tall enough for all of it.
     const tall = await open(await context({ viewport: { width: 1280, height: 2000 } }));
     await go(tall, planPath, '.dp-table');
@@ -230,6 +240,11 @@ const CHOICES = {
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
     await go(phone, planPath, '.dp-table');
     await phone.screenshot({ path: path.join(OUT, '14-phone.png') });
+    step = '17-view-phone';
+    await phone.click('.title-bar .mode button[data-mode=show]');
+    await phone.waitForSelector('.show-cards');
+    await phone.selectOption('select.find', { label: 'Kari Test' });
+    await phone.screenshot({ path: path.join(OUT, '17-view-phone.png') });
 
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));
     await go(nb, planPath, '.dp-table');
