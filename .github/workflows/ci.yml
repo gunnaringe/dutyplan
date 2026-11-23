@@ -1,6 +1,8 @@
 # The checks of `mise run verify` (prek, tests, smoke test, mutations) plus the browser check, on every pull request and on main.
 # The tools come from mise.toml (jdx/mise-action), the Python packages from solver/uv.lock.
 # The mutations get a job of their own: the Python ones edit the planner in place while they run, so nothing else may use it then.
+# On a pull request only the mutations of the files it changes run (and those it adds or changes), with every pattern checked to
+# still exist; main runs them all (about 25 min), so a weakened test is still caught there.
 name: CI
 
 on:
@@ -14,7 +16,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # a new push to a pull request replaces its run; on main every merge gets its full run of the mutations
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -44,8 +47,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the pull request's base, to see what it changed
       - uses: jdx/mise-action@v5
       - name: Python packages
         run: mise run setup
       - name: Every rule broken in turn must make a test fail
-        run: mise run mutations
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE" ]; then mise run mutations -- --changed-since "$BASE"; else mise run mutations; fi

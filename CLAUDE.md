@@ -12,7 +12,10 @@ and an organisation page with the plans (the setup page is gone). There is no ch
 Since 2026-11-20 the API covers only what the page uses: no personal links, no «My assignments», no bulk task paste, no cells or selections for several
 events at once, and no places when an event is created (adding repeatedly with `until` and `every`, copying and the availability map stay: the page uses them).
 **CI** (GitHub Actions, since 2026-11-20): `.github/workflows/ci.yml` runs `mise run lint`, `test`, `app:smoke`, `app:ui` (playwright-core from npm, the runner's
-Chrome) and, in a job of its own, `mise run mutations`, on every PR and on main. **`main` is protected** (ruleset «main», 2026-11-20): changes only through a PR, the checks `test`, `mutations` and `build` must pass before
+Chrome) and, in a job of its own, the mutations: on a PR only those of the files it changes and those it adds or changes
+(`mise run mutations -- --changed-since <base>`, every pattern still checked for OUTDATED; 2026-11-23, the user: "Can we make the ci
+job faster? Just check the solver if we touch that one directly?"), on main all of them (about 25 min; merges to main do not cancel
+each other's run). A test weakened in a PR is therefore only caught on main: look at main's run after merging. **`main` is protected** (ruleset «main», 2026-11-20): changes only through a PR, the checks `test`, `mutations` and `build` must pass before
 it can merge, no force push or deletion; no review is required. Secret scanning with push protection is on. `.github/workflows/image.yml` builds the image
 (amd64 + arm64; the Go stage cross-compiles) on PRs and publishes `ghcr.io/gunnaringe/dutyplan` from main (`main`, `main-<UTC>-<sha>`, `sha-<sha>`) and `v*` tags.
 A first test runs on kate since 2026-11-20 (asked by the user), behind Pocket ID at dutyplan.haxxor.xyz, manifests in `clusters/kate/dutyplan/`:
