@@ -172,6 +172,8 @@ button.cellbtn { background: none; border: none; color: var(--fg); padding: 0; t
 button.cellbtn .sub { text-decoration: none; }
 button.cellbtn .sub.prompt { color: var(--accent); text-decoration: underline; }
 button.cellbtn.inline { display: inline; }
+/* the names in the first column wrap like the draft's (buttons are nowrap by default) */
+.dp-table th[scope=row] button.cellbtn { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
 .dp-table tr.adds th { font-weight: 400; }
 
 /* the draft allocation */
