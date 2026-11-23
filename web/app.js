@@ -881,7 +881,7 @@ function dragScroll(grid) {
   let start = null;
   let moved = false;
   grid.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, .grip, td[data-cell]')) return;
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('button, input, select, textarea, a, label, .grip, td[data-cell], th[scope=row]:has(.grip)')) return;
     start = { x: e.clientX, left: grid.scrollLeft };
     moved = false;
   });
@@ -905,7 +905,7 @@ async function pagePlan(r, org, people) {
   const pbase = `${base}/plans/${enc(r.plan)}`;
   const epath = pbase + '/events';
   const key = r.org + '/' + r.plan;
-  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null });
+  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set() });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections] = await Promise.all([
     get(pbase), get(epath), get(base + '/tasks'), get(base + '/combinations'),
     get(pbase + '/fields'), get(pbase + '/answers'), get(pbase + '/places'), get(pbase + '/cells'),
@@ -1185,7 +1185,7 @@ async function pagePlan(r, org, people) {
     .map((tr) => { tr.dataset.fold = ((tr.dataset.fold || '') + ' ' + key).trim(); return tr; });
   const applyFolds = (table) => {
     table.querySelectorAll('tr[data-fold]').forEach((tr) => {
-      tr.hidden = tr.dataset.filtered === '1' || (tr.dataset.person && !shown(Number(tr.dataset.person))) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
+      tr.hidden = tr.dataset.filtered === '1' || (tr.dataset.adds && !planState.adds.has(tr.dataset.adds)) || (tr.dataset.person && !shown(Number(tr.dataset.person))) || tr.dataset.fold.split(' ').some((k) => folded.has(k));
     });
     table.querySelectorAll('button.fold').forEach((b) => b.setAttribute('aria-expanded', String(!folded.has(b.dataset.key))));
   };
@@ -1475,30 +1475,7 @@ async function pagePlan(r, org, people) {
     date.focus();
   }
 
-  // ✎ on a section: its name, where it goes, delete (its people go to those without a section).
-  function sectionDialog(x) {
-    let dlg;
-    const name = h('input', { type: 'text', value: x.name, maxlength: '80', 'aria-label': t('common.name') });
-    const others = sections.filter((o) => o.id !== x.id);
-    const now = sections.findIndex((o) => o.id === x.id);
-    const where = h('select', { 'aria-label': t('section.where') }, h('option', { value: '0', selected: now === 0 }, t('section.first')),
-      others.map((o, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: o.name }))));
-    dlg = modal(t('section.title', { name: x.name }), { info: [t('section.hint', { org: org.name })] },
-      h('form', { class: 'stack', onsubmit: async (e) => {
-        e.preventDefault();
-        const pos = parseInt(where.value, 10);
-        if (name.value.trim() === x.name && pos === now) { dlg.close(); return; }
-        if (await write(async () => {
-          if (name.value.trim() !== x.name) await api('PATCH', `${base}/sections/${x.id}`, { name: name.value });
-          if (pos !== now) await api('PUT', `${base}/sections/${x.id}/position`, { position: pos });
-        })) { dlg.close(); render(); }
-      } },
-        field(t('common.name'), name),
-        others.length ? field(t('section.where'), where) : '',
-        foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); await api('DELETE', `${base}/sections/${x.id}`); })) { dlg.close(); render(); }
-        } }, t('section.delete')), h('button', { type: 'submit' }, t('common.save')))));
-  }
+
 
   function taskDialog(tk) {
     let dlg;
@@ -1672,6 +1649,43 @@ async function pagePlan(r, org, people) {
   const sect = (key, title, info) => h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn(key, title), title, info ? infoBtn(title, info) : '')),
     h('td', { colspan: String(cols + 1) }));
   const addLine = (form) => h('tr', { class: 'adds' }, h('th', { scope: 'row' }, form), h('td', { colspan: String(cols + 1) }));
+  // The add lines are behind a small + at the end of the last name cell of their list (2026-11-23, the user: "Hide the add people
+  // icon under a small plus symbol at the end of the last cells, where clicking it makes it a minus and collapse it"); an empty
+  // list has it on its heading. Open, the + is a − and the line shows, ready to type; it stays open after adding (planState.adds,
+  // for this plan while the page is open), Escape or − closes it. lines: the add lines it opens (the last list of people also
+  // opens «Add a section»).
+  const adds = (key, rows, host, lines) => {
+    const open = planState.adds.has(key);
+    const trs = lines.map((form) => {
+      const tr = addLine(form);
+      tr.hidden = !open;
+      tr.classList.add('folded-add');
+      tr.dataset.adds = key;
+      const input = form.querySelector('input');
+      input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); toggle(); } });
+      return tr;
+    });
+    const what = lines[0].querySelector('input').placeholder;
+    const plus = h('button', { type: 'button', class: 'addplus', 'data-adds': key, 'aria-expanded': String(open), title: open ? t('adds.close') : what,
+      'aria-label': open ? t('adds.close') : what }, open ? '−' : '+');
+    const toggle = () => {
+      if (planState.adds.has(key)) planState.adds.delete(key); else planState.adds.add(key);
+      const now = planState.adds.has(key);
+      applyFolds(plus.closest('table'));
+      plus.textContent = now ? '−' : '+';
+      plus.title = now ? t('adds.close') : what;
+      plus.setAttribute('aria-label', plus.title);
+      plus.setAttribute('aria-expanded', String(now));
+      if (now) trs[0].querySelector('input').focus(); else plus.focus();
+    };
+    plus.addEventListener('click', toggle);
+    const last = rows.length ? rows[rows.length - 1] : host;
+    const th = last.querySelector('th');
+    th.classList.add('has-addplus');
+    th.append(plus);
+    if (open) setTimeout(() => { if (document.activeElement === document.body) trs[0].querySelector('input').focus({ preventScroll: true }); }, 0);
+    return [...rows, ...trs];
+  };
 
   const head = h('tr', {}, h('th', { scope: 'row', class: 'corner' }, t('table.date')),
     events.map((ev) => h('th', { scope: 'col' }, h('div', { class: 'rl' },
@@ -1747,57 +1761,133 @@ async function pagePlan(r, org, people) {
   };
   // ⋮⋮ drags a row (a details row, a task, a person, a section). dropOn makes a row take what accept(kind, item) allows;
   // act(item) saves the move. dragRow is the usual case: a row of a kind takes the others of that kind at its position.
-  let dragged = null;
-  const grip = (title) => h('span', { class: 'grip', draggable: 'true', title, 'aria-hidden': 'true' }, '⋮⋮');
-  const handleFor = (handle, kind, item) => {
-    handle.addEventListener('dragstart', (e) => { dragged = { kind, item }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.name); });
-    handle.addEventListener('dragend', () => { dragged = null; });
-  };
-  const dropOn = (row, accept, act) => {
-    const ok = () => dragged && accept(dragged.kind, dragged.item);
-    row.addEventListener('dragover', (e) => { if (ok()) { e.preventDefault(); row.classList.add('drop'); } });
-    row.addEventListener('dragleave', () => row.classList.remove('drop'));
-    row.addEventListener('drop', async (e) => {
-      if (!ok()) return;
-      e.preventDefault();
-      row.classList.remove('drop');
-      const d = dragged.item;
-      dragged = null;
-      if (await write(() => act(d))) render();
-    });
-    return row;
-  };
-  const dragRow = (row, handle, kind, item, i, move) => {
+  // Moving rows (2026-11-23, the user: "Let the drag and drop of people easier"): with a mouse the whole name cell is the handle
+  // (a click still opens; the drag starts after a few pixels), on a touch screen ⋮⋮. A line shows where the row lands, above or
+  // below the row under the pointer by its half; on a heading (a section) it goes last in it. Near the edges the table scrolls on.
+  // handleFor marks a row's ⋮⋮ (what is dragged); dropOn makes a row take what accept(kind, item) allows, act(item, after) saves.
+  const grip = (title) => h('span', { class: 'grip', title, 'aria-hidden': 'true' }, '⋮⋮');
+  const handleFor = (handle, kind, item) => { handle._drag = { kind, item }; };
+  const dropOn = (row, accept, act, into = false) => { row._drop = { accept, act, into }; return row; };
+  // A row of a list (details rows, tasks, sections): it takes the others of its kind, above or below it.
+  const dragRow = (row, handle, kind, item, list, move) => {
     handleFor(handle, kind, item);
-    return dropOn(row, (k, d) => k === kind && d.id !== item.id, (d) => move(d, i));
+    return dropOn(row, (k, d) => k === kind && d.id !== item.id, (d, after) => {
+      const others = list.filter((x) => x.id !== d.id);
+      return move(d, others.findIndex((x) => x.id === item.id) + (after ? 1 : 0));
+    });
+  };
+  let rowDrag = null;  // { kind, item, row, x, y, started, target: { tr, after } }
+  const dropMarks = () => document.querySelectorAll('tr.drop').forEach((x) => x.classList.remove('drop'));
+  const rowDragAt = (x, y) => {
+    const d = rowDrag;
+    d.ghost.style.left = x + 12 + 'px';
+    d.ghost.style.top = y + 8 + 'px';
+    dropMarks();
+    d.line.hidden = true;
+    d.target = null;
+    const tr = document.elementFromPoint(x, y)?.closest('tr');
+    if (!tr || tr === d.row || !tr._drop || !tr._drop.accept(d.kind, d.item)) return;
+    const r = tr.getBoundingClientRect();
+    const after = tr._drop.into || y > r.top + r.height / 2;
+    d.target = { tr, after };
+    if (tr._drop.into) { tr.classList.add('drop'); return; }
+    const box = tr.closest('.grid-scroll').getBoundingClientRect();
+    Object.assign(d.line.style, { left: box.left + 'px', width: Math.min(box.width, r.width) + 'px', top: (after ? r.bottom : r.top) - 1.5 + 'px' });
+    d.line.hidden = false;
+  };
+  const rowDragScroll = () => {
+    const d = rowDrag;
+    if (!d || !d.started) return;
+    const box = d.row.closest('.grid-scroll');
+    const r = box.getBoundingClientRect();
+    const head = box.querySelector('thead');
+    const top = Math.max(r.top, 0) + (head ? head.offsetHeight : 0);
+    const dy = d.y < top + 30 ? -16 : d.y > Math.min(r.bottom, innerHeight) - 30 ? 16 : 0;
+    if (dy) { box.scrollTop += dy; rowDragAt(d.x, d.y); }
+  };
+  const rowDragMove = (e) => {
+    const d = rowDrag;
+    if (!d) return;
+    d.x = e.clientX;
+    d.y = e.clientY;
+    if (!d.started) {
+      if (Math.hypot(d.x - d.x0, d.y - d.y0) < 5) return;
+      d.started = true;
+      document.body.classList.add('row-dragging');
+      d.row.classList.add('dragged');
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      d.ghost = document.body.appendChild(h('div', { class: 'row-ghost' }, d.item.name));
+      d.line = document.body.appendChild(h('div', { class: 'drop-line', hidden: true }));
+      d.timer = setInterval(rowDragScroll, 40);
+    }
+    e.preventDefault();
+    rowDragAt(d.x, d.y);
+  };
+  const rowDragEnd = async (e) => {
+    const d = rowDrag;
+    rowDrag = null;
+    removeEventListener('pointermove', rowDragMove);
+    removeEventListener('pointerup', rowDragEnd);
+    removeEventListener('pointercancel', rowDragEnd);
+    removeEventListener('keydown', rowDragKey, true);
+    if (!d || !d.started) return;
+    clearInterval(d.timer);
+    d.ghost.remove();
+    d.line.remove();
+    dropMarks();
+    d.row.classList.remove('dragged');
+    document.body.classList.remove('row-dragging');
+    // the click that ends a drag opens nothing (and is let go at once if none comes)
+    const swallow = (c) => { c.stopPropagation(); c.preventDefault(); };
+    document.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener('click', swallow, { capture: true }), 0);
+    if (e.type === 'pointerup' && d.target && await write(() => d.target.tr._drop.act(d.item, d.target.after, d.kind))) render();
+  };
+  const rowDragKey = (e) => { if (e.key === 'Escape' && rowDrag) { e.preventDefault(); e.stopPropagation(); rowDrag.target = null; rowDragEnd({ type: 'pointercancel' }); } };
+  const onRowDown = (e) => {
+    if (e.button !== 0 || rowDrag) return;
+    const th = e.target.closest('th[scope=row]');
+    const g = th && th.querySelector('.grip');
+    if (!g || !g._drag) return;
+    const onGrip = !!e.target.closest('.grip');
+    if (e.pointerType !== 'mouse' && !onGrip) return;  // on a touch screen only ⋮⋮, so the table still scrolls
+    if (!onGrip && e.target.closest('input, select, textarea, button.fold, button.auto, button.freeze, button.edit, button.addplus, .tags')) return;
+    if (onGrip) e.preventDefault();
+    rowDrag = { ...g._drag, row: th.closest('tr'), x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, started: false };
+    addEventListener('pointermove', rowDragMove, { passive: false });
+    addEventListener('pointerup', rowDragEnd);
+    addEventListener('pointercancel', rowDragEnd);
+    addEventListener('keydown', rowDragKey, true);
+  };
+  // A heading's name as a field of its own (a details row, a section): Enter saves, Escape takes it back, empty deletes (asked).
+  const nameField = (cur, aria, hint, rename, remove) => {
+    const name = h('input', { type: 'text', class: 'fname', value: cur, maxlength: '80', 'aria-label': aria, title: hint });
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
+      else if (e.key === 'Escape') { name.value = cur; name.blur(); }
+    });
+    name.addEventListener('change', async () => {
+      const v = name.value.trim();
+      if (v === cur) { name.value = cur; return; }
+      if (await write(() => (v ? rename(v) : remove()))) render(); else name.value = cur;
+    });
+    return name;
   };
   // Details rows (2026-11-23, the user: "Remove the edit meny of about. Renaming can be done directly"): the name is a field
   // (emptied: the row is deleted, asked first), ⋮⋮ drags the row to another place, the pin freezes it ("similar to having a frozen
   // Row in excel": it stays under the dates while the table scrolls, for everyone), and the values suggest the texts of the row.
   const fieldRow = (f, i) => {
     const g = grip(t('field.drag'));
-    const name = h('input', { type: 'text', class: 'fname', value: f.name, maxlength: '80', 'aria-label': t('field.name_aria', { name: f.name }), title: t('field.name_hint') });
-    name.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
-      else if (e.key === 'Escape') { name.value = f.name; name.blur(); }
-    });
-    name.addEventListener('change', async () => {
-      const v = name.value.trim();
-      if (v === f.name) { name.value = f.name; return; }
-      const ok = await write(async () => {
-        if (v) return api('PATCH', `${pbase}/fields/${f.id}`, { name: v });
-        await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete'));
-        return api('DELETE', `${pbase}/fields/${f.id}`);
-      });
-      if (ok) render(); else name.value = f.name;
-    });
+    const name = nameField(f.name, t('field.name_aria', { name: f.name }), t('field.name_hint'),
+      (v) => api('PATCH', `${pbase}/fields/${f.id}`, { name: v }),
+      async () => { await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete')); return api('DELETE', `${pbase}/fields/${f.id}`); });
     const pinName = t(f.frozen ? 'field.unfreeze' : 'field.freeze', { name: f.name });
     const pin = h('button', { type: 'button', class: 'freeze' + (f.frozen ? ' on' : ''), 'aria-pressed': String(!!f.frozen), title: pinName, 'aria-label': pinName,
       onclick: async () => { if (await write(() => api('PUT', `${pbase}/fields/${f.id}/frozen`, { frozen: !f.frozen }))) render(); } }, icon('pin'));
     const row = h('tr', { class: 'field-row' + (f.frozen ? ' frozen' : '') }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, name, pin)),
     events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.add_value', { name: f.name.toLowerCase() }), t('table.value_aria', { name: f.name, label: label(ev) }),
       async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); }, rowValues(f))), filler());
-    return dragRow(row, g, 'field', f, i, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
+    return dragRow(row, g, 'field', f, fields.fields, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
   };
 
   // Names straight in the cell (2026-11-23, the user: "Let it be possible to click a planning cell to easily add names. Show
@@ -2131,7 +2221,7 @@ async function pagePlan(r, org, people) {
     const row = h('tr', { class: 'task-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g,
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) }, tk.name), zap)),
     events.map((ev) => placesCell(tk, ev)), rowPick('places', tk.id, tk.name));
-    return dragRow(row, g, 'task', tk, i, (d, pos) => api('PUT', `${base}/tasks/${d.id}/position`, { position: pos }));
+    return dragRow(row, g, 'task', tk, tasks, (d, pos) => api('PUT', `${base}/tasks/${d.id}/position`, { position: pos }));
   };
 
   // Availability: one click on a cell moves the answer on; the count above each event follows.
@@ -2284,16 +2374,28 @@ async function pagePlan(r, org, people) {
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
         p.name), autoBtn(p)), tags.length ? h('div', { class: 'tags' }, tags) : ''),
       events.map((ev) => answerCell(p, ev)), rowPick('answers', p.id, p.name));
-    return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
+    return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d, after) => {
+      const others = inSection(p.section).filter((x) => x.id !== d.id);
+      return movePerson(d, p.section, others.findIndex((x) => x.id === p.id) + (after ? 1 : 0));
+    });
   };
   const sectionRow = (x, i) => {
     const g = grip(t('section.drag'));
     const n = inSection(x.id).length;
-    const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('s' + x.id, x.name), h('span', { class: 'nm' }, x.name),
-      h('button', { type: 'button', class: 'edit', 'aria-label': t('section.edit_aria', { name: x.name }), onclick: () => sectionDialog(x) }, '✎'))),
+    const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('s' + x.id, x.name),
+      nameField(x.name, t('section.name_aria', { name: x.name }), t('section.name_hint'),
+        (v) => api('PATCH', `${base}/sections/${x.id}`, { name: v }),
+        async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return api('DELETE', `${base}/sections/${x.id}`); }))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
-    dragRow(row, g, 'section', x, i, (d, pos) => api('PUT', `${base}/sections/${d.id}/position`, { position: pos }));
-    return dropOn(row, (k) => k === 'person', (d) => movePerson(d, x.id, 0));
+    // a section is dragged among the sections (a line above or below); a person dropped on it goes last in it
+    dragRow(row, g, 'section', x, sections, (d, pos) => api('PUT', `${base}/sections/${d.id}/position`, { position: pos }));
+    const asSection = row._drop;
+    row._drop = {
+      accept: (k, d) => k === 'person' || asSection.accept(k, d),
+      act: (d, after, kind) => (kind === 'person' ? movePerson(d, x.id, inSection(x.id).filter((o) => o.id !== d.id).length) : asSection.act(d, after)),
+      get into() { return rowDrag && rowDrag.kind === 'person'; },
+    };
+    return row;
   };
 
   // The draft's extras, in its bar: compromises, distribution and the earlier drafts.
@@ -2305,25 +2407,28 @@ async function pagePlan(r, org, people) {
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
     (name) => api('POST', base + '/people', x ? { name, section: x.id } : { name }));
+  const addSection = () => addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name }));
+  const detailsHead = sect('details', t('table.details'), [t('table.details_hint')]);
+  const tasksHead = sect('tasks', t('table.tasks'), [t('table.tasks_hint')]);
+  let availHead;
   const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' + (store.get('tags') === '1' ? ' show-tags' : '') },
     h('thead', {}, head),
     h('tbody', {},
-      sect('details', t('table.details'), [t('table.details_hint')]),
-      folds('details', [fields.fields.map(fieldRow), addLine(addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name })))]),
-      sect('tasks', t('table.tasks'), [t('table.tasks_hint')]),
-      folds('tasks', [tasks.map(taskRow), addLine(addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name })))]),
+      detailsHead,
+      folds('details', adds('field', fields.fields.map(fieldRow), detailsHead, [addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))])),
+      tasksHead,
+      folds('tasks', adds('task', tasks.map(taskRow), tasksHead, [addRow(t('table.new_task'), (name) => api('POST', base + '/tasks', { name }))])),
       h('tr', { class: 'sect draft' }, h('td', { colspan: String(cols + 2) }, bar)),
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), rowPick('draft', tk.id, tk.name)))]),
       [
-        dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
+        availHead = dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
           people.length > 1 ? whoBtn : '', people.length ? tagsBtn : '', people.length > 8 ? filterBox() : ''),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
-          (k) => k === 'person', (d) => movePerson(d, 0, 0)),
+          (k) => k === 'person', (d) => movePerson(d, 0, inSection(0).filter((o) => o.id !== d.id).length), true),
         folds('avail', [
-          inSection(0).map(personRow),
-          addLine(addPerson()),
-          sections.flatMap((x, i) => [sectionRow(x, i), ...folds('s' + x.id, [...inSection(x.id).map(personRow), addLine(addPerson(x))])]),
-          addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])])));
+          adds('person:0', inSection(0).map(personRow), availHead, [addPerson(), ...(sections.length ? [] : [addSection()])]),
+          sections.flatMap((x, i) => { const head = sectionRow(x, i);
+            return [head, ...folds('s' + x.id, adds('person:' + x.id, inSection(x.id).map(personRow), head, [addPerson(x), ...(i === sections.length - 1 ? [addSection()] : [])]))]; })])])));
   applyFolds(table);
   table.addEventListener('pointerdown', onCellDown);
   // Frozen details rows stay in sight: each sticks under the dates and the frozen rows above it (measured again when the table
@@ -2357,6 +2462,7 @@ async function pagePlan(r, org, people) {
     selbar,
     notePop);
   dragScroll(table);
+  table.addEventListener('pointerdown', onRowDown);
   // the field in a cell opens again after a change (editCell), for the next name
   const editing = planState.edit && events.flatMap((ev) => tasks.map((tk) => [ev, tk])).find(([ev, tk]) => at(ev, tk) === planState.edit);
   planState.edit = null;

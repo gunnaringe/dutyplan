@@ -143,7 +143,21 @@ table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
 .dp-table .rl { display: flex; align-items: center; gap: .35rem; }
 .dp-table thead .rl .edit { margin-left: auto; }
 button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0; width: var(--ctl-sm); height: var(--ctl-sm); font-size: .8rem; line-height: 1; flex: none; }
-.grip { color: var(--muted); cursor: grab; letter-spacing: -2px; user-select: none; }
+.grip { color: var(--muted); cursor: grab; letter-spacing: -2px; user-select: none; touch-action: none; padding: 0 .1rem; }
+/* moving rows: the whole name cell is the handle with a mouse; a line shows where the row lands, the row itself is faded */
+@media (hover: hover) { .dp-table th[scope=row]:has(.grip) { cursor: grab; } }
+body.row-dragging, body.row-dragging * { cursor: grabbing !important; user-select: none; }
+.dp-table tr.dragged > * { opacity: .4; }
+.drop-line { position: fixed; z-index: 50; height: 3px; background: var(--accent); border-radius: 2px; pointer-events: none; }
+.drop-line[hidden] { display: none; }
+.row-ghost { position: fixed; z-index: 51; pointer-events: none; padding: .2rem .6rem; background: var(--bg); color: var(--fg); border: 1px solid var(--accent);
+  border-radius: .35rem; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); font-weight: 600; font-size: .875rem; white-space: nowrap; }
+/* the add lines: behind a small + at the end of the last name cell of their list (− closes) */
+.dp-table th.has-addplus { padding-bottom: 1.3rem !important; }  /* a strip for the +, so it never covers a control of the row */
+.dp-table button.addplus { position: absolute; right: .15rem; bottom: .1rem; width: 1.1rem; height: 1.1rem; min-height: 0; min-width: 0; padding: 0; line-height: 1;
+  font-size: .9rem; font-weight: 700; background: var(--bg); color: var(--muted); border: 1px solid var(--line); border-radius: .25rem; opacity: .55; z-index: 1; }
+.dp-table button.addplus:hover, .dp-table button.addplus:focus-visible, .dp-table button.addplus[aria-expanded=true] { opacity: 1; color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .dp-table button.addplus { opacity: 1; width: 1.5rem; height: 1.5rem; } }
 .dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
 .person-sect .nm { font-weight: 700; flex: 1; }
 .dp-table tr.person-sect th, .dp-table tr.person-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
@@ -597,8 +611,8 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 .dp-table tr.field-row th, .dp-table tr.field-row td, .dp-table tr.task-row th, .dp-table tr.task-row td, .dp-table tr.adds th, .dp-table tr.adds td { padding-top: .1rem; padding-bottom: .1rem; }
 .dp-table tr.field-row td input, .dp-table tr.task-row td input { height: 1.5rem; padding-top: 0; padding-bottom: 0; }
 /* the name of a details row is a field of its own (no dialog); the pin freezes the row */
-.dp-table tr.field-row input.fname { flex: 1; min-width: 0; height: 1.5rem; padding: 0 .3rem; font-weight: 700; font-size: .875rem; border-color: transparent; background: transparent; }
-.dp-table tr.field-row input.fname:hover, .dp-table tr.field-row input.fname:focus { border-color: var(--line); background: var(--bg); }
+.dp-table input.fname { flex: 1; min-width: 0; height: 1.5rem; padding: 0 .3rem; font-weight: 700; font-size: .875rem; border-color: transparent; background: transparent; }
+.dp-table input.fname:hover, .dp-table input.fname:focus { border-color: var(--line); background: var(--bg); }
 .dp-table tr.field-row button.freeze { flex: none; width: 1.4rem; height: 1.4rem; min-height: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center;
   background: none; color: var(--muted); border: 1px solid transparent; opacity: .45; }
 .dp-table tr.field-row button.freeze svg { width: .85rem; height: .85rem; }

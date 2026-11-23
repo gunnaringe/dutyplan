@@ -190,10 +190,10 @@ const CHOICES = {
     await go(page, planPath, '.dp-table');
     const sects = page.locator('.dp-table tr.sect');
     const draftHead = page.locator('.dp-table tr.sect.draft');
-    await range(page, '03-details-places', sects.nth(0), draftHead.locator('xpath=preceding-sibling::tr[1]'));
+    await range(page, '03-details-places', sects.nth(0), draftHead.locator('xpath=preceding-sibling::tr[not(@hidden)][1]'));
     const availability = sects.nth(3);
-    await range(page, '04-draft', draftHead, availability.locator('xpath=preceding-sibling::tr[1]'));
-    await range(page, '05-availability', availability, page.locator('.dp-table tbody tr').last());
+    await range(page, '04-draft', draftHead, availability.locator('xpath=preceding-sibling::tr[not(@hidden)][1]'));
+    await range(page, '05-availability', availability, page.locator('.dp-table tbody tr:not([hidden])').last());
     // A name typed into a cell of the draft: the suggestions (yes first, no last) and a name of its own.
     step = '19-cell-names';
     await page.locator('td.draft', { has: page.getByRole('button', { name: /^Sound, Sat 12 Dec .*: open the place$/ }) }).locator('.dlines').click();

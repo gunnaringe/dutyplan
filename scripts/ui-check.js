@@ -54,6 +54,9 @@ const { spawn } = require('child_process');
     // addRow (a dashed line with a name and «Add»), or a new plan (a field and «Create»)
     const addNamed = async (placeholder, name) => {
       const form = page.locator(`form:is(.addrow, .row):has(input[placeholder="${placeholder}"])`);
+      // in the table the add lines are behind a + (the line's key is on both)
+      const line = page.locator('tr.adds', { has: form });
+      if ((await line.count()) && await line.isHidden()) await page.click(`button.addplus[data-adds="${await line.getAttribute('data-adds')}"]`);
       await form.locator('input').fill(name);
       await form.locator('button').click();
     };
@@ -266,37 +269,88 @@ const { spawn } = require('child_process');
       await page.waitForSelector(`button[aria-label="Open ${name}"]`);
     }
     // people in the order they were added; ⋮⋮ drags one, and sections are headings to place people under
-    const peopleOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.person-row .cellbtn, tr.person-sect .nm')]
-      .map((b) => (b.classList.contains('nm') ? '| ' + b.textContent : b.firstChild.textContent)).join(','));
+    const peopleOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.person-row .cellbtn, tr.person-sect input.fname')]
+      .map((b) => (b.matches('input') ? '| ' + b.value : b.firstChild.textContent)).join(','));
     ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'people in the order they were added: ' + await peopleOrder());
     const personRowOf = (name) => page.locator('tr.person-row', { has: page.locator(`button[aria-label="Open ${name}"]`) });
+    const nameOf = (name) => page.locator(`button[aria-label="Open ${name}"]`);
     await personRowOf('Kari Test').evaluate((e) => e.scrollIntoView({ block: 'center' }));
-    await personRowOf('Jon Demo').locator('.grip').dragTo(personRowOf('Kari Test'));
-    await until(page, () => [...document.querySelectorAll('tr.person-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Jon Demo,Kari Test,Ola Sample', null, 'dragging ⋮⋮ moves a person to the top');
+    await personRowOf('Jon Demo').locator('.grip').dragTo(personRowOf('Kari Test'), { targetPosition: { x: 20, y: 3 } });
+    await until(page, () => [...document.querySelectorAll('tr.person-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Jon Demo,Kari Test,Ola Sample', null, 'dragging ⋮⋮ to the top half of a row puts a person above it');
+    // the whole name is the handle (a click still opens); a line shows where it lands; the lower half puts it below
+    {
+      const box = await nameOf('Jon Demo').boundingBox();
+      const to = await personRowOf('Kari Test').boundingBox();
+      await page.mouse.move(box.x + 10, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 30, to.y + to.height - 4, { steps: 4 });
+      ok(await page.locator('.drop-line').isVisible() && await page.locator('.row-ghost').innerText() === 'Jon Demo', 'a line shows where the row lands, the name follows the pointer');
+      const line = await page.locator('.drop-line').boundingBox();
+      ok(Math.abs(line.y + line.height / 2 - (to.y + to.height)) < 3, 'the line is under the row: ' + JSON.stringify([line.y, to.y + to.height]));
+      await page.mouse.up();
+      await until(page, () => [...document.querySelectorAll('tr.person-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Kari Test,Jon Demo,Ola Sample', null, 'dragging the name to the lower half puts it below');
+      ok((await page.locator('dialog[open]').count()) === 0, 'and the drag opens no dialog');
+      // Escape lets go without moving anything
+      const b2 = await nameOf('Ola Sample').boundingBox();
+      await page.mouse.move(b2.x + 10, b2.y + b2.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(b2.x + 20, to.y + 3, { steps: 4 });
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+      ok((await peopleOrder()) === 'Kari Test,Jon Demo,Ola Sample' && !(await page.locator('.drop-line').count()), 'Escape lets go: ' + await peopleOrder());
+      await nameOf('Ola Sample').click();
+      ok((await page.locator('dialog.modal[open]').count()) === 1, 'a plain click on the name still opens it');
+      await closeDialog();
+    }
     await addNamed('Add a section', 'Not this term');
     await page.waitForSelector('tr.person-sect');
     ok((await page.innerText('tr.person-sect')).includes('Drag people here'), 'a new section is empty');
     await page.locator('tr.person-sect').evaluate((e) => e.scrollIntoView({ block: 'center' }));  // in the middle: near the window's edge a drag scrolls it
     await personRowOf('Ola Sample').locator('.grip').dragTo(page.locator('tr.person-sect'));
     await until(page, () => document.querySelector('tr.person-sect').innerText.includes('1 person'), null, 'a person dropped on a section heading goes into it');
-    ok((await peopleOrder()) === 'Jon Demo,Kari Test,| Not this term,Ola Sample', 'without a section first, then the section: ' + await peopleOrder());
+    ok((await peopleOrder()) === 'Kari Test,Jon Demo,| Not this term,Ola Sample', 'without a section first, then the section: ' + await peopleOrder());
+    await personRowOf('Kari Test').locator('.grip').dragTo(page.locator('tr.person-sect'));
+    await until(page, () => document.querySelector('tr.person-sect').innerText.includes('2 people'), null, 'a second one dropped on the heading');
+    ok((await peopleOrder()) === 'Jon Demo,| Not this term,Ola Sample,Kari Test', 'goes last in the section: ' + await peopleOrder());
+    await personRowOf('Kari Test').locator('.grip').dragTo(page.locator('tr.sect', { hasText: 'Availability' }));
+    await until(page, () => document.querySelector('tr.person-sect').innerText.includes('1 person'), null, 'dropped on the Availability heading');
+    ok((await peopleOrder()) === 'Jon Demo,Kari Test,| Not this term,Ola Sample', 'goes last of those without a section: ' + await peopleOrder());
     // the person dialog places someone in a section too (for phones)
     await page.click('button[aria-label="Open Jon Demo"]');
     await reopens(() => dialog.locator('select[aria-label="Section in the table"]').selectOption({ label: 'Not this term' }), 'the person dialog opens again');
     await closeDialog();
     ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo', 'the dialog puts a person last in the section: ' + await peopleOrder());
-    // «Add a person» lines: one after those without a section, one at the end of each section; the new person lands there
-    ok(await page.evaluate(() => { const rows = [...document.querySelectorAll('tr.person-row, tr.person-sect, tr.adds:has(input[placeholder^="Add a person"])')];
-      return rows.map((r) => (r.classList.contains('adds') ? '+' : r.classList.contains('person-sect') ? '|' : 'p')).join(''); }) === 'p+|pp+', 'an add line after the people without a section and at the end of the section');
-    await addNamed('Add a person to Not this term', 'Pia Demo');
-    await until(page, () => document.querySelectorAll('tr.person-row').length === 4, null, 'the new person is added');
-    ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo,Pia Demo', 'added in the section, last: ' + await peopleOrder());
-    // deleting the section puts its people back, without a section
-    await page.click('button[aria-label="Change the section Not this term"]');
-    await dialog.getByRole('button', { name: 'Delete the section' }).click();
-    await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();  // asked in the page's own dialog
-    await until(page, () => !document.querySelector('tr.person-sect'), null, 'the section is gone');
-    ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo,Pia Demo', 'its people come back in their order: ' + await peopleOrder());
+    // «Add a person» lines: behind a + at the end of the last name of each list; − closes; the new person lands there
+    {
+      const plusOf = (key) => page.locator(`button.addplus[data-adds="${key}"]`);
+      const sectKey = await page.locator('tr.adds', { has: page.locator('input[placeholder="Add a person to Not this term"]') }).getAttribute('data-adds');
+      ok(await page.locator('input[placeholder="Add a person to Not this term"]').isHidden(), 'the add line of a section is hidden at first');
+      ok(await personRowOf('Jon Demo').locator(`button.addplus[data-adds="${sectKey}"]`).count() === 1, 'its + is in the last name of the section');
+      await plusOf(sectKey).click();
+      ok(await page.locator('input[placeholder="Add a person to Not this term"]').isVisible() && (await plusOf(sectKey).innerText()) === '−', '+ shows the line and turns into −');
+      ok(await page.evaluate(() => document.activeElement.placeholder) === 'Add a person to Not this term', 'ready to type');
+      await plusOf(sectKey).click();
+      ok(await page.locator('input[placeholder="Add a person to Not this term"]').isHidden() && (await plusOf(sectKey).innerText()) === '+', '− hides it again');
+      await addNamed('Add a person to Not this term', 'Pia Demo');
+      await until(page, () => document.querySelectorAll('tr.person-row').length === 4, null, 'the new person is added');
+      ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo,Pia Demo', 'added in the section, last: ' + await peopleOrder());
+      ok(await page.locator('input[placeholder="Add a person to Not this term"]').isVisible(), 'the line stays open for the next');
+      await page.locator('input[placeholder="Add a person to Not this term"]').press('Escape');
+      ok(await page.locator('input[placeholder="Add a person to Not this term"]').isHidden(), 'Escape closes it');
+    }
+    // a section's name is a field: renamed in place; emptied, the section goes (asked) and its people come back
+    {
+      const sectName = () => page.locator('tr.person-sect input.fname');
+      await sectName().fill('Away');
+      await sectName().press('Enter');
+      await until(page, () => document.querySelector('tr.person-sect input.fname').value === 'Away', null, 'the section is renamed in place');
+      await sectName().fill('');
+      await sectName().press('Enter');
+      await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();  // asked in the page's own dialog
+      await until(page, () => !document.querySelector('tr.person-sect'), null, 'the section is gone');
+      ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo,Pia Demo', 'its people come back in their order: ' + await peopleOrder());
+    }
     const takes = async (person, list) => {
       await page.click(`button[aria-label="Open ${person}"]`);
       // one click per step: can’t → if needed → good
@@ -760,16 +814,16 @@ const { spawn } = require('child_process');
     const clearOfNames = () => page.evaluate(() => {
       const box = document.querySelector('.grid-scroll.main');
       return [parseFloat(getComputedStyle(box).scrollPaddingLeft), box.querySelector('th.corner').getBoundingClientRect().width,
-        ...[...box.querySelectorAll('tbody th[scope=row]')].map((th) => th.getBoundingClientRect().width)].map(Math.round);
+        ...[...box.querySelectorAll('tbody tr:not([hidden]) > th[scope=row]')].map((th) => th.getBoundingClientRect().width)].map(Math.round);
     });
     {
       const a = await page.evaluate(() => {
-        const hs = (sel) => [...document.querySelectorAll(sel)].map((e) => Math.round(e.getBoundingClientRect().height));
+        const hs = (sel) => [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().height));  // (what is shown: the add lines are behind a +)
         return { title: hs('.title-bar > button:not(.info), .title-bar .sideways button'),
           table: hs('.dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table thead button.edit'),
           slim: hs('.dp-table tr.adds form.addrow button, .dp-table tr.field-row button.freeze') };  // the add lines and the details rows are slimmer
       });
-      ok(a.slim.length >= 3 && a.slim.every((x) => x === a.slim[0]) && a.slim[0] < a.table[0], 'the add lines and details rows have one smaller height: ' + a.slim);
+      ok(a.slim.length >= 2 && a.slim.every((x) => x === a.slim[0]) && a.slim[0] < a.table[0], 'the add lines and details rows have one smaller height: ' + a.slim);
       ok(a.title.length >= 4 && a.title.every((x) => x === a.title[0]), 'the title bar’s buttons are one height: ' + a.title);
       ok(a.table.length >= 4 && a.table.every((x) => x === a.table[0]), 'the buttons in the table are one height: ' + a.table);
       const [pad, ...names] = await clearOfNames();

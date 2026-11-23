@@ -205,6 +205,13 @@ starts the Python planner, turns the answer into a view with explanations), `int
   The main table scrolls inside the window (dates and names stay put); ‹ › / the calendar button (next event from today) / wheel over the dates / arrow keys / dragging move sideways.
 - **Every other date is shaded** (2026-11-23, the user: "alternativt background colors to aid navigation"): `--alt` as a background-image on
   even columns (thead th, tbody td without colspan), so the cells' own colours stay.
+- **Moving rows and the add lines** (2026-11-23, the user: "Let the drag and drop of people easier. Hide the add people icon under a small
+  plus symbol at the end of the last cells, where clicking it makes it a minus and collapse it"): rows move by pointer events, not HTML
+  drag (`onRowDown` on the table; `handleFor` marks ⋮⋮, `dropOn(row, accept, act(item, after, kind), into)`): with a mouse the whole name
+  cell is the handle (5 px before it starts, the click after is swallowed), on touch only ⋮⋮; a `.drop-line` above/below by the row's
+  half, a heading (`into`) puts it last; autoscroll near the edges; Escape lets go. The add lines are behind `adds(key, rows, host, lines)`:
+  a `button.addplus` in a strip at the bottom of the last name cell (the heading when empty), open keys in `planState.adds`,
+  `applyFolds` hides the closed ones; the last list of people also opens «Add a section». Section names are typed in place (`nameField`).
 - **Names in a draft cell** (2026-11-23, the user: "click a planning cell to easily add names. Show autocompletions. Adding a name that is not a
   person makes it a custom name. Add a plus … We allow adding more people then we have spots", and "No need to warn if adding more people then
   required"): `editCell` replaces the cell with chips + a combobox (`input.ename`, `ul.elist`); a plain click or + opens it (Ctrl/Shift
