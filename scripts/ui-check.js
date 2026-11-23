@@ -207,11 +207,13 @@ const { spawn } = require('child_process');
       .map((b) => (b.classList.contains('nm') ? '| ' + b.textContent : b.firstChild.textContent)).join(','));
     ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo', 'people in the order they were added: ' + await peopleOrder());
     const personRowOf = (name) => page.locator('tr.person-row', { has: page.locator(`button[aria-label="Open ${name}"]`) });
+    await personRowOf('Kari Test').evaluate((e) => e.scrollIntoView({ block: 'center' }));
     await personRowOf('Jon Demo').locator('.grip').dragTo(personRowOf('Kari Test'));
     await until(page, () => [...document.querySelectorAll('tr.person-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === 'Jon Demo,Kari Test,Ola Sample', null, 'dragging ⋮⋮ moves a person to the top');
     await addNamed('Add a section', 'Not this term');
     await page.waitForSelector('tr.person-sect');
     ok((await page.innerText('tr.person-sect')).includes('Drag people here'), 'a new section is empty');
+    await page.locator('tr.person-sect').evaluate((e) => e.scrollIntoView({ block: 'center' }));  // in the middle: near the window's edge a drag scrolls it
     await personRowOf('Ola Sample').locator('.grip').dragTo(page.locator('tr.person-sect'));
     await until(page, () => document.querySelector('tr.person-sect').innerText.includes('1 person'), null, 'a person dropped on a section heading goes into it');
     ok((await peopleOrder()) === 'Jon Demo,Kari Test,| Not this term,Ola Sample', 'without a section first, then the section: ' + await peopleOrder());
