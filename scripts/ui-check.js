@@ -473,7 +473,8 @@ const { spawn } = require('child_process');
       const cell = (task, e) => `button[aria-label="${task}, ${e}: open the place"]`;
       const inCell = (sel, what) => until(page, ([c, q]) => { const td = document.querySelector(c)?.closest('td'); return !!td && !!td.querySelector(q); }, [cell('Sound', ev[1]), sel], what);
       await draft('Sound', ev[1]).locator('.nm').first().click();
-      ok((await page.locator('dialog[open]').count()) === 0, 'a click on a name in the draft opens nothing');
+      ok((await page.locator('dialog[open]').count()) === 0, 'a click on a name in the draft opens no dialog');
+      await page.keyboard.press('Escape');  // (it opens the field for a name: see below)
       const one = draft('Sound', ev[1]).locator('button.lockbtn:not(.on)').first();
       const who = (await one.getAttribute('aria-label')).slice(5);
       await one.click();
@@ -509,6 +510,58 @@ const { spawn } = require('child_process');
       await dialog.getByRole('button', { name: 'Make draft #2 the current plan' }).click();
       await runIs(2, 'pinning a draft shows it again');
       await closeDialog();
+    }
+
+    // --- a name in a cell of the draft: a click opens a field with suggestions; Enter adds; a name of its own; × removes ---
+    {
+      const td = () => draft('Sound', ev[1]);
+      const ed = page.locator('td.draft.editing');  // (the field takes the place of ⋯, which td() goes by)
+      const field = () => ed.locator('input.ename');
+      const opts = () => ed.locator('ul.elist li').allInnerTexts();
+      const chips = () => ed.locator('.echip').allInnerTexts();
+      await page.keyboard.down('Control');
+      await draft('Sound', ev[0]).locator('.dlines').click();
+      await page.keyboard.up('Control');
+      ok((await page.locator('td.draft.editing').count()) === 0 && (await page.locator('td.sel').count()) === 1, 'Ctrl+click selects the cell, no field');
+      await page.keyboard.press('Escape');
+      await td().locator('.dlines').click();
+      await until(page, () => document.activeElement && document.activeElement.matches('td.draft.editing input.ename'), null, 'a click on the cell opens the field, ready to type');
+      const all = await opts();
+      ok(all.length > 0 && all[all.length - 1].includes('Jon Demo') && all[all.length - 1].includes('said no'), 'who said no comes last: ' + all.join(' | '));
+      ok(all.some((x) => x.includes('in the draft: locks it')), 'the names the planner put there say so');
+      await field().fill('Ingrid Sample');
+      ok((await opts()).join('|') === '+ Add «Ingrid Sample» as a name of its own', 'no person by that name: a name of its own: ' + (await opts()).join('|'));
+      await field().press('Enter');
+      await until(page, () => [...document.querySelectorAll('td.draft.editing .echip.hand')].some((x) => x.textContent.includes('Ingrid Sample')), null, 'Enter adds it');
+      await until(page, () => document.activeElement && document.activeElement.matches('td.draft.editing input.ename') && document.activeElement.value === '', null, 'and the field stays open for the next name');
+      await field().fill('pia');
+      ok((await opts())[0].includes('Pia Demo'), 'typing suggests the person: ' + (await opts())[0]);
+      await field().press('Enter');
+      await until(page, () => [...document.querySelectorAll('td.draft.editing .echip.hand')].some((x) => x.textContent.includes('Pia Demo')), null, 'a person is added by Enter');
+      // a name the planner put there, picked: it is locked (set by hand)
+      const planned = ed.locator('ul.elist li', { hasText: 'in the draft: locks it' }).first();
+      const plannedName = await planned.locator('.nm').innerText();
+      await planned.click();
+      await until(page, (n) => [...document.querySelectorAll('td.draft.editing .echip.locked')].some((x) => x.textContent.includes(n)), plannedName, 'a name from the draft picked is locked');
+      await page.keyboard.press('Escape');
+      await until(page, () => !document.querySelector('td.draft.editing'), null, 'Escape closes the field');
+      const hand = await td().locator('.slot.hand').allInnerTexts();
+      ok(hand.includes('Ingrid Sample') && hand.includes('Pia Demo'), 'the names are in the cell, violet: ' + hand.join(', '));
+      // + opens it too (more names than places are allowed: no warning), and × takes a name set by hand away
+      await td().hover();
+      await td().locator('button.addname').click();
+      await field().waitFor();
+      ok((await chips()).length >= 3, 'the field shows the names there: ' + (await chips()).join(', '));
+      ok((await ed.locator(`.echip.locked button.x`).count()) === 0, 'a name of the planner’s has no × (its lock is in the cell)');
+      for (const n of ['Ingrid Sample', 'Pia Demo']) {
+        await ed.locator(`.echip button.x[aria-label="Remove ${n}"]`).click();
+        await until(page, (x) => !!document.querySelector('td.draft.editing') && ![...document.querySelectorAll('td.draft.editing .echip.hand')].some((c) => c.textContent.includes(x)), n, '× removes ' + n);
+      }
+      await page.keyboard.press('Escape');
+      ok((await td().locator('.slot.hand').count()) === 0, 'nothing set by hand is left');
+      await td().locator(`button.lockbtn.on[aria-label="Unlock ${plannedName}"]`).click();
+      await until(page, ([c, n]) => !!document.querySelector(c)?.closest('td').querySelector(`button.lockbtn:not(.on)[aria-label="Lock ${n}"]`),
+        [`button[aria-label="Sound, ${ev[1]}: open the place"]`, plannedName], 'and its lock undoes it');
     }
 
     // --- «Edit | View»: the plan as it stands, without editing; a name found stands out; a card per event on a phone; print ---

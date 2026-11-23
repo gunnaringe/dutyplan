@@ -1734,14 +1734,98 @@ async function pagePlan(r, org, people) {
     return dragRow(row, g, 'field', f, i, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
   };
 
+  // Names straight in the cell (2026-11-23, the user: "Let it be possible to click a planning cell to easily add names. Show
+  // autocompletions. Adding a name that is not a person makes it a custom name. Add a plus to make it possible to add more names. We allow
+  // adding more people then we have spots." … "No need to warn if adding more people then required … it is a consious choice"): a plain
+  // click on a draft cell (or its +) opens a field with suggestions. Those who said yes and take the task come first, those who said no
+  // last; one the planner put there is locked when picked; text that is no one becomes a name of its own. After each change the page is
+  // drawn again and the field opens again in the same cell, for the next name. × takes away a name set by hand. Escape or a click
+  // outside closes it.
+  const levelRank = { good: 0, poor: 1, '': 2, never: 3 };
+  const taskRank = { good: 0, poor: 1, '': 2, never: 3 };
+  const editCell = (ev, tk, td, typed = '') => {
+    const k = at(ev, tk);
+    planState.edit = k;
+    const s = slotsAt(ev, tk);
+    // what is typed while the page is drawn again goes into the new field (editInput: the field of the cell open now)
+    const again = async (action) => { input.value = ''; if (await write(action)) { planState.edit = k; await render(); } };
+    const chips = s.items.map((x) => h('span', { class: 'echip' + (x.hand ? ' hand' : '') + (x.locked ? ' locked' : '') },
+      x.locked ? mark('lock') : '', h('span', {}, itemText(x)),
+      x.hand ? h('button', { type: 'button', class: 'x', 'aria-label': t('place.remove_aria', { name: x.name }), title: t('common.remove'),
+        onclick: () => again(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)) }, '×') : ''));
+    const taken = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
+    const fromPlanner = new Set(s.items.filter((x) => !x.cell && x.kind === 'person').map((x) => x.id));
+    const taskLevel = (p) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || {}).level || '';
+    const level = (p) => (ans[p.id] || {})[ev.id] || '';
+    const candidates = people.filter((p) => !taken.has(p.id))
+      .sort((a, b) => levelRank[level(a)] - levelRank[level(b)] || taskRank[taskLevel(a)] - taskRank[taskLevel(b)] || a.name.localeCompare(b.name, locale()));
+    const input = h('input', { type: 'text', class: 'ename', maxlength: '80', placeholder: t('cell.placeholder'), autocomplete: 'off', role: 'combobox',
+      'aria-label': t('cell.add_aria', { task: tk.name, label: label(ev) }), 'aria-autocomplete': 'list', 'aria-expanded': 'true', 'aria-controls': 'cell-list' });
+    const list = h('ul', { class: 'elist', id: 'cell-list', role: 'listbox' });
+    let options = [];  // { el, add }
+    let active = -1;
+    const activate = (i) => {
+      active = i;
+      options.forEach((o, j) => o.el.setAttribute('aria-selected', String(j === i)));
+      if (options[i]) { options[i].el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', options[i].el.id); }
+    };
+    const addPerson = (p) => again(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id, ...(fromPlanner.has(p.id) ? { locked: true } : {}) }));
+    const addText = (text) => again(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, label: text, fills: 1 }));
+    const fill = () => {
+      const q = input.value.trim().toLowerCase();
+      const hits = candidates.filter((p) => p.name.toLowerCase().includes(q))
+        .sort((a, b) => (q ? Number(!a.name.toLowerCase().startsWith(q)) - Number(!b.name.toLowerCase().startsWith(q)) : 0)).slice(0, 12);
+      options = hits.map((p, i) => {
+        const l = level(p), tl = taskLevel(p);
+        const el = h('li', { role: 'option', id: 'cell-opt-' + i, class: l === 'never' ? 'no' : '', onmousedown: (e) => { e.preventDefault(); addPerson(p); } },
+          h('span', { class: 'ans ' + (l || 'none') }, l ? icon(LEVEL_ICON[l]) : ''), h('span', { class: 'nm' }, p.name),
+          h('span', { class: 'why small' }, fromPlanner.has(p.id) ? t('cell.in_draft') : l === 'never' ? t('cell.said_no') : tl && tl !== 'never' ? tk.name + ': ' + t('pick.' + tl) : ''));
+        return { el, add: () => addPerson(p) };
+      });
+      const exact = people.some((p) => p.name.toLowerCase() === q);
+      if (q && !exact) {
+        const text = input.value.trim();
+        const el = h('li', { role: 'option', id: 'cell-opt-custom', class: 'custom', onmousedown: (e) => { e.preventDefault(); addText(text); } }, '+ ' + t('cell.custom', { text }));
+        options.push({ el, add: () => addText(text) });
+      }
+      list.replaceChildren(...options.map((o) => o.el));
+      list.hidden = !options.length;
+      activate(q && options.length ? 0 : -1);  // what is typed: the best match is picked by Enter (the name of its own when nothing matches)
+    };
+    input.addEventListener('input', fill);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); activate(Math.min(options.length - 1, active + 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activate(Math.max(0, active - 1)); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (options[active]) options[active].add(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    });
+    const addBtn = h('button', { type: 'button', class: 'eadd', title: t('cell.add'), 'aria-label': t('cell.add'),
+      onmousedown: (e) => e.preventDefault(), onclick: () => { if (options[active]) options[active].add(); else input.focus(); } }, '+');
+    const box = h('div', { class: 'cell-edit' }, h('div', { class: 'echips' }, chips), h('div', { class: 'erow' }, input, addBtn), list);
+    const close = () => { if (planState.edit === k) planState.edit = null; if (box.isConnected) putDraftCell(ev, tk); };
+    box.addEventListener('focusout', (e) => { if (!box.contains(e.relatedTarget)) setTimeout(() => { if (box.isConnected && !box.contains(document.activeElement)) close(); }, 0); });
+    td.classList.add('editing');
+    td.replaceChildren(box);
+    planState.editInput = input;
+    input.value = typed;
+    fill();
+    input.focus();
+  };
   // The draft's cells, so a change of places can redraw the cell below without redrawing the page.
   const draftTd = {};
   // A place in the draft: the names, each of the planner's with a lock button (locked: kept by the next draft), and ⋯ for
-  // the place's dialog. A click on the cell itself does nothing, so dragging over cells selects them (Lock / Unlock in the bar).
+  // the place's dialog, + (or a plain click on the cell) for a name (editCell); dragging over cells selects them (Lock / Unlock in the bar).
   const draftCell = (ev, tk) => {
     const s = slotsAt(ev, tk);
-    if (!s.n && !s.items.length) return h('td', { class: 'draft none' }, h('span', { class: 'muted small', 'aria-hidden': 'true' }, '–'));
     const edit = org.level !== 'view';
+    const plus = () => h('button', { type: 'button', class: 'addname', title: t('cell.add'), 'aria-label': t('cell.add_aria', { task: tk.name, label: label(ev) }),
+      onclick: (e) => editCell(ev, tk, e.currentTarget.closest('td')) }, '+');
+    const clickable = (td) => {
+      if (edit) td.addEventListener('click', (e) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.target.closest('button, input, .cell-edit')) editCell(ev, tk, td); });
+      return td;
+    };
+    if (!s.n && !s.items.length) return clickable(h('td', { class: 'draft none' }, h('div', { class: 'dcell' }, h('div', { class: 'dlines' }, h('span', { class: 'muted small', 'aria-hidden': 'true' }, '–')),
+      edit ? h('div', { class: 'dside' }, plus()) : '')));
     const open = () => placeDialog(ev, tk);
     const line = (x) => {
       if (!edit || x.hand || x.kind !== 'person') return slot(x);
@@ -1758,9 +1842,10 @@ async function pagePlan(r, org, people) {
     const td = h('td', { class: 'draft' }, h('div', { class: 'dcell' }, h('div', { class: 'dlines' }, lines),
       h('div', { class: 'dside' },
         h('button', { type: 'button', class: 'dmenu', title: t('draft.open_place'), 'aria-label': t('draft.place_aria', { task: tk.name, label: label(ev) }), onclick: open }, icon('more')),
+        edit ? plus() : '',
         pool && pool.people.length ? h('span', { class: 'mark pool', role: 'img', title: t('draft.pool_mark'), 'aria-label': t('draft.pool_mark') }, icon('filter')) : '')));
     if (done) reg('draft', tk.id, ev, td, () => putDraftCell(ev, tk));
-    return td;
+    return clickable(td);
   };
   const putDraftCell = (ev, tk) => { const td = draftCell(ev, tk); if (draftTd[at(ev, tk)]) draftTd[at(ev, tk)].replaceWith(td); draftTd[at(ev, tk)] = td; return td; };
 
@@ -2198,7 +2283,14 @@ async function pagePlan(r, org, people) {
     selbar,
     notePop);
   dragScroll(table);
-  root.shown = () => reopened({
+  // the field in a cell opens again after a change (editCell), for the next name
+  const editing = planState.edit && events.flatMap((ev) => tasks.map((tk) => [ev, tk])).find(([ev, tk]) => at(ev, tk) === planState.edit);
+  planState.edit = null;
+  root.shown = () => {
+    if (editing && draftTd[at(...editing)]) editCell(...editing, draftTd[at(...editing)], planState.editInput ? planState.editInput.value : '');
+    return reopenedPage();
+  };
+  const reopenedPage = () => reopened({
     task: (id) => { const x = tasks.find((tk) => tk.id === id); if (x) taskDialog(x); },
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },
     place: (k) => { const [e, tk] = k.split('/').map(Number); const ev = events.find((x) => x.id === e), task = tasks.find((x) => x.id === tk); if (ev && task) placeDialog(ev, task); },
