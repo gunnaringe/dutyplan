@@ -121,6 +121,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; «Add a person» lines after those without a section and at the end of each section, `POST /people {name, section}`; organisation-wide *sections* (`person_section`)
   are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone too). Clicking a date, task, person, row ✎ or draft place opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
+  - **The whole width** (2026-11-23, the user: "Vi har stort behov for horisontal plass. Så for planen bør vi ikke ha en container for dette midt på"):
+    the plan page has no max-width and only a small side padding (`main:has(.plan-page)`); other pages may stay centred.
   - **On a phone** the same table as on a wide screen, narrower (2026-11-22, the user: "La vertikal visning på mobil vises som vanlig. Den
     løsningen som er i dag er litt forvirrende." — the turned availability of 2026-11-20 is gone; do not bring it back). Names stay put, the days
     scroll sideways; a tap answers. Dragging a selection needs a mouse (a touch scrolls), but ⇥ and a count still select.
