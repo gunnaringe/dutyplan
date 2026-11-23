@@ -172,7 +172,7 @@ message EventAnswer {
   string level = 3;
 }
 
-// A task a person takes (no row = not at all).
+// A task a person takes in the plan (no row = not at all).
 message TaskAnswer {
   int32 person_id = 1;
   int32 task_id = 2;
@@ -490,9 +490,10 @@ message DeleteLinkRequest {
 }
 message DeleteLinkResponse {}
 
-// ---- tasks, people and sections (the organisation's own) ----------------------------------------------------------
+// ---- tasks, people and sections (each plan's own) ------------------------------------------------------------------
 
-// The organisation's tasks, people and sections: the same in every plan. Every call: links read, edit link.
+// A plan's tasks, people and sections: every plan has its own. Every call: members; a link to the plan reads, an edit
+// link writes.
 service SetupService {
   // The tasks, in their order.
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
@@ -520,10 +521,6 @@ service SetupService {
   rpc UpdatePerson(UpdatePersonRequest) returns (UpdatePersonResponse);
   // Move a person, into a section or out of one.
   rpc MovePerson(MovePersonRequest) returns (MovePersonResponse);
-  // A person takes a task: good (gladly) | poor (if needed).
-  rpc SetPersonTask(SetPersonTaskRequest) returns (SetPersonTaskResponse);
-  // A person no longer takes a task.
-  rpc RemovePersonTask(RemovePersonTaskRequest) returns (RemovePersonTaskResponse);
 
   // Sections of people: headings, placement only.
   rpc ListSections(ListSectionsRequest) returns (ListSectionsResponse);
@@ -550,6 +547,7 @@ service SetupService {
 
 message ListTasksRequest {
   string org = 1;
+  string plan = 2;
 }
 message ListTasksResponse {
   repeated Task tasks = 1;
@@ -557,9 +555,10 @@ message ListTasksResponse {
 
 message CreateTaskRequest {
   string org = 1;
-  string name = 2;
+  string plan = 2;
+  string name = 3;
   // a task section to add it to (0 = none)
-  int32 section = 3;
+  int32 section = 4;
 }
 message CreateTaskResponse {
   Task task = 1;
@@ -567,10 +566,11 @@ message CreateTaskResponse {
 
 message UpdateTaskRequest {
   string org = 1;
-  int32 id = 2;
-  optional string name = 3;
+  string plan = 2;
+  int32 id = 3;
+  optional string name = 4;
   // false: the planner leaves it alone (only what is set by hand)
-  optional bool planned = 4;
+  optional bool planned = 5;
 }
 message UpdateTaskResponse {
   Task task = 1;
@@ -578,22 +578,25 @@ message UpdateTaskResponse {
 
 message DeleteTaskRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
 }
 message DeleteTaskResponse {}
 
 message MoveTaskRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
   // required
-  optional int32 position = 3;
+  optional int32 position = 4;
   // 0 = none; left out = the section it is in
-  optional int32 section = 4;
+  optional int32 section = 5;
 }
 message MoveTaskResponse {}
 
 message ListCombinationsRequest {
   string org = 1;
+  string plan = 2;
 }
 message ListCombinationsResponse {
   repeated Combination combinations = 1;
@@ -601,24 +604,27 @@ message ListCombinationsResponse {
 
 message SetCombinationRequest {
   string org = 1;
+  string plan = 2;
   // two task ids, in either order
-  int32 a = 2;
-  int32 b = 3;
+  int32 a = 3;
+  int32 b = 4;
   // cannot | practical | standard
-  string level = 4;
+  string level = 5;
 }
 message SetCombinationResponse {}
 
 message SetTaskCombinationsRequest {
   string org = 1;
-  int32 task = 2;
+  string plan = 2;
+  int32 task = 3;
   // cannot | practical | standard
-  string level = 3;
+  string level = 4;
 }
 message SetTaskCombinationsResponse {}
 
 message ListPeopleRequest {
   string org = 1;
+  string plan = 2;
 }
 message ListPeopleResponse {
   repeated Person people = 1;
@@ -626,9 +632,10 @@ message ListPeopleResponse {
 
 message CreatePersonRequest {
   string org = 1;
-  string name = 2;
+  string plan = 2;
+  string name = 3;
   // 0 = none
-  int32 section = 3;
+  int32 section = 4;
 }
 message CreatePersonResponse {
   Person person = 1;
@@ -636,10 +643,11 @@ message CreatePersonResponse {
 
 message UpdatePersonRequest {
   string org = 1;
-  int32 id = 2;
-  optional string name = 3;
+  string plan = 2;
+  int32 id = 3;
+  optional string name = 4;
   // false: the planner never picks them
-  optional bool proposable = 4;
+  optional bool proposable = 5;
 }
 message UpdatePersonResponse {
   Person person = 1;
@@ -647,32 +655,18 @@ message UpdatePersonResponse {
 
 message MovePersonRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
   // required
-  optional int32 position = 3;
+  optional int32 position = 4;
   // 0 = none
-  int32 section = 4;
+  int32 section = 5;
 }
 message MovePersonResponse {}
 
-message SetPersonTaskRequest {
-  string org = 1;
-  int32 person = 2;
-  int32 task = 3;
-  // good | poor
-  string level = 4;
-}
-message SetPersonTaskResponse {}
-
-message RemovePersonTaskRequest {
-  string org = 1;
-  int32 person = 2;
-  int32 task = 3;
-}
-message RemovePersonTaskResponse {}
-
 message ListSectionsRequest {
   string org = 1;
+  string plan = 2;
 }
 message ListSectionsResponse {
   repeated Section sections = 1;
@@ -680,7 +674,8 @@ message ListSectionsResponse {
 
 message CreateSectionRequest {
   string org = 1;
-  string name = 2;
+  string plan = 2;
+  string name = 3;
 }
 message CreateSectionResponse {
   Section section = 1;
@@ -688,8 +683,9 @@ message CreateSectionResponse {
 
 message RenameSectionRequest {
   string org = 1;
-  int32 id = 2;
-  string name = 3;
+  string plan = 2;
+  int32 id = 3;
+  string name = 4;
 }
 message RenameSectionResponse {
   Section section = 1;
@@ -697,20 +693,23 @@ message RenameSectionResponse {
 
 message MoveSectionRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
   // required
-  optional int32 position = 3;
+  optional int32 position = 4;
 }
 message MoveSectionResponse {}
 
 message DeleteSectionRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
 }
 message DeleteSectionResponse {}
 
 message ListTaskSectionsRequest {
   string org = 1;
+  string plan = 2;
 }
 message ListTaskSectionsResponse {
   repeated Section sections = 1;
@@ -718,7 +717,8 @@ message ListTaskSectionsResponse {
 
 message CreateTaskSectionRequest {
   string org = 1;
-  string name = 2;
+  string plan = 2;
+  string name = 3;
 }
 message CreateTaskSectionResponse {
   Section section = 1;
@@ -726,8 +726,9 @@ message CreateTaskSectionResponse {
 
 message RenameTaskSectionRequest {
   string org = 1;
-  int32 id = 2;
-  string name = 3;
+  string plan = 2;
+  int32 id = 3;
+  string name = 4;
 }
 message RenameTaskSectionResponse {
   Section section = 1;
@@ -735,15 +736,17 @@ message RenameTaskSectionResponse {
 
 message MoveTaskSectionRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
   // required
-  optional int32 position = 3;
+  optional int32 position = 4;
 }
 message MoveTaskSectionResponse {}
 
 message DeleteTaskSectionRequest {
   string org = 1;
-  int32 id = 2;
+  string plan = 2;
+  int32 id = 3;
 }
 message DeleteTaskSectionResponse {}
 
@@ -754,8 +757,12 @@ message DeleteTaskSectionResponse {}
 service PlanService {
   // The organisation's plans. Members only.
   rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
-  // Make a plan; its slug comes from the name. Members only.
+  // Make a plan; its slug comes from the name. It starts empty, or with the people and tasks of another plan (their
+  // sections, ⚡, combinations and the tasks people take). Members only.
   rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse);
+  // A copy of a plan under a new name: its people and tasks, and with `table` its events, details, places, names set by
+  // hand, selections, answers, notes and weights. Drafts and links are never copied. Members only.
+  rpc DuplicatePlan(DuplicatePlanRequest) returns (DuplicatePlanResponse);
   // One plan.
   rpc GetPlan(GetPlanRequest) returns (GetPlanResponse);
   // Rename a plan; the slug stays.
@@ -798,8 +805,13 @@ service PlanService {
   // The text of a details row for one event; "" removes it.
   rpc SetFieldValue(SetFieldValueRequest) returns (SetFieldValueResponse);
 
-  // Everyone's answers per event, the tasks each person takes, and the notes.
+  // Everyone's answers per event, the tasks each person takes in this plan, and the notes.
   rpc ListAnswers(ListAnswersRequest) returns (ListAnswersResponse);
+  // A person takes a task in this plan: good (gladly) | poor (if needed). Each plan has its own; a new plan starts with a copy
+  // of the newest plan's. Answer link.
+  rpc SetPersonTask(SetPersonTaskRequest) returns (SetPersonTaskResponse);
+  // A person no longer takes a task in this plan. Answer link.
+  rpc RemovePersonTask(RemovePersonTaskRequest) returns (RemovePersonTaskResponse);
   // One person's answers for some events. Answer link.
   rpc SetAvailability(SetAvailabilityRequest) returns (SetAvailabilityResponse);
   // A note on an answer, at most 300 characters; "" removes it. Answer link.
@@ -818,8 +830,21 @@ message ListPlansResponse {
 message CreatePlanRequest {
   string org = 1;
   string name = 2;
+  // the slug of a plan of the organisation to start with the people and tasks of; empty: start empty
+  string from = 3;
 }
 message CreatePlanResponse {
+  Plan plan = 1;
+}
+
+message DuplicatePlanRequest {
+  string org = 1;
+  string plan = 2;
+  string name = 3;
+  // copy the filled-in table too
+  bool table = 4;
+}
+message DuplicatePlanResponse {
   Plan plan = 1;
 }
 
@@ -1029,6 +1054,24 @@ message SetAvailabilityRequest {
   map<int32, string> levels = 4;
 }
 message SetAvailabilityResponse {}
+
+message SetPersonTaskRequest {
+  string org = 1;
+  string plan = 2;
+  int32 person = 3;
+  int32 task = 4;
+  // good | poor
+  string level = 5;
+}
+message SetPersonTaskResponse {}
+
+message RemovePersonTaskRequest {
+  string org = 1;
+  string plan = 2;
+  int32 person = 3;
+  int32 task = 4;
+}
+message RemovePersonTaskResponse {}
 
 message SetNoteRequest {
   string org = 1;

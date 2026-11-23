@@ -38,13 +38,13 @@ func addWithPlaces(ctx context.Context, s *Store, org, plan string, in NewEvents
 }
 
 // unplannedTask creates a task the planner does not distribute (only names set by hand).
-func unplannedTask(ctx context.Context, s *Store, org, name string) (Task, error) {
-	t, err := s.CreateTask(ctx, org, name)
+func unplannedTask(ctx context.Context, s *Store, org, plan, name string) (Task, error) {
+	t, err := s.CreateTask(ctx, org, plan, name)
 	if err != nil {
 		return t, err
 	}
 	off := false
-	return s.UpdateTask(ctx, org, t.ID, TaskPatch{Planned: &off})
+	return s.UpdateTask(ctx, org, plan, t.ID, TaskPatch{Planned: &off})
 }
 
 func mustOrg(t *testing.T, s *Store, name string) Org {
@@ -103,7 +103,7 @@ func TestTenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	personA, err := s.CreatePerson(ctx, a.Slug, "Kari Test")
+	personA, err := s.CreatePerson(ctx, a.Slug, planA.Slug, "Kari Test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,35 +112,38 @@ func TestTenantIsolation(t *testing.T) {
 	if _, err := s.GetPlan(ctx, b.Slug, planA.Slug); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B reads A's plan: want ErrNotFound, got %v", err)
 	}
-	if people, _ := s.ListPeople(ctx, b.Slug); len(people) != 0 {
-		t.Errorf("B sees A's people: %v", people)
+	if people, err := s.ListPeople(ctx, b.Slug, planA.Slug); !errors.Is(err, ErrNotFound) {
+		t.Errorf("B sees A's people: %v %v", people, err)
 	}
 	if plans, _ := s.ListPlans(ctx, b.Slug); len(plans) != 0 {
 		t.Errorf("B sees A's plans: %v", plans)
 	}
+	planB, err := s.CreatePlan(ctx, b.Slug, "Autumn 2026")
+	if people, _ := s.ListPeople(ctx, b.Slug, planB.Slug); len(people) != 0 {
+		t.Errorf("B's plan has A's people: %v", people)
+	}
 
 	// Writing to A's person through B fails and changes nothing.
 	off := false
-	if _, err := s.UpdatePerson(ctx, b.Slug, personA.ID, PersonPatch{Proposable: &off}); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdatePerson(ctx, b.Slug, planB.Slug, personA.ID, PersonPatch{Proposable: &off}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B updates A's person: want ErrNotFound, got %v", err)
 	}
-	if people, _ := s.ListPeople(ctx, a.Slug); len(people) != 1 || !people[0].Proposable {
+	if people, _ := s.ListPeople(ctx, a.Slug, planA.Slug); len(people) != 1 || !people[0].Proposable {
 		t.Errorf("A's person changed: %v", people)
 	}
 
 	// The same plan slug and person name may exist in both, as separate things.
-	planB, err := s.CreatePlan(ctx, b.Slug, "Autumn 2026")
 	if err != nil || planB.Slug != planA.Slug {
 		t.Fatalf("same plan name in B: %+v, %v", planB, err)
 	}
-	if _, err := s.CreatePerson(ctx, b.Slug, "Kari Test"); err != nil {
+	if _, err := s.CreatePerson(ctx, b.Slug, planB.Slug, "Kari Test"); err != nil {
 		t.Fatalf("same person name in B: %v", err)
 	}
 	// ... but not twice in one organisation.
 	if _, err := s.CreatePlan(ctx, a.Slug, "Autumn 2026"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate plan in A: want ErrConflict, got %v", err)
 	}
-	if _, err := s.CreatePerson(ctx, a.Slug, "Kari Test"); !errors.Is(err, ErrConflict) {
+	if _, err := s.CreatePerson(ctx, a.Slug, planA.Slug, "Kari Test"); !errors.Is(err, ErrConflict) {
 		t.Errorf("duplicate person in A: want ErrConflict, got %v", err)
 	}
 }
@@ -156,7 +159,7 @@ func TestUnknownOrganisationIsNotFoundEverywhere(t *testing.T) {
 	if _, err := s.CreatePlan(ctx, "nope", "Plan"); !errors.Is(err, ErrNotFound) {
 		t.Error("CreatePlan")
 	}
-	if _, err := s.CreatePerson(ctx, "nope", "Kari"); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreatePerson(ctx, "nope", "plan", "Kari"); !errors.Is(err, ErrNotFound) {
 		t.Error("CreatePerson")
 	}
 }
@@ -164,13 +167,24 @@ func TestUnknownOrganisationIsNotFoundEverywhere(t *testing.T) {
 func TestUpdatePersonToggles(t *testing.T) {
 	s := open(t)
 	o := mustOrg(t, s, "Club")
-	p, _ := s.CreatePerson(ctx, o.Slug, "Kari Test")
+	pl1 := mustPlan(t, s, o.Slug)
+	p, _ := s.CreatePerson(ctx, o.Slug, pl1.Slug, "Kari Test")
 	off := false
-	got, err := s.UpdatePerson(ctx, o.Slug, p.ID, PersonPatch{Proposable: &off})
+	got, err := s.UpdatePerson(ctx, o.Slug, pl1.Slug, p.ID, PersonPatch{Proposable: &off})
 	if err != nil || got.Proposable {
 		t.Fatalf("got %+v, err %v", got, err)
 	}
-	if _, err := s.UpdatePerson(ctx, o.Slug, p.ID, PersonPatch{Proposable: &off}); !errors.Is(err, ErrInvalid) {
+	if _, err := s.UpdatePerson(ctx, o.Slug, pl1.Slug, p.ID, PersonPatch{Proposable: &off}); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op update: want ErrInvalid, got %v", err)
 	}
+}
+
+// mustPlan makes a plan in the organisation, for tests that need one for its people and tasks.
+func mustPlan(t *testing.T, s *Store, org string) Plan {
+	t.Helper()
+	p, err := s.CreatePlan(ctx, org, "Term")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

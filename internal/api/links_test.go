@@ -85,19 +85,19 @@ func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 	if to != "/o/choir/p/autumn" || c == nil || !c.Secure || !c.HttpOnly {
 		t.Fatalf("opening the link: to %q, cookie %+v", to, c)
 	}
-	for _, path := range []string{"/api/orgs", "/api/orgs/choir", "/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/events", "/api/orgs/choir/people"} {
+	for _, path := range []string{"/api/orgs", "/api/orgs/choir", "/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/events", "/api/orgs/choir/plans/autumn/people"} {
 		if r := e.as(c, "GET", path, nil); r.code != 200 {
 			t.Errorf("GET %s with a view link: %d", path, r.code)
 		}
 	}
-	for _, req := range [][2]string{{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"},
+	for _, req := range [][2]string{{"POST", "/api/orgs/choir/plans/autumn/people"}, {"PATCH", "/api/orgs/choir/plans/autumn"}, {"PATCH", "/api/orgs/choir"},
 		{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"}, {"PUT", "/api/orgs/choir/plans/autumn/events/1/notes/1"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
 			t.Errorf("%s %s with a view link: %d, want 403", req[0], req[1], r.code)
 		}
 	}
 	// not the members or the links, and not another organisation
-	for _, path := range []string{"/api/orgs/choir/members", "/api/orgs/choir/links", "/api/orgs/other/people"} {
+	for _, path := range []string{"/api/orgs/choir/members", "/api/orgs/choir/links", "/api/orgs/other/plans/autumn/people"} {
 		if r := e.as(c, "GET", path, nil); r.code != 401 && r.code != 404 {
 			t.Errorf("GET %s with a view link: %d, want 401/404", path, r.code)
 		}
@@ -110,17 +110,20 @@ func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 }
 
 // An answer link (2026-11-22, the user: "en visning der de kan fylle ut når de selv kan … samme lenke"): it sees the plan and sets
-// the answers and notes of anyone on the list, and nothing else.
-func TestAnAnswerLinkSetsAnswersAndNotesOnly(t *testing.T) {
+// the answers and notes of anyone on the list, and the tasks they take in that plan (2026-11-23, the user: "Task preferences are
+// editable", "for that plan only"), and nothing else.
+func TestAnAnswerLinkSetsAnswersNotesAndTasksOnly(t *testing.T) {
 	e, kari := sharedOrg(t)
 	var person struct{ ID int64 }
-	e.as(kari, "POST", "/api/orgs/choir/people", map[string]string{"name": "Ola"}).json(&person)
+	e.as(kari, "POST", "/api/orgs/choir/plans/autumn/people", map[string]string{"name": "Ola"}).json(&person)
 	var evs []struct{ ID int64 }
 	e.as(kari, "POST", "/api/orgs/choir/plans/autumn/events", map[string]string{"date": "2031-01-12"}).json(&evs)
 	if person.ID == 0 || len(evs) != 1 {
 		t.Fatalf("setup: person %d, events %v", person.ID, evs)
 	}
-	p, ev := strconv.FormatInt(person.ID, 10), strconv.FormatInt(evs[0].ID, 10)
+	var task struct{ ID int64 }
+	e.as(kari, "POST", "/api/orgs/choir/plans/autumn/tasks", map[string]string{"name": "Sound"}).json(&task)
+	p, ev, tk := strconv.FormatInt(person.ID, 10), strconv.FormatInt(evs[0].ID, 10), strconv.FormatInt(task.ID, 10)
 	l := e.link(kari, "autumn", "answer")
 	to, c := e.open(l.Token)
 	if to != "/o/choir/p/autumn" {
@@ -131,7 +134,7 @@ func TestAnAnswerLinkSetsAnswersAndNotesOnly(t *testing.T) {
 	if org.Level != "answer" {
 		t.Fatalf("the organisation says level %q", org.Level)
 	}
-	for _, path := range []string{"/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/answers", "/api/orgs/choir/people", "/api/orgs/choir/plans/autumn/runs"} {
+	for _, path := range []string{"/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/answers", "/api/orgs/choir/plans/autumn/people", "/api/orgs/choir/plans/autumn/runs"} {
 		if r := e.as(c, "GET", path, nil); r.code != 200 {
 			t.Errorf("GET %s with an answer link: %d", path, r.code)
 		}
@@ -142,16 +145,31 @@ func TestAnAnswerLinkSetsAnswersAndNotesOnly(t *testing.T) {
 	if r := e.as(c, "PUT", "/api/orgs/choir/plans/autumn/events/"+ev+"/notes/"+p, map[string]string{"note": "late"}); r.code != 204 {
 		t.Errorf("a note: %d %s", r.code, r.body)
 	}
+	if r := e.as(c, "PUT", "/api/orgs/choir/plans/autumn/people/"+p+"/tasks/"+tk, map[string]string{"level": "poor"}); r.code != 204 {
+		t.Errorf("a task the person takes: %d %s", r.code, r.body)
+	}
 	var ans struct {
 		Events []struct{ Level string }
+		Tasks  []struct{ Level string }
 		Notes  []struct{ Note string }
 	}
 	e.as(kari, "GET", "/api/orgs/choir/plans/autumn/answers", nil).json(&ans)
-	if len(ans.Events) != 1 || ans.Events[0].Level != "good" || len(ans.Notes) != 1 || ans.Notes[0].Note != "late" {
+	if len(ans.Events) != 1 || ans.Events[0].Level != "good" || len(ans.Notes) != 1 || ans.Notes[0].Note != "late" || len(ans.Tasks) != 1 || ans.Tasks[0].Level != "poor" {
 		t.Fatalf("what the link set: %+v", ans)
 	}
+	var spring struct{ Tasks []struct{ Level string } }
+	e.as(kari, "GET", "/api/orgs/choir/plans/spring/answers", nil).json(&spring)
+	if len(spring.Tasks) != 0 {
+		t.Errorf("the task holds in its plan only, spring has %+v", spring.Tasks)
+	}
+	if r := e.as(c, "DELETE", "/api/orgs/choir/plans/autumn/people/"+p+"/tasks/"+tk, nil); r.code != 204 {
+		t.Errorf("no longer taking the task: %d %s", r.code, r.body)
+	}
+	if r := e.as(c, "PUT", "/api/orgs/choir/plans/spring/people/"+p+"/tasks/"+tk, map[string]string{"level": "good"}); r.code < 400 {
+		t.Errorf("a task in another plan: %d", r.code)
+	}
 	for _, req := range [][2]string{{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"},
-		{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/people/" + p}, {"PUT", "/api/orgs/choir/people/" + p + "/tasks/1"},
+		{"POST", "/api/orgs/choir/plans/autumn/people"}, {"PATCH", "/api/orgs/choir/plans/autumn/people/" + p}, {"POST", "/api/orgs/choir/plans/autumn/tasks"}, {"PUT", "/api/orgs/choir/plans/autumn/tasks/" + tk + "/combinations"},
 		{"PATCH", "/api/orgs/choir/plans/autumn"}, {"POST", "/api/orgs/choir/plans/autumn/runs"}, {"PUT", "/api/orgs/choir/plans/autumn/events/" + ev + "/fields/1"},
 		{"DELETE", "/api/orgs/choir/plans/autumn/events/" + ev}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
@@ -196,20 +214,20 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 	if to != "/o/choir/p/autumn" {
 		t.Fatalf("to %q", to)
 	}
-	ok := [][2]string{{"GET", "/api/orgs/choir"}, {"GET", "/api/orgs/choir/plans/autumn"}, {"GET", "/api/orgs/choir/people"}, {"GET", "/api/orgs/choir/tasks"}}
+	ok := [][2]string{{"GET", "/api/orgs/choir"}, {"GET", "/api/orgs/choir/plans/autumn"}, {"GET", "/api/orgs/choir/plans/autumn/people"}, {"GET", "/api/orgs/choir/plans/autumn/tasks"}}
 	for _, req := range ok {
 		if r := e.as(c, req[0], req[1], nil); r.code != 200 {
 			t.Errorf("%s %s: %d", req[0], req[1], r.code)
 		}
 	}
-	if r := e.as(c, "POST", "/api/orgs/choir/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
+	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
 		t.Errorf("adding a person from the plan's table: %d %s", r.code, r.body)
 	}
 	if r := e.as(c, "PATCH", "/api/orgs/choir/plans/autumn", map[string]string{"name": "Autumn 2026"}); r.code != 200 {
 		t.Errorf("renaming its plan: %d", r.code)
 	}
 	// what web/llms.txt tells an agent with an edit link to do: tasks, details rows, events, places
-	if r := e.as(c, "POST", "/api/orgs/choir/tasks", map[string]string{"name": "Coffee"}); r.code != 201 {
+	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/tasks", map[string]string{"name": "Coffee"}); r.code != 201 {
 		t.Errorf("adding a task: %d %s", r.code, r.body)
 	}
 	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/fields", map[string]string{"name": "Theme"}); r.code != 201 {
@@ -218,9 +236,10 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 	if r := e.as(c, "POST", "/api/orgs/choir/plans/autumn/events", map[string]string{"date": "2031-01-12", "start_time": "11:00"}); r.code != 201 || !strings.HasPrefix(string(r.body), "[") {
 		t.Errorf("adding an event: %d %s (the guide says it answers with a list)", r.code, r.body)
 	}
-	for _, req := range [][2]string{{"GET", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans"}, {"GET", "/api/orgs/choir/plans/spring"},
+	for _, req := range [][2]string{{"GET", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans"}, {"POST", "/api/orgs/choir/plans/autumn/duplicate"}, {"GET", "/api/orgs/choir/plans/spring"},
+		{"GET", "/api/orgs/choir/plans/spring/people"}, {"POST", "/api/orgs/choir/plans/spring/people"},
 		{"PATCH", "/api/orgs/choir/plans/spring"}, {"PUT", "/api/orgs/choir/plans/spring/answers"}, {"PUT", "/api/orgs/choir/plans/spring/places"}, {"GET", "/api/orgs/choir/links"}, {"POST", "/api/orgs/choir/links"}, {"PATCH", "/api/orgs/choir"}, {"DELETE", "/api/orgs/choir?confirm=choir"}} {
-		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code < 400 {
+		if r := e.as(c, req[0], req[1], map[string]string{"name": "Extra plan"}); r.code < 400 { // (a name that would do)
 			t.Errorf("%s %s with a link to another plan: %d", req[0], req[1], r.code)
 		}
 	}
@@ -361,7 +380,7 @@ func TestALinkOpensItsOwnOrganisationOnly(t *testing.T) {
 		t.Fatalf("band: %d", r.code)
 	}
 	_, c := e.open(e.link(kari, "autumn", "edit").Token)
-	for _, req := range [][2]string{{"GET", "/api/orgs/band"}, {"GET", "/api/orgs/band/people"}, {"POST", "/api/orgs/band/people"}} {
+	for _, req := range [][2]string{{"GET", "/api/orgs/band"}, {"GET", "/api/orgs/band/plans/autumn/people"}, {"POST", "/api/orgs/band/plans/autumn/people"}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 401 {
 			t.Errorf("%s %s with a link to another organisation: %d, want 401", req[0], req[1], r.code)
 		}
@@ -454,10 +473,10 @@ func TestTheGateReadsBinaryRequestsLikeJSONOnes(t *testing.T) {
 	e, kari := sharedOrg(t)
 	stranger := e.signIn("stranger", "/")
 	// org: a member reaches the organisation, someone else does not
-	if code := e.bin("SetupService/ListPeople", &dutyplanv1.ListPeopleRequest{Org: "choir"}, kari); code != 200 {
+	if code := e.bin("PlanService/ListPlans", &dutyplanv1.ListPlansRequest{Org: "choir"}, kari); code != 200 {
 		t.Errorf("a member, in binary: %d", code)
 	}
-	if code := e.bin("SetupService/ListPeople", &dutyplanv1.ListPeopleRequest{Org: "choir"}, stranger); code != 404 {
+	if code := e.bin("PlanService/ListPlans", &dutyplanv1.ListPlansRequest{Org: "choir"}, stranger); code != 404 {
 		t.Errorf("a stranger, in binary: %d, want 404", code)
 	}
 	// plan: a link to one plan reaches that plan only

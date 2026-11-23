@@ -95,8 +95,21 @@ func TestBuildInputSendsManualCellsAndSelections(t *testing.T) {
 func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	a := newWorld(t, "Org A")
 	b := populate(t, a.st, "Org B")
-	other, _ := a.st.CreatePlan(ctx, a.org.Slug, "Spring 2027")
-	otherEvs, _ := addWithPlaces(a.st, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07"}, map[int64]int{a.sound.ID: 1})
+	other, _ := a.st.CreatePlanFrom(ctx, a.org.Slug, store.NewPlan{Name: "Spring 2027", From: a.plan.Slug})
+	var sound, birger int64 // the other plan's own copies
+	tasks, _ := a.st.ListTasks(ctx, a.org.Slug, other.Slug)
+	for _, x := range tasks {
+		if x.Name == "Sound" {
+			sound = x.ID
+		}
+	}
+	people, _ := a.st.ListPeople(ctx, a.org.Slug, other.Slug)
+	for _, x := range people {
+		if x.Name == "Birger" {
+			birger = x.ID
+		}
+	}
+	otherEvs, _ := addWithPlaces(a.st, a.org.Slug, other.Slug, store.NewEvents{Date: "2027-02-07"}, map[int64]int{sound: 1})
 	otherEv := otherEvs[0]
 	a.cell(t, a.events[0], a.sound, store.NewCell{PersonID: a.people["Aslaug"].ID})
 	b.cell(t, b.events[0], b.sound, store.NewCell{PersonID: b.people["Aslaug"].ID})
@@ -104,7 +117,9 @@ func TestBuildInputNeverSendsAnotherPlansOrOrganisationsCells(t *testing.T) {
 	if _, err := a.st.GetPlan(ctx, a.org.Slug, other.Slug); err != nil {
 		t.Fatal(err)
 	}
-	a.st.AddCell(ctx, a.org.Slug, other.Slug, store.NewCell{EventID: otherEv.ID, TaskID: a.sound.ID, PersonID: a.people["Birger"].ID})
+	if _, err := a.st.AddCell(ctx, a.org.Slug, other.Slug, store.NewCell{EventID: otherEv.ID, TaskID: sound, PersonID: birger}); err != nil {
+		t.Fatal(err)
+	}
 
 	locked, pools, raw, _, _ := a.cellsAndPools(t)
 	if len(locked) != 1 || locked[0].Person != pid(a.people["Aslaug"].ID) || len(pools) != 0 {
@@ -125,10 +140,10 @@ func TestTheRealSolverKeepsTheSingersOutOfSoundAndCameraAndHonoursTheSelection(t
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	for _, n := range []string{"Dina", "Embla"} { // without the rule, Dina and Embla could take Sound too
-		w.st.SetPersonTask(ctx, w.org.Slug, w.people[n].ID, w.sound.ID, "good")
+		w.st.SetPersonTask(ctx, w.org.Slug, w.plan.Slug, w.people[n].ID, w.sound.ID, "good")
 	}
-	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.sound.ID, "cannot")
-	w.st.SetCombination(ctx, w.org.Slug, w.singing.ID, w.camera.ID, "cannot")
+	w.st.SetCombination(ctx, w.org.Slug, w.plan.Slug, w.singing.ID, w.sound.ID, "cannot")
+	w.st.SetCombination(ctx, w.org.Slug, w.plan.Slug, w.singing.ID, w.camera.ID, "cannot")
 	ev := w.events[3]
 	w.cell(t, ev, w.singing, store.NewCell{PersonID: w.people["Dina"].ID})
 	w.cell(t, ev, w.singing, store.NewCell{PersonID: w.people["Embla"].ID})

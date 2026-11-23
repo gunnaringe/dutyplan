@@ -26,7 +26,7 @@ export async function render() {
     let people: Person[] = [];
     let org: any = null;
     if (r.org) {
-      [org, people] = await Promise.all([get(Org.getOrg, { org: r.org }), get(Setup.listPeople, { org: r.org }, 'people')]);
+      [org, people] = await Promise.all([get(Org.getOrg, { org: r.org }), r.plan ? get(Setup.listPeople, { org: r.org, plan: r.plan }, 'people') : []]);
       store.set('org', r.org);
     }
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });

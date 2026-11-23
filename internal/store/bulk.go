@@ -79,7 +79,7 @@ func (s *Store) SetAnswers(ctx context.Context, orgSlug, planSlug string, answer
 		people, events := known{}, known{}
 		changed := 0
 		for _, a := range answers {
-			if err := people.check(a.Person, func() error { _, err := getPerson(ctx, tx, oid, a.Person); return err }); err != nil {
+			if err := people.check(a.Person, func() error { _, err := getPerson(ctx, tx, pid, a.Person); return err }); err != nil {
 				return err
 			}
 			if err := events.check(a.Event, func() error { return eventInPlan(ctx, tx, oid, pid, a.Event) }); err != nil {
@@ -128,7 +128,7 @@ func (s *Store) SetPlacesMany(ctx context.Context, orgSlug, planSlug string, pla
 		tasks, events := known{}, known{}
 		changed := 0
 		for _, p := range places {
-			if err := tasks.check(p.Task, func() error { return inOrg(ctx, tx, "task", oid, p.Task) }); err != nil {
+			if err := tasks.check(p.Task, func() error { return inPlan(ctx, tx, "task", pid, p.Task) }); err != nil {
 				return err
 			}
 			if err := events.check(p.Event, func() error { return eventInPlan(ctx, tx, oid, pid, p.Event) }); err != nil {

@@ -128,7 +128,7 @@ func (s *Store) AddCell(ctx context.Context, orgSlug, planSlug string, in NewCel
 			return err
 		}
 		var taskName, what string
-		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, in.TaskID, oid).Scan(&taskName); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND plan_id = ?`, in.TaskID, pid).Scan(&taskName); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -136,7 +136,7 @@ func (s *Store) AddCell(ctx context.Context, orgSlug, planSlug string, in NewCel
 		var person any
 		switch {
 		case in.PersonID != 0:
-			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND org_id = ?`, in.PersonID, oid).Scan(&what); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND plan_id = ?`, in.PersonID, pid).Scan(&what); errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
 				return err
@@ -256,7 +256,7 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventID, 
 		}
 		var taskName string
 		var planned bool
-		if err := tx.QueryRowContext(ctx, `SELECT name, planned FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&taskName, &planned); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT name, planned FROM task WHERE id = ? AND plan_id = ?`, taskID, pid).Scan(&taskName, &planned); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
@@ -266,7 +266,7 @@ func (s *Store) SetPool(ctx context.Context, orgSlug, planSlug string, eventID, 
 		}
 		for _, p := range people {
 			var n string
-			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND org_id = ?`, p, oid).Scan(&n); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT name FROM person WHERE id = ? AND plan_id = ?`, p, pid).Scan(&n); errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
 				return err

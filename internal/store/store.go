@@ -73,7 +73,11 @@ type Store struct {
 
 // Open opens (and creates) the database at path and applies pending migrations.
 // Foreign keys are SQLite-off by default on every connection, so they are switched on in the DSN.
-func Open(path string) (*Store, error) {
+func Open(path string) (*Store, error) { return OpenUpTo(path, 0) }
+
+// OpenUpTo is Open that applies the migrations only up to and including version upTo (0: all). For tests of a migration:
+// they make a database as it was before it, then open it again with Open.
+func OpenUpTo(path string, upTo int) (*Store, error) {
 	q := url.Values{}
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "busy_timeout(5000)")
@@ -84,7 +88,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db, now: func() time.Time { return time.Now().UTC() }}
-	if err := s.migrate(context.Background()); err != nil {
+	if err := s.migrate(context.Background(), upTo); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -96,7 +100,15 @@ func (s *Store) Close() error { return s.db.Close() }
 // DB exposes the handle for tests that need to look underneath the API.
 func (s *Store) DB() *sql.DB { return s.db }
 
-func (s *Store) migrate(ctx context.Context) error {
+// A migration whose file starts with this line runs with the foreign keys off, so it can rebuild a table others point at
+// (SQLite cannot drop a UNIQUE constraint otherwise, and dropping the table would cascade). The keys are checked before
+// it commits.
+const foreignKeysOff = "-- foreign_keys: off"
+
+// goSteps run in a migration's transaction after its SQL.
+var goSteps = map[int]func(ctx context.Context, tx *sql.Tx) error{12: remapRuns012}
+
+func (s *Store) migrate(ctx context.Context, upTo int) error {
 	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
 		return err
 	}
@@ -145,30 +157,66 @@ func (s *Store) migrate(ctx context.Context) error {
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, version).Scan(&done); err != nil {
 			return err
 		}
-		if done > 0 {
+		if done > 0 || (upTo > 0 && version > upTo) {
 			continue
 		}
 		body, err := migrationFiles.ReadFile("migrations/" + name)
 		if err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, version, s.stamp()); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
+		if err := s.apply(ctx, name, version, string(body)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// apply runs one migration in a transaction (see foreignKeysOff). The pool has one connection, so the pragma holds for it.
+func (s *Store) apply(ctx context.Context, name string, version int, body string) error {
+	keysOff := strings.HasPrefix(body, foreignKeysOff)
+	if keysOff {
+		var was int // put back as it was (the connection's setting), not simply on
+		if err := s.db.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&was); err != nil {
+			return err
+		}
+		if _, err := s.db.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+			return err
+		}
+		defer s.db.ExecContext(ctx, fmt.Sprintf(`PRAGMA foreign_keys = %d`, was))
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, body); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if step := goSteps[version]; step != nil {
+		if err := step(ctx, tx); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	}
+	if keysOff {
+		rows, err := tx.QueryContext(ctx, `PRAGMA foreign_key_check`)
+		if err != nil {
+			return err
+		}
+		bad := rows.Next()
+		var table, parent string
+		var rowid, fk any
+		if bad {
+			rows.Scan(&table, &rowid, &parent, &fk)
+		}
+		rows.Close()
+		if bad {
+			return fmt.Errorf("%s: a row of %s points at a missing %s", name, table, parent)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`, version, s.stamp()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) stamp() string { return s.now().Format(time.RFC3339) }
@@ -323,8 +371,25 @@ type Plan struct {
 	DraftAside bool `json:"draft_aside,omitempty"`
 }
 
+// CreatePlan makes an empty plan (CreatePlanFrom says what else).
 func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, error) {
-	name, err := cleanName(name, "name")
+	return s.CreatePlanFrom(ctx, orgSlug, NewPlan{Name: name})
+}
+
+// NewPlan is a plan to make. From: the slug of a plan of the organisation whose people and tasks (with their sections,
+// ⚡, combinations and the tasks people take) the new plan starts with; empty: start empty. Table: copy From's table
+// too (a duplicate): its events with their times, details rows and values, places, names set by hand, selections,
+// answers and notes, and its weights (without From it has nothing to copy). Drafts and links are never copied.
+type NewPlan struct {
+	Name  string
+	From  string
+	Table bool
+}
+
+// CreatePlanFrom makes a plan, in one transaction with what it copies. The first plan of an organisation also takes the
+// people and tasks the organisation had before plans had their own (migration 012).
+func (s *Store) CreatePlanFrom(ctx context.Context, orgSlug string, in NewPlan) (Plan, error) {
+	name, err := cleanName(in.Name, "name")
 	if err != nil {
 		return Plan{}, err
 	}
@@ -341,14 +406,27 @@ func (s *Store) CreatePlan(ctx context.Context, orgSlug, name string) (Plan, err
 		if err := atMost(ctx, tx, MaxPlansPerOrg, "plans", `SELECT COUNT(*) FROM plan WHERE org_id = ?`, oid); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
+		var from int64
+		if in.From != "" {
+			if from, err = planID(ctx, tx, oid, in.From); err != nil {
+				return err
+			}
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO plan (org_id, slug, name, created_at) VALUES (?, ?, ?, ?)`, oid, p.Slug, p.Name, p.CreatedAt)
 		if isUnique(err) {
 			return exists("plan", p.Slug)
 		}
 		if err != nil {
 			return err
 		}
-		return nil
+		pid, err := res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if from == 0 {
+			return claimLeftovers(ctx, tx, oid, pid)
+		}
+		return copyPlan(ctx, tx, oid, from, pid, in.Table)
 	})
 	return p, err
 }
@@ -394,30 +472,30 @@ type Person struct {
 	Section    int64  `json:"section"` // 0: no section
 }
 
-func (s *Store) CreatePerson(ctx context.Context, orgSlug, name string) (Person, error) {
-	return s.CreatePersonIn(ctx, orgSlug, name, 0)
+func (s *Store) CreatePerson(ctx context.Context, orgSlug, planSlug, name string) (Person, error) {
+	return s.CreatePersonIn(ctx, orgSlug, planSlug, name, 0)
 }
 
 // CreatePersonIn adds a person last in a section (0: last among those without one), where the page's «Add a person»
 // line for that section is.
-func (s *Store) CreatePersonIn(ctx context.Context, orgSlug, name string, section int64) (Person, error) {
+func (s *Store) CreatePersonIn(ctx context.Context, orgSlug, planSlug, name string, section int64) (Person, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Person{}, err
 	}
 	p := Person{Name: name, Proposable: true, Section: section}
 	err = s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		oid, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
-		if err := atMost(ctx, tx, MaxPeoplePerOrg, "people", `SELECT COUNT(*) FROM person WHERE org_id = ?`, oid); err != nil {
+		if err := atMost(ctx, tx, MaxPeoplePerPlan, "people", `SELECT COUNT(*) FROM person WHERE plan_id = ?`, pid); err != nil {
 			return err
 		}
 		var sec any // NULL: no section
 		if section != 0 {
 			var one int
-			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM person_section WHERE id = ? AND org_id = ?`, section, oid).Scan(&one); errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT 1 FROM person_section WHERE id = ? AND plan_id = ?`, section, pid).Scan(&one); errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			} else if err != nil {
 				return err
@@ -425,10 +503,10 @@ func (s *Store) CreatePersonIn(ctx context.Context, orgSlug, name string, sectio
 			sec = section
 		}
 		var n int // a new person goes last in their section
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE org_id = ? AND section_id IS ?`, oid, sec).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM person WHERE plan_id = ? AND section_id IS ?`, pid, sec).Scan(&n); err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, name, position, section_id, created_at) VALUES (?, ?, ?, ?, ?)`, oid, p.Name, n, sec, s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO person (org_id, plan_id, name, position, section_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`, oid, pid, p.Name, n, sec, s.stamp())
 		if isUnique(err) {
 			return exists("person", p.Name)
 		}
@@ -441,15 +519,15 @@ func (s *Store) CreatePersonIn(ctx context.Context, orgSlug, name string, sectio
 	return p, err
 }
 
-func (s *Store) ListPeople(ctx context.Context, orgSlug string) ([]Person, error) {
-	oid, err := orgID(ctx, s.db, orgSlug)
+func (s *Store) ListPeople(ctx context.Context, orgSlug, planSlug string) ([]Person, error) {
+	_, pid, err := scope(ctx, s.db, orgSlug, planSlug)
 	if err != nil {
 		return nil, err
 	}
 	// the table's order: those without a section first, then section by section, each in its own order
 	rows, err := s.db.QueryContext(ctx, `SELECT p.id, p.name, p.proposable, COALESCE(p.section_id, 0) FROM person p
-		LEFT JOIN person_section x ON x.id = p.section_id AND x.org_id = p.org_id
-		WHERE p.org_id = ? ORDER BY x.position IS NOT NULL, x.position, p.position, p.id`, oid)
+		LEFT JOIN person_section x ON x.id = p.section_id AND x.plan_id = p.plan_id
+		WHERE p.plan_id = ? ORDER BY x.position IS NOT NULL, x.position, p.position, p.id`, pid)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +549,7 @@ type PersonPatch struct {
 	Proposable *bool   `json:"proposable"`
 }
 
-func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patch PersonPatch) (Person, error) {
+func (s *Store) UpdatePerson(ctx context.Context, orgSlug, planSlug string, id int64, patch PersonPatch) (Person, error) {
 	var p Person
 	if patch.Name != nil {
 		n, err := cleanName(*patch.Name, "name")
@@ -481,12 +559,12 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 		patch.Name = &n
 	}
 	err := s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		_, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
-		// The org_id in every statement is the tenancy guard: another organisation's person is simply not found.
-		err = tx.QueryRowContext(ctx, `SELECT id, name, proposable, COALESCE(section_id, 0) FROM person WHERE id = ? AND org_id = ?`, id, oid).
+		// The plan_id in every statement is the tenancy guard: another plan's or organisation's person is simply not found.
+		err = tx.QueryRowContext(ctx, `SELECT id, name, proposable, COALESCE(section_id, 0) FROM person WHERE id = ? AND plan_id = ?`, id, pid).
 			Scan(&p.ID, &p.Name, &p.Proposable, &p.Section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
@@ -506,8 +584,8 @@ func (s *Store) UpdatePerson(ctx context.Context, orgSlug string, id int64, patc
 		if len(changes) == 0 {
 			return errNothingToChange()
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, proposable = ? WHERE id = ? AND org_id = ?`,
-			p.Name, p.Proposable, id, oid)
+		_, err = tx.ExecContext(ctx, `UPDATE person SET name = ?, proposable = ? WHERE id = ? AND plan_id = ?`,
+			p.Name, p.Proposable, id, pid)
 		if isUnique(err) {
 			return exists("person", p.Name)
 		}

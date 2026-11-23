@@ -13,23 +13,23 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 
 	var sound store.Task
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&sound)
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Sound"}).json(&sound)
 	if !sound.Planned {
 		t.Error("tasks are planned by default")
 	}
 	var camera store.Task
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Camera"}).json(&camera)
-	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}); r.code != 409 {
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Camera"}).json(&camera)
+	if r := e.do("POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Sound"}); r.code != 409 {
 		t.Errorf("a second task with the same name: %d %s", r.code, r.body)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Coffee", "planned": false}); r.code != 400 {
+	if r := e.do("POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Coffee", "planned": false}); r.code != 400 {
 		t.Errorf("a new task is always planned; the page switches it off afterwards: %d %s", r.code, r.body)
 	}
-	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), map[string]any{"planned": false})
+	e.mustDo(200, "PATCH", fmt.Sprintf("/api/orgs/org-a/plans/"+term+"/tasks/%d", sound.ID), map[string]any{"planned": false})
 
-	e.mustDo(204, "PUT", "/api/orgs/org-a/combinations", map[string]any{"a": camera.ID, "b": sound.ID, "level": "cannot"})
+	e.mustDo(204, "PUT", "/api/orgs/org-a/plans/"+term+"/combinations", map[string]any{"a": camera.ID, "b": sound.ID, "level": "cannot"})
 	var combos []store.Combination
-	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/"+term+"/combinations", nil).json(&combos)
 	if len(combos) != 1 || combos[0].A > combos[0].B {
 		t.Errorf("combinations: %+v", combos)
 	}
@@ -88,8 +88,8 @@ func TestSetupAndDatesFlow(t *testing.T) {
 	}
 	e.mustDo(200, "PATCH", fmt.Sprintf("%s/%d", events, dates[1].ID), map[string]any{"start_time": "10:00"})
 	e.mustDo(204, "DELETE", fmt.Sprintf("%s/%d", events, dates[1].ID), nil)
-	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", camera.ID), nil) // its places and its combination go with it
-	e.mustDo(200, "GET", "/api/orgs/org-a/combinations", nil).json(&combos)
+	e.mustDo(204, "DELETE", fmt.Sprintf("/api/orgs/org-a/plans/"+term+"/tasks/%d", camera.ID), nil) // its places and its combination go with it
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/"+term+"/combinations", nil).json(&combos)
 	if len(combos) != 0 {
 		t.Errorf("combination must go with its task: %+v", combos)
 	}
@@ -97,7 +97,7 @@ func TestSetupAndDatesFlow(t *testing.T) {
 		t.Errorf("the places of a deleted task go: %s, want %s", got, want)
 	}
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans/autumn-2026/cells", map[string]any{"event": d.ID, "task": sound.ID, "label": "Outside guest"})
-	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/tasks/%d", sound.ID), nil); r.code != 409 {
+	if r := e.do("DELETE", fmt.Sprintf("/api/orgs/org-a/plans/"+term+"/tasks/%d", sound.ID), nil); r.code != 409 {
 		t.Errorf("task in use: %d %s", r.code, r.body)
 	}
 }
@@ -110,8 +110,8 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	e.mustDo(201, "POST", "/api/orgs/org-b/plans", map[string]string{"name": "Autumn 2026"})
 	var taskA, taskB store.Task
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&taskA)
-	e.mustDo(201, "POST", "/api/orgs/org-b/tasks", map[string]any{"name": "Sound"}).json(&taskB) // same name in both is fine
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Sound"}).json(&taskA)
+	e.mustDo(201, "POST", "/api/orgs/org-b/plans/"+term+"/tasks", map[string]any{"name": "Sound"}).json(&taskB) // same name in both is fine
 	var evsA []store.Event
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "2026-08-09"}).json(&evsA)
 	dateA := evsA[0]
@@ -124,18 +124,18 @@ func TestSetupIsolationBetweenOrganisations(t *testing.T) {
 	}
 	notFound("PUT", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d/places/%d", dateA.ID, taskA.ID), map[string]int{"slots": 1})
 	notFound("POST", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d/copy", dateA.ID), map[string]any{"dates": []string{"2026-08-16"}})
-	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
-	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/tasks/%d", taskA.ID), nil)
-	notFound("PUT", "/api/orgs/org-b/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "practical"})
+	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/"+term+"/tasks/%d", taskA.ID), map[string]any{"name": "Kapret"})
+	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/"+term+"/tasks/%d", taskA.ID), nil)
+	notFound("PUT", "/api/orgs/org-b/plans/"+term+"/combinations", map[string]any{"a": taskA.ID, "b": taskB.ID, "level": "practical"})
 	notFound("PATCH", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), map[string]any{"start_time": "10:00"})
 	notFound("DELETE", fmt.Sprintf("/api/orgs/org-b/plans/autumn-2026/events/%d", dateA.ID), nil)
 	notFound("GET", "/api/orgs/org-a/plans/nope/events", nil)
-	notFound("PATCH", "/api/orgs/org-a/tasks/abc", map[string]any{"name": "x"})
+	notFound("PATCH", "/api/orgs/org-a/plans/"+term+"/tasks/abc", map[string]any{"name": "x"})
 
 	var datesB []store.Event
 	e.mustDo(200, "GET", "/api/orgs/org-b/plans/autumn-2026/events", nil).json(&datesB)
 	var tasksB []store.Task
-	e.mustDo(200, "GET", "/api/orgs/org-b/tasks", nil).json(&tasksB)
+	e.mustDo(200, "GET", "/api/orgs/org-b/plans/"+term+"/tasks", nil).json(&tasksB)
 	if len(datesB) != 0 || len(tasksB) != 1 || tasksB[0].ID != taskB.ID {
 		t.Errorf("B must see only its own: %v %v", datesB, tasksB)
 	}
@@ -151,11 +151,11 @@ func TestSetupWritesNeedValidInput(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	var task store.Task
-	e.mustDo(201, "POST", "/api/orgs/org-a/tasks", map[string]any{"name": "Sound"}).json(&task)
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "Sound"}).json(&task)
 	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "morgen"}); r.code != 400 {
 		t.Errorf("bad date: %d", r.code)
 	}
-	if r := e.do("POST", "/api/orgs/org-a/tasks", map[string]any{"name": "  "}); r.code != 400 {
+	if r := e.do("POST", "/api/orgs/org-a/plans/"+term+"/tasks", map[string]any{"name": "  "}); r.code != 400 {
 		t.Errorf("a blank task name: %d", r.code)
 	}
 	if r := e.do("POST", "/api/orgs/org-a/plans/autumn-2026/events", map[string]any{"date": "2026-08-09", "description": "x"}); r.code != 400 {

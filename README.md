@@ -155,6 +155,12 @@ with what matters and the plan's name.
 
 ![Plan settings: the name, what matters and the earlier drafts](docs/img/11-settings.png)
 
+**A new plan from the last one.** On the organisation's page a new plan copies the people and tasks of another plan (the newest
+by default), or starts empty. **⋯ Duplicate** makes a copy of a plan; tick *Keep the filled-in table* to bring its dates, places,
+names set by hand, answers and notes too. The copy is marked in the list, with *Delete the copy* if it was a mistake.
+
+![The organisation's plans, and duplicating one](docs/img/21-duplicate.png)
+
 **Edit or View.** The same page has two modes, a switch by the title: *Edit* is the table above, *View* is the plan as it stands
 and nothing else: the events down the page, the tasks across, with who has each place (the current plan, else the newest
 draft, with the names set by hand) and the event details. *Find a name* (a search field) makes one person's tasks stand out and fades the
@@ -181,8 +187,10 @@ and each sees only the organisations they are a member of.
 
 ## How it works
 
-1. An **organisation** holds everything that is shared: people, sections, tasks and which tasks can be combined.
-2. An organisation has several **plans** (for example *December 2026*). A plan is a list of **events**, shown as one table.
+1. An **organisation** has members and several **plans** (for example *December 2026*).
+2. Each plan has its own people, tasks, sections, which tasks can be combined and the tasks each person takes, and a list of
+   **events**, shown as one table. A new plan copies the people and tasks of another plan (or starts empty); **⋯ Duplicate** on
+   the organisation's page copies a whole plan, with its filled-in table if you want (never its drafts or links).
 3. Everyone answers in the plan's table (a person is a row; the people who plan fill it in).
 4. **Make a draft** runs the planner. Set places by hand, lock names, choose whom the planner picks from, change the weighting,
    and try again.
@@ -224,7 +232,7 @@ server refuses to start without one or the other. The server refuses writes from
 `X-Robots-Tag: noindex` and a strict Content-Security-Policy.
 
 **Limits.** With a login anyone with an account may sign up, so there are caps: one person owns at most 20 organisations; an
-organisation has at most 100 plans, 1000 people, 200 tasks and 200 links; a plan at most 1000 events. Changes are rate limited per
+organisation has at most 100 plans and 200 links; a plan at most 1000 people, 200 tasks and 1000 events. Changes are rate limited per
 person (or per address, for someone using a link): bursts of 300, then 5 a second; making an organisation or a link, or starting a
 planning run, 20 at once and then one every 30 seconds. Beyond that the answer is `429` with `Retry-After`. Reading is not rate limited, and
 without a login neither are changes. With a login the start page may be indexed by search engines; nothing else is.

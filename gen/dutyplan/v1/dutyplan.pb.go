@@ -1093,7 +1093,7 @@ func (x *EventAnswer) GetLevel() string {
 	return ""
 }
 
-// A task a person takes (no row = not at all).
+// A task a person takes in the plan (no row = not at all).
 type TaskAnswer struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	PersonId int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
@@ -3580,6 +3580,7 @@ func (*DeleteLinkResponse) Descriptor() ([]byte, []int) {
 type ListTasksRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3617,6 +3618,13 @@ func (*ListTasksRequest) Descriptor() ([]byte, []int) {
 func (x *ListTasksRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *ListTasksRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -3668,9 +3676,10 @@ func (x *ListTasksResponse) GetTasks() []*Task {
 type CreateTaskRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// a task section to add it to (0 = none)
-	Section       int32 `protobuf:"varint,3,opt,name=section,proto3" json:"section,omitempty"`
+	Section       int32 `protobuf:"varint,4,opt,name=section,proto3" json:"section,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3708,6 +3717,13 @@ func (*CreateTaskRequest) Descriptor() ([]byte, []int) {
 func (x *CreateTaskRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *CreateTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -3773,10 +3789,11 @@ func (x *CreateTaskResponse) GetTask() *Task {
 type UpdateTaskRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name  *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *string                `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	// false: the planner leaves it alone (only what is set by hand)
-	Planned       *bool `protobuf:"varint,4,opt,name=planned,proto3,oneof" json:"planned,omitempty"`
+	Planned       *bool `protobuf:"varint,5,opt,name=planned,proto3,oneof" json:"planned,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3814,6 +3831,13 @@ func (*UpdateTaskRequest) Descriptor() ([]byte, []int) {
 func (x *UpdateTaskRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *UpdateTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -3886,7 +3910,8 @@ func (x *UpdateTaskResponse) GetTask() *Task {
 type DeleteTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3924,6 +3949,13 @@ func (*DeleteTaskRequest) Descriptor() ([]byte, []int) {
 func (x *DeleteTaskRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *DeleteTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -3974,11 +4006,12 @@ func (*DeleteTaskResponse) Descriptor() ([]byte, []int) {
 type MoveTaskRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	// required
-	Position *int32 `protobuf:"varint,3,opt,name=position,proto3,oneof" json:"position,omitempty"`
+	Position *int32 `protobuf:"varint,4,opt,name=position,proto3,oneof" json:"position,omitempty"`
 	// 0 = none; left out = the section it is in
-	Section       *int32 `protobuf:"varint,4,opt,name=section,proto3,oneof" json:"section,omitempty"`
+	Section       *int32 `protobuf:"varint,5,opt,name=section,proto3,oneof" json:"section,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4016,6 +4049,13 @@ func (*MoveTaskRequest) Descriptor() ([]byte, []int) {
 func (x *MoveTaskRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *MoveTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4080,6 +4120,7 @@ func (*MoveTaskResponse) Descriptor() ([]byte, []int) {
 type ListCombinationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4117,6 +4158,13 @@ func (*ListCombinationsRequest) Descriptor() ([]byte, []int) {
 func (x *ListCombinationsRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *ListCombinationsRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4168,11 +4216,12 @@ func (x *ListCombinationsResponse) GetCombinations() []*Combination {
 type SetCombinationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	// two task ids, in either order
-	A int32 `protobuf:"varint,2,opt,name=a,proto3" json:"a,omitempty"`
-	B int32 `protobuf:"varint,3,opt,name=b,proto3" json:"b,omitempty"`
+	A int32 `protobuf:"varint,3,opt,name=a,proto3" json:"a,omitempty"`
+	B int32 `protobuf:"varint,4,opt,name=b,proto3" json:"b,omitempty"`
 	// cannot | practical | standard
-	Level         string `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
+	Level         string `protobuf:"bytes,5,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4210,6 +4259,13 @@ func (*SetCombinationRequest) Descriptor() ([]byte, []int) {
 func (x *SetCombinationRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *SetCombinationRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4274,9 +4330,10 @@ func (*SetCombinationResponse) Descriptor() ([]byte, []int) {
 type SetTaskCombinationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Task  int32                  `protobuf:"varint,2,opt,name=task,proto3" json:"task,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Task  int32                  `protobuf:"varint,3,opt,name=task,proto3" json:"task,omitempty"`
 	// cannot | practical | standard
-	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	Level         string `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4314,6 +4371,13 @@ func (*SetTaskCombinationsRequest) Descriptor() ([]byte, []int) {
 func (x *SetTaskCombinationsRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *SetTaskCombinationsRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4371,6 +4435,7 @@ func (*SetTaskCombinationsResponse) Descriptor() ([]byte, []int) {
 type ListPeopleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4408,6 +4473,13 @@ func (*ListPeopleRequest) Descriptor() ([]byte, []int) {
 func (x *ListPeopleRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *ListPeopleRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4459,9 +4531,10 @@ func (x *ListPeopleResponse) GetPeople() []*Person {
 type CreatePersonRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	// 0 = none
-	Section       int32 `protobuf:"varint,3,opt,name=section,proto3" json:"section,omitempty"`
+	Section       int32 `protobuf:"varint,4,opt,name=section,proto3" json:"section,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4499,6 +4572,13 @@ func (*CreatePersonRequest) Descriptor() ([]byte, []int) {
 func (x *CreatePersonRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *CreatePersonRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4564,10 +4644,11 @@ func (x *CreatePersonResponse) GetPerson() *Person {
 type UpdatePersonRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name  *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *string                `protobuf:"bytes,4,opt,name=name,proto3,oneof" json:"name,omitempty"`
 	// false: the planner never picks them
-	Proposable    *bool `protobuf:"varint,4,opt,name=proposable,proto3,oneof" json:"proposable,omitempty"`
+	Proposable    *bool `protobuf:"varint,5,opt,name=proposable,proto3,oneof" json:"proposable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4605,6 +4686,13 @@ func (*UpdatePersonRequest) Descriptor() ([]byte, []int) {
 func (x *UpdatePersonRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *UpdatePersonRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4677,11 +4765,12 @@ func (x *UpdatePersonResponse) GetPerson() *Person {
 type MovePersonRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	// required
-	Position *int32 `protobuf:"varint,3,opt,name=position,proto3,oneof" json:"position,omitempty"`
+	Position *int32 `protobuf:"varint,4,opt,name=position,proto3,oneof" json:"position,omitempty"`
 	// 0 = none
-	Section       int32 `protobuf:"varint,4,opt,name=section,proto3" json:"section,omitempty"`
+	Section       int32 `protobuf:"varint,5,opt,name=section,proto3" json:"section,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4719,6 +4808,13 @@ func (*MovePersonRequest) Descriptor() ([]byte, []int) {
 func (x *MovePersonRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *MovePersonRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -4780,217 +4876,17 @@ func (*MovePersonResponse) Descriptor() ([]byte, []int) {
 	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{80}
 }
 
-type SetPersonTaskRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Org    string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Person int32                  `protobuf:"varint,2,opt,name=person,proto3" json:"person,omitempty"`
-	Task   int32                  `protobuf:"varint,3,opt,name=task,proto3" json:"task,omitempty"`
-	// good | poor
-	Level         string `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetPersonTaskRequest) Reset() {
-	*x = SetPersonTaskRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[81]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetPersonTaskRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetPersonTaskRequest) ProtoMessage() {}
-
-func (x *SetPersonTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[81]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetPersonTaskRequest.ProtoReflect.Descriptor instead.
-func (*SetPersonTaskRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{81}
-}
-
-func (x *SetPersonTaskRequest) GetOrg() string {
-	if x != nil {
-		return x.Org
-	}
-	return ""
-}
-
-func (x *SetPersonTaskRequest) GetPerson() int32 {
-	if x != nil {
-		return x.Person
-	}
-	return 0
-}
-
-func (x *SetPersonTaskRequest) GetTask() int32 {
-	if x != nil {
-		return x.Task
-	}
-	return 0
-}
-
-func (x *SetPersonTaskRequest) GetLevel() string {
-	if x != nil {
-		return x.Level
-	}
-	return ""
-}
-
-type SetPersonTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetPersonTaskResponse) Reset() {
-	*x = SetPersonTaskResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[82]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetPersonTaskResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetPersonTaskResponse) ProtoMessage() {}
-
-func (x *SetPersonTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[82]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetPersonTaskResponse.ProtoReflect.Descriptor instead.
-func (*SetPersonTaskResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{82}
-}
-
-type RemovePersonTaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Person        int32                  `protobuf:"varint,2,opt,name=person,proto3" json:"person,omitempty"`
-	Task          int32                  `protobuf:"varint,3,opt,name=task,proto3" json:"task,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RemovePersonTaskRequest) Reset() {
-	*x = RemovePersonTaskRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[83]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RemovePersonTaskRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RemovePersonTaskRequest) ProtoMessage() {}
-
-func (x *RemovePersonTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[83]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RemovePersonTaskRequest.ProtoReflect.Descriptor instead.
-func (*RemovePersonTaskRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{83}
-}
-
-func (x *RemovePersonTaskRequest) GetOrg() string {
-	if x != nil {
-		return x.Org
-	}
-	return ""
-}
-
-func (x *RemovePersonTaskRequest) GetPerson() int32 {
-	if x != nil {
-		return x.Person
-	}
-	return 0
-}
-
-func (x *RemovePersonTaskRequest) GetTask() int32 {
-	if x != nil {
-		return x.Task
-	}
-	return 0
-}
-
-type RemovePersonTaskResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RemovePersonTaskResponse) Reset() {
-	*x = RemovePersonTaskResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[84]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RemovePersonTaskResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RemovePersonTaskResponse) ProtoMessage() {}
-
-func (x *RemovePersonTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[84]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RemovePersonTaskResponse.ProtoReflect.Descriptor instead.
-func (*RemovePersonTaskResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{84}
-}
-
 type ListSectionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListSectionsRequest) Reset() {
 	*x = ListSectionsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[85]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5002,7 +4898,7 @@ func (x *ListSectionsRequest) String() string {
 func (*ListSectionsRequest) ProtoMessage() {}
 
 func (x *ListSectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[85]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5015,12 +4911,19 @@ func (x *ListSectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSectionsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{85}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *ListSectionsRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *ListSectionsRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5034,7 +4937,7 @@ type ListSectionsResponse struct {
 
 func (x *ListSectionsResponse) Reset() {
 	*x = ListSectionsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[86]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5046,7 +4949,7 @@ func (x *ListSectionsResponse) String() string {
 func (*ListSectionsResponse) ProtoMessage() {}
 
 func (x *ListSectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[86]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5059,7 +4962,7 @@ func (x *ListSectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSectionsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{86}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ListSectionsResponse) GetSections() []*Section {
@@ -5072,14 +4975,15 @@ func (x *ListSectionsResponse) GetSections() []*Section {
 type CreateSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateSectionRequest) Reset() {
 	*x = CreateSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[87]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5091,7 +4995,7 @@ func (x *CreateSectionRequest) String() string {
 func (*CreateSectionRequest) ProtoMessage() {}
 
 func (x *CreateSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[87]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5104,12 +5008,19 @@ func (x *CreateSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSectionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{87}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *CreateSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *CreateSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5130,7 +5041,7 @@ type CreateSectionResponse struct {
 
 func (x *CreateSectionResponse) Reset() {
 	*x = CreateSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[88]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5142,7 +5053,7 @@ func (x *CreateSectionResponse) String() string {
 func (*CreateSectionResponse) ProtoMessage() {}
 
 func (x *CreateSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[88]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5155,7 +5066,7 @@ func (x *CreateSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSectionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{88}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *CreateSectionResponse) GetSection() *Section {
@@ -5168,15 +5079,16 @@ func (x *CreateSectionResponse) GetSection() *Section {
 type RenameSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenameSectionRequest) Reset() {
 	*x = RenameSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[89]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5188,7 +5100,7 @@ func (x *RenameSectionRequest) String() string {
 func (*RenameSectionRequest) ProtoMessage() {}
 
 func (x *RenameSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[89]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5201,12 +5113,19 @@ func (x *RenameSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSectionRequest.ProtoReflect.Descriptor instead.
 func (*RenameSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{89}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *RenameSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *RenameSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5234,7 +5153,7 @@ type RenameSectionResponse struct {
 
 func (x *RenameSectionResponse) Reset() {
 	*x = RenameSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[90]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5246,7 +5165,7 @@ func (x *RenameSectionResponse) String() string {
 func (*RenameSectionResponse) ProtoMessage() {}
 
 func (x *RenameSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[90]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5259,7 +5178,7 @@ func (x *RenameSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameSectionResponse.ProtoReflect.Descriptor instead.
 func (*RenameSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{90}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *RenameSectionResponse) GetSection() *Section {
@@ -5272,16 +5191,17 @@ func (x *RenameSectionResponse) GetSection() *Section {
 type MoveSectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	// required
-	Position      *int32 `protobuf:"varint,3,opt,name=position,proto3,oneof" json:"position,omitempty"`
+	Position      *int32 `protobuf:"varint,4,opt,name=position,proto3,oneof" json:"position,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MoveSectionRequest) Reset() {
 	*x = MoveSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[91]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5293,7 +5213,7 @@ func (x *MoveSectionRequest) String() string {
 func (*MoveSectionRequest) ProtoMessage() {}
 
 func (x *MoveSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[91]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5306,12 +5226,19 @@ func (x *MoveSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveSectionRequest.ProtoReflect.Descriptor instead.
 func (*MoveSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{91}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *MoveSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *MoveSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5338,7 +5265,7 @@ type MoveSectionResponse struct {
 
 func (x *MoveSectionResponse) Reset() {
 	*x = MoveSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[92]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5350,7 +5277,7 @@ func (x *MoveSectionResponse) String() string {
 func (*MoveSectionResponse) ProtoMessage() {}
 
 func (x *MoveSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[92]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5363,20 +5290,21 @@ func (x *MoveSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveSectionResponse.ProtoReflect.Descriptor instead.
 func (*MoveSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{92}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{88}
 }
 
 type DeleteSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteSectionRequest) Reset() {
 	*x = DeleteSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[93]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5388,7 +5316,7 @@ func (x *DeleteSectionRequest) String() string {
 func (*DeleteSectionRequest) ProtoMessage() {}
 
 func (x *DeleteSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[93]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5401,12 +5329,19 @@ func (x *DeleteSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSectionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{93}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *DeleteSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *DeleteSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5426,7 +5361,7 @@ type DeleteSectionResponse struct {
 
 func (x *DeleteSectionResponse) Reset() {
 	*x = DeleteSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[94]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5438,7 +5373,7 @@ func (x *DeleteSectionResponse) String() string {
 func (*DeleteSectionResponse) ProtoMessage() {}
 
 func (x *DeleteSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[94]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5451,19 +5386,20 @@ func (x *DeleteSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSectionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{94}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{90}
 }
 
 type ListTaskSectionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListTaskSectionsRequest) Reset() {
 	*x = ListTaskSectionsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[95]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5475,7 +5411,7 @@ func (x *ListTaskSectionsRequest) String() string {
 func (*ListTaskSectionsRequest) ProtoMessage() {}
 
 func (x *ListTaskSectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[95]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5488,12 +5424,19 @@ func (x *ListTaskSectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskSectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListTaskSectionsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{95}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *ListTaskSectionsRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *ListTaskSectionsRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5507,7 +5450,7 @@ type ListTaskSectionsResponse struct {
 
 func (x *ListTaskSectionsResponse) Reset() {
 	*x = ListTaskSectionsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[96]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5519,7 +5462,7 @@ func (x *ListTaskSectionsResponse) String() string {
 func (*ListTaskSectionsResponse) ProtoMessage() {}
 
 func (x *ListTaskSectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[96]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5532,7 +5475,7 @@ func (x *ListTaskSectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskSectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListTaskSectionsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{96}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *ListTaskSectionsResponse) GetSections() []*Section {
@@ -5545,14 +5488,15 @@ func (x *ListTaskSectionsResponse) GetSections() []*Section {
 type CreateTaskSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateTaskSectionRequest) Reset() {
 	*x = CreateTaskSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[97]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5564,7 +5508,7 @@ func (x *CreateTaskSectionRequest) String() string {
 func (*CreateTaskSectionRequest) ProtoMessage() {}
 
 func (x *CreateTaskSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[97]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5577,12 +5521,19 @@ func (x *CreateTaskSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTaskSectionRequest.ProtoReflect.Descriptor instead.
 func (*CreateTaskSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{97}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *CreateTaskSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *CreateTaskSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5603,7 +5554,7 @@ type CreateTaskSectionResponse struct {
 
 func (x *CreateTaskSectionResponse) Reset() {
 	*x = CreateTaskSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[98]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5615,7 +5566,7 @@ func (x *CreateTaskSectionResponse) String() string {
 func (*CreateTaskSectionResponse) ProtoMessage() {}
 
 func (x *CreateTaskSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[98]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5628,7 +5579,7 @@ func (x *CreateTaskSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateTaskSectionResponse.ProtoReflect.Descriptor instead.
 func (*CreateTaskSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{98}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *CreateTaskSectionResponse) GetSection() *Section {
@@ -5641,15 +5592,16 @@ func (x *CreateTaskSectionResponse) GetSection() *Section {
 type RenameTaskSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RenameTaskSectionRequest) Reset() {
 	*x = RenameTaskSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[99]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5661,7 +5613,7 @@ func (x *RenameTaskSectionRequest) String() string {
 func (*RenameTaskSectionRequest) ProtoMessage() {}
 
 func (x *RenameTaskSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[99]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5674,12 +5626,19 @@ func (x *RenameTaskSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameTaskSectionRequest.ProtoReflect.Descriptor instead.
 func (*RenameTaskSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{99}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *RenameTaskSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *RenameTaskSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5707,7 +5666,7 @@ type RenameTaskSectionResponse struct {
 
 func (x *RenameTaskSectionResponse) Reset() {
 	*x = RenameTaskSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[100]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5719,7 +5678,7 @@ func (x *RenameTaskSectionResponse) String() string {
 func (*RenameTaskSectionResponse) ProtoMessage() {}
 
 func (x *RenameTaskSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[100]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5732,7 +5691,7 @@ func (x *RenameTaskSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameTaskSectionResponse.ProtoReflect.Descriptor instead.
 func (*RenameTaskSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{100}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *RenameTaskSectionResponse) GetSection() *Section {
@@ -5745,16 +5704,17 @@ func (x *RenameTaskSectionResponse) GetSection() *Section {
 type MoveTaskSectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id    int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	// required
-	Position      *int32 `protobuf:"varint,3,opt,name=position,proto3,oneof" json:"position,omitempty"`
+	Position      *int32 `protobuf:"varint,4,opt,name=position,proto3,oneof" json:"position,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MoveTaskSectionRequest) Reset() {
 	*x = MoveTaskSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[101]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5766,7 +5726,7 @@ func (x *MoveTaskSectionRequest) String() string {
 func (*MoveTaskSectionRequest) ProtoMessage() {}
 
 func (x *MoveTaskSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[101]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5779,12 +5739,19 @@ func (x *MoveTaskSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveTaskSectionRequest.ProtoReflect.Descriptor instead.
 func (*MoveTaskSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{101}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *MoveTaskSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *MoveTaskSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5811,7 +5778,7 @@ type MoveTaskSectionResponse struct {
 
 func (x *MoveTaskSectionResponse) Reset() {
 	*x = MoveTaskSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[102]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5823,7 +5790,7 @@ func (x *MoveTaskSectionResponse) String() string {
 func (*MoveTaskSectionResponse) ProtoMessage() {}
 
 func (x *MoveTaskSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[102]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5836,20 +5803,21 @@ func (x *MoveTaskSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveTaskSectionResponse.ProtoReflect.Descriptor instead.
 func (*MoveTaskSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{102}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{98}
 }
 
 type DeleteTaskSectionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteTaskSectionRequest) Reset() {
 	*x = DeleteTaskSectionRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[103]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5861,7 +5829,7 @@ func (x *DeleteTaskSectionRequest) String() string {
 func (*DeleteTaskSectionRequest) ProtoMessage() {}
 
 func (x *DeleteTaskSectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[103]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5874,12 +5842,19 @@ func (x *DeleteTaskSectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTaskSectionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteTaskSectionRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{103}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *DeleteTaskSectionRequest) GetOrg() string {
 	if x != nil {
 		return x.Org
+	}
+	return ""
+}
+
+func (x *DeleteTaskSectionRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
 	}
 	return ""
 }
@@ -5899,7 +5874,7 @@ type DeleteTaskSectionResponse struct {
 
 func (x *DeleteTaskSectionResponse) Reset() {
 	*x = DeleteTaskSectionResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[104]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5911,7 +5886,7 @@ func (x *DeleteTaskSectionResponse) String() string {
 func (*DeleteTaskSectionResponse) ProtoMessage() {}
 
 func (x *DeleteTaskSectionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[104]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5924,7 +5899,7 @@ func (x *DeleteTaskSectionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteTaskSectionResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTaskSectionResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{104}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{100}
 }
 
 type ListPlansRequest struct {
@@ -5936,7 +5911,7 @@ type ListPlansRequest struct {
 
 func (x *ListPlansRequest) Reset() {
 	*x = ListPlansRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[105]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5948,7 +5923,7 @@ func (x *ListPlansRequest) String() string {
 func (*ListPlansRequest) ProtoMessage() {}
 
 func (x *ListPlansRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[105]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5961,7 +5936,7 @@ func (x *ListPlansRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlansRequest.ProtoReflect.Descriptor instead.
 func (*ListPlansRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{105}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ListPlansRequest) GetOrg() string {
@@ -5980,7 +5955,7 @@ type ListPlansResponse struct {
 
 func (x *ListPlansResponse) Reset() {
 	*x = ListPlansResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[106]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5992,7 +5967,7 @@ func (x *ListPlansResponse) String() string {
 func (*ListPlansResponse) ProtoMessage() {}
 
 func (x *ListPlansResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[106]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6005,7 +5980,7 @@ func (x *ListPlansResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlansResponse.ProtoReflect.Descriptor instead.
 func (*ListPlansResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{106}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ListPlansResponse) GetPlans() []*Plan {
@@ -6016,16 +5991,18 @@ func (x *ListPlansResponse) GetPlans() []*Plan {
 }
 
 type CreatePlanRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// the slug of a plan of the organisation to start with the people and tasks of; empty: start empty
+	From          string `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreatePlanRequest) Reset() {
 	*x = CreatePlanRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[107]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6037,7 +6014,7 @@ func (x *CreatePlanRequest) String() string {
 func (*CreatePlanRequest) ProtoMessage() {}
 
 func (x *CreatePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[107]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6050,7 +6027,7 @@ func (x *CreatePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePlanRequest.ProtoReflect.Descriptor instead.
 func (*CreatePlanRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{107}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *CreatePlanRequest) GetOrg() string {
@@ -6067,6 +6044,13 @@ func (x *CreatePlanRequest) GetName() string {
 	return ""
 }
 
+func (x *CreatePlanRequest) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
 type CreatePlanResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Plan          *Plan                  `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
@@ -6076,7 +6060,7 @@ type CreatePlanResponse struct {
 
 func (x *CreatePlanResponse) Reset() {
 	*x = CreatePlanResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[108]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6088,7 +6072,7 @@ func (x *CreatePlanResponse) String() string {
 func (*CreatePlanResponse) ProtoMessage() {}
 
 func (x *CreatePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[108]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6101,10 +6085,123 @@ func (x *CreatePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePlanResponse.ProtoReflect.Descriptor instead.
 func (*CreatePlanResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{108}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *CreatePlanResponse) GetPlan() *Plan {
+	if x != nil {
+		return x.Plan
+	}
+	return nil
+}
+
+type DuplicatePlanRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// copy the filled-in table too
+	Table         bool `protobuf:"varint,4,opt,name=table,proto3" json:"table,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicatePlanRequest) Reset() {
+	*x = DuplicatePlanRequest{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[105]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicatePlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicatePlanRequest) ProtoMessage() {}
+
+func (x *DuplicatePlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[105]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicatePlanRequest.ProtoReflect.Descriptor instead.
+func (*DuplicatePlanRequest) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{105}
+}
+
+func (x *DuplicatePlanRequest) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *DuplicatePlanRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
+}
+
+func (x *DuplicatePlanRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DuplicatePlanRequest) GetTable() bool {
+	if x != nil {
+		return x.Table
+	}
+	return false
+}
+
+type DuplicatePlanResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plan          *Plan                  `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DuplicatePlanResponse) Reset() {
+	*x = DuplicatePlanResponse{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[106]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DuplicatePlanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DuplicatePlanResponse) ProtoMessage() {}
+
+func (x *DuplicatePlanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[106]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DuplicatePlanResponse.ProtoReflect.Descriptor instead.
+func (*DuplicatePlanResponse) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{106}
+}
+
+func (x *DuplicatePlanResponse) GetPlan() *Plan {
 	if x != nil {
 		return x.Plan
 	}
@@ -6121,7 +6218,7 @@ type GetPlanRequest struct {
 
 func (x *GetPlanRequest) Reset() {
 	*x = GetPlanRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[109]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6133,7 +6230,7 @@ func (x *GetPlanRequest) String() string {
 func (*GetPlanRequest) ProtoMessage() {}
 
 func (x *GetPlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[109]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6146,7 +6243,7 @@ func (x *GetPlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlanRequest.ProtoReflect.Descriptor instead.
 func (*GetPlanRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{109}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *GetPlanRequest) GetOrg() string {
@@ -6172,7 +6269,7 @@ type GetPlanResponse struct {
 
 func (x *GetPlanResponse) Reset() {
 	*x = GetPlanResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[110]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6184,7 +6281,7 @@ func (x *GetPlanResponse) String() string {
 func (*GetPlanResponse) ProtoMessage() {}
 
 func (x *GetPlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[110]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6197,7 +6294,7 @@ func (x *GetPlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlanResponse.ProtoReflect.Descriptor instead.
 func (*GetPlanResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{110}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *GetPlanResponse) GetPlan() *Plan {
@@ -6218,7 +6315,7 @@ type RenamePlanRequest struct {
 
 func (x *RenamePlanRequest) Reset() {
 	*x = RenamePlanRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[111]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6230,7 +6327,7 @@ func (x *RenamePlanRequest) String() string {
 func (*RenamePlanRequest) ProtoMessage() {}
 
 func (x *RenamePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[111]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6243,7 +6340,7 @@ func (x *RenamePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenamePlanRequest.ProtoReflect.Descriptor instead.
 func (*RenamePlanRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{111}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *RenamePlanRequest) GetOrg() string {
@@ -6276,7 +6373,7 @@ type RenamePlanResponse struct {
 
 func (x *RenamePlanResponse) Reset() {
 	*x = RenamePlanResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[112]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6288,7 +6385,7 @@ func (x *RenamePlanResponse) String() string {
 func (*RenamePlanResponse) ProtoMessage() {}
 
 func (x *RenamePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[112]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6301,7 +6398,7 @@ func (x *RenamePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenamePlanResponse.ProtoReflect.Descriptor instead.
 func (*RenamePlanResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{112}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *RenamePlanResponse) GetPlan() *Plan {
@@ -6321,7 +6418,7 @@ type DeletePlanRequest struct {
 
 func (x *DeletePlanRequest) Reset() {
 	*x = DeletePlanRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[113]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6333,7 +6430,7 @@ func (x *DeletePlanRequest) String() string {
 func (*DeletePlanRequest) ProtoMessage() {}
 
 func (x *DeletePlanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[113]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6346,7 +6443,7 @@ func (x *DeletePlanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePlanRequest.ProtoReflect.Descriptor instead.
 func (*DeletePlanRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{113}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *DeletePlanRequest) GetOrg() string {
@@ -6371,7 +6468,7 @@ type DeletePlanResponse struct {
 
 func (x *DeletePlanResponse) Reset() {
 	*x = DeletePlanResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[114]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6383,7 +6480,7 @@ func (x *DeletePlanResponse) String() string {
 func (*DeletePlanResponse) ProtoMessage() {}
 
 func (x *DeletePlanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[114]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6396,7 +6493,7 @@ func (x *DeletePlanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePlanResponse.ProtoReflect.Descriptor instead.
 func (*DeletePlanResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{114}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{112}
 }
 
 type ListEventsRequest struct {
@@ -6409,7 +6506,7 @@ type ListEventsRequest struct {
 
 func (x *ListEventsRequest) Reset() {
 	*x = ListEventsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[115]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6421,7 +6518,7 @@ func (x *ListEventsRequest) String() string {
 func (*ListEventsRequest) ProtoMessage() {}
 
 func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[115]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6434,7 +6531,7 @@ func (x *ListEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListEventsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{115}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *ListEventsRequest) GetOrg() string {
@@ -6460,7 +6557,7 @@ type ListEventsResponse struct {
 
 func (x *ListEventsResponse) Reset() {
 	*x = ListEventsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[116]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6472,7 +6569,7 @@ func (x *ListEventsResponse) String() string {
 func (*ListEventsResponse) ProtoMessage() {}
 
 func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[116]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6485,7 +6582,7 @@ func (x *ListEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListEventsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{116}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *ListEventsResponse) GetEvents() []*Event {
@@ -6514,7 +6611,7 @@ type AddEventsRequest struct {
 
 func (x *AddEventsRequest) Reset() {
 	*x = AddEventsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[117]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6526,7 +6623,7 @@ func (x *AddEventsRequest) String() string {
 func (*AddEventsRequest) ProtoMessage() {}
 
 func (x *AddEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[117]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6539,7 +6636,7 @@ func (x *AddEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEventsRequest.ProtoReflect.Descriptor instead.
 func (*AddEventsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{117}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *AddEventsRequest) GetOrg() string {
@@ -6600,7 +6697,7 @@ type AddEventsResponse struct {
 
 func (x *AddEventsResponse) Reset() {
 	*x = AddEventsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[118]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6612,7 +6709,7 @@ func (x *AddEventsResponse) String() string {
 func (*AddEventsResponse) ProtoMessage() {}
 
 func (x *AddEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[118]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6625,7 +6722,7 @@ func (x *AddEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddEventsResponse.ProtoReflect.Descriptor instead.
 func (*AddEventsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{118}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *AddEventsResponse) GetEvents() []*Event {
@@ -6663,7 +6760,7 @@ type CopyEventRequest struct {
 
 func (x *CopyEventRequest) Reset() {
 	*x = CopyEventRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[119]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6675,7 +6772,7 @@ func (x *CopyEventRequest) String() string {
 func (*CopyEventRequest) ProtoMessage() {}
 
 func (x *CopyEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[119]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6688,7 +6785,7 @@ func (x *CopyEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyEventRequest.ProtoReflect.Descriptor instead.
 func (*CopyEventRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{119}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *CopyEventRequest) GetOrg() string {
@@ -6784,7 +6881,7 @@ type CopyEventResponse struct {
 
 func (x *CopyEventResponse) Reset() {
 	*x = CopyEventResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[120]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6796,7 +6893,7 @@ func (x *CopyEventResponse) String() string {
 func (*CopyEventResponse) ProtoMessage() {}
 
 func (x *CopyEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[120]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6809,7 +6906,7 @@ func (x *CopyEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyEventResponse.ProtoReflect.Descriptor instead.
 func (*CopyEventResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{120}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *CopyEventResponse) GetEvents() []*Event {
@@ -6832,7 +6929,7 @@ type UpdateEventRequest struct {
 
 func (x *UpdateEventRequest) Reset() {
 	*x = UpdateEventRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[121]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6844,7 +6941,7 @@ func (x *UpdateEventRequest) String() string {
 func (*UpdateEventRequest) ProtoMessage() {}
 
 func (x *UpdateEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[121]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6857,7 +6954,7 @@ func (x *UpdateEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEventRequest.ProtoReflect.Descriptor instead.
 func (*UpdateEventRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{121}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *UpdateEventRequest) GetOrg() string {
@@ -6904,7 +7001,7 @@ type UpdateEventResponse struct {
 
 func (x *UpdateEventResponse) Reset() {
 	*x = UpdateEventResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[122]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6916,7 +7013,7 @@ func (x *UpdateEventResponse) String() string {
 func (*UpdateEventResponse) ProtoMessage() {}
 
 func (x *UpdateEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[122]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6929,7 +7026,7 @@ func (x *UpdateEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEventResponse.ProtoReflect.Descriptor instead.
 func (*UpdateEventResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{122}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *UpdateEventResponse) GetEvent() *Event {
@@ -6950,7 +7047,7 @@ type DeleteEventRequest struct {
 
 func (x *DeleteEventRequest) Reset() {
 	*x = DeleteEventRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[123]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6962,7 +7059,7 @@ func (x *DeleteEventRequest) String() string {
 func (*DeleteEventRequest) ProtoMessage() {}
 
 func (x *DeleteEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[123]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6975,7 +7072,7 @@ func (x *DeleteEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteEventRequest.ProtoReflect.Descriptor instead.
 func (*DeleteEventRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{123}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *DeleteEventRequest) GetOrg() string {
@@ -7007,7 +7104,7 @@ type DeleteEventResponse struct {
 
 func (x *DeleteEventResponse) Reset() {
 	*x = DeleteEventResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[124]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7019,7 +7116,7 @@ func (x *DeleteEventResponse) String() string {
 func (*DeleteEventResponse) ProtoMessage() {}
 
 func (x *DeleteEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[124]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7032,7 +7129,7 @@ func (x *DeleteEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteEventResponse.ProtoReflect.Descriptor instead.
 func (*DeleteEventResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{124}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{122}
 }
 
 type ListPlacesRequest struct {
@@ -7045,7 +7142,7 @@ type ListPlacesRequest struct {
 
 func (x *ListPlacesRequest) Reset() {
 	*x = ListPlacesRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[125]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7057,7 +7154,7 @@ func (x *ListPlacesRequest) String() string {
 func (*ListPlacesRequest) ProtoMessage() {}
 
 func (x *ListPlacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[125]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7070,7 +7167,7 @@ func (x *ListPlacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlacesRequest.ProtoReflect.Descriptor instead.
 func (*ListPlacesRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{125}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *ListPlacesRequest) GetOrg() string {
@@ -7096,7 +7193,7 @@ type ListPlacesResponse struct {
 
 func (x *ListPlacesResponse) Reset() {
 	*x = ListPlacesResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[126]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7108,7 +7205,7 @@ func (x *ListPlacesResponse) String() string {
 func (*ListPlacesResponse) ProtoMessage() {}
 
 func (x *ListPlacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[126]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7121,7 +7218,7 @@ func (x *ListPlacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPlacesResponse.ProtoReflect.Descriptor instead.
 func (*ListPlacesResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{126}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *ListPlacesResponse) GetPlaces() []*EventPlaces {
@@ -7145,7 +7242,7 @@ type SetPlacesRequest struct {
 
 func (x *SetPlacesRequest) Reset() {
 	*x = SetPlacesRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[127]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7157,7 +7254,7 @@ func (x *SetPlacesRequest) String() string {
 func (*SetPlacesRequest) ProtoMessage() {}
 
 func (x *SetPlacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[127]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7170,7 +7267,7 @@ func (x *SetPlacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPlacesRequest.ProtoReflect.Descriptor instead.
 func (*SetPlacesRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{127}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *SetPlacesRequest) GetOrg() string {
@@ -7216,7 +7313,7 @@ type SetPlacesResponse struct {
 
 func (x *SetPlacesResponse) Reset() {
 	*x = SetPlacesResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[128]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7228,7 +7325,7 @@ func (x *SetPlacesResponse) String() string {
 func (*SetPlacesResponse) ProtoMessage() {}
 
 func (x *SetPlacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[128]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7241,7 +7338,7 @@ func (x *SetPlacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPlacesResponse.ProtoReflect.Descriptor instead.
 func (*SetPlacesResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{128}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{126}
 }
 
 type ResetPlacesRequest struct {
@@ -7256,7 +7353,7 @@ type ResetPlacesRequest struct {
 
 func (x *ResetPlacesRequest) Reset() {
 	*x = ResetPlacesRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[129]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7268,7 +7365,7 @@ func (x *ResetPlacesRequest) String() string {
 func (*ResetPlacesRequest) ProtoMessage() {}
 
 func (x *ResetPlacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[129]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7281,7 +7378,7 @@ func (x *ResetPlacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPlacesRequest.ProtoReflect.Descriptor instead.
 func (*ResetPlacesRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{129}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *ResetPlacesRequest) GetOrg() string {
@@ -7320,7 +7417,7 @@ type ResetPlacesResponse struct {
 
 func (x *ResetPlacesResponse) Reset() {
 	*x = ResetPlacesResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[130]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7332,7 +7429,7 @@ func (x *ResetPlacesResponse) String() string {
 func (*ResetPlacesResponse) ProtoMessage() {}
 
 func (x *ResetPlacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[130]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7345,7 +7442,7 @@ func (x *ResetPlacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetPlacesResponse.ProtoReflect.Descriptor instead.
 func (*ResetPlacesResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{130}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{128}
 }
 
 type SetPlacesManyRequest struct {
@@ -7359,7 +7456,7 @@ type SetPlacesManyRequest struct {
 
 func (x *SetPlacesManyRequest) Reset() {
 	*x = SetPlacesManyRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[131]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7371,7 +7468,7 @@ func (x *SetPlacesManyRequest) String() string {
 func (*SetPlacesManyRequest) ProtoMessage() {}
 
 func (x *SetPlacesManyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[131]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7384,7 +7481,7 @@ func (x *SetPlacesManyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPlacesManyRequest.ProtoReflect.Descriptor instead.
 func (*SetPlacesManyRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{131}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *SetPlacesManyRequest) GetOrg() string {
@@ -7416,7 +7513,7 @@ type SetPlacesManyResponse struct {
 
 func (x *SetPlacesManyResponse) Reset() {
 	*x = SetPlacesManyResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[132]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7428,7 +7525,7 @@ func (x *SetPlacesManyResponse) String() string {
 func (*SetPlacesManyResponse) ProtoMessage() {}
 
 func (x *SetPlacesManyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[132]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7441,7 +7538,7 @@ func (x *SetPlacesManyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPlacesManyResponse.ProtoReflect.Descriptor instead.
 func (*SetPlacesManyResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{132}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{130}
 }
 
 type ListFieldsRequest struct {
@@ -7454,7 +7551,7 @@ type ListFieldsRequest struct {
 
 func (x *ListFieldsRequest) Reset() {
 	*x = ListFieldsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[133]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7466,7 +7563,7 @@ func (x *ListFieldsRequest) String() string {
 func (*ListFieldsRequest) ProtoMessage() {}
 
 func (x *ListFieldsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[133]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7479,7 +7576,7 @@ func (x *ListFieldsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFieldsRequest.ProtoReflect.Descriptor instead.
 func (*ListFieldsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{133}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *ListFieldsRequest) GetOrg() string {
@@ -7506,7 +7603,7 @@ type ListFieldsResponse struct {
 
 func (x *ListFieldsResponse) Reset() {
 	*x = ListFieldsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[134]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7518,7 +7615,7 @@ func (x *ListFieldsResponse) String() string {
 func (*ListFieldsResponse) ProtoMessage() {}
 
 func (x *ListFieldsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[134]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7531,7 +7628,7 @@ func (x *ListFieldsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFieldsResponse.ProtoReflect.Descriptor instead.
 func (*ListFieldsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{134}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *ListFieldsResponse) GetFields() []*PlanField {
@@ -7559,7 +7656,7 @@ type AddFieldRequest struct {
 
 func (x *AddFieldRequest) Reset() {
 	*x = AddFieldRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[135]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7571,7 +7668,7 @@ func (x *AddFieldRequest) String() string {
 func (*AddFieldRequest) ProtoMessage() {}
 
 func (x *AddFieldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[135]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7584,7 +7681,7 @@ func (x *AddFieldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddFieldRequest.ProtoReflect.Descriptor instead.
 func (*AddFieldRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{135}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *AddFieldRequest) GetOrg() string {
@@ -7617,7 +7714,7 @@ type AddFieldResponse struct {
 
 func (x *AddFieldResponse) Reset() {
 	*x = AddFieldResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[136]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7629,7 +7726,7 @@ func (x *AddFieldResponse) String() string {
 func (*AddFieldResponse) ProtoMessage() {}
 
 func (x *AddFieldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[136]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7642,7 +7739,7 @@ func (x *AddFieldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddFieldResponse.ProtoReflect.Descriptor instead.
 func (*AddFieldResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{136}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *AddFieldResponse) GetField() *PlanField {
@@ -7664,7 +7761,7 @@ type RenameFieldRequest struct {
 
 func (x *RenameFieldRequest) Reset() {
 	*x = RenameFieldRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[137]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7676,7 +7773,7 @@ func (x *RenameFieldRequest) String() string {
 func (*RenameFieldRequest) ProtoMessage() {}
 
 func (x *RenameFieldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[137]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7689,7 +7786,7 @@ func (x *RenameFieldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameFieldRequest.ProtoReflect.Descriptor instead.
 func (*RenameFieldRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{137}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *RenameFieldRequest) GetOrg() string {
@@ -7729,7 +7826,7 @@ type RenameFieldResponse struct {
 
 func (x *RenameFieldResponse) Reset() {
 	*x = RenameFieldResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[138]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7741,7 +7838,7 @@ func (x *RenameFieldResponse) String() string {
 func (*RenameFieldResponse) ProtoMessage() {}
 
 func (x *RenameFieldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[138]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7754,7 +7851,7 @@ func (x *RenameFieldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenameFieldResponse.ProtoReflect.Descriptor instead.
 func (*RenameFieldResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{138}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *RenameFieldResponse) GetField() *PlanField {
@@ -7777,7 +7874,7 @@ type MoveFieldRequest struct {
 
 func (x *MoveFieldRequest) Reset() {
 	*x = MoveFieldRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[139]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7789,7 +7886,7 @@ func (x *MoveFieldRequest) String() string {
 func (*MoveFieldRequest) ProtoMessage() {}
 
 func (x *MoveFieldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[139]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7802,7 +7899,7 @@ func (x *MoveFieldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveFieldRequest.ProtoReflect.Descriptor instead.
 func (*MoveFieldRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{139}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *MoveFieldRequest) GetOrg() string {
@@ -7841,7 +7938,7 @@ type MoveFieldResponse struct {
 
 func (x *MoveFieldResponse) Reset() {
 	*x = MoveFieldResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[140]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7853,7 +7950,7 @@ func (x *MoveFieldResponse) String() string {
 func (*MoveFieldResponse) ProtoMessage() {}
 
 func (x *MoveFieldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[140]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7866,7 +7963,7 @@ func (x *MoveFieldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveFieldResponse.ProtoReflect.Descriptor instead.
 func (*MoveFieldResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{140}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{138}
 }
 
 type FreezeFieldRequest struct {
@@ -7882,7 +7979,7 @@ type FreezeFieldRequest struct {
 
 func (x *FreezeFieldRequest) Reset() {
 	*x = FreezeFieldRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[141]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7894,7 +7991,7 @@ func (x *FreezeFieldRequest) String() string {
 func (*FreezeFieldRequest) ProtoMessage() {}
 
 func (x *FreezeFieldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[141]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7907,7 +8004,7 @@ func (x *FreezeFieldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreezeFieldRequest.ProtoReflect.Descriptor instead.
 func (*FreezeFieldRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{141}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *FreezeFieldRequest) GetOrg() string {
@@ -7946,7 +8043,7 @@ type FreezeFieldResponse struct {
 
 func (x *FreezeFieldResponse) Reset() {
 	*x = FreezeFieldResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[142]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7958,7 +8055,7 @@ func (x *FreezeFieldResponse) String() string {
 func (*FreezeFieldResponse) ProtoMessage() {}
 
 func (x *FreezeFieldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[142]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7971,7 +8068,7 @@ func (x *FreezeFieldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreezeFieldResponse.ProtoReflect.Descriptor instead.
 func (*FreezeFieldResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{142}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{140}
 }
 
 type DeleteFieldRequest struct {
@@ -7985,7 +8082,7 @@ type DeleteFieldRequest struct {
 
 func (x *DeleteFieldRequest) Reset() {
 	*x = DeleteFieldRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[143]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7997,7 +8094,7 @@ func (x *DeleteFieldRequest) String() string {
 func (*DeleteFieldRequest) ProtoMessage() {}
 
 func (x *DeleteFieldRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[143]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8010,7 +8107,7 @@ func (x *DeleteFieldRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFieldRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFieldRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{143}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *DeleteFieldRequest) GetOrg() string {
@@ -8042,7 +8139,7 @@ type DeleteFieldResponse struct {
 
 func (x *DeleteFieldResponse) Reset() {
 	*x = DeleteFieldResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[144]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8054,7 +8151,7 @@ func (x *DeleteFieldResponse) String() string {
 func (*DeleteFieldResponse) ProtoMessage() {}
 
 func (x *DeleteFieldResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[144]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8067,7 +8164,7 @@ func (x *DeleteFieldResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFieldResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFieldResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{144}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{142}
 }
 
 type SetFieldValueRequest struct {
@@ -8084,7 +8181,7 @@ type SetFieldValueRequest struct {
 
 func (x *SetFieldValueRequest) Reset() {
 	*x = SetFieldValueRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[145]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8096,7 +8193,7 @@ func (x *SetFieldValueRequest) String() string {
 func (*SetFieldValueRequest) ProtoMessage() {}
 
 func (x *SetFieldValueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[145]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8109,7 +8206,7 @@ func (x *SetFieldValueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFieldValueRequest.ProtoReflect.Descriptor instead.
 func (*SetFieldValueRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{145}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *SetFieldValueRequest) GetOrg() string {
@@ -8155,7 +8252,7 @@ type SetFieldValueResponse struct {
 
 func (x *SetFieldValueResponse) Reset() {
 	*x = SetFieldValueResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[146]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8167,7 +8264,7 @@ func (x *SetFieldValueResponse) String() string {
 func (*SetFieldValueResponse) ProtoMessage() {}
 
 func (x *SetFieldValueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[146]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8180,7 +8277,7 @@ func (x *SetFieldValueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetFieldValueResponse.ProtoReflect.Descriptor instead.
 func (*SetFieldValueResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{146}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{144}
 }
 
 type ListAnswersRequest struct {
@@ -8193,7 +8290,7 @@ type ListAnswersRequest struct {
 
 func (x *ListAnswersRequest) Reset() {
 	*x = ListAnswersRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[147]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8205,7 +8302,7 @@ func (x *ListAnswersRequest) String() string {
 func (*ListAnswersRequest) ProtoMessage() {}
 
 func (x *ListAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[147]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8218,7 +8315,7 @@ func (x *ListAnswersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAnswersRequest.ProtoReflect.Descriptor instead.
 func (*ListAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{147}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ListAnswersRequest) GetOrg() string {
@@ -8246,7 +8343,7 @@ type ListAnswersResponse struct {
 
 func (x *ListAnswersResponse) Reset() {
 	*x = ListAnswersResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[148]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8258,7 +8355,7 @@ func (x *ListAnswersResponse) String() string {
 func (*ListAnswersResponse) ProtoMessage() {}
 
 func (x *ListAnswersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[148]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8271,7 +8368,7 @@ func (x *ListAnswersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAnswersResponse.ProtoReflect.Descriptor instead.
 func (*ListAnswersResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{148}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *ListAnswersResponse) GetEvents() []*EventAnswer {
@@ -8308,7 +8405,7 @@ type SetAvailabilityRequest struct {
 
 func (x *SetAvailabilityRequest) Reset() {
 	*x = SetAvailabilityRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[149]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8320,7 +8417,7 @@ func (x *SetAvailabilityRequest) String() string {
 func (*SetAvailabilityRequest) ProtoMessage() {}
 
 func (x *SetAvailabilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[149]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8333,7 +8430,7 @@ func (x *SetAvailabilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAvailabilityRequest.ProtoReflect.Descriptor instead.
 func (*SetAvailabilityRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{149}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *SetAvailabilityRequest) GetOrg() string {
@@ -8372,7 +8469,7 @@ type SetAvailabilityResponse struct {
 
 func (x *SetAvailabilityResponse) Reset() {
 	*x = SetAvailabilityResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[150]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8384,7 +8481,7 @@ func (x *SetAvailabilityResponse) String() string {
 func (*SetAvailabilityResponse) ProtoMessage() {}
 
 func (x *SetAvailabilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[150]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8397,7 +8494,224 @@ func (x *SetAvailabilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAvailabilityResponse.ProtoReflect.Descriptor instead.
 func (*SetAvailabilityResponse) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{148}
+}
+
+type SetPersonTaskRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Org    string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan   string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Person int32                  `protobuf:"varint,3,opt,name=person,proto3" json:"person,omitempty"`
+	Task   int32                  `protobuf:"varint,4,opt,name=task,proto3" json:"task,omitempty"`
+	// good | poor
+	Level         string `protobuf:"bytes,5,opt,name=level,proto3" json:"level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPersonTaskRequest) Reset() {
+	*x = SetPersonTaskRequest{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[149]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPersonTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPersonTaskRequest) ProtoMessage() {}
+
+func (x *SetPersonTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[149]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPersonTaskRequest.ProtoReflect.Descriptor instead.
+func (*SetPersonTaskRequest) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{149}
+}
+
+func (x *SetPersonTaskRequest) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *SetPersonTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
+}
+
+func (x *SetPersonTaskRequest) GetPerson() int32 {
+	if x != nil {
+		return x.Person
+	}
+	return 0
+}
+
+func (x *SetPersonTaskRequest) GetTask() int32 {
+	if x != nil {
+		return x.Task
+	}
+	return 0
+}
+
+func (x *SetPersonTaskRequest) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+type SetPersonTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetPersonTaskResponse) Reset() {
+	*x = SetPersonTaskResponse{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[150]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetPersonTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetPersonTaskResponse) ProtoMessage() {}
+
+func (x *SetPersonTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[150]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetPersonTaskResponse.ProtoReflect.Descriptor instead.
+func (*SetPersonTaskResponse) Descriptor() ([]byte, []int) {
 	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{150}
+}
+
+type RemovePersonTaskRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Person        int32                  `protobuf:"varint,3,opt,name=person,proto3" json:"person,omitempty"`
+	Task          int32                  `protobuf:"varint,4,opt,name=task,proto3" json:"task,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePersonTaskRequest) Reset() {
+	*x = RemovePersonTaskRequest{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[151]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePersonTaskRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePersonTaskRequest) ProtoMessage() {}
+
+func (x *RemovePersonTaskRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[151]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePersonTaskRequest.ProtoReflect.Descriptor instead.
+func (*RemovePersonTaskRequest) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{151}
+}
+
+func (x *RemovePersonTaskRequest) GetOrg() string {
+	if x != nil {
+		return x.Org
+	}
+	return ""
+}
+
+func (x *RemovePersonTaskRequest) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
+}
+
+func (x *RemovePersonTaskRequest) GetPerson() int32 {
+	if x != nil {
+		return x.Person
+	}
+	return 0
+}
+
+func (x *RemovePersonTaskRequest) GetTask() int32 {
+	if x != nil {
+		return x.Task
+	}
+	return 0
+}
+
+type RemovePersonTaskResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovePersonTaskResponse) Reset() {
+	*x = RemovePersonTaskResponse{}
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[152]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovePersonTaskResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovePersonTaskResponse) ProtoMessage() {}
+
+func (x *RemovePersonTaskResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[152]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovePersonTaskResponse.ProtoReflect.Descriptor instead.
+func (*RemovePersonTaskResponse) Descriptor() ([]byte, []int) {
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{152}
 }
 
 type SetNoteRequest struct {
@@ -8414,7 +8728,7 @@ type SetNoteRequest struct {
 
 func (x *SetNoteRequest) Reset() {
 	*x = SetNoteRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[151]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8426,7 +8740,7 @@ func (x *SetNoteRequest) String() string {
 func (*SetNoteRequest) ProtoMessage() {}
 
 func (x *SetNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[151]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8439,7 +8753,7 @@ func (x *SetNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetNoteRequest.ProtoReflect.Descriptor instead.
 func (*SetNoteRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{151}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *SetNoteRequest) GetOrg() string {
@@ -8485,7 +8799,7 @@ type SetNoteResponse struct {
 
 func (x *SetNoteResponse) Reset() {
 	*x = SetNoteResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[152]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8497,7 +8811,7 @@ func (x *SetNoteResponse) String() string {
 func (*SetNoteResponse) ProtoMessage() {}
 
 func (x *SetNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[152]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8510,7 +8824,7 @@ func (x *SetNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetNoteResponse.ProtoReflect.Descriptor instead.
 func (*SetNoteResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{152}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{154}
 }
 
 type SetAnswersRequest struct {
@@ -8524,7 +8838,7 @@ type SetAnswersRequest struct {
 
 func (x *SetAnswersRequest) Reset() {
 	*x = SetAnswersRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[153]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8536,7 +8850,7 @@ func (x *SetAnswersRequest) String() string {
 func (*SetAnswersRequest) ProtoMessage() {}
 
 func (x *SetAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[153]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8549,7 +8863,7 @@ func (x *SetAnswersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAnswersRequest.ProtoReflect.Descriptor instead.
 func (*SetAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{153}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *SetAnswersRequest) GetOrg() string {
@@ -8581,7 +8895,7 @@ type SetAnswersResponse struct {
 
 func (x *SetAnswersResponse) Reset() {
 	*x = SetAnswersResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[154]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8593,7 +8907,7 @@ func (x *SetAnswersResponse) String() string {
 func (*SetAnswersResponse) ProtoMessage() {}
 
 func (x *SetAnswersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[154]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8606,7 +8920,7 @@ func (x *SetAnswersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAnswersResponse.ProtoReflect.Descriptor instead.
 func (*SetAnswersResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{154}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{156}
 }
 
 type ListCellsRequest struct {
@@ -8619,7 +8933,7 @@ type ListCellsRequest struct {
 
 func (x *ListCellsRequest) Reset() {
 	*x = ListCellsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[155]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8631,7 +8945,7 @@ func (x *ListCellsRequest) String() string {
 func (*ListCellsRequest) ProtoMessage() {}
 
 func (x *ListCellsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[155]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8644,7 +8958,7 @@ func (x *ListCellsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCellsRequest.ProtoReflect.Descriptor instead.
 func (*ListCellsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{155}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *ListCellsRequest) GetOrg() string {
@@ -8670,7 +8984,7 @@ type ListCellsResponse struct {
 
 func (x *ListCellsResponse) Reset() {
 	*x = ListCellsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[156]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8682,7 +8996,7 @@ func (x *ListCellsResponse) String() string {
 func (*ListCellsResponse) ProtoMessage() {}
 
 func (x *ListCellsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[156]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8695,7 +9009,7 @@ func (x *ListCellsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCellsResponse.ProtoReflect.Descriptor instead.
 func (*ListCellsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{156}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *ListCellsResponse) GetCells() []*ManualCell {
@@ -8724,7 +9038,7 @@ type AddCellRequest struct {
 
 func (x *AddCellRequest) Reset() {
 	*x = AddCellRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[157]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8736,7 +9050,7 @@ func (x *AddCellRequest) String() string {
 func (*AddCellRequest) ProtoMessage() {}
 
 func (x *AddCellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[157]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8749,7 +9063,7 @@ func (x *AddCellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddCellRequest.ProtoReflect.Descriptor instead.
 func (*AddCellRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{157}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *AddCellRequest) GetOrg() string {
@@ -8817,7 +9131,7 @@ type AddCellResponse struct {
 
 func (x *AddCellResponse) Reset() {
 	*x = AddCellResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[158]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8829,7 +9143,7 @@ func (x *AddCellResponse) String() string {
 func (*AddCellResponse) ProtoMessage() {}
 
 func (x *AddCellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[158]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8842,7 +9156,7 @@ func (x *AddCellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddCellResponse.ProtoReflect.Descriptor instead.
 func (*AddCellResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{158}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *AddCellResponse) GetCell() *ManualCell {
@@ -8863,7 +9177,7 @@ type DeleteCellRequest struct {
 
 func (x *DeleteCellRequest) Reset() {
 	*x = DeleteCellRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[159]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8875,7 +9189,7 @@ func (x *DeleteCellRequest) String() string {
 func (*DeleteCellRequest) ProtoMessage() {}
 
 func (x *DeleteCellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[159]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8888,7 +9202,7 @@ func (x *DeleteCellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCellRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCellRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{159}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *DeleteCellRequest) GetOrg() string {
@@ -8920,7 +9234,7 @@ type DeleteCellResponse struct {
 
 func (x *DeleteCellResponse) Reset() {
 	*x = DeleteCellResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[160]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8932,7 +9246,7 @@ func (x *DeleteCellResponse) String() string {
 func (*DeleteCellResponse) ProtoMessage() {}
 
 func (x *DeleteCellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[160]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8945,7 +9259,7 @@ func (x *DeleteCellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCellResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCellResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{160}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{162}
 }
 
 type ListPoolsRequest struct {
@@ -8958,7 +9272,7 @@ type ListPoolsRequest struct {
 
 func (x *ListPoolsRequest) Reset() {
 	*x = ListPoolsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[161]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8970,7 +9284,7 @@ func (x *ListPoolsRequest) String() string {
 func (*ListPoolsRequest) ProtoMessage() {}
 
 func (x *ListPoolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[161]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8983,7 +9297,7 @@ func (x *ListPoolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPoolsRequest.ProtoReflect.Descriptor instead.
 func (*ListPoolsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{161}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *ListPoolsRequest) GetOrg() string {
@@ -9009,7 +9323,7 @@ type ListPoolsResponse struct {
 
 func (x *ListPoolsResponse) Reset() {
 	*x = ListPoolsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[162]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9021,7 +9335,7 @@ func (x *ListPoolsResponse) String() string {
 func (*ListPoolsResponse) ProtoMessage() {}
 
 func (x *ListPoolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[162]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9034,7 +9348,7 @@ func (x *ListPoolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPoolsResponse.ProtoReflect.Descriptor instead.
 func (*ListPoolsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{162}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *ListPoolsResponse) GetPools() []*Pool {
@@ -9058,7 +9372,7 @@ type SetPoolRequest struct {
 
 func (x *SetPoolRequest) Reset() {
 	*x = SetPoolRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[163]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9070,7 +9384,7 @@ func (x *SetPoolRequest) String() string {
 func (*SetPoolRequest) ProtoMessage() {}
 
 func (x *SetPoolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[163]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9083,7 +9397,7 @@ func (x *SetPoolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPoolRequest.ProtoReflect.Descriptor instead.
 func (*SetPoolRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{163}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *SetPoolRequest) GetOrg() string {
@@ -9129,7 +9443,7 @@ type SetPoolResponse struct {
 
 func (x *SetPoolResponse) Reset() {
 	*x = SetPoolResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[164]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9141,7 +9455,7 @@ func (x *SetPoolResponse) String() string {
 func (*SetPoolResponse) ProtoMessage() {}
 
 func (x *SetPoolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[164]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9154,7 +9468,7 @@ func (x *SetPoolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetPoolResponse.ProtoReflect.Descriptor instead.
 func (*SetPoolResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{164}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{166}
 }
 
 type SetLocksRequest struct {
@@ -9170,7 +9484,7 @@ type SetLocksRequest struct {
 
 func (x *SetLocksRequest) Reset() {
 	*x = SetLocksRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[165]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9182,7 +9496,7 @@ func (x *SetLocksRequest) String() string {
 func (*SetLocksRequest) ProtoMessage() {}
 
 func (x *SetLocksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[165]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9195,7 +9509,7 @@ func (x *SetLocksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocksRequest.ProtoReflect.Descriptor instead.
 func (*SetLocksRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{165}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *SetLocksRequest) GetOrg() string {
@@ -9234,7 +9548,7 @@ type SetLocksResponse struct {
 
 func (x *SetLocksResponse) Reset() {
 	*x = SetLocksResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[166]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9246,7 +9560,7 @@ func (x *SetLocksResponse) String() string {
 func (*SetLocksResponse) ProtoMessage() {}
 
 func (x *SetLocksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[166]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9259,7 +9573,7 @@ func (x *SetLocksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocksResponse.ProtoReflect.Descriptor instead.
 func (*SetLocksResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{166}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{168}
 }
 
 type SetDraftAsideRequest struct {
@@ -9272,7 +9586,7 @@ type SetDraftAsideRequest struct {
 
 func (x *SetDraftAsideRequest) Reset() {
 	*x = SetDraftAsideRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[167]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9284,7 +9598,7 @@ func (x *SetDraftAsideRequest) String() string {
 func (*SetDraftAsideRequest) ProtoMessage() {}
 
 func (x *SetDraftAsideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[167]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9297,7 +9611,7 @@ func (x *SetDraftAsideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDraftAsideRequest.ProtoReflect.Descriptor instead.
 func (*SetDraftAsideRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{167}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *SetDraftAsideRequest) GetOrg() string {
@@ -9322,7 +9636,7 @@ type SetDraftAsideResponse struct {
 
 func (x *SetDraftAsideResponse) Reset() {
 	*x = SetDraftAsideResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[168]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9334,7 +9648,7 @@ func (x *SetDraftAsideResponse) String() string {
 func (*SetDraftAsideResponse) ProtoMessage() {}
 
 func (x *SetDraftAsideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[168]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9347,7 +9661,7 @@ func (x *SetDraftAsideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDraftAsideResponse.ProtoReflect.Descriptor instead.
 func (*SetDraftAsideResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{168}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{170}
 }
 
 type ClearDraftAsideRequest struct {
@@ -9360,7 +9674,7 @@ type ClearDraftAsideRequest struct {
 
 func (x *ClearDraftAsideRequest) Reset() {
 	*x = ClearDraftAsideRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[169]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9372,7 +9686,7 @@ func (x *ClearDraftAsideRequest) String() string {
 func (*ClearDraftAsideRequest) ProtoMessage() {}
 
 func (x *ClearDraftAsideRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[169]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9385,7 +9699,7 @@ func (x *ClearDraftAsideRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearDraftAsideRequest.ProtoReflect.Descriptor instead.
 func (*ClearDraftAsideRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{169}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *ClearDraftAsideRequest) GetOrg() string {
@@ -9410,7 +9724,7 @@ type ClearDraftAsideResponse struct {
 
 func (x *ClearDraftAsideResponse) Reset() {
 	*x = ClearDraftAsideResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[170]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9422,7 +9736,7 @@ func (x *ClearDraftAsideResponse) String() string {
 func (*ClearDraftAsideResponse) ProtoMessage() {}
 
 func (x *ClearDraftAsideResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[170]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9435,7 +9749,7 @@ func (x *ClearDraftAsideResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearDraftAsideResponse.ProtoReflect.Descriptor instead.
 func (*ClearDraftAsideResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{170}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{172}
 }
 
 type GetWeightsRequest struct {
@@ -9448,7 +9762,7 @@ type GetWeightsRequest struct {
 
 func (x *GetWeightsRequest) Reset() {
 	*x = GetWeightsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[171]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9460,7 +9774,7 @@ func (x *GetWeightsRequest) String() string {
 func (*GetWeightsRequest) ProtoMessage() {}
 
 func (x *GetWeightsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[171]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9473,7 +9787,7 @@ func (x *GetWeightsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWeightsRequest.ProtoReflect.Descriptor instead.
 func (*GetWeightsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{171}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *GetWeightsRequest) GetOrg() string {
@@ -9501,7 +9815,7 @@ type GetWeightsResponse struct {
 
 func (x *GetWeightsResponse) Reset() {
 	*x = GetWeightsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[172]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9513,7 +9827,7 @@ func (x *GetWeightsResponse) String() string {
 func (*GetWeightsResponse) ProtoMessage() {}
 
 func (x *GetWeightsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[172]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9526,7 +9840,7 @@ func (x *GetWeightsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWeightsResponse.ProtoReflect.Descriptor instead.
 func (*GetWeightsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{172}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *GetWeightsResponse) GetSpecs() []*WeightSpec {
@@ -9555,7 +9869,7 @@ type SetWeightsRequest struct {
 
 func (x *SetWeightsRequest) Reset() {
 	*x = SetWeightsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[173]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9567,7 +9881,7 @@ func (x *SetWeightsRequest) String() string {
 func (*SetWeightsRequest) ProtoMessage() {}
 
 func (x *SetWeightsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[173]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9580,7 +9894,7 @@ func (x *SetWeightsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWeightsRequest.ProtoReflect.Descriptor instead.
 func (*SetWeightsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{173}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *SetWeightsRequest) GetOrg() string {
@@ -9614,7 +9928,7 @@ type SetWeightsResponse struct {
 
 func (x *SetWeightsResponse) Reset() {
 	*x = SetWeightsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[174]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9626,7 +9940,7 @@ func (x *SetWeightsResponse) String() string {
 func (*SetWeightsResponse) ProtoMessage() {}
 
 func (x *SetWeightsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[174]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9639,7 +9953,7 @@ func (x *SetWeightsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWeightsResponse.ProtoReflect.Descriptor instead.
 func (*SetWeightsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{174}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *SetWeightsResponse) GetSpecs() []*WeightSpec {
@@ -9668,7 +9982,7 @@ type StartRunRequest struct {
 
 func (x *StartRunRequest) Reset() {
 	*x = StartRunRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[175]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9680,7 +9994,7 @@ func (x *StartRunRequest) String() string {
 func (*StartRunRequest) ProtoMessage() {}
 
 func (x *StartRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[175]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9693,7 +10007,7 @@ func (x *StartRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRunRequest.ProtoReflect.Descriptor instead.
 func (*StartRunRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{175}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *StartRunRequest) GetOrg() string {
@@ -9727,7 +10041,7 @@ type StartRunResponse struct {
 
 func (x *StartRunResponse) Reset() {
 	*x = StartRunResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[176]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9739,7 +10053,7 @@ func (x *StartRunResponse) String() string {
 func (*StartRunResponse) ProtoMessage() {}
 
 func (x *StartRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[176]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9752,7 +10066,7 @@ func (x *StartRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRunResponse.ProtoReflect.Descriptor instead.
 func (*StartRunResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{176}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *StartRunResponse) GetId() int32 {
@@ -9772,7 +10086,7 @@ type ListRunsRequest struct {
 
 func (x *ListRunsRequest) Reset() {
 	*x = ListRunsRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[177]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9784,7 +10098,7 @@ func (x *ListRunsRequest) String() string {
 func (*ListRunsRequest) ProtoMessage() {}
 
 func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[177]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9797,7 +10111,7 @@ func (x *ListRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListRunsRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{177}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *ListRunsRequest) GetOrg() string {
@@ -9823,7 +10137,7 @@ type ListRunsResponse struct {
 
 func (x *ListRunsResponse) Reset() {
 	*x = ListRunsResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[178]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9835,7 +10149,7 @@ func (x *ListRunsResponse) String() string {
 func (*ListRunsResponse) ProtoMessage() {}
 
 func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[178]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9848,7 +10162,7 @@ func (x *ListRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListRunsResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{178}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *ListRunsResponse) GetRuns() []*Run {
@@ -9872,7 +10186,7 @@ type GetRunRequest struct {
 
 func (x *GetRunRequest) Reset() {
 	*x = GetRunRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[179]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9884,7 +10198,7 @@ func (x *GetRunRequest) String() string {
 func (*GetRunRequest) ProtoMessage() {}
 
 func (x *GetRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[179]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9897,7 +10211,7 @@ func (x *GetRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunRequest.ProtoReflect.Descriptor instead.
 func (*GetRunRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{179}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *GetRunRequest) GetOrg() string {
@@ -9946,7 +10260,7 @@ type GetRunResponse struct {
 
 func (x *GetRunResponse) Reset() {
 	*x = GetRunResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[180]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9958,7 +10272,7 @@ func (x *GetRunResponse) String() string {
 func (*GetRunResponse) ProtoMessage() {}
 
 func (x *GetRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[180]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9971,7 +10285,7 @@ func (x *GetRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRunResponse.ProtoReflect.Descriptor instead.
 func (*GetRunResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{180}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *GetRunResponse) GetRun() *RunInfo {
@@ -10027,7 +10341,7 @@ type PinRunRequest struct {
 
 func (x *PinRunRequest) Reset() {
 	*x = PinRunRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[181]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10039,7 +10353,7 @@ func (x *PinRunRequest) String() string {
 func (*PinRunRequest) ProtoMessage() {}
 
 func (x *PinRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[181]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10052,7 +10366,7 @@ func (x *PinRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinRunRequest.ProtoReflect.Descriptor instead.
 func (*PinRunRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{181}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *PinRunRequest) GetOrg() string {
@@ -10084,7 +10398,7 @@ type PinRunResponse struct {
 
 func (x *PinRunResponse) Reset() {
 	*x = PinRunResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[182]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10096,7 +10410,7 @@ func (x *PinRunResponse) String() string {
 func (*PinRunResponse) ProtoMessage() {}
 
 func (x *PinRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[182]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10109,7 +10423,7 @@ func (x *PinRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PinRunResponse.ProtoReflect.Descriptor instead.
 func (*PinRunResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{182}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{184}
 }
 
 type UnpinRunRequest struct {
@@ -10123,7 +10437,7 @@ type UnpinRunRequest struct {
 
 func (x *UnpinRunRequest) Reset() {
 	*x = UnpinRunRequest{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[183]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10135,7 +10449,7 @@ func (x *UnpinRunRequest) String() string {
 func (*UnpinRunRequest) ProtoMessage() {}
 
 func (x *UnpinRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[183]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10148,7 +10462,7 @@ func (x *UnpinRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinRunRequest.ProtoReflect.Descriptor instead.
 func (*UnpinRunRequest) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{183}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *UnpinRunRequest) GetOrg() string {
@@ -10180,7 +10494,7 @@ type UnpinRunResponse struct {
 
 func (x *UnpinRunResponse) Reset() {
 	*x = UnpinRunResponse{}
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[184]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10192,7 +10506,7 @@ func (x *UnpinRunResponse) String() string {
 func (*UnpinRunResponse) ProtoMessage() {}
 
 func (x *UnpinRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[184]
+	mi := &file_dutyplan_v1_dutyplan_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10205,7 +10519,7 @@ func (x *UnpinRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnpinRunResponse.ProtoReflect.Descriptor instead.
 func (*UnpinRunResponse) Descriptor() ([]byte, []int) {
-	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{184}
+	return file_dutyplan_v1_dutyplan_proto_rawDescGZIP(), []int{186}
 }
 
 var File_dutyplan_v1_dutyplan_proto protoreflect.FileDescriptor
@@ -10474,152 +10788,171 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\x11DeleteLinkRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\x05R\x02id\"\x14\n" +
-	"\x12DeleteLinkResponse\"$\n" +
+	"\x12DeleteLinkResponse\"8\n" +
 	"\x10ListTasksRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\"<\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\"<\n" +
 	"\x11ListTasksResponse\x12'\n" +
-	"\x05tasks\x18\x01 \x03(\v2\x11.dutyplan.v1.TaskR\x05tasks\"S\n" +
+	"\x05tasks\x18\x01 \x03(\v2\x11.dutyplan.v1.TaskR\x05tasks\"g\n" +
 	"\x11CreateTaskRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\asection\x18\x03 \x01(\x05R\asection\";\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
+	"\asection\x18\x04 \x01(\x05R\asection\";\n" +
 	"\x12CreateTaskResponse\x12%\n" +
-	"\x04task\x18\x01 \x01(\v2\x11.dutyplan.v1.TaskR\x04task\"\x82\x01\n" +
+	"\x04task\x18\x01 \x01(\v2\x11.dutyplan.v1.TaskR\x04task\"\x96\x01\n" +
 	"\x11UpdateTaskRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x17\n" +
-	"\x04name\x18\x03 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1d\n" +
-	"\aplanned\x18\x04 \x01(\bH\x01R\aplanned\x88\x01\x01B\a\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x17\n" +
+	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1d\n" +
+	"\aplanned\x18\x05 \x01(\bH\x01R\aplanned\x88\x01\x01B\a\n" +
 	"\x05_nameB\n" +
 	"\n" +
 	"\b_planned\";\n" +
 	"\x12UpdateTaskResponse\x12%\n" +
-	"\x04task\x18\x01 \x01(\v2\x11.dutyplan.v1.TaskR\x04task\"5\n" +
+	"\x04task\x18\x01 \x01(\v2\x11.dutyplan.v1.TaskR\x04task\"I\n" +
 	"\x11DeleteTaskRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\"\x14\n" +
-	"\x12DeleteTaskResponse\"\x8c\x01\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\"\x14\n" +
+	"\x12DeleteTaskResponse\"\xa0\x01\n" +
 	"\x0fMoveTaskRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x1f\n" +
-	"\bposition\x18\x03 \x01(\x05H\x00R\bposition\x88\x01\x01\x12\x1d\n" +
-	"\asection\x18\x04 \x01(\x05H\x01R\asection\x88\x01\x01B\v\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x1f\n" +
+	"\bposition\x18\x04 \x01(\x05H\x00R\bposition\x88\x01\x01\x12\x1d\n" +
+	"\asection\x18\x05 \x01(\x05H\x01R\asection\x88\x01\x01B\v\n" +
 	"\t_positionB\n" +
 	"\n" +
 	"\b_section\"\x12\n" +
-	"\x10MoveTaskResponse\"+\n" +
+	"\x10MoveTaskResponse\"?\n" +
 	"\x17ListCombinationsRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\"X\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\"X\n" +
 	"\x18ListCombinationsResponse\x12<\n" +
-	"\fcombinations\x18\x01 \x03(\v2\x18.dutyplan.v1.CombinationR\fcombinations\"[\n" +
+	"\fcombinations\x18\x01 \x03(\v2\x18.dutyplan.v1.CombinationR\fcombinations\"o\n" +
 	"\x15SetCombinationRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\f\n" +
-	"\x01a\x18\x02 \x01(\x05R\x01a\x12\f\n" +
-	"\x01b\x18\x03 \x01(\x05R\x01b\x12\x14\n" +
-	"\x05level\x18\x04 \x01(\tR\x05level\"\x18\n" +
-	"\x16SetCombinationResponse\"X\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\f\n" +
+	"\x01a\x18\x03 \x01(\x05R\x01a\x12\f\n" +
+	"\x01b\x18\x04 \x01(\x05R\x01b\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\tR\x05level\"\x18\n" +
+	"\x16SetCombinationResponse\"l\n" +
 	"\x1aSetTaskCombinationsRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04task\x18\x02 \x01(\x05R\x04task\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\tR\x05level\"\x1d\n" +
-	"\x1bSetTaskCombinationsResponse\"%\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
+	"\x04task\x18\x03 \x01(\x05R\x04task\x12\x14\n" +
+	"\x05level\x18\x04 \x01(\tR\x05level\"\x1d\n" +
+	"\x1bSetTaskCombinationsResponse\"9\n" +
 	"\x11ListPeopleRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\"A\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\"A\n" +
 	"\x12ListPeopleResponse\x12+\n" +
-	"\x06people\x18\x01 \x03(\v2\x13.dutyplan.v1.PersonR\x06people\"U\n" +
+	"\x06people\x18\x01 \x03(\v2\x13.dutyplan.v1.PersonR\x06people\"i\n" +
 	"\x13CreatePersonRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\asection\x18\x03 \x01(\x05R\asection\"C\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
+	"\asection\x18\x04 \x01(\x05R\asection\"C\n" +
 	"\x14CreatePersonResponse\x12+\n" +
-	"\x06person\x18\x01 \x01(\v2\x13.dutyplan.v1.PersonR\x06person\"\x8d\x01\n" +
+	"\x06person\x18\x01 \x01(\v2\x13.dutyplan.v1.PersonR\x06person\"\xa1\x01\n" +
 	"\x13UpdatePersonRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x17\n" +
-	"\x04name\x18\x03 \x01(\tH\x00R\x04name\x88\x01\x01\x12#\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x17\n" +
+	"\x04name\x18\x04 \x01(\tH\x00R\x04name\x88\x01\x01\x12#\n" +
 	"\n" +
-	"proposable\x18\x04 \x01(\bH\x01R\n" +
+	"proposable\x18\x05 \x01(\bH\x01R\n" +
 	"proposable\x88\x01\x01B\a\n" +
 	"\x05_nameB\r\n" +
 	"\v_proposable\"C\n" +
 	"\x14UpdatePersonResponse\x12+\n" +
-	"\x06person\x18\x01 \x01(\v2\x13.dutyplan.v1.PersonR\x06person\"}\n" +
+	"\x06person\x18\x01 \x01(\v2\x13.dutyplan.v1.PersonR\x06person\"\x91\x01\n" +
 	"\x11MovePersonRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x1f\n" +
-	"\bposition\x18\x03 \x01(\x05H\x00R\bposition\x88\x01\x01\x12\x18\n" +
-	"\asection\x18\x04 \x01(\x05R\asectionB\v\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x1f\n" +
+	"\bposition\x18\x04 \x01(\x05H\x00R\bposition\x88\x01\x01\x12\x18\n" +
+	"\asection\x18\x05 \x01(\x05R\asectionB\v\n" +
 	"\t_position\"\x14\n" +
-	"\x12MovePersonResponse\"j\n" +
-	"\x14SetPersonTaskRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x16\n" +
-	"\x06person\x18\x02 \x01(\x05R\x06person\x12\x12\n" +
-	"\x04task\x18\x03 \x01(\x05R\x04task\x12\x14\n" +
-	"\x05level\x18\x04 \x01(\tR\x05level\"\x17\n" +
-	"\x15SetPersonTaskResponse\"W\n" +
-	"\x17RemovePersonTaskRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x16\n" +
-	"\x06person\x18\x02 \x01(\x05R\x06person\x12\x12\n" +
-	"\x04task\x18\x03 \x01(\x05R\x04task\"\x1a\n" +
-	"\x18RemovePersonTaskResponse\"'\n" +
+	"\x12MovePersonResponse\";\n" +
 	"\x13ListSectionsRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\"H\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\"H\n" +
 	"\x14ListSectionsResponse\x120\n" +
-	"\bsections\x18\x01 \x03(\v2\x14.dutyplan.v1.SectionR\bsections\"<\n" +
+	"\bsections\x18\x01 \x03(\v2\x14.dutyplan.v1.SectionR\bsections\"P\n" +
 	"\x14CreateSectionRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"G\n" +
-	"\x15CreateSectionResponse\x12.\n" +
-	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"L\n" +
-	"\x14RenameSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"G\n" +
+	"\x15CreateSectionResponse\x12.\n" +
+	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"`\n" +
+	"\x14RenameSectionRequest\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"G\n" +
 	"\x15RenameSectionResponse\x12.\n" +
-	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"d\n" +
+	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"x\n" +
 	"\x12MoveSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x1f\n" +
-	"\bposition\x18\x03 \x01(\x05H\x00R\bposition\x88\x01\x01B\v\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x1f\n" +
+	"\bposition\x18\x04 \x01(\x05H\x00R\bposition\x88\x01\x01B\v\n" +
 	"\t_position\"\x15\n" +
-	"\x13MoveSectionResponse\"8\n" +
+	"\x13MoveSectionResponse\"L\n" +
 	"\x14DeleteSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\"\x17\n" +
-	"\x15DeleteSectionResponse\"+\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\"\x17\n" +
+	"\x15DeleteSectionResponse\"?\n" +
 	"\x17ListTaskSectionsRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\"L\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\"L\n" +
 	"\x18ListTaskSectionsResponse\x120\n" +
-	"\bsections\x18\x01 \x03(\v2\x14.dutyplan.v1.SectionR\bsections\"@\n" +
+	"\bsections\x18\x01 \x03(\v2\x14.dutyplan.v1.SectionR\bsections\"T\n" +
 	"\x18CreateTaskSectionRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"K\n" +
-	"\x19CreateTaskSectionResponse\x12.\n" +
-	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"P\n" +
-	"\x18RenameTaskSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\"K\n" +
+	"\x19CreateTaskSectionResponse\x12.\n" +
+	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"d\n" +
+	"\x18RenameTaskSectionRequest\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\"K\n" +
 	"\x19RenameTaskSectionResponse\x12.\n" +
-	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"h\n" +
+	"\asection\x18\x01 \x01(\v2\x14.dutyplan.v1.SectionR\asection\"|\n" +
 	"\x16MoveTaskSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\x12\x1f\n" +
-	"\bposition\x18\x03 \x01(\x05H\x00R\bposition\x88\x01\x01B\v\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\x12\x1f\n" +
+	"\bposition\x18\x04 \x01(\x05H\x00R\bposition\x88\x01\x01B\v\n" +
 	"\t_position\"\x19\n" +
-	"\x17MoveTaskSectionResponse\"<\n" +
+	"\x17MoveTaskSectionResponse\"P\n" +
 	"\x18DeleteTaskSectionRequest\x12\x10\n" +
-	"\x03org\x18\x01 \x01(\tR\x03org\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02id\"\x1b\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x0e\n" +
+	"\x02id\x18\x03 \x01(\x05R\x02id\"\x1b\n" +
 	"\x19DeleteTaskSectionResponse\"$\n" +
 	"\x10ListPlansRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\"<\n" +
 	"\x11ListPlansResponse\x12'\n" +
-	"\x05plans\x18\x01 \x03(\v2\x11.dutyplan.v1.PlanR\x05plans\"9\n" +
+	"\x05plans\x18\x01 \x03(\v2\x11.dutyplan.v1.PlanR\x05plans\"M\n" +
 	"\x11CreatePlanRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\";\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04from\x18\x03 \x01(\tR\x04from\";\n" +
 	"\x12CreatePlanResponse\x12%\n" +
+	"\x04plan\x18\x01 \x01(\v2\x11.dutyplan.v1.PlanR\x04plan\"f\n" +
+	"\x14DuplicatePlanRequest\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05table\x18\x04 \x01(\bR\x05table\">\n" +
+	"\x15DuplicatePlanResponse\x12%\n" +
 	"\x04plan\x18\x01 \x01(\v2\x11.dutyplan.v1.PlanR\x04plan\"6\n" +
 	"\x0eGetPlanRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
@@ -10769,7 +11102,20 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\vLevelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x19\n" +
-	"\x17SetAvailabilityResponse\"x\n" +
+	"\x17SetAvailabilityResponse\"~\n" +
+	"\x14SetPersonTaskRequest\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x16\n" +
+	"\x06person\x18\x03 \x01(\x05R\x06person\x12\x12\n" +
+	"\x04task\x18\x04 \x01(\x05R\x04task\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\tR\x05level\"\x17\n" +
+	"\x15SetPersonTaskResponse\"k\n" +
+	"\x17RemovePersonTaskRequest\x12\x10\n" +
+	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
+	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x16\n" +
+	"\x06person\x18\x03 \x01(\x05R\x06person\x12\x12\n" +
+	"\x04task\x18\x04 \x01(\x05R\x04task\"\x1a\n" +
+	"\x18RemovePersonTaskResponse\"x\n" +
 	"\x0eSetNoteRequest\x12\x10\n" +
 	"\x03org\x18\x01 \x01(\tR\x03org\x12\x12\n" +
 	"\x04plan\x18\x02 \x01(\tR\x04plan\x12\x14\n" +
@@ -10893,7 +11239,7 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\n" +
 	"CreateLink\x12\x1e.dutyplan.v1.CreateLinkRequest\x1a\x1f.dutyplan.v1.CreateLinkResponse\x12M\n" +
 	"\n" +
-	"DeleteLink\x12\x1e.dutyplan.v1.DeleteLinkRequest\x1a\x1f.dutyplan.v1.DeleteLinkResponse2\xd1\x10\n" +
+	"DeleteLink\x12\x1e.dutyplan.v1.DeleteLinkRequest\x1a\x1f.dutyplan.v1.DeleteLinkResponse2\x98\x0f\n" +
 	"\fSetupService\x12J\n" +
 	"\tListTasks\x12\x1d.dutyplan.v1.ListTasksRequest\x1a\x1e.dutyplan.v1.ListTasksResponse\x12M\n" +
 	"\n" +
@@ -10911,9 +11257,7 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\fCreatePerson\x12 .dutyplan.v1.CreatePersonRequest\x1a!.dutyplan.v1.CreatePersonResponse\x12S\n" +
 	"\fUpdatePerson\x12 .dutyplan.v1.UpdatePersonRequest\x1a!.dutyplan.v1.UpdatePersonResponse\x12M\n" +
 	"\n" +
-	"MovePerson\x12\x1e.dutyplan.v1.MovePersonRequest\x1a\x1f.dutyplan.v1.MovePersonResponse\x12V\n" +
-	"\rSetPersonTask\x12!.dutyplan.v1.SetPersonTaskRequest\x1a\".dutyplan.v1.SetPersonTaskResponse\x12_\n" +
-	"\x10RemovePersonTask\x12$.dutyplan.v1.RemovePersonTaskRequest\x1a%.dutyplan.v1.RemovePersonTaskResponse\x12S\n" +
+	"MovePerson\x12\x1e.dutyplan.v1.MovePersonRequest\x1a\x1f.dutyplan.v1.MovePersonResponse\x12S\n" +
 	"\fListSections\x12 .dutyplan.v1.ListSectionsRequest\x1a!.dutyplan.v1.ListSectionsResponse\x12V\n" +
 	"\rCreateSection\x12!.dutyplan.v1.CreateSectionRequest\x1a\".dutyplan.v1.CreateSectionResponse\x12V\n" +
 	"\rRenameSection\x12!.dutyplan.v1.RenameSectionRequest\x1a\".dutyplan.v1.RenameSectionResponse\x12P\n" +
@@ -10923,11 +11267,12 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\x11CreateTaskSection\x12%.dutyplan.v1.CreateTaskSectionRequest\x1a&.dutyplan.v1.CreateTaskSectionResponse\x12b\n" +
 	"\x11RenameTaskSection\x12%.dutyplan.v1.RenameTaskSectionRequest\x1a&.dutyplan.v1.RenameTaskSectionResponse\x12\\\n" +
 	"\x0fMoveTaskSection\x12#.dutyplan.v1.MoveTaskSectionRequest\x1a$.dutyplan.v1.MoveTaskSectionResponse\x12b\n" +
-	"\x11DeleteTaskSection\x12%.dutyplan.v1.DeleteTaskSectionRequest\x1a&.dutyplan.v1.DeleteTaskSectionResponse2\xd3\x0f\n" +
+	"\x11DeleteTaskSection\x12%.dutyplan.v1.DeleteTaskSectionRequest\x1a&.dutyplan.v1.DeleteTaskSectionResponse2\xe4\x11\n" +
 	"\vPlanService\x12J\n" +
 	"\tListPlans\x12\x1d.dutyplan.v1.ListPlansRequest\x1a\x1e.dutyplan.v1.ListPlansResponse\x12M\n" +
 	"\n" +
-	"CreatePlan\x12\x1e.dutyplan.v1.CreatePlanRequest\x1a\x1f.dutyplan.v1.CreatePlanResponse\x12D\n" +
+	"CreatePlan\x12\x1e.dutyplan.v1.CreatePlanRequest\x1a\x1f.dutyplan.v1.CreatePlanResponse\x12V\n" +
+	"\rDuplicatePlan\x12!.dutyplan.v1.DuplicatePlanRequest\x1a\".dutyplan.v1.DuplicatePlanResponse\x12D\n" +
 	"\aGetPlan\x12\x1b.dutyplan.v1.GetPlanRequest\x1a\x1c.dutyplan.v1.GetPlanResponse\x12M\n" +
 	"\n" +
 	"RenamePlan\x12\x1e.dutyplan.v1.RenamePlanRequest\x1a\x1f.dutyplan.v1.RenamePlanResponse\x12M\n" +
@@ -10952,7 +11297,9 @@ const file_dutyplan_v1_dutyplan_proto_rawDesc = "" +
 	"\vFreezeField\x12\x1f.dutyplan.v1.FreezeFieldRequest\x1a .dutyplan.v1.FreezeFieldResponse\x12P\n" +
 	"\vDeleteField\x12\x1f.dutyplan.v1.DeleteFieldRequest\x1a .dutyplan.v1.DeleteFieldResponse\x12V\n" +
 	"\rSetFieldValue\x12!.dutyplan.v1.SetFieldValueRequest\x1a\".dutyplan.v1.SetFieldValueResponse\x12P\n" +
-	"\vListAnswers\x12\x1f.dutyplan.v1.ListAnswersRequest\x1a .dutyplan.v1.ListAnswersResponse\x12\\\n" +
+	"\vListAnswers\x12\x1f.dutyplan.v1.ListAnswersRequest\x1a .dutyplan.v1.ListAnswersResponse\x12V\n" +
+	"\rSetPersonTask\x12!.dutyplan.v1.SetPersonTaskRequest\x1a\".dutyplan.v1.SetPersonTaskResponse\x12_\n" +
+	"\x10RemovePersonTask\x12$.dutyplan.v1.RemovePersonTaskRequest\x1a%.dutyplan.v1.RemovePersonTaskResponse\x12\\\n" +
 	"\x0fSetAvailability\x12#.dutyplan.v1.SetAvailabilityRequest\x1a$.dutyplan.v1.SetAvailabilityResponse\x12D\n" +
 	"\aSetNote\x12\x1b.dutyplan.v1.SetNoteRequest\x1a\x1c.dutyplan.v1.SetNoteResponse\x12M\n" +
 	"\n" +
@@ -10989,7 +11336,7 @@ func file_dutyplan_v1_dutyplan_proto_rawDescGZIP() []byte {
 	return file_dutyplan_v1_dutyplan_proto_rawDescData
 }
 
-var file_dutyplan_v1_dutyplan_proto_msgTypes = make([]protoimpl.MessageInfo, 186)
+var file_dutyplan_v1_dutyplan_proto_msgTypes = make([]protoimpl.MessageInfo, 188)
 var file_dutyplan_v1_dutyplan_proto_goTypes = []any{
 	(*Problem)(nil),                     // 0: dutyplan.v1.Problem
 	(*Org)(nil),                         // 1: dutyplan.v1.Org
@@ -11072,115 +11419,117 @@ var file_dutyplan_v1_dutyplan_proto_goTypes = []any{
 	(*UpdatePersonResponse)(nil),        // 78: dutyplan.v1.UpdatePersonResponse
 	(*MovePersonRequest)(nil),           // 79: dutyplan.v1.MovePersonRequest
 	(*MovePersonResponse)(nil),          // 80: dutyplan.v1.MovePersonResponse
-	(*SetPersonTaskRequest)(nil),        // 81: dutyplan.v1.SetPersonTaskRequest
-	(*SetPersonTaskResponse)(nil),       // 82: dutyplan.v1.SetPersonTaskResponse
-	(*RemovePersonTaskRequest)(nil),     // 83: dutyplan.v1.RemovePersonTaskRequest
-	(*RemovePersonTaskResponse)(nil),    // 84: dutyplan.v1.RemovePersonTaskResponse
-	(*ListSectionsRequest)(nil),         // 85: dutyplan.v1.ListSectionsRequest
-	(*ListSectionsResponse)(nil),        // 86: dutyplan.v1.ListSectionsResponse
-	(*CreateSectionRequest)(nil),        // 87: dutyplan.v1.CreateSectionRequest
-	(*CreateSectionResponse)(nil),       // 88: dutyplan.v1.CreateSectionResponse
-	(*RenameSectionRequest)(nil),        // 89: dutyplan.v1.RenameSectionRequest
-	(*RenameSectionResponse)(nil),       // 90: dutyplan.v1.RenameSectionResponse
-	(*MoveSectionRequest)(nil),          // 91: dutyplan.v1.MoveSectionRequest
-	(*MoveSectionResponse)(nil),         // 92: dutyplan.v1.MoveSectionResponse
-	(*DeleteSectionRequest)(nil),        // 93: dutyplan.v1.DeleteSectionRequest
-	(*DeleteSectionResponse)(nil),       // 94: dutyplan.v1.DeleteSectionResponse
-	(*ListTaskSectionsRequest)(nil),     // 95: dutyplan.v1.ListTaskSectionsRequest
-	(*ListTaskSectionsResponse)(nil),    // 96: dutyplan.v1.ListTaskSectionsResponse
-	(*CreateTaskSectionRequest)(nil),    // 97: dutyplan.v1.CreateTaskSectionRequest
-	(*CreateTaskSectionResponse)(nil),   // 98: dutyplan.v1.CreateTaskSectionResponse
-	(*RenameTaskSectionRequest)(nil),    // 99: dutyplan.v1.RenameTaskSectionRequest
-	(*RenameTaskSectionResponse)(nil),   // 100: dutyplan.v1.RenameTaskSectionResponse
-	(*MoveTaskSectionRequest)(nil),      // 101: dutyplan.v1.MoveTaskSectionRequest
-	(*MoveTaskSectionResponse)(nil),     // 102: dutyplan.v1.MoveTaskSectionResponse
-	(*DeleteTaskSectionRequest)(nil),    // 103: dutyplan.v1.DeleteTaskSectionRequest
-	(*DeleteTaskSectionResponse)(nil),   // 104: dutyplan.v1.DeleteTaskSectionResponse
-	(*ListPlansRequest)(nil),            // 105: dutyplan.v1.ListPlansRequest
-	(*ListPlansResponse)(nil),           // 106: dutyplan.v1.ListPlansResponse
-	(*CreatePlanRequest)(nil),           // 107: dutyplan.v1.CreatePlanRequest
-	(*CreatePlanResponse)(nil),          // 108: dutyplan.v1.CreatePlanResponse
-	(*GetPlanRequest)(nil),              // 109: dutyplan.v1.GetPlanRequest
-	(*GetPlanResponse)(nil),             // 110: dutyplan.v1.GetPlanResponse
-	(*RenamePlanRequest)(nil),           // 111: dutyplan.v1.RenamePlanRequest
-	(*RenamePlanResponse)(nil),          // 112: dutyplan.v1.RenamePlanResponse
-	(*DeletePlanRequest)(nil),           // 113: dutyplan.v1.DeletePlanRequest
-	(*DeletePlanResponse)(nil),          // 114: dutyplan.v1.DeletePlanResponse
-	(*ListEventsRequest)(nil),           // 115: dutyplan.v1.ListEventsRequest
-	(*ListEventsResponse)(nil),          // 116: dutyplan.v1.ListEventsResponse
-	(*AddEventsRequest)(nil),            // 117: dutyplan.v1.AddEventsRequest
-	(*AddEventsResponse)(nil),           // 118: dutyplan.v1.AddEventsResponse
-	(*CopyEventRequest)(nil),            // 119: dutyplan.v1.CopyEventRequest
-	(*CopyEventResponse)(nil),           // 120: dutyplan.v1.CopyEventResponse
-	(*UpdateEventRequest)(nil),          // 121: dutyplan.v1.UpdateEventRequest
-	(*UpdateEventResponse)(nil),         // 122: dutyplan.v1.UpdateEventResponse
-	(*DeleteEventRequest)(nil),          // 123: dutyplan.v1.DeleteEventRequest
-	(*DeleteEventResponse)(nil),         // 124: dutyplan.v1.DeleteEventResponse
-	(*ListPlacesRequest)(nil),           // 125: dutyplan.v1.ListPlacesRequest
-	(*ListPlacesResponse)(nil),          // 126: dutyplan.v1.ListPlacesResponse
-	(*SetPlacesRequest)(nil),            // 127: dutyplan.v1.SetPlacesRequest
-	(*SetPlacesResponse)(nil),           // 128: dutyplan.v1.SetPlacesResponse
-	(*ResetPlacesRequest)(nil),          // 129: dutyplan.v1.ResetPlacesRequest
-	(*ResetPlacesResponse)(nil),         // 130: dutyplan.v1.ResetPlacesResponse
-	(*SetPlacesManyRequest)(nil),        // 131: dutyplan.v1.SetPlacesManyRequest
-	(*SetPlacesManyResponse)(nil),       // 132: dutyplan.v1.SetPlacesManyResponse
-	(*ListFieldsRequest)(nil),           // 133: dutyplan.v1.ListFieldsRequest
-	(*ListFieldsResponse)(nil),          // 134: dutyplan.v1.ListFieldsResponse
-	(*AddFieldRequest)(nil),             // 135: dutyplan.v1.AddFieldRequest
-	(*AddFieldResponse)(nil),            // 136: dutyplan.v1.AddFieldResponse
-	(*RenameFieldRequest)(nil),          // 137: dutyplan.v1.RenameFieldRequest
-	(*RenameFieldResponse)(nil),         // 138: dutyplan.v1.RenameFieldResponse
-	(*MoveFieldRequest)(nil),            // 139: dutyplan.v1.MoveFieldRequest
-	(*MoveFieldResponse)(nil),           // 140: dutyplan.v1.MoveFieldResponse
-	(*FreezeFieldRequest)(nil),          // 141: dutyplan.v1.FreezeFieldRequest
-	(*FreezeFieldResponse)(nil),         // 142: dutyplan.v1.FreezeFieldResponse
-	(*DeleteFieldRequest)(nil),          // 143: dutyplan.v1.DeleteFieldRequest
-	(*DeleteFieldResponse)(nil),         // 144: dutyplan.v1.DeleteFieldResponse
-	(*SetFieldValueRequest)(nil),        // 145: dutyplan.v1.SetFieldValueRequest
-	(*SetFieldValueResponse)(nil),       // 146: dutyplan.v1.SetFieldValueResponse
-	(*ListAnswersRequest)(nil),          // 147: dutyplan.v1.ListAnswersRequest
-	(*ListAnswersResponse)(nil),         // 148: dutyplan.v1.ListAnswersResponse
-	(*SetAvailabilityRequest)(nil),      // 149: dutyplan.v1.SetAvailabilityRequest
-	(*SetAvailabilityResponse)(nil),     // 150: dutyplan.v1.SetAvailabilityResponse
-	(*SetNoteRequest)(nil),              // 151: dutyplan.v1.SetNoteRequest
-	(*SetNoteResponse)(nil),             // 152: dutyplan.v1.SetNoteResponse
-	(*SetAnswersRequest)(nil),           // 153: dutyplan.v1.SetAnswersRequest
-	(*SetAnswersResponse)(nil),          // 154: dutyplan.v1.SetAnswersResponse
-	(*ListCellsRequest)(nil),            // 155: dutyplan.v1.ListCellsRequest
-	(*ListCellsResponse)(nil),           // 156: dutyplan.v1.ListCellsResponse
-	(*AddCellRequest)(nil),              // 157: dutyplan.v1.AddCellRequest
-	(*AddCellResponse)(nil),             // 158: dutyplan.v1.AddCellResponse
-	(*DeleteCellRequest)(nil),           // 159: dutyplan.v1.DeleteCellRequest
-	(*DeleteCellResponse)(nil),          // 160: dutyplan.v1.DeleteCellResponse
-	(*ListPoolsRequest)(nil),            // 161: dutyplan.v1.ListPoolsRequest
-	(*ListPoolsResponse)(nil),           // 162: dutyplan.v1.ListPoolsResponse
-	(*SetPoolRequest)(nil),              // 163: dutyplan.v1.SetPoolRequest
-	(*SetPoolResponse)(nil),             // 164: dutyplan.v1.SetPoolResponse
-	(*SetLocksRequest)(nil),             // 165: dutyplan.v1.SetLocksRequest
-	(*SetLocksResponse)(nil),            // 166: dutyplan.v1.SetLocksResponse
-	(*SetDraftAsideRequest)(nil),        // 167: dutyplan.v1.SetDraftAsideRequest
-	(*SetDraftAsideResponse)(nil),       // 168: dutyplan.v1.SetDraftAsideResponse
-	(*ClearDraftAsideRequest)(nil),      // 169: dutyplan.v1.ClearDraftAsideRequest
-	(*ClearDraftAsideResponse)(nil),     // 170: dutyplan.v1.ClearDraftAsideResponse
-	(*GetWeightsRequest)(nil),           // 171: dutyplan.v1.GetWeightsRequest
-	(*GetWeightsResponse)(nil),          // 172: dutyplan.v1.GetWeightsResponse
-	(*SetWeightsRequest)(nil),           // 173: dutyplan.v1.SetWeightsRequest
-	(*SetWeightsResponse)(nil),          // 174: dutyplan.v1.SetWeightsResponse
-	(*StartRunRequest)(nil),             // 175: dutyplan.v1.StartRunRequest
-	(*StartRunResponse)(nil),            // 176: dutyplan.v1.StartRunResponse
-	(*ListRunsRequest)(nil),             // 177: dutyplan.v1.ListRunsRequest
-	(*ListRunsResponse)(nil),            // 178: dutyplan.v1.ListRunsResponse
-	(*GetRunRequest)(nil),               // 179: dutyplan.v1.GetRunRequest
-	(*GetRunResponse)(nil),              // 180: dutyplan.v1.GetRunResponse
-	(*PinRunRequest)(nil),               // 181: dutyplan.v1.PinRunRequest
-	(*PinRunResponse)(nil),              // 182: dutyplan.v1.PinRunResponse
-	(*UnpinRunRequest)(nil),             // 183: dutyplan.v1.UnpinRunRequest
-	(*UnpinRunResponse)(nil),            // 184: dutyplan.v1.UnpinRunResponse
-	nil,                                 // 185: dutyplan.v1.SetAvailabilityRequest.LevelsEntry
-	(*structpb.Struct)(nil),             // 186: google.protobuf.Struct
+	(*ListSectionsRequest)(nil),         // 81: dutyplan.v1.ListSectionsRequest
+	(*ListSectionsResponse)(nil),        // 82: dutyplan.v1.ListSectionsResponse
+	(*CreateSectionRequest)(nil),        // 83: dutyplan.v1.CreateSectionRequest
+	(*CreateSectionResponse)(nil),       // 84: dutyplan.v1.CreateSectionResponse
+	(*RenameSectionRequest)(nil),        // 85: dutyplan.v1.RenameSectionRequest
+	(*RenameSectionResponse)(nil),       // 86: dutyplan.v1.RenameSectionResponse
+	(*MoveSectionRequest)(nil),          // 87: dutyplan.v1.MoveSectionRequest
+	(*MoveSectionResponse)(nil),         // 88: dutyplan.v1.MoveSectionResponse
+	(*DeleteSectionRequest)(nil),        // 89: dutyplan.v1.DeleteSectionRequest
+	(*DeleteSectionResponse)(nil),       // 90: dutyplan.v1.DeleteSectionResponse
+	(*ListTaskSectionsRequest)(nil),     // 91: dutyplan.v1.ListTaskSectionsRequest
+	(*ListTaskSectionsResponse)(nil),    // 92: dutyplan.v1.ListTaskSectionsResponse
+	(*CreateTaskSectionRequest)(nil),    // 93: dutyplan.v1.CreateTaskSectionRequest
+	(*CreateTaskSectionResponse)(nil),   // 94: dutyplan.v1.CreateTaskSectionResponse
+	(*RenameTaskSectionRequest)(nil),    // 95: dutyplan.v1.RenameTaskSectionRequest
+	(*RenameTaskSectionResponse)(nil),   // 96: dutyplan.v1.RenameTaskSectionResponse
+	(*MoveTaskSectionRequest)(nil),      // 97: dutyplan.v1.MoveTaskSectionRequest
+	(*MoveTaskSectionResponse)(nil),     // 98: dutyplan.v1.MoveTaskSectionResponse
+	(*DeleteTaskSectionRequest)(nil),    // 99: dutyplan.v1.DeleteTaskSectionRequest
+	(*DeleteTaskSectionResponse)(nil),   // 100: dutyplan.v1.DeleteTaskSectionResponse
+	(*ListPlansRequest)(nil),            // 101: dutyplan.v1.ListPlansRequest
+	(*ListPlansResponse)(nil),           // 102: dutyplan.v1.ListPlansResponse
+	(*CreatePlanRequest)(nil),           // 103: dutyplan.v1.CreatePlanRequest
+	(*CreatePlanResponse)(nil),          // 104: dutyplan.v1.CreatePlanResponse
+	(*DuplicatePlanRequest)(nil),        // 105: dutyplan.v1.DuplicatePlanRequest
+	(*DuplicatePlanResponse)(nil),       // 106: dutyplan.v1.DuplicatePlanResponse
+	(*GetPlanRequest)(nil),              // 107: dutyplan.v1.GetPlanRequest
+	(*GetPlanResponse)(nil),             // 108: dutyplan.v1.GetPlanResponse
+	(*RenamePlanRequest)(nil),           // 109: dutyplan.v1.RenamePlanRequest
+	(*RenamePlanResponse)(nil),          // 110: dutyplan.v1.RenamePlanResponse
+	(*DeletePlanRequest)(nil),           // 111: dutyplan.v1.DeletePlanRequest
+	(*DeletePlanResponse)(nil),          // 112: dutyplan.v1.DeletePlanResponse
+	(*ListEventsRequest)(nil),           // 113: dutyplan.v1.ListEventsRequest
+	(*ListEventsResponse)(nil),          // 114: dutyplan.v1.ListEventsResponse
+	(*AddEventsRequest)(nil),            // 115: dutyplan.v1.AddEventsRequest
+	(*AddEventsResponse)(nil),           // 116: dutyplan.v1.AddEventsResponse
+	(*CopyEventRequest)(nil),            // 117: dutyplan.v1.CopyEventRequest
+	(*CopyEventResponse)(nil),           // 118: dutyplan.v1.CopyEventResponse
+	(*UpdateEventRequest)(nil),          // 119: dutyplan.v1.UpdateEventRequest
+	(*UpdateEventResponse)(nil),         // 120: dutyplan.v1.UpdateEventResponse
+	(*DeleteEventRequest)(nil),          // 121: dutyplan.v1.DeleteEventRequest
+	(*DeleteEventResponse)(nil),         // 122: dutyplan.v1.DeleteEventResponse
+	(*ListPlacesRequest)(nil),           // 123: dutyplan.v1.ListPlacesRequest
+	(*ListPlacesResponse)(nil),          // 124: dutyplan.v1.ListPlacesResponse
+	(*SetPlacesRequest)(nil),            // 125: dutyplan.v1.SetPlacesRequest
+	(*SetPlacesResponse)(nil),           // 126: dutyplan.v1.SetPlacesResponse
+	(*ResetPlacesRequest)(nil),          // 127: dutyplan.v1.ResetPlacesRequest
+	(*ResetPlacesResponse)(nil),         // 128: dutyplan.v1.ResetPlacesResponse
+	(*SetPlacesManyRequest)(nil),        // 129: dutyplan.v1.SetPlacesManyRequest
+	(*SetPlacesManyResponse)(nil),       // 130: dutyplan.v1.SetPlacesManyResponse
+	(*ListFieldsRequest)(nil),           // 131: dutyplan.v1.ListFieldsRequest
+	(*ListFieldsResponse)(nil),          // 132: dutyplan.v1.ListFieldsResponse
+	(*AddFieldRequest)(nil),             // 133: dutyplan.v1.AddFieldRequest
+	(*AddFieldResponse)(nil),            // 134: dutyplan.v1.AddFieldResponse
+	(*RenameFieldRequest)(nil),          // 135: dutyplan.v1.RenameFieldRequest
+	(*RenameFieldResponse)(nil),         // 136: dutyplan.v1.RenameFieldResponse
+	(*MoveFieldRequest)(nil),            // 137: dutyplan.v1.MoveFieldRequest
+	(*MoveFieldResponse)(nil),           // 138: dutyplan.v1.MoveFieldResponse
+	(*FreezeFieldRequest)(nil),          // 139: dutyplan.v1.FreezeFieldRequest
+	(*FreezeFieldResponse)(nil),         // 140: dutyplan.v1.FreezeFieldResponse
+	(*DeleteFieldRequest)(nil),          // 141: dutyplan.v1.DeleteFieldRequest
+	(*DeleteFieldResponse)(nil),         // 142: dutyplan.v1.DeleteFieldResponse
+	(*SetFieldValueRequest)(nil),        // 143: dutyplan.v1.SetFieldValueRequest
+	(*SetFieldValueResponse)(nil),       // 144: dutyplan.v1.SetFieldValueResponse
+	(*ListAnswersRequest)(nil),          // 145: dutyplan.v1.ListAnswersRequest
+	(*ListAnswersResponse)(nil),         // 146: dutyplan.v1.ListAnswersResponse
+	(*SetAvailabilityRequest)(nil),      // 147: dutyplan.v1.SetAvailabilityRequest
+	(*SetAvailabilityResponse)(nil),     // 148: dutyplan.v1.SetAvailabilityResponse
+	(*SetPersonTaskRequest)(nil),        // 149: dutyplan.v1.SetPersonTaskRequest
+	(*SetPersonTaskResponse)(nil),       // 150: dutyplan.v1.SetPersonTaskResponse
+	(*RemovePersonTaskRequest)(nil),     // 151: dutyplan.v1.RemovePersonTaskRequest
+	(*RemovePersonTaskResponse)(nil),    // 152: dutyplan.v1.RemovePersonTaskResponse
+	(*SetNoteRequest)(nil),              // 153: dutyplan.v1.SetNoteRequest
+	(*SetNoteResponse)(nil),             // 154: dutyplan.v1.SetNoteResponse
+	(*SetAnswersRequest)(nil),           // 155: dutyplan.v1.SetAnswersRequest
+	(*SetAnswersResponse)(nil),          // 156: dutyplan.v1.SetAnswersResponse
+	(*ListCellsRequest)(nil),            // 157: dutyplan.v1.ListCellsRequest
+	(*ListCellsResponse)(nil),           // 158: dutyplan.v1.ListCellsResponse
+	(*AddCellRequest)(nil),              // 159: dutyplan.v1.AddCellRequest
+	(*AddCellResponse)(nil),             // 160: dutyplan.v1.AddCellResponse
+	(*DeleteCellRequest)(nil),           // 161: dutyplan.v1.DeleteCellRequest
+	(*DeleteCellResponse)(nil),          // 162: dutyplan.v1.DeleteCellResponse
+	(*ListPoolsRequest)(nil),            // 163: dutyplan.v1.ListPoolsRequest
+	(*ListPoolsResponse)(nil),           // 164: dutyplan.v1.ListPoolsResponse
+	(*SetPoolRequest)(nil),              // 165: dutyplan.v1.SetPoolRequest
+	(*SetPoolResponse)(nil),             // 166: dutyplan.v1.SetPoolResponse
+	(*SetLocksRequest)(nil),             // 167: dutyplan.v1.SetLocksRequest
+	(*SetLocksResponse)(nil),            // 168: dutyplan.v1.SetLocksResponse
+	(*SetDraftAsideRequest)(nil),        // 169: dutyplan.v1.SetDraftAsideRequest
+	(*SetDraftAsideResponse)(nil),       // 170: dutyplan.v1.SetDraftAsideResponse
+	(*ClearDraftAsideRequest)(nil),      // 171: dutyplan.v1.ClearDraftAsideRequest
+	(*ClearDraftAsideResponse)(nil),     // 172: dutyplan.v1.ClearDraftAsideResponse
+	(*GetWeightsRequest)(nil),           // 173: dutyplan.v1.GetWeightsRequest
+	(*GetWeightsResponse)(nil),          // 174: dutyplan.v1.GetWeightsResponse
+	(*SetWeightsRequest)(nil),           // 175: dutyplan.v1.SetWeightsRequest
+	(*SetWeightsResponse)(nil),          // 176: dutyplan.v1.SetWeightsResponse
+	(*StartRunRequest)(nil),             // 177: dutyplan.v1.StartRunRequest
+	(*StartRunResponse)(nil),            // 178: dutyplan.v1.StartRunResponse
+	(*ListRunsRequest)(nil),             // 179: dutyplan.v1.ListRunsRequest
+	(*ListRunsResponse)(nil),            // 180: dutyplan.v1.ListRunsResponse
+	(*GetRunRequest)(nil),               // 181: dutyplan.v1.GetRunRequest
+	(*GetRunResponse)(nil),              // 182: dutyplan.v1.GetRunResponse
+	(*PinRunRequest)(nil),               // 183: dutyplan.v1.PinRunRequest
+	(*PinRunResponse)(nil),              // 184: dutyplan.v1.PinRunResponse
+	(*UnpinRunRequest)(nil),             // 185: dutyplan.v1.UnpinRunRequest
+	(*UnpinRunResponse)(nil),            // 186: dutyplan.v1.UnpinRunResponse
+	nil,                                 // 187: dutyplan.v1.SetAvailabilityRequest.LevelsEntry
+	(*structpb.Struct)(nil),             // 188: google.protobuf.Struct
 }
 var file_dutyplan_v1_dutyplan_proto_depIdxs = []int32{
-	186, // 0: dutyplan.v1.Problem.params:type_name -> google.protobuf.Struct
+	188, // 0: dutyplan.v1.Problem.params:type_name -> google.protobuf.Struct
 	26,  // 1: dutyplan.v1.Cell.people:type_name -> dutyplan.v1.CellPerson
 	27,  // 2: dutyplan.v1.Cell.texts:type_name -> dutyplan.v1.CellText
 	28,  // 3: dutyplan.v1.EventRow.cells:type_name -> dutyplan.v1.Cell
@@ -11207,196 +11556,199 @@ var file_dutyplan_v1_dutyplan_proto_depIdxs = []int32{
 	9,   // 24: dutyplan.v1.RenameTaskSectionResponse.section:type_name -> dutyplan.v1.Section
 	2,   // 25: dutyplan.v1.ListPlansResponse.plans:type_name -> dutyplan.v1.Plan
 	2,   // 26: dutyplan.v1.CreatePlanResponse.plan:type_name -> dutyplan.v1.Plan
-	2,   // 27: dutyplan.v1.GetPlanResponse.plan:type_name -> dutyplan.v1.Plan
-	2,   // 28: dutyplan.v1.RenamePlanResponse.plan:type_name -> dutyplan.v1.Plan
-	10,  // 29: dutyplan.v1.ListEventsResponse.events:type_name -> dutyplan.v1.Event
-	10,  // 30: dutyplan.v1.AddEventsResponse.events:type_name -> dutyplan.v1.Event
-	10,  // 31: dutyplan.v1.CopyEventResponse.events:type_name -> dutyplan.v1.Event
-	10,  // 32: dutyplan.v1.UpdateEventResponse.event:type_name -> dutyplan.v1.Event
-	11,  // 33: dutyplan.v1.ListPlacesResponse.places:type_name -> dutyplan.v1.EventPlaces
-	20,  // 34: dutyplan.v1.SetPlacesManyRequest.places:type_name -> dutyplan.v1.Places
-	12,  // 35: dutyplan.v1.ListFieldsResponse.fields:type_name -> dutyplan.v1.PlanField
-	13,  // 36: dutyplan.v1.ListFieldsResponse.values:type_name -> dutyplan.v1.FieldValue
-	12,  // 37: dutyplan.v1.AddFieldResponse.field:type_name -> dutyplan.v1.PlanField
-	12,  // 38: dutyplan.v1.RenameFieldResponse.field:type_name -> dutyplan.v1.PlanField
-	14,  // 39: dutyplan.v1.ListAnswersResponse.events:type_name -> dutyplan.v1.EventAnswer
-	15,  // 40: dutyplan.v1.ListAnswersResponse.tasks:type_name -> dutyplan.v1.TaskAnswer
-	16,  // 41: dutyplan.v1.ListAnswersResponse.notes:type_name -> dutyplan.v1.AnswerNote
-	185, // 42: dutyplan.v1.SetAvailabilityRequest.levels:type_name -> dutyplan.v1.SetAvailabilityRequest.LevelsEntry
-	19,  // 43: dutyplan.v1.SetAnswersRequest.answers:type_name -> dutyplan.v1.Answer
-	17,  // 44: dutyplan.v1.ListCellsResponse.cells:type_name -> dutyplan.v1.ManualCell
-	17,  // 45: dutyplan.v1.AddCellResponse.cell:type_name -> dutyplan.v1.ManualCell
-	18,  // 46: dutyplan.v1.ListPoolsResponse.pools:type_name -> dutyplan.v1.Pool
-	21,  // 47: dutyplan.v1.SetLocksRequest.locks:type_name -> dutyplan.v1.Lock
-	22,  // 48: dutyplan.v1.GetWeightsResponse.specs:type_name -> dutyplan.v1.WeightSpec
-	186, // 49: dutyplan.v1.GetWeightsResponse.values:type_name -> google.protobuf.Struct
-	186, // 50: dutyplan.v1.SetWeightsRequest.values:type_name -> google.protobuf.Struct
-	22,  // 51: dutyplan.v1.SetWeightsResponse.specs:type_name -> dutyplan.v1.WeightSpec
-	186, // 52: dutyplan.v1.SetWeightsResponse.values:type_name -> google.protobuf.Struct
-	23,  // 53: dutyplan.v1.ListRunsResponse.runs:type_name -> dutyplan.v1.Run
-	24,  // 54: dutyplan.v1.GetRunResponse.run:type_name -> dutyplan.v1.RunInfo
-	25,  // 55: dutyplan.v1.GetRunResponse.tasks:type_name -> dutyplan.v1.SnapTask
-	29,  // 56: dutyplan.v1.GetRunResponse.events:type_name -> dutyplan.v1.EventRow
-	30,  // 57: dutyplan.v1.GetRunResponse.load:type_name -> dutyplan.v1.LoadRow
-	31,  // 58: dutyplan.v1.AccountService.Health:input_type -> dutyplan.v1.HealthRequest
-	33,  // 59: dutyplan.v1.AccountService.Me:input_type -> dutyplan.v1.MeRequest
-	35,  // 60: dutyplan.v1.AccountService.ListOrgs:input_type -> dutyplan.v1.ListOrgsRequest
-	37,  // 61: dutyplan.v1.AccountService.CreateOrg:input_type -> dutyplan.v1.CreateOrgRequest
-	39,  // 62: dutyplan.v1.OrgService.GetOrg:input_type -> dutyplan.v1.GetOrgRequest
-	41,  // 63: dutyplan.v1.OrgService.RenameOrg:input_type -> dutyplan.v1.RenameOrgRequest
-	43,  // 64: dutyplan.v1.OrgService.DeleteOrg:input_type -> dutyplan.v1.DeleteOrgRequest
-	45,  // 65: dutyplan.v1.OrgService.ListMembers:input_type -> dutyplan.v1.ListMembersRequest
-	47,  // 66: dutyplan.v1.OrgService.SetMemberRole:input_type -> dutyplan.v1.SetMemberRoleRequest
-	49,  // 67: dutyplan.v1.OrgService.RemoveMember:input_type -> dutyplan.v1.RemoveMemberRequest
-	51,  // 68: dutyplan.v1.OrgService.ListLinks:input_type -> dutyplan.v1.ListLinksRequest
-	53,  // 69: dutyplan.v1.OrgService.CreateLink:input_type -> dutyplan.v1.CreateLinkRequest
-	55,  // 70: dutyplan.v1.OrgService.DeleteLink:input_type -> dutyplan.v1.DeleteLinkRequest
-	57,  // 71: dutyplan.v1.SetupService.ListTasks:input_type -> dutyplan.v1.ListTasksRequest
-	59,  // 72: dutyplan.v1.SetupService.CreateTask:input_type -> dutyplan.v1.CreateTaskRequest
-	61,  // 73: dutyplan.v1.SetupService.UpdateTask:input_type -> dutyplan.v1.UpdateTaskRequest
-	63,  // 74: dutyplan.v1.SetupService.DeleteTask:input_type -> dutyplan.v1.DeleteTaskRequest
-	65,  // 75: dutyplan.v1.SetupService.MoveTask:input_type -> dutyplan.v1.MoveTaskRequest
-	67,  // 76: dutyplan.v1.SetupService.ListCombinations:input_type -> dutyplan.v1.ListCombinationsRequest
-	69,  // 77: dutyplan.v1.SetupService.SetCombination:input_type -> dutyplan.v1.SetCombinationRequest
-	71,  // 78: dutyplan.v1.SetupService.SetTaskCombinations:input_type -> dutyplan.v1.SetTaskCombinationsRequest
-	73,  // 79: dutyplan.v1.SetupService.ListPeople:input_type -> dutyplan.v1.ListPeopleRequest
-	75,  // 80: dutyplan.v1.SetupService.CreatePerson:input_type -> dutyplan.v1.CreatePersonRequest
-	77,  // 81: dutyplan.v1.SetupService.UpdatePerson:input_type -> dutyplan.v1.UpdatePersonRequest
-	79,  // 82: dutyplan.v1.SetupService.MovePerson:input_type -> dutyplan.v1.MovePersonRequest
-	81,  // 83: dutyplan.v1.SetupService.SetPersonTask:input_type -> dutyplan.v1.SetPersonTaskRequest
-	83,  // 84: dutyplan.v1.SetupService.RemovePersonTask:input_type -> dutyplan.v1.RemovePersonTaskRequest
-	85,  // 85: dutyplan.v1.SetupService.ListSections:input_type -> dutyplan.v1.ListSectionsRequest
-	87,  // 86: dutyplan.v1.SetupService.CreateSection:input_type -> dutyplan.v1.CreateSectionRequest
-	89,  // 87: dutyplan.v1.SetupService.RenameSection:input_type -> dutyplan.v1.RenameSectionRequest
-	91,  // 88: dutyplan.v1.SetupService.MoveSection:input_type -> dutyplan.v1.MoveSectionRequest
-	93,  // 89: dutyplan.v1.SetupService.DeleteSection:input_type -> dutyplan.v1.DeleteSectionRequest
-	95,  // 90: dutyplan.v1.SetupService.ListTaskSections:input_type -> dutyplan.v1.ListTaskSectionsRequest
-	97,  // 91: dutyplan.v1.SetupService.CreateTaskSection:input_type -> dutyplan.v1.CreateTaskSectionRequest
-	99,  // 92: dutyplan.v1.SetupService.RenameTaskSection:input_type -> dutyplan.v1.RenameTaskSectionRequest
-	101, // 93: dutyplan.v1.SetupService.MoveTaskSection:input_type -> dutyplan.v1.MoveTaskSectionRequest
-	103, // 94: dutyplan.v1.SetupService.DeleteTaskSection:input_type -> dutyplan.v1.DeleteTaskSectionRequest
-	105, // 95: dutyplan.v1.PlanService.ListPlans:input_type -> dutyplan.v1.ListPlansRequest
-	107, // 96: dutyplan.v1.PlanService.CreatePlan:input_type -> dutyplan.v1.CreatePlanRequest
-	109, // 97: dutyplan.v1.PlanService.GetPlan:input_type -> dutyplan.v1.GetPlanRequest
-	111, // 98: dutyplan.v1.PlanService.RenamePlan:input_type -> dutyplan.v1.RenamePlanRequest
-	113, // 99: dutyplan.v1.PlanService.DeletePlan:input_type -> dutyplan.v1.DeletePlanRequest
-	115, // 100: dutyplan.v1.PlanService.ListEvents:input_type -> dutyplan.v1.ListEventsRequest
-	117, // 101: dutyplan.v1.PlanService.AddEvents:input_type -> dutyplan.v1.AddEventsRequest
-	119, // 102: dutyplan.v1.PlanService.CopyEvent:input_type -> dutyplan.v1.CopyEventRequest
-	121, // 103: dutyplan.v1.PlanService.UpdateEvent:input_type -> dutyplan.v1.UpdateEventRequest
-	123, // 104: dutyplan.v1.PlanService.DeleteEvent:input_type -> dutyplan.v1.DeleteEventRequest
-	125, // 105: dutyplan.v1.PlanService.ListPlaces:input_type -> dutyplan.v1.ListPlacesRequest
-	127, // 106: dutyplan.v1.PlanService.SetPlaces:input_type -> dutyplan.v1.SetPlacesRequest
-	129, // 107: dutyplan.v1.PlanService.ResetPlaces:input_type -> dutyplan.v1.ResetPlacesRequest
-	131, // 108: dutyplan.v1.PlanService.SetPlacesMany:input_type -> dutyplan.v1.SetPlacesManyRequest
-	133, // 109: dutyplan.v1.PlanService.ListFields:input_type -> dutyplan.v1.ListFieldsRequest
-	135, // 110: dutyplan.v1.PlanService.AddField:input_type -> dutyplan.v1.AddFieldRequest
-	137, // 111: dutyplan.v1.PlanService.RenameField:input_type -> dutyplan.v1.RenameFieldRequest
-	139, // 112: dutyplan.v1.PlanService.MoveField:input_type -> dutyplan.v1.MoveFieldRequest
-	141, // 113: dutyplan.v1.PlanService.FreezeField:input_type -> dutyplan.v1.FreezeFieldRequest
-	143, // 114: dutyplan.v1.PlanService.DeleteField:input_type -> dutyplan.v1.DeleteFieldRequest
-	145, // 115: dutyplan.v1.PlanService.SetFieldValue:input_type -> dutyplan.v1.SetFieldValueRequest
-	147, // 116: dutyplan.v1.PlanService.ListAnswers:input_type -> dutyplan.v1.ListAnswersRequest
-	149, // 117: dutyplan.v1.PlanService.SetAvailability:input_type -> dutyplan.v1.SetAvailabilityRequest
-	151, // 118: dutyplan.v1.PlanService.SetNote:input_type -> dutyplan.v1.SetNoteRequest
-	153, // 119: dutyplan.v1.PlanService.SetAnswers:input_type -> dutyplan.v1.SetAnswersRequest
-	155, // 120: dutyplan.v1.DraftService.ListCells:input_type -> dutyplan.v1.ListCellsRequest
-	157, // 121: dutyplan.v1.DraftService.AddCell:input_type -> dutyplan.v1.AddCellRequest
-	159, // 122: dutyplan.v1.DraftService.DeleteCell:input_type -> dutyplan.v1.DeleteCellRequest
-	161, // 123: dutyplan.v1.DraftService.ListPools:input_type -> dutyplan.v1.ListPoolsRequest
-	163, // 124: dutyplan.v1.DraftService.SetPool:input_type -> dutyplan.v1.SetPoolRequest
-	165, // 125: dutyplan.v1.DraftService.SetLocks:input_type -> dutyplan.v1.SetLocksRequest
-	167, // 126: dutyplan.v1.DraftService.SetDraftAside:input_type -> dutyplan.v1.SetDraftAsideRequest
-	169, // 127: dutyplan.v1.DraftService.ClearDraftAside:input_type -> dutyplan.v1.ClearDraftAsideRequest
-	171, // 128: dutyplan.v1.DraftService.GetWeights:input_type -> dutyplan.v1.GetWeightsRequest
-	173, // 129: dutyplan.v1.DraftService.SetWeights:input_type -> dutyplan.v1.SetWeightsRequest
-	175, // 130: dutyplan.v1.DraftService.StartRun:input_type -> dutyplan.v1.StartRunRequest
-	177, // 131: dutyplan.v1.DraftService.ListRuns:input_type -> dutyplan.v1.ListRunsRequest
-	179, // 132: dutyplan.v1.DraftService.GetRun:input_type -> dutyplan.v1.GetRunRequest
-	181, // 133: dutyplan.v1.DraftService.PinRun:input_type -> dutyplan.v1.PinRunRequest
-	183, // 134: dutyplan.v1.DraftService.UnpinRun:input_type -> dutyplan.v1.UnpinRunRequest
-	32,  // 135: dutyplan.v1.AccountService.Health:output_type -> dutyplan.v1.HealthResponse
-	34,  // 136: dutyplan.v1.AccountService.Me:output_type -> dutyplan.v1.MeResponse
-	36,  // 137: dutyplan.v1.AccountService.ListOrgs:output_type -> dutyplan.v1.ListOrgsResponse
-	38,  // 138: dutyplan.v1.AccountService.CreateOrg:output_type -> dutyplan.v1.CreateOrgResponse
-	40,  // 139: dutyplan.v1.OrgService.GetOrg:output_type -> dutyplan.v1.GetOrgResponse
-	42,  // 140: dutyplan.v1.OrgService.RenameOrg:output_type -> dutyplan.v1.RenameOrgResponse
-	44,  // 141: dutyplan.v1.OrgService.DeleteOrg:output_type -> dutyplan.v1.DeleteOrgResponse
-	46,  // 142: dutyplan.v1.OrgService.ListMembers:output_type -> dutyplan.v1.ListMembersResponse
-	48,  // 143: dutyplan.v1.OrgService.SetMemberRole:output_type -> dutyplan.v1.SetMemberRoleResponse
-	50,  // 144: dutyplan.v1.OrgService.RemoveMember:output_type -> dutyplan.v1.RemoveMemberResponse
-	52,  // 145: dutyplan.v1.OrgService.ListLinks:output_type -> dutyplan.v1.ListLinksResponse
-	54,  // 146: dutyplan.v1.OrgService.CreateLink:output_type -> dutyplan.v1.CreateLinkResponse
-	56,  // 147: dutyplan.v1.OrgService.DeleteLink:output_type -> dutyplan.v1.DeleteLinkResponse
-	58,  // 148: dutyplan.v1.SetupService.ListTasks:output_type -> dutyplan.v1.ListTasksResponse
-	60,  // 149: dutyplan.v1.SetupService.CreateTask:output_type -> dutyplan.v1.CreateTaskResponse
-	62,  // 150: dutyplan.v1.SetupService.UpdateTask:output_type -> dutyplan.v1.UpdateTaskResponse
-	64,  // 151: dutyplan.v1.SetupService.DeleteTask:output_type -> dutyplan.v1.DeleteTaskResponse
-	66,  // 152: dutyplan.v1.SetupService.MoveTask:output_type -> dutyplan.v1.MoveTaskResponse
-	68,  // 153: dutyplan.v1.SetupService.ListCombinations:output_type -> dutyplan.v1.ListCombinationsResponse
-	70,  // 154: dutyplan.v1.SetupService.SetCombination:output_type -> dutyplan.v1.SetCombinationResponse
-	72,  // 155: dutyplan.v1.SetupService.SetTaskCombinations:output_type -> dutyplan.v1.SetTaskCombinationsResponse
-	74,  // 156: dutyplan.v1.SetupService.ListPeople:output_type -> dutyplan.v1.ListPeopleResponse
-	76,  // 157: dutyplan.v1.SetupService.CreatePerson:output_type -> dutyplan.v1.CreatePersonResponse
-	78,  // 158: dutyplan.v1.SetupService.UpdatePerson:output_type -> dutyplan.v1.UpdatePersonResponse
-	80,  // 159: dutyplan.v1.SetupService.MovePerson:output_type -> dutyplan.v1.MovePersonResponse
-	82,  // 160: dutyplan.v1.SetupService.SetPersonTask:output_type -> dutyplan.v1.SetPersonTaskResponse
-	84,  // 161: dutyplan.v1.SetupService.RemovePersonTask:output_type -> dutyplan.v1.RemovePersonTaskResponse
-	86,  // 162: dutyplan.v1.SetupService.ListSections:output_type -> dutyplan.v1.ListSectionsResponse
-	88,  // 163: dutyplan.v1.SetupService.CreateSection:output_type -> dutyplan.v1.CreateSectionResponse
-	90,  // 164: dutyplan.v1.SetupService.RenameSection:output_type -> dutyplan.v1.RenameSectionResponse
-	92,  // 165: dutyplan.v1.SetupService.MoveSection:output_type -> dutyplan.v1.MoveSectionResponse
-	94,  // 166: dutyplan.v1.SetupService.DeleteSection:output_type -> dutyplan.v1.DeleteSectionResponse
-	96,  // 167: dutyplan.v1.SetupService.ListTaskSections:output_type -> dutyplan.v1.ListTaskSectionsResponse
-	98,  // 168: dutyplan.v1.SetupService.CreateTaskSection:output_type -> dutyplan.v1.CreateTaskSectionResponse
-	100, // 169: dutyplan.v1.SetupService.RenameTaskSection:output_type -> dutyplan.v1.RenameTaskSectionResponse
-	102, // 170: dutyplan.v1.SetupService.MoveTaskSection:output_type -> dutyplan.v1.MoveTaskSectionResponse
-	104, // 171: dutyplan.v1.SetupService.DeleteTaskSection:output_type -> dutyplan.v1.DeleteTaskSectionResponse
-	106, // 172: dutyplan.v1.PlanService.ListPlans:output_type -> dutyplan.v1.ListPlansResponse
-	108, // 173: dutyplan.v1.PlanService.CreatePlan:output_type -> dutyplan.v1.CreatePlanResponse
-	110, // 174: dutyplan.v1.PlanService.GetPlan:output_type -> dutyplan.v1.GetPlanResponse
-	112, // 175: dutyplan.v1.PlanService.RenamePlan:output_type -> dutyplan.v1.RenamePlanResponse
-	114, // 176: dutyplan.v1.PlanService.DeletePlan:output_type -> dutyplan.v1.DeletePlanResponse
-	116, // 177: dutyplan.v1.PlanService.ListEvents:output_type -> dutyplan.v1.ListEventsResponse
-	118, // 178: dutyplan.v1.PlanService.AddEvents:output_type -> dutyplan.v1.AddEventsResponse
-	120, // 179: dutyplan.v1.PlanService.CopyEvent:output_type -> dutyplan.v1.CopyEventResponse
-	122, // 180: dutyplan.v1.PlanService.UpdateEvent:output_type -> dutyplan.v1.UpdateEventResponse
-	124, // 181: dutyplan.v1.PlanService.DeleteEvent:output_type -> dutyplan.v1.DeleteEventResponse
-	126, // 182: dutyplan.v1.PlanService.ListPlaces:output_type -> dutyplan.v1.ListPlacesResponse
-	128, // 183: dutyplan.v1.PlanService.SetPlaces:output_type -> dutyplan.v1.SetPlacesResponse
-	130, // 184: dutyplan.v1.PlanService.ResetPlaces:output_type -> dutyplan.v1.ResetPlacesResponse
-	132, // 185: dutyplan.v1.PlanService.SetPlacesMany:output_type -> dutyplan.v1.SetPlacesManyResponse
-	134, // 186: dutyplan.v1.PlanService.ListFields:output_type -> dutyplan.v1.ListFieldsResponse
-	136, // 187: dutyplan.v1.PlanService.AddField:output_type -> dutyplan.v1.AddFieldResponse
-	138, // 188: dutyplan.v1.PlanService.RenameField:output_type -> dutyplan.v1.RenameFieldResponse
-	140, // 189: dutyplan.v1.PlanService.MoveField:output_type -> dutyplan.v1.MoveFieldResponse
-	142, // 190: dutyplan.v1.PlanService.FreezeField:output_type -> dutyplan.v1.FreezeFieldResponse
-	144, // 191: dutyplan.v1.PlanService.DeleteField:output_type -> dutyplan.v1.DeleteFieldResponse
-	146, // 192: dutyplan.v1.PlanService.SetFieldValue:output_type -> dutyplan.v1.SetFieldValueResponse
-	148, // 193: dutyplan.v1.PlanService.ListAnswers:output_type -> dutyplan.v1.ListAnswersResponse
-	150, // 194: dutyplan.v1.PlanService.SetAvailability:output_type -> dutyplan.v1.SetAvailabilityResponse
-	152, // 195: dutyplan.v1.PlanService.SetNote:output_type -> dutyplan.v1.SetNoteResponse
-	154, // 196: dutyplan.v1.PlanService.SetAnswers:output_type -> dutyplan.v1.SetAnswersResponse
-	156, // 197: dutyplan.v1.DraftService.ListCells:output_type -> dutyplan.v1.ListCellsResponse
-	158, // 198: dutyplan.v1.DraftService.AddCell:output_type -> dutyplan.v1.AddCellResponse
-	160, // 199: dutyplan.v1.DraftService.DeleteCell:output_type -> dutyplan.v1.DeleteCellResponse
-	162, // 200: dutyplan.v1.DraftService.ListPools:output_type -> dutyplan.v1.ListPoolsResponse
-	164, // 201: dutyplan.v1.DraftService.SetPool:output_type -> dutyplan.v1.SetPoolResponse
-	166, // 202: dutyplan.v1.DraftService.SetLocks:output_type -> dutyplan.v1.SetLocksResponse
-	168, // 203: dutyplan.v1.DraftService.SetDraftAside:output_type -> dutyplan.v1.SetDraftAsideResponse
-	170, // 204: dutyplan.v1.DraftService.ClearDraftAside:output_type -> dutyplan.v1.ClearDraftAsideResponse
-	172, // 205: dutyplan.v1.DraftService.GetWeights:output_type -> dutyplan.v1.GetWeightsResponse
-	174, // 206: dutyplan.v1.DraftService.SetWeights:output_type -> dutyplan.v1.SetWeightsResponse
-	176, // 207: dutyplan.v1.DraftService.StartRun:output_type -> dutyplan.v1.StartRunResponse
-	178, // 208: dutyplan.v1.DraftService.ListRuns:output_type -> dutyplan.v1.ListRunsResponse
-	180, // 209: dutyplan.v1.DraftService.GetRun:output_type -> dutyplan.v1.GetRunResponse
-	182, // 210: dutyplan.v1.DraftService.PinRun:output_type -> dutyplan.v1.PinRunResponse
-	184, // 211: dutyplan.v1.DraftService.UnpinRun:output_type -> dutyplan.v1.UnpinRunResponse
-	135, // [135:212] is the sub-list for method output_type
-	58,  // [58:135] is the sub-list for method input_type
-	58,  // [58:58] is the sub-list for extension type_name
-	58,  // [58:58] is the sub-list for extension extendee
-	0,   // [0:58] is the sub-list for field type_name
+	2,   // 27: dutyplan.v1.DuplicatePlanResponse.plan:type_name -> dutyplan.v1.Plan
+	2,   // 28: dutyplan.v1.GetPlanResponse.plan:type_name -> dutyplan.v1.Plan
+	2,   // 29: dutyplan.v1.RenamePlanResponse.plan:type_name -> dutyplan.v1.Plan
+	10,  // 30: dutyplan.v1.ListEventsResponse.events:type_name -> dutyplan.v1.Event
+	10,  // 31: dutyplan.v1.AddEventsResponse.events:type_name -> dutyplan.v1.Event
+	10,  // 32: dutyplan.v1.CopyEventResponse.events:type_name -> dutyplan.v1.Event
+	10,  // 33: dutyplan.v1.UpdateEventResponse.event:type_name -> dutyplan.v1.Event
+	11,  // 34: dutyplan.v1.ListPlacesResponse.places:type_name -> dutyplan.v1.EventPlaces
+	20,  // 35: dutyplan.v1.SetPlacesManyRequest.places:type_name -> dutyplan.v1.Places
+	12,  // 36: dutyplan.v1.ListFieldsResponse.fields:type_name -> dutyplan.v1.PlanField
+	13,  // 37: dutyplan.v1.ListFieldsResponse.values:type_name -> dutyplan.v1.FieldValue
+	12,  // 38: dutyplan.v1.AddFieldResponse.field:type_name -> dutyplan.v1.PlanField
+	12,  // 39: dutyplan.v1.RenameFieldResponse.field:type_name -> dutyplan.v1.PlanField
+	14,  // 40: dutyplan.v1.ListAnswersResponse.events:type_name -> dutyplan.v1.EventAnswer
+	15,  // 41: dutyplan.v1.ListAnswersResponse.tasks:type_name -> dutyplan.v1.TaskAnswer
+	16,  // 42: dutyplan.v1.ListAnswersResponse.notes:type_name -> dutyplan.v1.AnswerNote
+	187, // 43: dutyplan.v1.SetAvailabilityRequest.levels:type_name -> dutyplan.v1.SetAvailabilityRequest.LevelsEntry
+	19,  // 44: dutyplan.v1.SetAnswersRequest.answers:type_name -> dutyplan.v1.Answer
+	17,  // 45: dutyplan.v1.ListCellsResponse.cells:type_name -> dutyplan.v1.ManualCell
+	17,  // 46: dutyplan.v1.AddCellResponse.cell:type_name -> dutyplan.v1.ManualCell
+	18,  // 47: dutyplan.v1.ListPoolsResponse.pools:type_name -> dutyplan.v1.Pool
+	21,  // 48: dutyplan.v1.SetLocksRequest.locks:type_name -> dutyplan.v1.Lock
+	22,  // 49: dutyplan.v1.GetWeightsResponse.specs:type_name -> dutyplan.v1.WeightSpec
+	188, // 50: dutyplan.v1.GetWeightsResponse.values:type_name -> google.protobuf.Struct
+	188, // 51: dutyplan.v1.SetWeightsRequest.values:type_name -> google.protobuf.Struct
+	22,  // 52: dutyplan.v1.SetWeightsResponse.specs:type_name -> dutyplan.v1.WeightSpec
+	188, // 53: dutyplan.v1.SetWeightsResponse.values:type_name -> google.protobuf.Struct
+	23,  // 54: dutyplan.v1.ListRunsResponse.runs:type_name -> dutyplan.v1.Run
+	24,  // 55: dutyplan.v1.GetRunResponse.run:type_name -> dutyplan.v1.RunInfo
+	25,  // 56: dutyplan.v1.GetRunResponse.tasks:type_name -> dutyplan.v1.SnapTask
+	29,  // 57: dutyplan.v1.GetRunResponse.events:type_name -> dutyplan.v1.EventRow
+	30,  // 58: dutyplan.v1.GetRunResponse.load:type_name -> dutyplan.v1.LoadRow
+	31,  // 59: dutyplan.v1.AccountService.Health:input_type -> dutyplan.v1.HealthRequest
+	33,  // 60: dutyplan.v1.AccountService.Me:input_type -> dutyplan.v1.MeRequest
+	35,  // 61: dutyplan.v1.AccountService.ListOrgs:input_type -> dutyplan.v1.ListOrgsRequest
+	37,  // 62: dutyplan.v1.AccountService.CreateOrg:input_type -> dutyplan.v1.CreateOrgRequest
+	39,  // 63: dutyplan.v1.OrgService.GetOrg:input_type -> dutyplan.v1.GetOrgRequest
+	41,  // 64: dutyplan.v1.OrgService.RenameOrg:input_type -> dutyplan.v1.RenameOrgRequest
+	43,  // 65: dutyplan.v1.OrgService.DeleteOrg:input_type -> dutyplan.v1.DeleteOrgRequest
+	45,  // 66: dutyplan.v1.OrgService.ListMembers:input_type -> dutyplan.v1.ListMembersRequest
+	47,  // 67: dutyplan.v1.OrgService.SetMemberRole:input_type -> dutyplan.v1.SetMemberRoleRequest
+	49,  // 68: dutyplan.v1.OrgService.RemoveMember:input_type -> dutyplan.v1.RemoveMemberRequest
+	51,  // 69: dutyplan.v1.OrgService.ListLinks:input_type -> dutyplan.v1.ListLinksRequest
+	53,  // 70: dutyplan.v1.OrgService.CreateLink:input_type -> dutyplan.v1.CreateLinkRequest
+	55,  // 71: dutyplan.v1.OrgService.DeleteLink:input_type -> dutyplan.v1.DeleteLinkRequest
+	57,  // 72: dutyplan.v1.SetupService.ListTasks:input_type -> dutyplan.v1.ListTasksRequest
+	59,  // 73: dutyplan.v1.SetupService.CreateTask:input_type -> dutyplan.v1.CreateTaskRequest
+	61,  // 74: dutyplan.v1.SetupService.UpdateTask:input_type -> dutyplan.v1.UpdateTaskRequest
+	63,  // 75: dutyplan.v1.SetupService.DeleteTask:input_type -> dutyplan.v1.DeleteTaskRequest
+	65,  // 76: dutyplan.v1.SetupService.MoveTask:input_type -> dutyplan.v1.MoveTaskRequest
+	67,  // 77: dutyplan.v1.SetupService.ListCombinations:input_type -> dutyplan.v1.ListCombinationsRequest
+	69,  // 78: dutyplan.v1.SetupService.SetCombination:input_type -> dutyplan.v1.SetCombinationRequest
+	71,  // 79: dutyplan.v1.SetupService.SetTaskCombinations:input_type -> dutyplan.v1.SetTaskCombinationsRequest
+	73,  // 80: dutyplan.v1.SetupService.ListPeople:input_type -> dutyplan.v1.ListPeopleRequest
+	75,  // 81: dutyplan.v1.SetupService.CreatePerson:input_type -> dutyplan.v1.CreatePersonRequest
+	77,  // 82: dutyplan.v1.SetupService.UpdatePerson:input_type -> dutyplan.v1.UpdatePersonRequest
+	79,  // 83: dutyplan.v1.SetupService.MovePerson:input_type -> dutyplan.v1.MovePersonRequest
+	81,  // 84: dutyplan.v1.SetupService.ListSections:input_type -> dutyplan.v1.ListSectionsRequest
+	83,  // 85: dutyplan.v1.SetupService.CreateSection:input_type -> dutyplan.v1.CreateSectionRequest
+	85,  // 86: dutyplan.v1.SetupService.RenameSection:input_type -> dutyplan.v1.RenameSectionRequest
+	87,  // 87: dutyplan.v1.SetupService.MoveSection:input_type -> dutyplan.v1.MoveSectionRequest
+	89,  // 88: dutyplan.v1.SetupService.DeleteSection:input_type -> dutyplan.v1.DeleteSectionRequest
+	91,  // 89: dutyplan.v1.SetupService.ListTaskSections:input_type -> dutyplan.v1.ListTaskSectionsRequest
+	93,  // 90: dutyplan.v1.SetupService.CreateTaskSection:input_type -> dutyplan.v1.CreateTaskSectionRequest
+	95,  // 91: dutyplan.v1.SetupService.RenameTaskSection:input_type -> dutyplan.v1.RenameTaskSectionRequest
+	97,  // 92: dutyplan.v1.SetupService.MoveTaskSection:input_type -> dutyplan.v1.MoveTaskSectionRequest
+	99,  // 93: dutyplan.v1.SetupService.DeleteTaskSection:input_type -> dutyplan.v1.DeleteTaskSectionRequest
+	101, // 94: dutyplan.v1.PlanService.ListPlans:input_type -> dutyplan.v1.ListPlansRequest
+	103, // 95: dutyplan.v1.PlanService.CreatePlan:input_type -> dutyplan.v1.CreatePlanRequest
+	105, // 96: dutyplan.v1.PlanService.DuplicatePlan:input_type -> dutyplan.v1.DuplicatePlanRequest
+	107, // 97: dutyplan.v1.PlanService.GetPlan:input_type -> dutyplan.v1.GetPlanRequest
+	109, // 98: dutyplan.v1.PlanService.RenamePlan:input_type -> dutyplan.v1.RenamePlanRequest
+	111, // 99: dutyplan.v1.PlanService.DeletePlan:input_type -> dutyplan.v1.DeletePlanRequest
+	113, // 100: dutyplan.v1.PlanService.ListEvents:input_type -> dutyplan.v1.ListEventsRequest
+	115, // 101: dutyplan.v1.PlanService.AddEvents:input_type -> dutyplan.v1.AddEventsRequest
+	117, // 102: dutyplan.v1.PlanService.CopyEvent:input_type -> dutyplan.v1.CopyEventRequest
+	119, // 103: dutyplan.v1.PlanService.UpdateEvent:input_type -> dutyplan.v1.UpdateEventRequest
+	121, // 104: dutyplan.v1.PlanService.DeleteEvent:input_type -> dutyplan.v1.DeleteEventRequest
+	123, // 105: dutyplan.v1.PlanService.ListPlaces:input_type -> dutyplan.v1.ListPlacesRequest
+	125, // 106: dutyplan.v1.PlanService.SetPlaces:input_type -> dutyplan.v1.SetPlacesRequest
+	127, // 107: dutyplan.v1.PlanService.ResetPlaces:input_type -> dutyplan.v1.ResetPlacesRequest
+	129, // 108: dutyplan.v1.PlanService.SetPlacesMany:input_type -> dutyplan.v1.SetPlacesManyRequest
+	131, // 109: dutyplan.v1.PlanService.ListFields:input_type -> dutyplan.v1.ListFieldsRequest
+	133, // 110: dutyplan.v1.PlanService.AddField:input_type -> dutyplan.v1.AddFieldRequest
+	135, // 111: dutyplan.v1.PlanService.RenameField:input_type -> dutyplan.v1.RenameFieldRequest
+	137, // 112: dutyplan.v1.PlanService.MoveField:input_type -> dutyplan.v1.MoveFieldRequest
+	139, // 113: dutyplan.v1.PlanService.FreezeField:input_type -> dutyplan.v1.FreezeFieldRequest
+	141, // 114: dutyplan.v1.PlanService.DeleteField:input_type -> dutyplan.v1.DeleteFieldRequest
+	143, // 115: dutyplan.v1.PlanService.SetFieldValue:input_type -> dutyplan.v1.SetFieldValueRequest
+	145, // 116: dutyplan.v1.PlanService.ListAnswers:input_type -> dutyplan.v1.ListAnswersRequest
+	149, // 117: dutyplan.v1.PlanService.SetPersonTask:input_type -> dutyplan.v1.SetPersonTaskRequest
+	151, // 118: dutyplan.v1.PlanService.RemovePersonTask:input_type -> dutyplan.v1.RemovePersonTaskRequest
+	147, // 119: dutyplan.v1.PlanService.SetAvailability:input_type -> dutyplan.v1.SetAvailabilityRequest
+	153, // 120: dutyplan.v1.PlanService.SetNote:input_type -> dutyplan.v1.SetNoteRequest
+	155, // 121: dutyplan.v1.PlanService.SetAnswers:input_type -> dutyplan.v1.SetAnswersRequest
+	157, // 122: dutyplan.v1.DraftService.ListCells:input_type -> dutyplan.v1.ListCellsRequest
+	159, // 123: dutyplan.v1.DraftService.AddCell:input_type -> dutyplan.v1.AddCellRequest
+	161, // 124: dutyplan.v1.DraftService.DeleteCell:input_type -> dutyplan.v1.DeleteCellRequest
+	163, // 125: dutyplan.v1.DraftService.ListPools:input_type -> dutyplan.v1.ListPoolsRequest
+	165, // 126: dutyplan.v1.DraftService.SetPool:input_type -> dutyplan.v1.SetPoolRequest
+	167, // 127: dutyplan.v1.DraftService.SetLocks:input_type -> dutyplan.v1.SetLocksRequest
+	169, // 128: dutyplan.v1.DraftService.SetDraftAside:input_type -> dutyplan.v1.SetDraftAsideRequest
+	171, // 129: dutyplan.v1.DraftService.ClearDraftAside:input_type -> dutyplan.v1.ClearDraftAsideRequest
+	173, // 130: dutyplan.v1.DraftService.GetWeights:input_type -> dutyplan.v1.GetWeightsRequest
+	175, // 131: dutyplan.v1.DraftService.SetWeights:input_type -> dutyplan.v1.SetWeightsRequest
+	177, // 132: dutyplan.v1.DraftService.StartRun:input_type -> dutyplan.v1.StartRunRequest
+	179, // 133: dutyplan.v1.DraftService.ListRuns:input_type -> dutyplan.v1.ListRunsRequest
+	181, // 134: dutyplan.v1.DraftService.GetRun:input_type -> dutyplan.v1.GetRunRequest
+	183, // 135: dutyplan.v1.DraftService.PinRun:input_type -> dutyplan.v1.PinRunRequest
+	185, // 136: dutyplan.v1.DraftService.UnpinRun:input_type -> dutyplan.v1.UnpinRunRequest
+	32,  // 137: dutyplan.v1.AccountService.Health:output_type -> dutyplan.v1.HealthResponse
+	34,  // 138: dutyplan.v1.AccountService.Me:output_type -> dutyplan.v1.MeResponse
+	36,  // 139: dutyplan.v1.AccountService.ListOrgs:output_type -> dutyplan.v1.ListOrgsResponse
+	38,  // 140: dutyplan.v1.AccountService.CreateOrg:output_type -> dutyplan.v1.CreateOrgResponse
+	40,  // 141: dutyplan.v1.OrgService.GetOrg:output_type -> dutyplan.v1.GetOrgResponse
+	42,  // 142: dutyplan.v1.OrgService.RenameOrg:output_type -> dutyplan.v1.RenameOrgResponse
+	44,  // 143: dutyplan.v1.OrgService.DeleteOrg:output_type -> dutyplan.v1.DeleteOrgResponse
+	46,  // 144: dutyplan.v1.OrgService.ListMembers:output_type -> dutyplan.v1.ListMembersResponse
+	48,  // 145: dutyplan.v1.OrgService.SetMemberRole:output_type -> dutyplan.v1.SetMemberRoleResponse
+	50,  // 146: dutyplan.v1.OrgService.RemoveMember:output_type -> dutyplan.v1.RemoveMemberResponse
+	52,  // 147: dutyplan.v1.OrgService.ListLinks:output_type -> dutyplan.v1.ListLinksResponse
+	54,  // 148: dutyplan.v1.OrgService.CreateLink:output_type -> dutyplan.v1.CreateLinkResponse
+	56,  // 149: dutyplan.v1.OrgService.DeleteLink:output_type -> dutyplan.v1.DeleteLinkResponse
+	58,  // 150: dutyplan.v1.SetupService.ListTasks:output_type -> dutyplan.v1.ListTasksResponse
+	60,  // 151: dutyplan.v1.SetupService.CreateTask:output_type -> dutyplan.v1.CreateTaskResponse
+	62,  // 152: dutyplan.v1.SetupService.UpdateTask:output_type -> dutyplan.v1.UpdateTaskResponse
+	64,  // 153: dutyplan.v1.SetupService.DeleteTask:output_type -> dutyplan.v1.DeleteTaskResponse
+	66,  // 154: dutyplan.v1.SetupService.MoveTask:output_type -> dutyplan.v1.MoveTaskResponse
+	68,  // 155: dutyplan.v1.SetupService.ListCombinations:output_type -> dutyplan.v1.ListCombinationsResponse
+	70,  // 156: dutyplan.v1.SetupService.SetCombination:output_type -> dutyplan.v1.SetCombinationResponse
+	72,  // 157: dutyplan.v1.SetupService.SetTaskCombinations:output_type -> dutyplan.v1.SetTaskCombinationsResponse
+	74,  // 158: dutyplan.v1.SetupService.ListPeople:output_type -> dutyplan.v1.ListPeopleResponse
+	76,  // 159: dutyplan.v1.SetupService.CreatePerson:output_type -> dutyplan.v1.CreatePersonResponse
+	78,  // 160: dutyplan.v1.SetupService.UpdatePerson:output_type -> dutyplan.v1.UpdatePersonResponse
+	80,  // 161: dutyplan.v1.SetupService.MovePerson:output_type -> dutyplan.v1.MovePersonResponse
+	82,  // 162: dutyplan.v1.SetupService.ListSections:output_type -> dutyplan.v1.ListSectionsResponse
+	84,  // 163: dutyplan.v1.SetupService.CreateSection:output_type -> dutyplan.v1.CreateSectionResponse
+	86,  // 164: dutyplan.v1.SetupService.RenameSection:output_type -> dutyplan.v1.RenameSectionResponse
+	88,  // 165: dutyplan.v1.SetupService.MoveSection:output_type -> dutyplan.v1.MoveSectionResponse
+	90,  // 166: dutyplan.v1.SetupService.DeleteSection:output_type -> dutyplan.v1.DeleteSectionResponse
+	92,  // 167: dutyplan.v1.SetupService.ListTaskSections:output_type -> dutyplan.v1.ListTaskSectionsResponse
+	94,  // 168: dutyplan.v1.SetupService.CreateTaskSection:output_type -> dutyplan.v1.CreateTaskSectionResponse
+	96,  // 169: dutyplan.v1.SetupService.RenameTaskSection:output_type -> dutyplan.v1.RenameTaskSectionResponse
+	98,  // 170: dutyplan.v1.SetupService.MoveTaskSection:output_type -> dutyplan.v1.MoveTaskSectionResponse
+	100, // 171: dutyplan.v1.SetupService.DeleteTaskSection:output_type -> dutyplan.v1.DeleteTaskSectionResponse
+	102, // 172: dutyplan.v1.PlanService.ListPlans:output_type -> dutyplan.v1.ListPlansResponse
+	104, // 173: dutyplan.v1.PlanService.CreatePlan:output_type -> dutyplan.v1.CreatePlanResponse
+	106, // 174: dutyplan.v1.PlanService.DuplicatePlan:output_type -> dutyplan.v1.DuplicatePlanResponse
+	108, // 175: dutyplan.v1.PlanService.GetPlan:output_type -> dutyplan.v1.GetPlanResponse
+	110, // 176: dutyplan.v1.PlanService.RenamePlan:output_type -> dutyplan.v1.RenamePlanResponse
+	112, // 177: dutyplan.v1.PlanService.DeletePlan:output_type -> dutyplan.v1.DeletePlanResponse
+	114, // 178: dutyplan.v1.PlanService.ListEvents:output_type -> dutyplan.v1.ListEventsResponse
+	116, // 179: dutyplan.v1.PlanService.AddEvents:output_type -> dutyplan.v1.AddEventsResponse
+	118, // 180: dutyplan.v1.PlanService.CopyEvent:output_type -> dutyplan.v1.CopyEventResponse
+	120, // 181: dutyplan.v1.PlanService.UpdateEvent:output_type -> dutyplan.v1.UpdateEventResponse
+	122, // 182: dutyplan.v1.PlanService.DeleteEvent:output_type -> dutyplan.v1.DeleteEventResponse
+	124, // 183: dutyplan.v1.PlanService.ListPlaces:output_type -> dutyplan.v1.ListPlacesResponse
+	126, // 184: dutyplan.v1.PlanService.SetPlaces:output_type -> dutyplan.v1.SetPlacesResponse
+	128, // 185: dutyplan.v1.PlanService.ResetPlaces:output_type -> dutyplan.v1.ResetPlacesResponse
+	130, // 186: dutyplan.v1.PlanService.SetPlacesMany:output_type -> dutyplan.v1.SetPlacesManyResponse
+	132, // 187: dutyplan.v1.PlanService.ListFields:output_type -> dutyplan.v1.ListFieldsResponse
+	134, // 188: dutyplan.v1.PlanService.AddField:output_type -> dutyplan.v1.AddFieldResponse
+	136, // 189: dutyplan.v1.PlanService.RenameField:output_type -> dutyplan.v1.RenameFieldResponse
+	138, // 190: dutyplan.v1.PlanService.MoveField:output_type -> dutyplan.v1.MoveFieldResponse
+	140, // 191: dutyplan.v1.PlanService.FreezeField:output_type -> dutyplan.v1.FreezeFieldResponse
+	142, // 192: dutyplan.v1.PlanService.DeleteField:output_type -> dutyplan.v1.DeleteFieldResponse
+	144, // 193: dutyplan.v1.PlanService.SetFieldValue:output_type -> dutyplan.v1.SetFieldValueResponse
+	146, // 194: dutyplan.v1.PlanService.ListAnswers:output_type -> dutyplan.v1.ListAnswersResponse
+	150, // 195: dutyplan.v1.PlanService.SetPersonTask:output_type -> dutyplan.v1.SetPersonTaskResponse
+	152, // 196: dutyplan.v1.PlanService.RemovePersonTask:output_type -> dutyplan.v1.RemovePersonTaskResponse
+	148, // 197: dutyplan.v1.PlanService.SetAvailability:output_type -> dutyplan.v1.SetAvailabilityResponse
+	154, // 198: dutyplan.v1.PlanService.SetNote:output_type -> dutyplan.v1.SetNoteResponse
+	156, // 199: dutyplan.v1.PlanService.SetAnswers:output_type -> dutyplan.v1.SetAnswersResponse
+	158, // 200: dutyplan.v1.DraftService.ListCells:output_type -> dutyplan.v1.ListCellsResponse
+	160, // 201: dutyplan.v1.DraftService.AddCell:output_type -> dutyplan.v1.AddCellResponse
+	162, // 202: dutyplan.v1.DraftService.DeleteCell:output_type -> dutyplan.v1.DeleteCellResponse
+	164, // 203: dutyplan.v1.DraftService.ListPools:output_type -> dutyplan.v1.ListPoolsResponse
+	166, // 204: dutyplan.v1.DraftService.SetPool:output_type -> dutyplan.v1.SetPoolResponse
+	168, // 205: dutyplan.v1.DraftService.SetLocks:output_type -> dutyplan.v1.SetLocksResponse
+	170, // 206: dutyplan.v1.DraftService.SetDraftAside:output_type -> dutyplan.v1.SetDraftAsideResponse
+	172, // 207: dutyplan.v1.DraftService.ClearDraftAside:output_type -> dutyplan.v1.ClearDraftAsideResponse
+	174, // 208: dutyplan.v1.DraftService.GetWeights:output_type -> dutyplan.v1.GetWeightsResponse
+	176, // 209: dutyplan.v1.DraftService.SetWeights:output_type -> dutyplan.v1.SetWeightsResponse
+	178, // 210: dutyplan.v1.DraftService.StartRun:output_type -> dutyplan.v1.StartRunResponse
+	180, // 211: dutyplan.v1.DraftService.ListRuns:output_type -> dutyplan.v1.ListRunsResponse
+	182, // 212: dutyplan.v1.DraftService.GetRun:output_type -> dutyplan.v1.GetRunResponse
+	184, // 213: dutyplan.v1.DraftService.PinRun:output_type -> dutyplan.v1.PinRunResponse
+	186, // 214: dutyplan.v1.DraftService.UnpinRun:output_type -> dutyplan.v1.UnpinRunResponse
+	137, // [137:215] is the sub-list for method output_type
+	59,  // [59:137] is the sub-list for method input_type
+	59,  // [59:59] is the sub-list for extension type_name
+	59,  // [59:59] is the sub-list for extension extendee
+	0,   // [0:59] is the sub-list for field type_name
 }
 
 func init() { file_dutyplan_v1_dutyplan_proto_init() }
@@ -11409,19 +11761,19 @@ func file_dutyplan_v1_dutyplan_proto_init() {
 	file_dutyplan_v1_dutyplan_proto_msgTypes[65].OneofWrappers = []any{}
 	file_dutyplan_v1_dutyplan_proto_msgTypes[77].OneofWrappers = []any{}
 	file_dutyplan_v1_dutyplan_proto_msgTypes[79].OneofWrappers = []any{}
-	file_dutyplan_v1_dutyplan_proto_msgTypes[91].OneofWrappers = []any{}
-	file_dutyplan_v1_dutyplan_proto_msgTypes[101].OneofWrappers = []any{}
-	file_dutyplan_v1_dutyplan_proto_msgTypes[121].OneofWrappers = []any{}
-	file_dutyplan_v1_dutyplan_proto_msgTypes[127].OneofWrappers = []any{}
+	file_dutyplan_v1_dutyplan_proto_msgTypes[87].OneofWrappers = []any{}
+	file_dutyplan_v1_dutyplan_proto_msgTypes[97].OneofWrappers = []any{}
+	file_dutyplan_v1_dutyplan_proto_msgTypes[119].OneofWrappers = []any{}
+	file_dutyplan_v1_dutyplan_proto_msgTypes[125].OneofWrappers = []any{}
+	file_dutyplan_v1_dutyplan_proto_msgTypes[137].OneofWrappers = []any{}
 	file_dutyplan_v1_dutyplan_proto_msgTypes[139].OneofWrappers = []any{}
-	file_dutyplan_v1_dutyplan_proto_msgTypes[141].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_dutyplan_v1_dutyplan_proto_rawDesc), len(file_dutyplan_v1_dutyplan_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   186,
+			NumMessages:   188,
 			NumExtensions: 0,
 			NumServices:   5,
 		},

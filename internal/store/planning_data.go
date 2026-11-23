@@ -44,7 +44,7 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 	}
 
 	d.Tasks = []Task{}
-	if err := scanAll(ctx, tx, `SELECT id, name, planned FROM task WHERE org_id = ? ORDER BY id`, []any{oid},
+	if err := scanAll(ctx, tx, `SELECT id, name, planned FROM task WHERE plan_id = ? ORDER BY id`, []any{pid},
 		func(r *sql.Rows) error {
 			var t Task
 			err := r.Scan(&t.ID, &t.Name, &t.Planned)
@@ -65,7 +65,7 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	d.People = []PlanPerson{}
-	if err := scanAll(ctx, tx, `SELECT id, name, proposable FROM person WHERE org_id = ? ORDER BY id`, []any{oid},
+	if err := scanAll(ctx, tx, `SELECT id, name, proposable FROM person WHERE plan_id = ? ORDER BY id`, []any{pid},
 		func(r *sql.Rows) error {
 			var p PlanPerson
 			err := r.Scan(&p.ID, &p.Name, &p.Proposable)
@@ -75,7 +75,7 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	d.PersonTasks = map[int64]map[int64]string{}
-	if err := scanAll(ctx, tx, `SELECT person_id, task_id, level FROM person_task WHERE org_id = ?`, []any{oid},
+	if err := scanAll(ctx, tx, `SELECT person_id, task_id, level FROM person_task WHERE org_id = ? AND plan_id = ?`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			var p, t int64
 			var l string
@@ -107,7 +107,7 @@ func (s *Store) GetPlanningData(ctx context.Context, orgSlug, planSlug string) (
 		return d, err
 	}
 	d.Combinations = []Combination{}
-	if err := scanAll(ctx, tx, `SELECT task_a, task_b, level FROM task_combination WHERE org_id = ? ORDER BY task_a, task_b`, []any{oid},
+	if err := scanAll(ctx, tx, `SELECT task_a, task_b, level FROM task_combination WHERE plan_id = ? ORDER BY task_a, task_b`, []any{pid},
 		func(r *sql.Rows) error {
 			var c Combination
 			err := r.Scan(&c.A, &c.B, &c.Level)

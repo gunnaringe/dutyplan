@@ -61,7 +61,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       const line = page.locator('tr.adds', { has: form });
       if ((await line.count()) && await line.isHidden()) await page.click(`button.addplus[data-adds="${await line.getAttribute('data-adds')}"]`);
       await form.locator('input').fill(name);
-      await form.locator('button').click();
+      await form.locator('button[type=submit], button:not([type])').first().click();
     };
 
     // --- the front page, organisations, switching ---
@@ -957,6 +957,10 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     await h1is(page, 'Sports Club');
     await addNamed('New plan, e.g. Autumn 2026', 'Spring 2027');
     await page.waitForURL('**/p/spring-2027');
+    // a new plan copies the newest plan's people and tasks (Copy from), never its dates
+    await page.waitForSelector('.dp-table');
+    ok((await page.locator('.dp-table tbody th[scope=row]', { hasText: 'Kari Test' }).count()) === 1, 'the new plan has the copied people');
+    ok((await page.locator('.dp-table thead th[scope=col]:not(.addcol)').count()) === 0, 'the new plan has no dates');
     await page.getByRole('button', { name: 'Plan settings' }).click();
     await dialog.locator('input[aria-label="Name of the plan"]').fill('Spring 2027 (draft)');
     await dialog.getByRole('button', { name: 'Rename' }).click();
@@ -967,6 +971,35 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
     await page.waitForURL('**/o/sports-club');
     await msgHas(page, 'The plan “Spring 2027 (draft)” was deleted.');
+    // ⋯ Duplicate: the name is suggested, the table is kept when ticked, the copy is marked (not opened) and can be deleted again
+    await page.click('details.plan-menu:has(summary[aria-label="More for Autumn 2026"]) > summary');
+    await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    ok((await dialog.locator('input[aria-label="Name of the copy"]').inputValue()) === 'Autumn 2026 (copy)', 'the copy\'s name is suggested');
+    ok(!(await dialog.locator('input[type=checkbox]').isChecked()), 'the table is not kept by default');
+    await dialog.locator('input[type=checkbox]').check();
+    await dialog.locator('button[type=submit]').click();
+    await msgHas(page, '“Autumn 2026 (copy)” was made.');
+    ok(page.url().endsWith('/o/sports-club'), 'the copy is not opened');
+    const copyRow = page.locator('.plan-item.new', { hasText: 'Autumn 2026 (copy)' });
+    ok((await copyRow.count()) === 1, 'the copy is marked in the list');
+    await page.goto(base + '/o/sports-club/p/autumn-2026-copy');
+    await page.waitForSelector('.dp-table');
+    ok((await page.locator('.dp-table thead th[scope=col]:not(.addcol)').count()) === 3, 'with the table the dates come along');
+    await page.goto(base + '/o/sports-club');
+    await h1is(page, 'Sports Club');
+    ok((await page.locator('.plan-item.new').count()) === 0, 'the mark is gone once the copy was opened');
+    await page.click('details.plan-menu:has(summary[aria-label="More for Autumn 2026"]) > summary');
+    await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    await dialog.locator('input[aria-label="Name of the copy"]').fill('Autumn again');
+    await dialog.locator('button[type=submit]').click();
+    await page.locator('.plan-item.new', { hasText: 'Autumn again' }).getByRole('button', { name: 'Delete the copy' }).click();
+    await msgHas(page, '“Autumn again” was deleted.');
+    ok((await page.locator('.plan-item', { hasText: 'Autumn again' }).count()) === 0, 'Delete the copy deletes it');
+    await page.goto(base + '/o/sports-club/p/autumn-2026-copy');
+    await page.getByRole('button', { name: 'Plan settings' }).click();
+    await dialog.getByRole('button', { name: 'Delete the plan' }).click();
+    await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.waitForURL('**/o/sports-club');
     await page.click('header a[aria-label="Settings"]');
     await h1is(page, 'Settings');
     ok((await page.innerText('main')).includes('cannot be deleted'), 'an organisation with plans cannot be deleted');

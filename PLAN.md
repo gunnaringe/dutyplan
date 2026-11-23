@@ -73,10 +73,10 @@ Migrations are forward-only and run in a transaction at startup.
 |---|---|---|
 | `organization` | | `slug` (unique, in the address), name |
 | `plan` | organisation | `slug` (unique in the organisation), name, **`weights`** (JSON: the planner weights that differ from the default). Replaces "period/semester" |
-| `person` | organisation | name (unique in the organisation), **can be proposed** (default yes). Reused in all plans |
-| `task` | organisation | name, whether the planner distributes it (otherwise only for manual cells and combinations) |
-| `task_combination` | organisation | **shared**: task A × task B: *cannot be combined / impractical / practical / should be combined* |
-| `person_task` | organisation | **built**: the person takes part in the task (their own choice; no row = not taking part) and a level (never / poor / neutral / good). Only tasks the planner distributes can be chosen |
+| `person` | plan (since migration 012, 2026-11-23; was the organisation's) | name (unique in the plan), **can be proposed** (default yes). A new plan copies another plan's, or starts empty |
+| `task` | plan (since migration 012) | name, whether the planner distributes it (otherwise only for manual cells and combinations) |
+| `task_combination` | plan (since migration 012) | task A × task B: *cannot be combined / impractical / practical / should be combined* |
+| `person_task` | plan (since 2026-11-23, migration 012; copied with the plan) | **built**: the person takes part in the task (their own choice; no row = not taking part) and a level (never / poor / neutral / good). Only tasks the planner distributes can be chosen |
 | `event` | plan | **event**: date, times, description. A self-contained unit; several on the same day are allowed |
 | `event_task` | plan | the places a task has on an event (no row = not needed) |
 | `plan_field`, `event_field` | plan | the plan's details rows (a note, a theme; ordered by `position`) and their text per event. For people only: never in the input or hash |
@@ -198,7 +198,7 @@ what the event is, what it needs, who got it, who can come.
 - **Tasks**: one row per task with the places per event, typed in (`event_task`, `PUT|DELETE /events/{id}/places/{task}`, `GET /plans/{plan}/places`); empty = not needed.
   ⇥ at the end of the row selects it, and the bar at the bottom sets every event (bulk `PUT /plans/{plan}/places`; *Fill row* and its route went
   2026-11-22). ⚡ by the name = `task.planned`. ⋮⋮ drags a task (`task.position`,
-  the organisation's order, `PUT /tasks/{id}/position`); the planner's input keeps the tasks by id, so the order is not in the hash.
+  the plan's order, `PUT /tasks/{id}/position`); the planner's input keeps the tasks by id, so the order is not in the hash.
   Clicking the task: rename, planned or only by hand, "Cannot be combined with anything" (`PUT /orgs/{org}/tasks/{id}/combinations`) and the single pairs, delete.
 - **Draft allocation** (green): the bar has "Make a draft"/"Try again", the time limit, "Draft #n · time", "✓ Current plan" with Unpin (or Pin), and a key. One row per task:
   what is set by hand (violet), a locked planner name («locked» chip), the planner's names («maybe» when given against a ?), and "Not filled · Why?". Clicking a place opens
@@ -206,7 +206,7 @@ what the event is, what it needs, who got it, who can come.
   Compromises, the distribution and earlier drafts are links under the rows. The page opens with the pinned draft, else the newest.
 - **Availability**: per event how many said ✓, ? and ✗; then one row per person (`GET /plans/{plan}/answers` loads everyone's): blank = not answered, a click cycles
   ✓ → ? → ✗ → blank. Clicking the name: tasks and levels, rename, can be proposed, section. ⋮⋮ drags a person (`person.position`, per section,
-  `PUT /people/{id}/position {section, position}`). *Sections* (`person_section`, organisation-wide, `/sections`) are headings with their people below;
+  `PUT /people/{id}/position {section, position}`). *Sections* (`person_section`, per plan, `/sections`) are headings with their people below;
   those without one come first, deleting one puts its people last of those. Only placement: the planner's input keeps people by id.
 - **⚙ Plan settings**: the name, the weighting, the earlier drafts (Show, Pin) and Delete.
 - **On a phone** (option A of the sketch, chosen 2026-11-20): *Availability* is turned and comes first: events down (date, time, the count), people across (first
@@ -226,7 +226,7 @@ what the event is, what it needs, who got it, who can come.
 ### Renaming and deleting (built)
 - Organisations and plans can be renamed (`PATCH`), people and tasks too (they already could be); the address (slug) never changes.
 - **A plan is deleted** (`DELETE`) with its events, places, details rows, answers, manual cells, selections and runs (a pinned one too). Refused while a run is in progress (409 `plan_busy`).
-- **An organisation is deleted** (`DELETE ...?confirm=<slug>`) only when it has no plans (409 `org_has_plans`), with its people, sections, tasks and combinations. The API writes the
+- **An organisation is deleted** (`DELETE ...?confirm=<slug>`) only when it has no plans (409 `org_has_plans`), with its members and links. The API writes the
   deletion to the server log.
 - A test lists the tables with `org_id` and `plan_id`, so a new table cannot be forgotten by the deletions; another checks that nothing is left after a deletion.
 

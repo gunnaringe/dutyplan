@@ -119,12 +119,6 @@ const (
 	SetupServiceUpdatePersonProcedure = "/dutyplan.v1.SetupService/UpdatePerson"
 	// SetupServiceMovePersonProcedure is the fully-qualified name of the SetupService's MovePerson RPC.
 	SetupServiceMovePersonProcedure = "/dutyplan.v1.SetupService/MovePerson"
-	// SetupServiceSetPersonTaskProcedure is the fully-qualified name of the SetupService's
-	// SetPersonTask RPC.
-	SetupServiceSetPersonTaskProcedure = "/dutyplan.v1.SetupService/SetPersonTask"
-	// SetupServiceRemovePersonTaskProcedure is the fully-qualified name of the SetupService's
-	// RemovePersonTask RPC.
-	SetupServiceRemovePersonTaskProcedure = "/dutyplan.v1.SetupService/RemovePersonTask"
 	// SetupServiceListSectionsProcedure is the fully-qualified name of the SetupService's ListSections
 	// RPC.
 	SetupServiceListSectionsProcedure = "/dutyplan.v1.SetupService/ListSections"
@@ -159,6 +153,9 @@ const (
 	PlanServiceListPlansProcedure = "/dutyplan.v1.PlanService/ListPlans"
 	// PlanServiceCreatePlanProcedure is the fully-qualified name of the PlanService's CreatePlan RPC.
 	PlanServiceCreatePlanProcedure = "/dutyplan.v1.PlanService/CreatePlan"
+	// PlanServiceDuplicatePlanProcedure is the fully-qualified name of the PlanService's DuplicatePlan
+	// RPC.
+	PlanServiceDuplicatePlanProcedure = "/dutyplan.v1.PlanService/DuplicatePlan"
 	// PlanServiceGetPlanProcedure is the fully-qualified name of the PlanService's GetPlan RPC.
 	PlanServiceGetPlanProcedure = "/dutyplan.v1.PlanService/GetPlan"
 	// PlanServiceRenamePlanProcedure is the fully-qualified name of the PlanService's RenamePlan RPC.
@@ -201,6 +198,12 @@ const (
 	PlanServiceSetFieldValueProcedure = "/dutyplan.v1.PlanService/SetFieldValue"
 	// PlanServiceListAnswersProcedure is the fully-qualified name of the PlanService's ListAnswers RPC.
 	PlanServiceListAnswersProcedure = "/dutyplan.v1.PlanService/ListAnswers"
+	// PlanServiceSetPersonTaskProcedure is the fully-qualified name of the PlanService's SetPersonTask
+	// RPC.
+	PlanServiceSetPersonTaskProcedure = "/dutyplan.v1.PlanService/SetPersonTask"
+	// PlanServiceRemovePersonTaskProcedure is the fully-qualified name of the PlanService's
+	// RemovePersonTask RPC.
+	PlanServiceRemovePersonTaskProcedure = "/dutyplan.v1.PlanService/RemovePersonTask"
 	// PlanServiceSetAvailabilityProcedure is the fully-qualified name of the PlanService's
 	// SetAvailability RPC.
 	PlanServiceSetAvailabilityProcedure = "/dutyplan.v1.PlanService/SetAvailability"
@@ -721,10 +724,6 @@ type SetupServiceClient interface {
 	UpdatePerson(context.Context, *connect.Request[v1.UpdatePersonRequest]) (*connect.Response[v1.UpdatePersonResponse], error)
 	// Move a person, into a section or out of one.
 	MovePerson(context.Context, *connect.Request[v1.MovePersonRequest]) (*connect.Response[v1.MovePersonResponse], error)
-	// A person takes a task: good (gladly) | poor (if needed).
-	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
-	// A person no longer takes a task.
-	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
 	// Sections of people: headings, placement only.
 	ListSections(context.Context, *connect.Request[v1.ListSectionsRequest]) (*connect.Response[v1.ListSectionsResponse], error)
 	// Add a section of people.
@@ -830,18 +829,6 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("MovePerson")),
 			connect.WithClientOptions(opts...),
 		),
-		setPersonTask: connect.NewClient[v1.SetPersonTaskRequest, v1.SetPersonTaskResponse](
-			httpClient,
-			baseURL+SetupServiceSetPersonTaskProcedure,
-			connect.WithSchema(setupServiceMethods.ByName("SetPersonTask")),
-			connect.WithClientOptions(opts...),
-		),
-		removePersonTask: connect.NewClient[v1.RemovePersonTaskRequest, v1.RemovePersonTaskResponse](
-			httpClient,
-			baseURL+SetupServiceRemovePersonTaskProcedure,
-			connect.WithSchema(setupServiceMethods.ByName("RemovePersonTask")),
-			connect.WithClientOptions(opts...),
-		),
 		listSections: connect.NewClient[v1.ListSectionsRequest, v1.ListSectionsResponse](
 			httpClient,
 			baseURL+SetupServiceListSectionsProcedure,
@@ -919,8 +906,6 @@ type setupServiceClient struct {
 	createPerson        *connect.Client[v1.CreatePersonRequest, v1.CreatePersonResponse]
 	updatePerson        *connect.Client[v1.UpdatePersonRequest, v1.UpdatePersonResponse]
 	movePerson          *connect.Client[v1.MovePersonRequest, v1.MovePersonResponse]
-	setPersonTask       *connect.Client[v1.SetPersonTaskRequest, v1.SetPersonTaskResponse]
-	removePersonTask    *connect.Client[v1.RemovePersonTaskRequest, v1.RemovePersonTaskResponse]
 	listSections        *connect.Client[v1.ListSectionsRequest, v1.ListSectionsResponse]
 	createSection       *connect.Client[v1.CreateSectionRequest, v1.CreateSectionResponse]
 	renameSection       *connect.Client[v1.RenameSectionRequest, v1.RenameSectionResponse]
@@ -991,16 +976,6 @@ func (c *setupServiceClient) UpdatePerson(ctx context.Context, req *connect.Requ
 // MovePerson calls dutyplan.v1.SetupService.MovePerson.
 func (c *setupServiceClient) MovePerson(ctx context.Context, req *connect.Request[v1.MovePersonRequest]) (*connect.Response[v1.MovePersonResponse], error) {
 	return c.movePerson.CallUnary(ctx, req)
-}
-
-// SetPersonTask calls dutyplan.v1.SetupService.SetPersonTask.
-func (c *setupServiceClient) SetPersonTask(ctx context.Context, req *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error) {
-	return c.setPersonTask.CallUnary(ctx, req)
-}
-
-// RemovePersonTask calls dutyplan.v1.SetupService.RemovePersonTask.
-func (c *setupServiceClient) RemovePersonTask(ctx context.Context, req *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error) {
-	return c.removePersonTask.CallUnary(ctx, req)
 }
 
 // ListSections calls dutyplan.v1.SetupService.ListSections.
@@ -1080,10 +1055,6 @@ type SetupServiceHandler interface {
 	UpdatePerson(context.Context, *connect.Request[v1.UpdatePersonRequest]) (*connect.Response[v1.UpdatePersonResponse], error)
 	// Move a person, into a section or out of one.
 	MovePerson(context.Context, *connect.Request[v1.MovePersonRequest]) (*connect.Response[v1.MovePersonResponse], error)
-	// A person takes a task: good (gladly) | poor (if needed).
-	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
-	// A person no longer takes a task.
-	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
 	// Sections of people: headings, placement only.
 	ListSections(context.Context, *connect.Request[v1.ListSectionsRequest]) (*connect.Response[v1.ListSectionsResponse], error)
 	// Add a section of people.
@@ -1185,18 +1156,6 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("MovePerson")),
 		connect.WithHandlerOptions(opts...),
 	)
-	setupServiceSetPersonTaskHandler := connect.NewUnaryHandler(
-		SetupServiceSetPersonTaskProcedure,
-		svc.SetPersonTask,
-		connect.WithSchema(setupServiceMethods.ByName("SetPersonTask")),
-		connect.WithHandlerOptions(opts...),
-	)
-	setupServiceRemovePersonTaskHandler := connect.NewUnaryHandler(
-		SetupServiceRemovePersonTaskProcedure,
-		svc.RemovePersonTask,
-		connect.WithSchema(setupServiceMethods.ByName("RemovePersonTask")),
-		connect.WithHandlerOptions(opts...),
-	)
 	setupServiceListSectionsHandler := connect.NewUnaryHandler(
 		SetupServiceListSectionsProcedure,
 		svc.ListSections,
@@ -1283,10 +1242,6 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceUpdatePersonHandler.ServeHTTP(w, r)
 		case SetupServiceMovePersonProcedure:
 			setupServiceMovePersonHandler.ServeHTTP(w, r)
-		case SetupServiceSetPersonTaskProcedure:
-			setupServiceSetPersonTaskHandler.ServeHTTP(w, r)
-		case SetupServiceRemovePersonTaskProcedure:
-			setupServiceRemovePersonTaskHandler.ServeHTTP(w, r)
 		case SetupServiceListSectionsProcedure:
 			setupServiceListSectionsHandler.ServeHTTP(w, r)
 		case SetupServiceCreateSectionProcedure:
@@ -1364,14 +1319,6 @@ func (UnimplementedSetupServiceHandler) MovePerson(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.SetupService.MovePerson is not implemented"))
 }
 
-func (UnimplementedSetupServiceHandler) SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.SetupService.SetPersonTask is not implemented"))
-}
-
-func (UnimplementedSetupServiceHandler) RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.SetupService.RemovePersonTask is not implemented"))
-}
-
 func (UnimplementedSetupServiceHandler) ListSections(context.Context, *connect.Request[v1.ListSectionsRequest]) (*connect.Response[v1.ListSectionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.SetupService.ListSections is not implemented"))
 }
@@ -1416,8 +1363,12 @@ func (UnimplementedSetupServiceHandler) DeleteTaskSection(context.Context, *conn
 type PlanServiceClient interface {
 	// The organisation's plans. Members only.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
-	// Make a plan; its slug comes from the name. Members only.
+	// Make a plan; its slug comes from the name. It starts empty, or with the people and tasks of another plan (their
+	// sections, ⚡, combinations and the tasks people take). Members only.
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	// A copy of a plan under a new name: its people and tasks, and with `table` its events, details, places, names set by
+	// hand, selections, answers, notes and weights. Drafts and links are never copied. Members only.
+	DuplicatePlan(context.Context, *connect.Request[v1.DuplicatePlanRequest]) (*connect.Response[v1.DuplicatePlanResponse], error)
 	// One plan.
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
 	// Rename a plan; the slug stays.
@@ -1456,8 +1407,13 @@ type PlanServiceClient interface {
 	DeleteField(context.Context, *connect.Request[v1.DeleteFieldRequest]) (*connect.Response[v1.DeleteFieldResponse], error)
 	// The text of a details row for one event; "" removes it.
 	SetFieldValue(context.Context, *connect.Request[v1.SetFieldValueRequest]) (*connect.Response[v1.SetFieldValueResponse], error)
-	// Everyone's answers per event, the tasks each person takes, and the notes.
+	// Everyone's answers per event, the tasks each person takes in this plan, and the notes.
 	ListAnswers(context.Context, *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error)
+	// A person takes a task in this plan: good (gladly) | poor (if needed). Each plan has its own; a new plan starts with a copy
+	// of the newest plan's. Answer link.
+	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
+	// A person no longer takes a task in this plan. Answer link.
+	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
 	// One person's answers for some events. Answer link.
 	SetAvailability(context.Context, *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error)
 	// A note on an answer, at most 300 characters; "" removes it. Answer link.
@@ -1487,6 +1443,12 @@ func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+PlanServiceCreatePlanProcedure,
 			connect.WithSchema(planServiceMethods.ByName("CreatePlan")),
+			connect.WithClientOptions(opts...),
+		),
+		duplicatePlan: connect.NewClient[v1.DuplicatePlanRequest, v1.DuplicatePlanResponse](
+			httpClient,
+			baseURL+PlanServiceDuplicatePlanProcedure,
+			connect.WithSchema(planServiceMethods.ByName("DuplicatePlan")),
 			connect.WithClientOptions(opts...),
 		),
 		getPlan: connect.NewClient[v1.GetPlanRequest, v1.GetPlanResponse](
@@ -1609,6 +1571,18 @@ func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(planServiceMethods.ByName("ListAnswers")),
 			connect.WithClientOptions(opts...),
 		),
+		setPersonTask: connect.NewClient[v1.SetPersonTaskRequest, v1.SetPersonTaskResponse](
+			httpClient,
+			baseURL+PlanServiceSetPersonTaskProcedure,
+			connect.WithSchema(planServiceMethods.ByName("SetPersonTask")),
+			connect.WithClientOptions(opts...),
+		),
+		removePersonTask: connect.NewClient[v1.RemovePersonTaskRequest, v1.RemovePersonTaskResponse](
+			httpClient,
+			baseURL+PlanServiceRemovePersonTaskProcedure,
+			connect.WithSchema(planServiceMethods.ByName("RemovePersonTask")),
+			connect.WithClientOptions(opts...),
+		),
 		setAvailability: connect.NewClient[v1.SetAvailabilityRequest, v1.SetAvailabilityResponse](
 			httpClient,
 			baseURL+PlanServiceSetAvailabilityProcedure,
@@ -1632,31 +1606,34 @@ func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // planServiceClient implements PlanServiceClient.
 type planServiceClient struct {
-	listPlans       *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
-	createPlan      *connect.Client[v1.CreatePlanRequest, v1.CreatePlanResponse]
-	getPlan         *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
-	renamePlan      *connect.Client[v1.RenamePlanRequest, v1.RenamePlanResponse]
-	deletePlan      *connect.Client[v1.DeletePlanRequest, v1.DeletePlanResponse]
-	listEvents      *connect.Client[v1.ListEventsRequest, v1.ListEventsResponse]
-	addEvents       *connect.Client[v1.AddEventsRequest, v1.AddEventsResponse]
-	copyEvent       *connect.Client[v1.CopyEventRequest, v1.CopyEventResponse]
-	updateEvent     *connect.Client[v1.UpdateEventRequest, v1.UpdateEventResponse]
-	deleteEvent     *connect.Client[v1.DeleteEventRequest, v1.DeleteEventResponse]
-	listPlaces      *connect.Client[v1.ListPlacesRequest, v1.ListPlacesResponse]
-	setPlaces       *connect.Client[v1.SetPlacesRequest, v1.SetPlacesResponse]
-	resetPlaces     *connect.Client[v1.ResetPlacesRequest, v1.ResetPlacesResponse]
-	setPlacesMany   *connect.Client[v1.SetPlacesManyRequest, v1.SetPlacesManyResponse]
-	listFields      *connect.Client[v1.ListFieldsRequest, v1.ListFieldsResponse]
-	addField        *connect.Client[v1.AddFieldRequest, v1.AddFieldResponse]
-	renameField     *connect.Client[v1.RenameFieldRequest, v1.RenameFieldResponse]
-	moveField       *connect.Client[v1.MoveFieldRequest, v1.MoveFieldResponse]
-	freezeField     *connect.Client[v1.FreezeFieldRequest, v1.FreezeFieldResponse]
-	deleteField     *connect.Client[v1.DeleteFieldRequest, v1.DeleteFieldResponse]
-	setFieldValue   *connect.Client[v1.SetFieldValueRequest, v1.SetFieldValueResponse]
-	listAnswers     *connect.Client[v1.ListAnswersRequest, v1.ListAnswersResponse]
-	setAvailability *connect.Client[v1.SetAvailabilityRequest, v1.SetAvailabilityResponse]
-	setNote         *connect.Client[v1.SetNoteRequest, v1.SetNoteResponse]
-	setAnswers      *connect.Client[v1.SetAnswersRequest, v1.SetAnswersResponse]
+	listPlans        *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
+	createPlan       *connect.Client[v1.CreatePlanRequest, v1.CreatePlanResponse]
+	duplicatePlan    *connect.Client[v1.DuplicatePlanRequest, v1.DuplicatePlanResponse]
+	getPlan          *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
+	renamePlan       *connect.Client[v1.RenamePlanRequest, v1.RenamePlanResponse]
+	deletePlan       *connect.Client[v1.DeletePlanRequest, v1.DeletePlanResponse]
+	listEvents       *connect.Client[v1.ListEventsRequest, v1.ListEventsResponse]
+	addEvents        *connect.Client[v1.AddEventsRequest, v1.AddEventsResponse]
+	copyEvent        *connect.Client[v1.CopyEventRequest, v1.CopyEventResponse]
+	updateEvent      *connect.Client[v1.UpdateEventRequest, v1.UpdateEventResponse]
+	deleteEvent      *connect.Client[v1.DeleteEventRequest, v1.DeleteEventResponse]
+	listPlaces       *connect.Client[v1.ListPlacesRequest, v1.ListPlacesResponse]
+	setPlaces        *connect.Client[v1.SetPlacesRequest, v1.SetPlacesResponse]
+	resetPlaces      *connect.Client[v1.ResetPlacesRequest, v1.ResetPlacesResponse]
+	setPlacesMany    *connect.Client[v1.SetPlacesManyRequest, v1.SetPlacesManyResponse]
+	listFields       *connect.Client[v1.ListFieldsRequest, v1.ListFieldsResponse]
+	addField         *connect.Client[v1.AddFieldRequest, v1.AddFieldResponse]
+	renameField      *connect.Client[v1.RenameFieldRequest, v1.RenameFieldResponse]
+	moveField        *connect.Client[v1.MoveFieldRequest, v1.MoveFieldResponse]
+	freezeField      *connect.Client[v1.FreezeFieldRequest, v1.FreezeFieldResponse]
+	deleteField      *connect.Client[v1.DeleteFieldRequest, v1.DeleteFieldResponse]
+	setFieldValue    *connect.Client[v1.SetFieldValueRequest, v1.SetFieldValueResponse]
+	listAnswers      *connect.Client[v1.ListAnswersRequest, v1.ListAnswersResponse]
+	setPersonTask    *connect.Client[v1.SetPersonTaskRequest, v1.SetPersonTaskResponse]
+	removePersonTask *connect.Client[v1.RemovePersonTaskRequest, v1.RemovePersonTaskResponse]
+	setAvailability  *connect.Client[v1.SetAvailabilityRequest, v1.SetAvailabilityResponse]
+	setNote          *connect.Client[v1.SetNoteRequest, v1.SetNoteResponse]
+	setAnswers       *connect.Client[v1.SetAnswersRequest, v1.SetAnswersResponse]
 }
 
 // ListPlans calls dutyplan.v1.PlanService.ListPlans.
@@ -1667,6 +1644,11 @@ func (c *planServiceClient) ListPlans(ctx context.Context, req *connect.Request[
 // CreatePlan calls dutyplan.v1.PlanService.CreatePlan.
 func (c *planServiceClient) CreatePlan(ctx context.Context, req *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error) {
 	return c.createPlan.CallUnary(ctx, req)
+}
+
+// DuplicatePlan calls dutyplan.v1.PlanService.DuplicatePlan.
+func (c *planServiceClient) DuplicatePlan(ctx context.Context, req *connect.Request[v1.DuplicatePlanRequest]) (*connect.Response[v1.DuplicatePlanResponse], error) {
+	return c.duplicatePlan.CallUnary(ctx, req)
 }
 
 // GetPlan calls dutyplan.v1.PlanService.GetPlan.
@@ -1769,6 +1751,16 @@ func (c *planServiceClient) ListAnswers(ctx context.Context, req *connect.Reques
 	return c.listAnswers.CallUnary(ctx, req)
 }
 
+// SetPersonTask calls dutyplan.v1.PlanService.SetPersonTask.
+func (c *planServiceClient) SetPersonTask(ctx context.Context, req *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error) {
+	return c.setPersonTask.CallUnary(ctx, req)
+}
+
+// RemovePersonTask calls dutyplan.v1.PlanService.RemovePersonTask.
+func (c *planServiceClient) RemovePersonTask(ctx context.Context, req *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error) {
+	return c.removePersonTask.CallUnary(ctx, req)
+}
+
 // SetAvailability calls dutyplan.v1.PlanService.SetAvailability.
 func (c *planServiceClient) SetAvailability(ctx context.Context, req *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error) {
 	return c.setAvailability.CallUnary(ctx, req)
@@ -1788,8 +1780,12 @@ func (c *planServiceClient) SetAnswers(ctx context.Context, req *connect.Request
 type PlanServiceHandler interface {
 	// The organisation's plans. Members only.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
-	// Make a plan; its slug comes from the name. Members only.
+	// Make a plan; its slug comes from the name. It starts empty, or with the people and tasks of another plan (their
+	// sections, ⚡, combinations and the tasks people take). Members only.
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	// A copy of a plan under a new name: its people and tasks, and with `table` its events, details, places, names set by
+	// hand, selections, answers, notes and weights. Drafts and links are never copied. Members only.
+	DuplicatePlan(context.Context, *connect.Request[v1.DuplicatePlanRequest]) (*connect.Response[v1.DuplicatePlanResponse], error)
 	// One plan.
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
 	// Rename a plan; the slug stays.
@@ -1828,8 +1824,13 @@ type PlanServiceHandler interface {
 	DeleteField(context.Context, *connect.Request[v1.DeleteFieldRequest]) (*connect.Response[v1.DeleteFieldResponse], error)
 	// The text of a details row for one event; "" removes it.
 	SetFieldValue(context.Context, *connect.Request[v1.SetFieldValueRequest]) (*connect.Response[v1.SetFieldValueResponse], error)
-	// Everyone's answers per event, the tasks each person takes, and the notes.
+	// Everyone's answers per event, the tasks each person takes in this plan, and the notes.
 	ListAnswers(context.Context, *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error)
+	// A person takes a task in this plan: good (gladly) | poor (if needed). Each plan has its own; a new plan starts with a copy
+	// of the newest plan's. Answer link.
+	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
+	// A person no longer takes a task in this plan. Answer link.
+	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
 	// One person's answers for some events. Answer link.
 	SetAvailability(context.Context, *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error)
 	// A note on an answer, at most 300 characters; "" removes it. Answer link.
@@ -1855,6 +1856,12 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 		PlanServiceCreatePlanProcedure,
 		svc.CreatePlan,
 		connect.WithSchema(planServiceMethods.ByName("CreatePlan")),
+		connect.WithHandlerOptions(opts...),
+	)
+	planServiceDuplicatePlanHandler := connect.NewUnaryHandler(
+		PlanServiceDuplicatePlanProcedure,
+		svc.DuplicatePlan,
+		connect.WithSchema(planServiceMethods.ByName("DuplicatePlan")),
 		connect.WithHandlerOptions(opts...),
 	)
 	planServiceGetPlanHandler := connect.NewUnaryHandler(
@@ -1977,6 +1984,18 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(planServiceMethods.ByName("ListAnswers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	planServiceSetPersonTaskHandler := connect.NewUnaryHandler(
+		PlanServiceSetPersonTaskProcedure,
+		svc.SetPersonTask,
+		connect.WithSchema(planServiceMethods.ByName("SetPersonTask")),
+		connect.WithHandlerOptions(opts...),
+	)
+	planServiceRemovePersonTaskHandler := connect.NewUnaryHandler(
+		PlanServiceRemovePersonTaskProcedure,
+		svc.RemovePersonTask,
+		connect.WithSchema(planServiceMethods.ByName("RemovePersonTask")),
+		connect.WithHandlerOptions(opts...),
+	)
 	planServiceSetAvailabilityHandler := connect.NewUnaryHandler(
 		PlanServiceSetAvailabilityProcedure,
 		svc.SetAvailability,
@@ -2001,6 +2020,8 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 			planServiceListPlansHandler.ServeHTTP(w, r)
 		case PlanServiceCreatePlanProcedure:
 			planServiceCreatePlanHandler.ServeHTTP(w, r)
+		case PlanServiceDuplicatePlanProcedure:
+			planServiceDuplicatePlanHandler.ServeHTTP(w, r)
 		case PlanServiceGetPlanProcedure:
 			planServiceGetPlanHandler.ServeHTTP(w, r)
 		case PlanServiceRenamePlanProcedure:
@@ -2041,6 +2062,10 @@ func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption
 			planServiceSetFieldValueHandler.ServeHTTP(w, r)
 		case PlanServiceListAnswersProcedure:
 			planServiceListAnswersHandler.ServeHTTP(w, r)
+		case PlanServiceSetPersonTaskProcedure:
+			planServiceSetPersonTaskHandler.ServeHTTP(w, r)
+		case PlanServiceRemovePersonTaskProcedure:
+			planServiceRemovePersonTaskHandler.ServeHTTP(w, r)
 		case PlanServiceSetAvailabilityProcedure:
 			planServiceSetAvailabilityHandler.ServeHTTP(w, r)
 		case PlanServiceSetNoteProcedure:
@@ -2062,6 +2087,10 @@ func (UnimplementedPlanServiceHandler) ListPlans(context.Context, *connect.Reque
 
 func (UnimplementedPlanServiceHandler) CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.PlanService.CreatePlan is not implemented"))
+}
+
+func (UnimplementedPlanServiceHandler) DuplicatePlan(context.Context, *connect.Request[v1.DuplicatePlanRequest]) (*connect.Response[v1.DuplicatePlanResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.PlanService.DuplicatePlan is not implemented"))
 }
 
 func (UnimplementedPlanServiceHandler) GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
@@ -2142,6 +2171,14 @@ func (UnimplementedPlanServiceHandler) SetFieldValue(context.Context, *connect.R
 
 func (UnimplementedPlanServiceHandler) ListAnswers(context.Context, *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.PlanService.ListAnswers is not implemented"))
+}
+
+func (UnimplementedPlanServiceHandler) SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.PlanService.SetPersonTask is not implemented"))
+}
+
+func (UnimplementedPlanServiceHandler) RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("dutyplan.v1.PlanService.RemovePersonTask is not implemented"))
 }
 
 func (UnimplementedPlanServiceHandler) SetAvailability(context.Context, *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error) {

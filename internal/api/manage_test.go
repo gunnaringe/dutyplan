@@ -111,3 +111,37 @@ func TestDeletingAnOrganisationIsWrittenToTheServerLog(t *testing.T) {
 		}
 	}
 }
+
+// A new plan from another one, and a duplicate with its table, over the API; members only (an edit link may not, see
+// TestAnEditLinkToAPlanReachesThatPlanOnly).
+func TestAPlanIsMadeFromAnotherOrDuplicated(t *testing.T) {
+	e := newEnv(t)
+	org, plan := e.plannable("Org A") // a task, a person who takes it, an event with a place
+	var p store.Plan
+	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans", map[string]string{"name": "Spring 2027", "from": plan}).json(&p)
+	var people []store.Person
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+p.Slug+"/people", nil).json(&people)
+	var events []store.Event
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+p.Slug+"/events", nil).json(&events)
+	if len(people) != 1 || people[0].Name != "Aslaug" || len(events) != 0 {
+		t.Errorf("from autumn: %+v %+v", people, events)
+	}
+	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans", map[string]string{"name": "Summer 2027"}).json(&p)
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+p.Slug+"/people", nil).json(&people)
+	if len(people) != 0 {
+		t.Errorf("an empty plan: %+v", people)
+	}
+	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans/"+plan+"/duplicate", map[string]any{"name": "Autumn 2026 (copy)", "table": true}).json(&p)
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+p.Slug+"/events", nil).json(&events)
+	if p.Slug != "autumn-2026-copy" || len(events) != 1 {
+		t.Errorf("the duplicate: %+v %+v", p, events)
+	}
+	e.mustDo(201, "POST", "/api/orgs/"+org+"/plans/"+plan+"/duplicate", map[string]any{"name": "Autumn bare", "table": false}).json(&p)
+	e.mustDo(200, "GET", "/api/orgs/"+org+"/plans/"+p.Slug+"/events", nil).json(&events)
+	if len(events) != 0 {
+		t.Errorf("a duplicate without its table has dates: %+v", events)
+	}
+	if r := e.do("POST", "/api/orgs/"+org+"/plans", map[string]string{"name": "Winter", "from": "nope"}); r.code != 404 {
+		t.Errorf("from a plan that is none: %d", r.code)
+	}
+}

@@ -95,9 +95,10 @@ func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug string) error 
 			return Conflict("plan_busy", map[string]any{"name": name}, "plan %q has a run in progress", name)
 		}
 		// The runs have no cascade, so they go first; the events take their answers, manual cells, selections, places and info
-		// values with them (ON DELETE CASCADE), and then the info rows can go. A table added later that refers to a plan or an
-		// event without a cascade makes this fail, and the test that lists the tables with a plan_id says where to look.
-		for _, table := range []string{"plan_run", "event", "plan_field", "share_link"} {
+		// values with them (ON DELETE CASCADE), and then the info rows can go, and the plan's people and tasks (children
+		// before parents). A table added later that refers to a plan or an event without a cascade makes this fail, and the
+		// test that lists the tables with a plan_id says where to look.
+		for _, table := range []string{"plan_run", "event", "plan_field", "share_link", "task_combination", "person_task", "person", "person_section", "task", "task_section"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ? AND plan_id = ?`, oid, pid); err != nil {
 				return err
 			}
@@ -109,7 +110,8 @@ func (s *Store) DeletePlan(ctx context.Context, orgSlug, planSlug string) error 
 	})
 }
 
-// DeleteOrg removes an organisation that has no plans, with its people, tasks, sections and combinations. confirm must be
+// DeleteOrg removes an organisation that has no plans, with its members and links (and people, tasks, sections and
+// combinations from before plans had their own, migration 012). confirm must be
 // the organisation's slug. It returns the organisation as it was.
 func (s *Store) DeleteOrg(ctx context.Context, orgSlug, confirm string) (Org, error) {
 	var o Org

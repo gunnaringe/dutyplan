@@ -28,47 +28,56 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	}
 	r := rich{org: mustOrg(t, s, orgName)}
 	slug := r.org.Slug
+	var err error
+	r.plan, err = s.CreatePlan(ctx, slug, planName)
+	must(err)
 	for _, n := range []string{"Kari Test", "Ola Test"} {
-		p, err := s.CreatePerson(ctx, slug, n)
+		p, err := s.CreatePerson(ctx, slug, r.plan.Slug, n)
 		must(err)
 		r.people = append(r.people, p)
 	}
-	var err error
-	r.sound, err = s.CreateTask(ctx, slug, "Sound")
+	r.sound, err = s.CreateTask(ctx, slug, r.plan.Slug, "Sound")
 	must(err)
-	r.camera, err = s.CreateTask(ctx, slug, "Camera")
+	r.camera, err = s.CreateTask(ctx, slug, r.plan.Slug, "Camera")
 	must(err)
-	must(s.SetCombination(ctx, slug, r.sound.ID, r.camera.ID, "cannot"))
-	r.section, err = s.CreateSection(ctx, slug, "Guests")
+	must(s.SetCombination(ctx, slug, r.plan.Slug, r.sound.ID, r.camera.ID, "cannot"))
+	r.section, err = s.CreateSection(ctx, slug, r.plan.Slug, "Guests")
 	must(err)
-	must(s.MovePerson(ctx, slug, r.people[1].ID, r.section.ID, 0))
-	ts, err := s.CreateSectionOf(ctx, Tasks, slug, "Tech")
+	must(s.MovePerson(ctx, slug, r.plan.Slug, r.people[1].ID, r.section.ID, 0))
+	ts, err := s.CreateSectionOf(ctx, Tasks, slug, r.plan.Slug, "Tech")
 	must(err)
-	must(s.MoveTask(ctx, slug, r.camera.ID, &ts.ID, 0))
-	must(s.SetPersonTask(ctx, slug, r.people[0].ID, r.sound.ID, "good"))
+	must(s.MoveTask(ctx, slug, r.plan.Slug, r.camera.ID, &ts.ID, 0))
 
-	r.plan, err = s.CreatePlan(ctx, slug, planName)
-	must(err)
-	r.other, err = s.CreatePlan(ctx, slug, "Other plan")
+	must(s.SetPersonTask(ctx, slug, r.plan.Slug, r.people[0].ID, r.sound.ID, "good"))
+	// the other plan starts as a copy of the people and tasks, with ids of its own
+	r.other, err = s.CreatePlanFrom(ctx, slug, NewPlan{Name: "Other plan", From: r.plan.Slug})
 	must(err)
 	for i, p := range []Plan{r.plan, r.other} {
+		people, err := s.ListPeople(ctx, slug, p.Slug)
+		must(err)
+		tasks, err := s.ListTasks(ctx, slug, p.Slug)
+		must(err)
+		kari, ola, sound, camera := people[0].ID, people[1].ID, tasks[0].ID, tasks[1].ID
+		if i == 1 {
+			must(s.SetPersonTask(ctx, slug, p.Slug, kari, sound, "poor"))
+		}
 		var evs []Event
 		for _, d := range []string{"2026-08-09", "2026-08-16"} {
-			ev, err := addWithPlaces(ctx, s, slug, p.Slug, NewEvents{Date: d}, map[int64]int{r.sound.ID: 1, r.camera.ID: 1})
+			ev, err := addWithPlaces(ctx, s, slug, p.Slug, NewEvents{Date: d}, map[int64]int{sound: 1, camera: 1})
 			must(err)
 			evs = append(evs, ev[0])
 		}
-		must(s.SetAvailability(ctx, slug, p.Slug, r.people[0].ID, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
-		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[0].ID, TaskID: r.sound.ID, PersonID: r.people[1].ID})
+		must(s.SetAvailability(ctx, slug, p.Slug, kari, map[int64]string{evs[0].ID: "never", evs[1].ID: "poor"}))
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[0].ID, TaskID: sound, PersonID: ola})
 		must(err)
-		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: r.camera.ID, Label: "Guest", Fills: 1})
+		_, err = s.AddCell(ctx, slug, p.Slug, NewCell{EventID: evs[1].ID, TaskID: camera, Label: "Guest", Fills: 1})
 		must(err)
-		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, r.camera.ID, []int64{r.people[0].ID}))
-		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, r.sound.ID, 2))
+		must(s.SetPool(ctx, slug, p.Slug, evs[0].ID, camera, []int64{kari}))
+		must(s.SetEventPlaces(ctx, slug, p.Slug, evs[0].ID, sound, 2))
 		field, err := s.AddField(ctx, slug, p.Slug, "Theme")
 		must(err)
 		must(s.SetFieldValue(ctx, slug, p.Slug, evs[1].ID, field.ID, "Light"))
-		must(s.SetAnswerNote(ctx, slug, p.Slug, evs[1].ID, r.people[0].ID, "After the meeting"))
+		must(s.SetAnswerNote(ctx, slug, p.Slug, evs[1].ID, kari, "After the meeting"))
 		_, err = s.SetWeights(ctx, slug, p.Slug, map[string]any{"w_fair": 12.0})
 		must(err)
 		done, err := s.CreateRun(ctx, slug, p.Slug, 1, 5, "h", []byte("{}"), []byte("{}"))
@@ -153,7 +162,7 @@ func sameCounts(t *testing.T, what string, before, after map[string]int) {
 func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	s := open(t)
 	got := func(column string) string { return strings.Join(tablesWith(t, s, column), " ") }
-	if want := "answer_note event event_field event_task manual_cell person_event plan_field plan_run pool_member share_link"; got("plan_id") != want {
+	if want := "answer_note event event_field event_task manual_cell person person_event person_section person_task plan_field plan_run pool_member share_link task task_combination task_section"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
 	want := "answer_note event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination task_section"
@@ -188,7 +197,7 @@ func TestRenamingChangesTheNameAndKeepsTheAddress(t *testing.T) {
 		t.Errorf("renaming A changed B: %+v", got)
 	}
 	// the people stay the same
-	if people, err := s.ListPeople(ctx, a.org.Slug); err != nil || len(people) == 0 || people[0].ID != a.people[0].ID {
+	if people, err := s.ListPeople(ctx, a.org.Slug, a.plan.Slug); err != nil || len(people) == 0 || people[0].ID != a.people[0].ID {
 		t.Errorf("the people after the rename: %+v %v", people, err)
 	}
 
@@ -268,11 +277,11 @@ func TestDeletingAPlanRemovesAllOfItAndNothingElse(t *testing.T) {
 	sameCounts(t, "the same organisation's other plan", otherBefore, rowsWith(t, s, "plan_id", otherID))
 	sameCounts(t, "the other organisation's plan with the same address", planBBefore, rowsWith(t, s, "plan_id", planB))
 	sameCounts(t, "the other organisation", orgBBefore, rowsWith(t, s, "org_id", orgB))
-	// the organisation keeps its people, tasks and sections
+	// the plan's people, tasks, sections and combinations go with it; the other plan's own stay
 	after := rowsWith(t, s, "org_id", orgA)
-	for _, table := range []string{"person", "task", "task_combination", "person_section", "person_task"} {
-		if after[table] != orgABefore[table] {
-			t.Errorf("deleting a plan changed the organisation's %s: %d -> %d", table, orgABefore[table], after[table])
+	for _, table := range []string{"person", "task", "task_combination", "person_section", "task_section", "person_task"} {
+		if before[table] == 0 || after[table] != orgABefore[table]-before[table] {
+			t.Errorf("deleting a plan: the organisation's %s %d -> %d, the plan had %d", table, orgABefore[table], after[table], before[table])
 		}
 	}
 	noBrokenReferences(t, s)

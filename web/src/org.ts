@@ -1,7 +1,7 @@
 import { Account, call, fetched, get, Org, Plan, write } from './api';
 import { h, icon, locale, say, store } from './core';
 import { render } from './main';
-import { ME, deadLink, go, initials, link } from './shell';
+import { ME, deadLink, dropdown, go, initials, link } from './shell';
 import { closeBtn, field, foot, infoBtn, modal, setRefreshKey } from './ui';
 import { enc } from './util';
 
@@ -29,8 +29,8 @@ export async function pageHome() {
     ME && ME.login ? '' : h('p', { class: 'muted small' }, t('home.warning')));
 }
 
-// The organisation: its plans, and rename or delete. Tasks and people are added from a plan's table; they belong to the
-// organisation, so every plan has them.
+// The organisation: its plans. Each plan has its own people and tasks, added from its table; a new plan copies them from
+// another plan (or starts empty), and ⋯ on a plan's row duplicates it.
 export async function pageOrg(r, org) {
   if (new URLSearchParams(location.search).has('joined')) {  // just joined through an invitation (/s/<token>)
     history.replaceState({}, '', location.pathname);
@@ -39,24 +39,65 @@ export async function pageOrg(r, org) {
   if (org.plan) return go(`/o/${enc(r.org)}/p/${enc(org.plan)}`);  // a link to one plan: that plan is all there is
   const plans = await get(Plan.listPlans, { org: r.org }, 'plans');
 
+  if (copied && (copied.org !== r.org || !plans.some((p) => p.slug === copied!.slug))) copied = null;
+
+  // A new plan copies the people and tasks of another plan (the newest by default), or starts empty.
   function newPlanForm() {
     const name = h('input', { type: 'text', placeholder: t('org.new_plan_placeholder'), maxlength: '80', required: true, 'aria-label': t('org.new_plan_placeholder') });
-    return h('form', { class: 'row', onsubmit: async (e) => {
+    const from = plans.length ? h('select', { 'aria-label': t('org.copy_from') },
+      plans.map((p, i) => h('option', { value: p.slug, selected: i === 0 }, t('org.copy_from_plan', { name: p.name }))),
+      h('option', { value: '' }, t('org.start_empty'))) : null;
+    return h('form', { class: 'row new-plan', onsubmit: async (e) => {
       e.preventDefault();
       let p;
-      if (await write(async () => { p = await call(Plan.createPlan, { org: r.org, name: name.value }, 'plan'); })) go(`/o/${enc(r.org)}/p/${enc(p.slug)}`);
-    } }, name, h('button', { type: 'submit' }, t('common.create')));
+      if (await write(async () => { p = await call(Plan.createPlan, { org: r.org, name: name.value, from: from ? from.value : '' }, 'plan'); })) go(`/o/${enc(r.org)}/p/${enc(p.slug)}`);
+    } }, name, from || '', from ? infoBtn(t('org.copy_from'), [t('org.copy_from_info')]) : '', h('button', { type: 'submit' }, t('common.create')));
   }
+
+  // ⋯ Duplicate: a copy of the plan under a new name, with or without its filled-in table. The copy is not opened: it is
+  // marked in the list, with a button that deletes it again.
+  function duplicate(p) {
+    const name = h('input', { type: 'text', class: 'wide', value: t('org.copy_name', { name: p.name }), maxlength: '80', required: true, 'aria-label': t('org.duplicate_name') });
+    const table = h('input', { type: 'checkbox' });
+    const dlg = modal(t('org.duplicate_title', { name: p.name }), { info: [t('org.duplicate_info'), t('org.duplicate_info_table')] },
+      h('form', { class: 'stack', onsubmit: async (e) => {
+        e.preventDefault();
+        let made;
+        if (await write(async () => { made = await call(Plan.duplicatePlan, { org: r.org, plan: p.slug, name: name.value, table: table.checked }, 'plan'); })) {
+          copied = { org: r.org, slug: made.slug };
+          dlg.close();
+          await render();
+          say(t('org.duplicated', { name: made.name }));
+        }
+      } }, field(t('org.duplicate_name'), name), h('label', { class: 'check' }, table, ' ', t('org.keep_table')),
+      foot('', h('button', { type: 'button', class: 'ghost', onclick: () => dlg.close() }, t('common.cancel')), h('button', { type: 'submit', class: 'solid' }, t('org.duplicate')))));
+    name.focus();
+    name.select();
+  }
+  async function undoCopy(p) {
+    if (await write(() => call(Plan.deletePlan, { org: r.org, plan: p.slug }))) { copied = null; await render(); say(t('org.copy_deleted', { name: p.name })); }
+  }
+
+  const editor = org.level !== 'view';
+  const row = (p) => {
+    const isNew = copied && copied.slug === p.slug;
+    return h('div', { class: 'plan-item' + (isNew ? ' new' : '') }, h('span', { class: 'nm' }, p.name),
+      isNew ? h('button', { type: 'button', class: 'ghost undo-copy', onclick: () => undoCopy(p) }, t('org.undo_copy')) : '',
+      editor ? dropdown('plan-menu', icon('more'), t('org.plan_menu', { name: p.name }),
+        h('button', { type: 'button', class: 'drop-item', onclick: (e) => { e.currentTarget.closest('details').open = false; duplicate(p); } }, h('span', {}, t('org.duplicate')))) : '',
+      link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button', onclick: () => { copied = null; } }));
+  };
   const root = h('div', { class: 'org-page' },
     h('h1', {}, org.name),
     h('h2', {}, t('org.plans')),
     h('div', { class: 'plans' },
-      plans.length ? plans.map((p) => h('div', { class: 'plan-item' }, h('span', { class: 'nm' }, p.name), link(`/o/${enc(r.org)}/p/${enc(p.slug)}`, t('org.open'), { class: 'button' })))
-        : h('p', { class: 'muted' }, t('org.no_plans')),
-      org.level === 'view' ? '' : newPlanForm()),
+      plans.length ? plans.map(row) : h('p', { class: 'muted' }, t('org.no_plans')),
+      editor ? newPlanForm() : ''),
     viewOnly(org));
   return root;
 }
+// the plan just duplicated, marked in the list until it is opened, deleted or the organisation is left
+let copied: { org: string; slug: string } | null = null;
 
 // The organisation's settings (admins): rename (the address stays) or delete. Deleting needs the organisation to have no
 // plans, and its name typed in.

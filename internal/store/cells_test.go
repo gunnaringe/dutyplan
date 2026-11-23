@@ -26,20 +26,20 @@ func cellWorld(t *testing.T, s *Store, orgName string) cellEnv {
 			t.Fatal(err)
 		}
 	}
-	e.sound, err = s.CreateTask(ctx, e.org.Slug, "Sound")
+	e.plan1, err = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
 	must(err)
-	e.camera, err = s.CreateTask(ctx, e.org.Slug, "Camera")
+	e.sound, err = s.CreateTask(ctx, e.org.Slug, e.plan1.Slug, "Sound")
 	must(err)
-	e.sang, err = unplannedTask(ctx, s, e.org.Slug, "Singing")
+	e.camera, err = s.CreateTask(ctx, e.org.Slug, e.plan1.Slug, "Camera")
+	must(err)
+	e.sang, err = unplannedTask(ctx, s, e.org.Slug, e.plan1.Slug, "Singing")
 	must(err)
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
-		p, err := s.CreatePerson(ctx, e.org.Slug, n)
+		p, err := s.CreatePerson(ctx, e.org.Slug, e.plan1.Slug, n)
 		must(err)
 		e.people[n] = p
 	}
-	e.plan1, err = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
-	must(err)
-	e.plan2, err = s.CreatePlan(ctx, e.org.Slug, "Spring 2027")
+	e.plan2, err = s.CreatePlanFrom(ctx, e.org.Slug, NewPlan{Name: "Spring 2027", From: e.plan1.Slug}) // copies, ids of its own
 	must(err)
 	for _, c := range []struct {
 		plan Plan
@@ -224,16 +224,16 @@ func TestWhatIsUsedByCellsAndPoolsCannotBeDeleted(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
 	made, _ := s.AddCell(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventID: e.ev[0].ID, TaskID: e.sang.ID, Label: "Choir"})
-	if err := s.DeleteTask(ctx, e.org.Slug, e.sang.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.plan1.Slug, e.sang.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a task in a manual cell: %v", err)
 	}
 	s.DeleteCell(ctx, e.org.Slug, e.plan1.Slug, made.ID)
 	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ev[0].ID, e.sound.ID, []int64{e.people["Aslaug"].ID})
-	if err := s.DeleteTask(ctx, e.org.Slug, e.sound.ID); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.plan1.Slug, e.sound.ID); !errors.Is(err, ErrConflict) {
 		t.Errorf("a task in a selection: %v", err)
 	}
 	s.SetPool(ctx, e.org.Slug, e.plan1.Slug, e.ev[0].ID, e.sound.ID, nil)
-	if err := s.DeleteTask(ctx, e.org.Slug, e.sound.ID); err != nil {
+	if err := s.DeleteTask(ctx, e.org.Slug, e.plan1.Slug, e.sound.ID); err != nil {
 		t.Errorf("once nothing names it: %v", err)
 	}
 }
@@ -272,11 +272,17 @@ func TestPlanningDataCarriesCellsAndPoolsOfItsPlanOnly(t *testing.T) {
 	s := open(t)
 	e := cellWorld(t, s, "Club")
 	s.AddCell(ctx, e.org.Slug, e.plan1.Slug, NewCell{EventID: e.ev[0].ID, TaskID: e.sound.ID, PersonID: e.people["Aslaug"].ID})
-	s.AddCell(ctx, e.org.Slug, e.plan2.Slug, NewCell{EventID: e.ev[2].ID, TaskID: e.sound.ID, PersonID: e.people["Birger"].ID})
-	s.SetPool(ctx, e.org.Slug, e.plan2.Slug, e.ev[2].ID, e.sound.ID, []int64{e.people["Birger"].ID})
+	people, _ := s.ListPeople(ctx, e.org.Slug, e.plan2.Slug)
+	tasks, _ := s.ListTasks(ctx, e.org.Slug, e.plan2.Slug)
+	birger, sound := people[1].ID, tasks[0].ID // plan2's own
+	if _, err := s.AddCell(ctx, e.org.Slug, e.plan2.Slug, NewCell{EventID: e.ev[2].ID, TaskID: e.sound.ID, PersonID: e.people["Birger"].ID}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("plan1's people and tasks are not plan2's: %v", err)
+	}
+	s.AddCell(ctx, e.org.Slug, e.plan2.Slug, NewCell{EventID: e.ev[2].ID, TaskID: sound, PersonID: birger})
+	s.SetPool(ctx, e.org.Slug, e.plan2.Slug, e.ev[2].ID, sound, []int64{birger})
 	d1, err := s.GetPlanningData(ctx, e.org.Slug, e.plan1.Slug)
 	d2, _ := s.GetPlanningData(ctx, e.org.Slug, e.plan2.Slug)
-	if err != nil || len(d1.Cells) != 1 || len(d1.Pools) != 0 || len(d2.Cells) != 1 || len(d2.Pools) != 1 || *d2.Cells[0].PersonID != e.people["Birger"].ID {
+	if err != nil || len(d1.Cells) != 1 || len(d1.Pools) != 0 || len(d2.Cells) != 1 || len(d2.Pools) != 1 || *d2.Cells[0].PersonID != birger || d2.People[1].ID != birger {
 		t.Fatalf("%+v %+v %v", d1, d2, err)
 	}
 }

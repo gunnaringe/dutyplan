@@ -74,8 +74,13 @@ func TestANoteStaysInItsOrganisationAndPlan(t *testing.T) {
 	if got := notesText(e, "org-b"); got != "" {
 		t.Fatalf("org B sees notes: %q", got)
 	}
-	// a note in another plan of the same organisation stays there
-	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/plans/spring/events/%d/notes/%d", evs[0].ID, a.person), map[string]string{"note": "Spring"})
+	// a note in another plan of the same organisation stays there, on that plan's own person
+	if r := e.do("PUT", fmt.Sprintf("/api/orgs/org-a/plans/spring/events/%d/notes/%d", evs[0].ID, a.person), map[string]string{"note": "Spring"}); r.code != 404 {
+		t.Errorf("autumn's person in spring: %d", r.code)
+	}
+	var kari store.Person
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/spring/people", map[string]string{"name": "Kari Test"}).json(&kari)
+	e.mustDo(204, "PUT", fmt.Sprintf("/api/orgs/org-a/plans/spring/events/%d/notes/%d", evs[0].ID, kari.ID), map[string]string{"note": "Spring"})
 	if got := notesText(e, "org-a"); strings.Contains(got, "Spring") {
 		t.Fatalf("autumn shows spring's note: %q", got)
 	}

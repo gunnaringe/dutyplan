@@ -8,15 +8,15 @@ import (
 
 func TestPlanningDataIsCompleteAndScoped(t *testing.T) {
 	a := newPrefEnv(t)
-	a.s.SetPersonTask(ctx, a.org.Slug, a.person.ID, a.sound.ID, "good")
+	a.s.SetPersonTask(ctx, a.org.Slug, a.plan.Slug, a.person.ID, a.sound.ID, "good")
 	a.s.SetAvailability(ctx, a.org.Slug, a.plan.Slug, a.person.ID, map[int64]string{a.ev[0].ID: "never"})
-	a.s.SetCombination(ctx, a.org.Slug, a.sound.ID, a.camera.ID, "practical")
+	a.s.SetCombination(ctx, a.org.Slug, a.plan.Slug, a.sound.ID, a.camera.ID, "practical")
 
 	b := mustOrg(t, a.s, "Org B")
 	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026") // same slug as A's plan
-	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Coffee")
-	a.s.SetPersonTask(ctx, b.Slug, personB.ID, taskB.ID, "good")
+	personB, _ := a.s.CreatePerson(ctx, b.Slug, planB.Slug, "Eva Test")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, planB.Slug, "Coffee")
+	a.s.SetPersonTask(ctx, b.Slug, planB.Slug, personB.ID, taskB.ID, "good")
 
 	d, err := a.s.GetPlanningData(ctx, a.org.Slug, a.plan.Slug)
 	if err != nil {
