@@ -45,58 +45,59 @@ const CHOICES = {
   });
 
   // ---- the data, through the API like any client ----
-  const api = async (method, p, body) => {
-    const r = await fetch(base + '/api' + p, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  // a Connect call: POST /dutyplan.v1.<Service>/<Method> with the organisation and plan in the body
+  const api = async (proc, body = {}) => {
+    const r = await fetch(`${base}/dutyplan.v1.${proc}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org: ORG.slug, ...body }) });
     const text = await r.text();
-    if (!r.ok) throw new Error(`${method} ${p}: ${r.status} ${text}`);
-    return text ? JSON.parse(text) : null;
+    if (!r.ok) throw new Error(`${proc}: ${r.status} ${text}`);
+    return JSON.parse(text);
   };
-  const o = `/orgs/${ORG.slug}`, p = `${o}/plans/${PLAN.slug}`;
+  const plan = PLAN.slug;
   let browser, browserNb;
   try {
-    await api('POST', '/orgs', { name: ORG.name });
-    for (const name of TASKS) await api('POST', `${o}/tasks`, { name });
-    const task = Object.fromEntries((await api('GET', `${o}/tasks`)).map((t) => [t.name, t.id]));
+    await api('AccountService/CreateOrg', { org: undefined, name: ORG.name });
+    for (const name of TASKS) await api('SetupService/CreateTask', { name });
+    const task = Object.fromEntries((await api('SetupService/ListTasks')).tasks.map((t) => [t.name, t.id]));
     for (const [a, b, level] of [['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
-      await api('PUT', `${o}/combinations`, { a: task[a], b: task[b], level });
+      await api('SetupService/SetCombination', { a: task[a], b: task[b], level });
     }
-    for (const name of PEOPLE) await api('POST', `${o}/people`, { name });
-    const person = Object.fromEntries((await api('GET', `${o}/people`)).map((x) => [x.name, x.id]));
+    for (const name of PEOPLE) await api('SetupService/CreatePerson', { name });
+    const person = Object.fromEntries((await api('SetupService/ListPeople')).people.map((x) => [x.name, x.id]));
     for (const [name, tasks] of Object.entries(CHOICES)) {
-      for (const [t, level] of Object.entries(tasks)) await api('PUT', `${o}/people/${person[name]}/tasks/${task[t]}`, { level });
+      for (const [t, level] of Object.entries(tasks)) await api('SetupService/SetPersonTask', { person: person[name], task: task[t], level });
     }
     // a section: people placed under their own heading in Availability (only placement)
-    const guests = await api('POST', `${o}/sections`, { name: 'Guests' });
-    for (const name of ['Njål Example', 'Sunniva Test']) await api('PUT', `${o}/people/${person[name]}/position`, { section: guests.id, position: 99 });
-    await api('POST', `${o}/plans`, { name: 'Spring 2016' });
+    const guests = (await api('SetupService/CreateSection', { name: 'Guests' })).section;
+    for (const name of ['Njål Example', 'Sunniva Test']) await api('SetupService/MovePerson', { id: person[name], section: guests.id, position: 99 });
+    await api('PlanService/CreatePlan', { name: 'Spring 2016' });
 
     // the plan: concerts every Saturday and rehearsals every Wednesday, each event with its own places
-    await api('POST', `${o}/plans`, { name: PLAN.name });
+    await api('PlanService/CreatePlan', { name: PLAN.name });
     // (as on the page: one event, its places typed in, then copied every week)
     const weekly = async (date, nextWeek, until, times, places) => {
-      const [first] = await api('POST', `${p}/events`, { date, ...times });
-      for (const [t, slots] of Object.entries(places)) await api('PUT', `${p}/events/${first.id}/places/${task[t]}`, { slots });
-      await api('POST', `${p}/events/${first.id}/copy`, { dates: [nextWeek], until, times: true, places: true });
+      const [first] = (await api('PlanService/AddEvents', { plan, date, ...times })).events;
+      for (const [t, slots] of Object.entries(places)) await api('PlanService/SetPlaces', { plan, event: first.id, task: task[t], slots });
+      await api('PlanService/CopyEvent', { plan, id: first.id, dates: [nextWeek], until, times: true, places: true });
     };
     await weekly('2015-12-05', '2015-12-12', '2015-12-19', { start_time: '19:00', end_time: '21:30' }, { Sound: 1, Video: 1, Doors: 2, Coffee: 1 });
     await weekly('2015-12-09', '2015-12-16', '2015-12-16', { start_time: '18:00', end_time: '20:00' }, { Sound: 1, Coffee: 1 });
-    const events = await api('GET', `${p}/events`);
+    const events = (await api('PlanService/ListEvents', { plan })).events;
     const on = (d) => events.find((e) => e.date === d);
     const concerts = ['2015-12-05', '2015-12-12', '2015-12-19'].map(on), rehearsals = ['2015-12-09', '2015-12-16'].map(on);
     const gala = concerts[2];
-    await api('PATCH', `${p}/events/${gala.id}`, { start_time: '18:30', end_time: '22:00' });
-    await api('PUT', `${p}/events/${gala.id}/places/${task.Doors}`, { slots: 3 });
+    await api('PlanService/UpdateEvent', { plan, id: gala.id, start_time: '18:30', end_time: '22:00' });
+    await api('PlanService/SetPlaces', { plan, event: gala.id, task: task.Doors, slots: 3 });
 
     // the plan's own details rows: text for people, which the planner never reads
-    const note = await api('POST', `${p}/fields`, { name: 'Note' });
-    const theme = await api('POST', `${p}/fields`, { name: 'Theme' });
+    const note = (await api('PlanService/AddField', { plan, name: 'Note' })).field;
+    const theme = (await api('PlanService/AddField', { plan, name: 'Theme' })).field;
     for (const [ev, value] of [[concerts[0], 'Concert'], [rehearsals[0], 'Rehearsal'], [concerts[1], 'Concert'], [rehearsals[1], 'Rehearsal'], [gala, 'Christmas gala']]) {
-      await api('PUT', `${p}/events/${ev.id}/fields/${note.id}`, { value });
+      await api('PlanService/SetFieldValue', { plan, event: ev.id, field: note.id, value });
     }
-    for (const [i, value] of [[0, 'Brass night'], [1, 'Strings'], [2, 'Christmas']]) await api('PUT', `${p}/events/${concerts[i].id}/fields/${theme.id}`, { value });
+    for (const [i, value] of [[0, 'Brass night'], [1, 'Strings'], [2, 'Christmas']]) await api('PlanService/SetFieldValue', { plan, event: concerts[i].id, field: theme.id, value });
 
     // answers: when people can, would rather not, or cannot (event id -> good | poor | never)
-    const answer = (who, spec) => api('PUT', `${p}/people/${person[who]}/availability`, { levels: Object.fromEntries(spec.map(([ev, l]) => [ev.id, l])) });
+    const answer = (who, spec) => api('PlanService/SetAvailability', { plan, person: person[who], levels: Object.fromEntries(spec.map(([ev, l]) => [ev.id, l])) });
     await answer('Kari Test', [[concerts[0], 'good'], [rehearsals[0], 'never'], [concerts[1], 'never'], [gala, 'poor']]);
     await answer('Ola Sample', [[concerts[0], 'good'], [rehearsals[0], 'never'], [concerts[1], 'never'], [gala, 'good']]);
     await answer('Mona Example', [[concerts[0], 'good'], [concerts[1], 'good'], [gala, 'good']]);
@@ -108,14 +109,14 @@ const CHOICES = {
 
     // set by hand: a person and a text at the doors; and a selection: only these two can run the video at the gala (and neither
     // can come, so the place stays empty and the draft says why)
-    await api('POST', `${p}/cells`, { event: concerts[0].id, task: task.Doors, person: person['Ola Sample'] });
-    await api('POST', `${p}/cells`, { event: gala.id, task: task.Doors, label: 'Stewards', fills: 2 });
-    await api('PUT', `${p}/pools`, { event: gala.id, task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']] });
+    await api('DraftService/AddCell', { plan, event: concerts[0].id, task: task.Doors, person: person['Ola Sample'] });
+    await api('DraftService/AddCell', { plan, event: gala.id, task: task.Doors, label: 'Stewards', fills: 2 });
+    await api('DraftService/SetPool', { plan, event: gala.id, task: task.Video, people: [person['Pia Demo'], person['Sunniva Test']] });
 
     const draft = async () => {
-      const started = await api('POST', `${p}/runs`, { time_limit: 10 });
+      const started = await api('DraftService/StartRun', { plan, time_limit: 10 });
       for (let i = 0; i < 120; i++) {
-        const run = (await api('GET', `${p}/runs/${started.id}`)).run;
+        const run = (await api('DraftService/GetRun', { plan, id: started.id })).run;
         if (run.status === 'done') return run;
         if (run.status === 'failed') throw new Error('the planner failed: ' + JSON.stringify(run));
         await new Promise((r) => setTimeout(r, 500));
@@ -124,9 +125,9 @@ const CHOICES = {
     };
     // a first draft; then one of its names is locked and the draft is tried again, and the newer one is pinned as the current plan
     await draft();
-    await api('POST', `${p}/cells`, { event: concerts[0].id, task: task.Sound, person: person['Kari Test'], locked: true });
+    await api('DraftService/AddCell', { plan, event: concerts[0].id, task: task.Sound, person: person['Kari Test'], locked: true });
     const second = await draft();
-    await api('PUT', `${p}/runs/${second.id}/pin`);
+    await api('DraftService/PinRun', { plan, id: second.id });
 
     // The server stamps what it writes with the real time. The pictures should not change with the day they are made, so the
     // stamps in the temporary database are set to a fixed day (the page shows what is stored, in UTC below).
@@ -263,7 +264,7 @@ const CHOICES = {
     // «My answers», what an answer link opens (this server has no login: the organisation is made to say level answer)
     step = '18-my-answers';
     const answering = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
-    await answering.route(`**/api/orgs/${ORG.slug}`, async (route) => { const res = await route.fetch(); route.fulfill({ json: { ...(await res.json()), role: '', level: 'answer', plan: PLAN.slug } }); });
+    await answering.route('**/dutyplan.v1.OrgService/GetOrg', async (route) => { const res = await route.fetch(); route.fulfill({ json: { ...(await res.json()), role: '', level: 'answer', plan: PLAN.slug } }); });
     await go(answering, planPath, '.me-page');
     await answering.click('button.me-pick:has-text("Kari Test")');
     await answering.waitForSelector('.me-list');

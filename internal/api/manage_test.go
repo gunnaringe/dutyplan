@@ -95,7 +95,7 @@ func TestRenamingAndDeletingOverHTTP(t *testing.T) {
 func TestDeletingAnOrganisationIsWrittenToTheServerLog(t *testing.T) {
 	var logged bytes.Buffer
 	st := newEnv(t).st // a store; the handler below has a log we can read
-	h := New(st, planner.New(st, nil, 1, slog.Default()), nil, slog.New(slog.NewTextHandler(&logged, nil)))
+	h := legacy(New(st, planner.New(st, nil, 1, slog.Default()), nil, slog.New(slog.NewTextHandler(&logged, nil))))
 	create := httptest.NewRequest("POST", "/api/orgs", bytes.NewReader([]byte(`{"name":"Gone Club"}`)))
 	create.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(httptest.NewRecorder(), create)

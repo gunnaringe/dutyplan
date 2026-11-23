@@ -3,14 +3,14 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
 
-// The page keeps one stream open per organisation (GET /api/orgs/{org}/stream, Server-Sent Events). After every write that
-// went through, and when a planning run ends, the stream says what changed: the method and path of the write (a run's end is
-// «RUN» on the plan's runs). The page fetches again only what that write can have changed, and redraws without a reload. The
+// The page keeps one stream open per organisation (GET /api/orgs/{org}/stream, Server-Sent Events; not Connect, which a
+// browser's EventSource cannot read). After every write that went through, and when a planning run ends, the stream says
+// what changed: the procedure of the write (its last part, «SetPlaces») and its plan; a run's end is «RunFinished», someone
+// joining «Joined». The page fetches again only what that write can have changed, and redraws without a reload. The
 // message also carries the id of the browser tab that made the change (from the X-Dutyplan-Client header), so that tab,
 // which has already redrawn, can skip it. No data goes over the stream.
 
@@ -23,11 +23,11 @@ var pingEvery = 25 * time.Second
 // maxStreams caps the open streams of the whole server, so open connections cannot use up its file handles.
 const maxStreams = 1000
 
-// change is one message. An empty Path means «anything may have changed» (messages that were merged).
+// change is one message. An empty Proc means «anything may have changed» (messages that were merged).
 type change struct {
 	Origin string `json:"origin,omitempty"`
-	Method string `json:"method,omitempty"`
-	Path   string `json:"path,omitempty"`
+	Proc   string `json:"proc,omitempty"`
+	Plan   string `json:"plan,omitempty"` // the plan it was about, "" for the organisation's own things
 }
 
 type hub struct {
@@ -82,7 +82,7 @@ func (h *hub) publish(org string, c change) {
 			select {
 			case old := <-ch:
 				if old != c {
-					m.Method, m.Path = "", ""
+					m.Proc, m.Plan = "", ""
 				}
 				if old.Origin != c.Origin {
 					m.Origin = ""
@@ -104,55 +104,18 @@ func (h *hub) close() {
 	}
 }
 
-// orgOf is the organisation a request is about, or "" (the list of organisations, creating one, the frontend).
-func orgOf(path string) string {
-	rest, ok := strings.CutPrefix(path, "/api/orgs/")
-	if !ok {
-		return ""
-	}
-	org, _, _ := strings.Cut(rest, "/")
-	return org
-}
-
-type statusWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *statusWriter) WriteHeader(code int) {
-	if w.status == 0 {
-		w.status = code
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *statusWriter) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	return w.ResponseWriter.Write(b)
-}
-
-// notifying publishes a change on the organisation after every write to it that went through.
-func (s *server) notifying(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		org := orgOf(r.URL.Path)
-		if org == "" || r.Method == http.MethodGet || r.Method == http.MethodHead {
-			next.ServeHTTP(w, r)
-			return
-		}
-		sw := &statusWriter{ResponseWriter: w}
-		next.ServeHTTP(sw, r)
-		if sw.status != 0 && sw.status < 400 {
-			s.hub.publish(org, change{Origin: r.Header.Get(clientHeader), Method: r.Method, Path: strings.TrimPrefix(r.URL.Path, "/api")})
-		}
-	})
-}
-
 func (s *server) stream(w http.ResponseWriter, r *http.Request) {
 	org := r.PathValue("org")
+	g := grant{}
+	if s.auth != nil { // members, and links to a plan of it (the people and tasks a plan's page shows are the organisation's)
+		var err error
+		if g, err = s.decide(r.Context(), read(scopeOrg), org, "", 0); err != nil {
+			writeConnectErr(w, err)
+			return
+		}
+	}
 	if _, err := s.st.GetOrg(r.Context(), org); err != nil {
-		writeErr(w, s.log, err)
+		writeConnectErr(w, fail(s.log, err))
 		return
 	}
 	ch, cancel, ok := s.hub.subscribe(org)
@@ -186,7 +149,7 @@ func (s *server) stream(w http.ResponseWriter, r *http.Request) {
 		case <-s.hub.done:
 			return
 		case c := <-ch:
-			if !grantFrom(r).sees(org, c) {
+			if !g.sees(c) {
 				continue
 			}
 			b, _ := json.Marshal(c)

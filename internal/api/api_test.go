@@ -20,10 +20,11 @@ import (
 )
 
 type env struct {
-	t  *testing.T
-	h  http.Handler
-	st *store.Store
-	pl *planner.Service
+	t   *testing.T
+	h   http.Handler // the app behind legacy() (legacy_test.go)
+	app *Handler
+	st  *store.Store
+	pl  *planner.Service
 }
 
 func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
@@ -39,7 +40,8 @@ func newEnvWith(t *testing.T, solver planner.Solver) *env {
 	static := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html>INDEX <link href="/style.css"><script src="/i18n.js"></script><script src="/app.js"></script>`)}, "i18n.js": {Data: []byte("//i18n")}, "app.js": {Data: []byte("//js")}, "style.css": {Data: []byte("/*css*/")}, "demo-en.mp4": {Data: []byte("0123456789")}}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	pl := planner.New(st, solver, 1, log)
-	return &env{t: t, h: New(st, pl, static, log), st: st, pl: pl}
+	app := New(st, pl, static, log)
+	return &env{t: t, h: legacy(app), app: app, st: st, pl: pl}
 }
 
 type reply struct {
@@ -119,6 +121,14 @@ func TestWritesNeedJSONAndKnownFields(t *testing.T) {
 	if w.Code != 415 {
 		t.Errorf("form post must be refused (cross-site writes), got %d", w.Code)
 	}
+	// Connect would also take binary protobuf; the API is JSON only (an empty body is a valid empty message).
+	req = httptest.NewRequest("POST", "/dutyplan.v1.AccountService/CreateOrg", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/proto")
+	w = httptest.NewRecorder()
+	e.app.ServeHTTP(w, req)
+	if w.Code != 415 {
+		t.Errorf("binary protobuf must be refused, got %d %s", w.Code, w.Body)
+	}
 	if r := e.do("POST", "/api/orgs", map[string]string{"name": "X Org", "title": "oops"}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("unknown field next to a valid one must be refused: %d %s", r.code, r.body)
 	}
@@ -156,12 +166,15 @@ func TestCrossSiteWritesAreRefused(t *testing.T) {
 			t.Errorf("%v: a cross-site delete must be refused, got %d", h, w.Code)
 		}
 	}
-	same := httptest.NewRequest("GET", "/api/orgs", nil)
-	same.Header.Set("Sec-Fetch-Site", "cross-site")
-	w := httptest.NewRecorder()
-	e.h.ServeHTTP(w, same)
-	if w.Code != 200 {
-		t.Errorf("reads stay open: %d", w.Code)
+	// Every call of the Connect API is a POST, so a cross-site read is refused too; the page's own reads are same-origin.
+	for site, want := range map[string]int{"cross-site": 403, "same-origin": 200} {
+		read := httptest.NewRequest("GET", "/api/orgs", nil)
+		read.Header.Set("Sec-Fetch-Site", site)
+		w := httptest.NewRecorder()
+		e.h.ServeHTTP(w, read)
+		if w.Code != want {
+			t.Errorf("a %s read: %d, want %d", site, w.Code, want)
+		}
 	}
 	e.mustDo(204, "DELETE", "/api/orgs/org-a?confirm=org-a", nil)
 }

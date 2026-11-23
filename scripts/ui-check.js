@@ -9,6 +9,8 @@ const chromeDir = () => {
   return path.join(root, d, 'chrome-linux64', 'chrome');
 };
 const { spawn } = require('child_process');
+// A read of the API (Connect: every call is a POST to /dutyplan.v1.<Service>/<Method>): its method, else null.
+const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith('/dutyplan.v1.') && /\/(List|Get)[A-Z]/.test(p) ? p.split('/').pop() : null; };
 
 (async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dp-ui-'));
@@ -451,7 +453,7 @@ const { spawn } = require('child_process');
     // An answer is shown at once and only sent: nothing is fetched again, so nothing flickers.
     {
       const gets = [];
-      const seen = (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) gets.push(new URL(r.url()).pathname); };
+      const seen = (r) => { const x = readOf(r); if (x) gets.push(x); };
       page.on('request', seen);
       await answer('Ola Sample', ev[0]).click();
       ok((await answer('Ola Sample', ev[0]).getAttribute('data-level')) === 'good', 'the answer shows at once');
@@ -481,7 +483,7 @@ const { spawn } = require('child_process');
     // A change in a dialog fetches again only what it can have changed: a person's task → their answers and the drafts.
     {
       const gets = [];
-      const seen = (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) gets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); };
+      const seen = (r) => { const x = readOf(r); if (x) gets.push(x); };
       await page.click('button[aria-label="Open Kari Test"]');
       const btn = () => dialog.locator('button.cyc[aria-label^="Video for Kari Test:"]');
       const was = await btn().getAttribute('data-level');
@@ -489,14 +491,14 @@ const { spawn } = require('child_process');
       page.on('request', seen);
       await reopens(() => btn().click(), 'the person dialog is drawn again');
       page.off('request', seen);
-      ok(gets.length > 0 && gets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'a task level fetches only the answers and the drafts again: ' + gets.join(', '));
+      ok(gets.length > 0 && gets.every((x) => ['ListAnswers', 'ListRuns', 'GetRun'].includes(x)), 'a task level fetches only the answers and the drafts again: ' + gets.join(', '));
       while ((await btn().getAttribute('data-level')) !== was) await reopens(() => btn().click(), 'and back');
       await closeDialog();
     }
     // Signed out (the sign-in in front answers with a redirect to its own site): a bar with «Sign in again», never «Failed to fetch»
     {
       const signedOut = (route) => route.fulfill({ status: 307, headers: { Location: 'https://auth.example.invalid/login' } });
-      await page.route('**/api/**', signedOut);
+      await page.route('**/dutyplan.v1.**', signedOut);
       const cell = answer('Ola Sample', ev[1]);
       const was = await cell.getAttribute('data-level');
       await cell.click();
@@ -507,12 +509,12 @@ const { spawn } = require('child_process');
       const body = await page.innerText('body');
       ok(!/failed to fetch|\[object/i.test(body), 'no «Failed to fetch» or «[object» on the page');
       // in a dialog, which covers the bar, the dialog says it too
-      await page.unroute('**/api/**', signedOut);
+      await page.unroute('**/dutyplan.v1.**', signedOut);
       await page.click('button[aria-label="Open Kari Test"]');
-      await page.route('**/api/**', signedOut);
+      await page.route('**/dutyplan.v1.**', signedOut);
       await dialog.locator('button.cyc').first().click();
       await until(page, () => (document.querySelector('dialog[open] [data-msg]') || {}).textContent.includes('Sign in again'), null, 'the dialog offers to sign in again');
-      await page.unroute('**/api/**', signedOut);
+      await page.unroute('**/dutyplan.v1.**', signedOut);
       await closeDialog();
       await page.click('#conn button');  // a reload: through the sign-in and back
       await page.waitForSelector('button.ans');
@@ -522,12 +524,12 @@ const { spawn } = require('child_process');
     // The server out of reach: a bar with «Try again», and the page stays as it was
     {
       const down = (route) => route.abort('connectionrefused');
-      await page.route('**/api/**', down);
+      await page.route('**/dutyplan.v1.**', down);
       await answer('Ola Sample', ev[1]).click();
       await page.waitForSelector('#conn.offline');
       ok((await page.innerText('#conn')).includes('Try again'), 'the bar offers to try again');
       ok(await page.locator('button.ans').count() > 0, 'the table is still there');
-      await page.unroute('**/api/**', down);
+      await page.unroute('**/dutyplan.v1.**', down);
       await page.click('#conn button');
       await until(page, () => !document.querySelector('#conn'), null, 'back again, the bar is gone');
       // the browser logs the refused request it was made to make; that is the test, not a fault of the page
@@ -552,11 +554,11 @@ const { spawn } = require('child_process');
       const before = await grid.evaluate((g) => g.scrollLeft);
       ok(before > 0, 'the table scrolls sideways in the test');
       const otherGets = [];
-      other.on('request', (r) => { if (r.method() === 'GET' && new URL(r.url()).pathname.startsWith('/api/')) otherGets.push(new URL(r.url()).pathname.split('/').slice(-1)[0]); });
+      other.on('request', (r) => { const x = readOf(r); if (x) otherGets.push(x); });
       await answer('Jon Demo', ev[2]).click();
       await until(other, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Jon Demo, ' + ev[2], 'the other tab shows the answer by itself');
       ok(await other.evaluate(() => window.notReloaded === true), 'without a reload');
-      ok(otherGets.every((x) => ['answers', 'runs'].includes(x) || /^\d+$/.test(x)), 'the other tab fetches only the answers and the drafts: ' + otherGets.join(', '));
+      ok(otherGets.every((x) => ['ListAnswers', 'ListRuns', 'GetRun'].includes(x)), 'the other tab fetches only the answers and the drafts: ' + otherGets.join(', '));
       ok((await grid.evaluate((g) => g.scrollLeft)) === before, 'and stays where it was sideways');
       await otherContext.close();
     }
@@ -1194,14 +1196,14 @@ const { spawn } = require('child_process');
     await h1is(nbPage, 'Choose organisation');
     await nbContext.close();
 
-    // With a login (the server says so in /api/me; the sign-in itself is tested in Go): someone not signed in gets the start
+    // With a login (the server says so in Me; the sign-in itself is tested in Go): someone not signed in gets the start
     // page, and «Sign in» goes to the sign-in and back to the same page; someone signed in sees their name and «Sign out».
     {
       const c = await browser.newContext({ locale: 'en-GB' });
       const pg = await c.newPage();
       watch(pg);
       let who = null;
-      await pg.route('**/api/me', (route) => route.fulfill({ json: { login: true, user: who, signup: 'https://id.example.invalid/signup' } }));
+      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => route.fulfill({ json: { login: true, user: who, signup: 'https://id.example.invalid/signup' } }));
       let signInAt = '';
       await pg.route('**/auth/login**', (route) => { signInAt = route.request().url(); return route.fulfill({ body: 'sign-in', contentType: 'text/plain' }); });
       await pg.goto(base + '/o/sample-club?x=1');
@@ -1254,14 +1256,14 @@ const { spawn } = require('child_process');
       await c.close();
     }
 
-    // Sharing (with a login; this server has none, so /api/me says there is one, and everyone is admin): links to a plan,
+    // Sharing (with a login; this server has none, so Me says there is one, and everyone is admin): links to a plan,
     // the members with the plans' links and an invitation, and what a view link or an edit link to a plan shows.
     {
       const c = await browser.newContext({ locale: 'en-GB', permissions: ['clipboard-read', 'clipboard-write'] });
       const pg = await c.newPage();
       watch(pg);
       const dlg = pg.locator('dialog.modal:not(.ask)');
-      await pg.route('**/api/me', (route) => route.fulfill({ json: { login: true, user: { name: 'Kari Test' }, links: [] } }));
+      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => route.fulfill({ json: { login: true, user: { name: 'Kari Test' }, links: [] } }));
       await pg.goto(base + '/o/sports-club');
       ok(!(await pg.locator('button:has-text("Share the organisation")').count()), 'no link to the whole organisation');
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
@@ -1313,16 +1315,16 @@ const { spawn } = require('child_process');
       await pg.setViewportSize({ width: 1280, height: 720 });
       // someone with a view link to the plan: a note, and nothing to share
       const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
-      await pg.route('**/api/orgs/sports-club', asLink({ level: 'view', plan: 'autumn-2026' }));
+      await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'view', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.show-tools');  // one who may only view starts in View; «Table» is the table, with a note
       ok((await pg.locator('.title-bar .mode button[data-mode=edit]').innerText()) === 'Table', 'a view link has View and Table');
       await pg.click('.title-bar .mode button[data-mode=edit]');
       await pg.waitForSelector('.view-only');
       ok(!(await pg.locator('button.share').count()), 'a view link shows no Share');
-      await pg.unroute('**/api/orgs/sports-club');
+      await pg.unroute('**/dutyplan.v1.OrgService/GetOrg');
       // an answer link: «My answers» first; who are you, then every date with yes / maybe / no and a note; kept after a reload
-      await pg.route('**/api/orgs/sports-club', asLink({ level: 'answer', plan: 'autumn-2026' }));
+      await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'answer', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.me-page');
       ok((await pg.innerText('.me-page h2')) === 'Who are you?' && (await pg.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'My answers View', 'an answer link asks who you are, with My answers and View');
@@ -1368,9 +1370,9 @@ const { spawn } = require('child_process');
       await pg.waitForURL('**/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.me-page');
       ok(!(await pg.locator('.title-bar .back').count()), 'no link back to the organisation for a link');
-      await pg.unroute('**/api/orgs/sports-club');
+      await pg.unroute('**/dutyplan.v1.OrgService/GetOrg');
       // an edit link to one plan opens that plan, not the organisation, and makes no links
-      await pg.route('**/api/orgs/sports-club', asLink({ level: 'edit', plan: 'autumn-2026' }));
+      await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'edit', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club');
       await pg.waitForURL('**/o/sports-club/p/autumn-2026');
       ok(!(await pg.locator('button.share').count()), 'no Share for someone with a link');

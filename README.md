@@ -298,7 +298,7 @@ To build it yourself from `Dockerfile`: `podman build -t dutyplan .`, or `mise r
 | `--client-ip-header` | `$DUTYPLAN_CLIENT_IP_HEADER` | the header a proxy in front puts the visitor's address in (`CF-Connecting-IP` behind Cloudflare), for the rate limits. Set it only when every request comes through that proxy. |
 | `--no-login` | `$DUTYPLAN_NO_LOGIN=1` | no signing in: everyone who reaches the address may do everything (see *Signing in*). |
 
-`dutyplan health [url]` asks a running server whether it is well (exit 0) or not (1), by default `http://127.0.0.1:8080/api/health`: a
+`dutyplan health [url]` asks a running server whether it is well (exit 0) or not (1), by default the one at `http://127.0.0.1:8080`: a
 container health check that needs no shell or curl in the image.
 
 `DUTYPLAN_SOLVER` is the same as `--solver`. The server writes one line with its address to standard output and logs to
@@ -311,7 +311,7 @@ found the best plan or runs out of time, and the draft says which.
 ## For AI agents
 
 [`web/llms.txt`](web/llms.txt), also served at `/llms.txt`, tells an AI agent how to use a server: getting access with a
-share link, putting a whole semester in with the API, and every route. It only describes what any user can do.
+share link, putting a whole semester in with the API, and every call of it. It only describes what any user can do.
 
 ## Data and backups
 
@@ -352,7 +352,8 @@ the smoke test, the browser check and the mutations. `.github/workflows/image.ym
 `main` and from `v*` tags. Dependabot proposes updates to the Go and Python packages, the actions and the base images weekly.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the planner's
-input from the database, runs it, turns the answer into a view), `internal/api` (JSON API), `internal/i18n` (server texts),
+input from the database, runs it, turns the answer into a view), `internal/api` (the API: [Connect](https://connectrpc.com) with JSON, its schema in `proto/` and the Go code made from it in `gen/`),
+`internal/i18n` (server texts),
 `web/` (the page: plain JavaScript, no build step), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
 rules and conventions for anyone (or any assistant) working on the code; `PLAN.md` has the design notes.
 

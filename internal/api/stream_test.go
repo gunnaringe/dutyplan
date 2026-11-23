@@ -72,7 +72,7 @@ func TestAWriteIsAnnouncedOnTheStreamOfItsOrganisationOnly(t *testing.T) {
 	}
 	var c change
 	m := next(a, 2*time.Second)
-	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Origin: "tab-1", Method: "POST", Path: "/orgs/org-a/people"}) {
+	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Origin: "tab-1", Proc: "CreatePerson"}) {
 		t.Fatalf("org A's stream got %q, want the change with its origin, method and path", m)
 	}
 	if m := next(b, 200*time.Millisecond); m != "" {
@@ -110,7 +110,7 @@ func TestTheEndOfARunIsAnnounced(t *testing.T) {
 	e.wait()
 	var c change
 	m := next(s, 2*time.Second)
-	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Method: "RUN", Path: "/orgs/" + org + "/plans/" + plan + "/runs"}) {
+	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Proc: "RunFinished", Plan: plan}) {
 		t.Fatalf("the end of the run: got %q, want the plan's runs, without an origin", m)
 	}
 	var latest struct {
@@ -130,7 +130,7 @@ func TestCloseStreamsEndsTheOpenStreams(t *testing.T) {
 	t.Cleanup(srv.Close)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	s := listen(t, srv, "org-a")
-	e.h.(*Handler).CloseStreams()
+	e.app.CloseStreams()
 	select {
 	case _, open := <-s:
 		if open {
@@ -148,17 +148,17 @@ func TestAPublishNeverBlocksAndMergesOrigins(t *testing.T) {
 		t.Fatal("subscribe")
 	}
 	defer cancel()
-	a := change{Origin: "tab-1", Method: "PUT", Path: "/orgs/o/plans/p/cells"}
-	b := change{Origin: "tab-2", Method: "PUT", Path: "/orgs/o/plans/p/cells"}
+	a := change{Origin: "tab-1", Proc: "AddCell", Plan: "p"}
+	b := change{Origin: "tab-2", Proc: "AddCell", Plan: "p"}
 	h.publish("o", a)
 	h.publish("o", b) // the stream has not sent the first yet
 	if c := <-ch; c.Origin != "" {
 		t.Fatalf("two tabs' changes kept origin %q; the first tab would skip the second's", c.Origin)
 	}
 	h.publish("o", a)
-	h.publish("o", change{Origin: "tab-1", Method: "PUT", Path: "/orgs/o/plans/p/pools"})
+	h.publish("o", change{Origin: "tab-1", Proc: "SetPool", Plan: "p"})
 	if c := <-ch; c != (change{Origin: "tab-1"}) {
-		t.Fatalf("two different changes merged into %+v, want one without a path (anything may have changed), from tab-1", c)
+		t.Fatalf("two different changes merged into %+v, want one without a procedure (anything may have changed), from tab-1", c)
 	}
 	h.publish("o", a)
 	h.publish("o", a)

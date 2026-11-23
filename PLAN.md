@@ -161,7 +161,7 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 ### Running the planner (built, phase 4 round 1)
 - `POST /api/orgs/{org}/plans/{plan}/runs` (`{time_limit}`, optional; the server picks the seed) answers 202 with an id at once; the run goes on in the background and the page
   asks `GET .../runs/{id|latest}` every second. Only **one run at a time** in the whole server (409 `busy`), time limit 5–120 s (default 20).
-  With no planner configured (`--solver` / `$DUTYPLAN_SOLVER`) the API answers 503 and `/api/health` has `"planner": false`; the rest of the app works.
+  With no planner configured (`--solver` / `$DUTYPLAN_SOLVER`) the API answers 503 and `AccountService/Health` says `"planner": false`; the rest of the app works.
 - Go builds the input from the database (`internal/planner/input.go`): everyone in the organisation, the ids `t<id>/e<id>/d<id>/p<id>`, "can be proposed",
   task choices, availability per event and combinations. The hash of the input (without seed and time) is stored, so an old plan can be marked **out of date**
   when answers or setup have changed since.

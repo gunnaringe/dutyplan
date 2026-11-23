@@ -125,13 +125,15 @@ func loopback(a net.Addr) bool {
 	return ok && t.IP.IsLoopback()
 }
 
+// health asks a running server whether it is well: the API's AccountService/Health. The argument is the server's
+// address (an older form that ended in /api/health still works).
 func health(args []string) int {
-	url := "http://127.0.0.1:8080/api/health"
+	base := "http://127.0.0.1:8080"
 	if len(args) > 0 {
-		url = args[0]
+		base = strings.TrimSuffix(strings.TrimSuffix(args[0], "/api/health"), "/")
 	}
 	c := http.Client{Timeout: 5 * time.Second}
-	res, err := c.Get(url)
+	res, err := c.Post(base+"/dutyplan.v1.AccountService/Health", "application/json", strings.NewReader("{}"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "health:", err)
 		return 1
