@@ -181,6 +181,9 @@ starts the Python planner, turns the answer into a view with explanations), `int
   redirect, a 401 or a non-JSON answer means *signed out*, and a network error means *out of reach*; `connection()` then shows a bar at the top with
   «Sign in again» (to `/auth/login?next=<this page>`, or a reload through the sign-in in front) or «Try again», the page stays as it was, a click is taken back, and an open dialog says it too.
   Never show a raw error («Failed to fetch») for these. modal() flattens its parts like h(): `append()` writes a list as «[object …]».
+- **No dialogs of the browser** (2026-11-22, the user: "La alle dialoger og bekreftelser være pent rendret."): never `confirm()`, `prompt()` or
+  `alert()`. Ask with `ask()` (or `await confirmed(title, text, yes)` inside a `write()` action, where «no» ends it quietly); a link
+  without a clipboard is shown selected in a `modal()`. `web/dialogs_test.go` fails on a native dialog; ui-check counts one as an error.
 - **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
   Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).
   The main table scrolls inside the window (dates and names stay put); ‹ › / the calendar button (next event from today) / wheel over the dates / arrow keys / dragging move sideways.

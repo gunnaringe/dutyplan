@@ -31,7 +31,7 @@ const { spawn } = require('child_process');
     const page = await context.newPage();
     const watch = (p) => {
       p.on('response', (r) => { if (r.status() === 404) notFound.push(new URL(r.url()).pathname); });
-      p.on('dialog', (d) => d.accept());  // confirmations (deleting and so on) are accepted
+      p.on('dialog', (d) => { errors.push('a dialog of the browser: ' + d.type() + ' ' + d.message()); d.dismiss().catch(() => {}); });  // the page asks in its own dialogs
       p.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
       p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
     };
@@ -229,6 +229,7 @@ const { spawn } = require('child_process');
     // deleting the section puts its people back, without a section
     await page.click('button[aria-label="Change the section Not this term"]');
     await dialog.getByRole('button', { name: 'Delete the section' }).click();
+    await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();  // asked in the page's own dialog
     await until(page, () => !document.querySelector('tr.person-sect'), null, 'the section is gone');
     ok((await peopleOrder()) === 'Kari Test,Ola Sample,Jon Demo,Pia Demo', 'its people come back in their order: ' + await peopleOrder());
     const takes = async (person, list) => {
@@ -566,7 +567,15 @@ const { spawn } = require('child_process');
     ok((await places('Sound', ev3).inputValue()) === '1' && (await value('Theme', ev3).inputValue()) === 'Finals', 'the places and the details come along');
     ok((await answer('Kari Test', ev3).getAttribute('data-level')) === 'none', 'answers are never copied');
     await page.click(`button[aria-label="Open the event ${ev3}"]`);
+    // asked first, in the page's own dialog over the event's: Cancel keeps the event, Delete deletes it
     await dialog.getByRole('button', { name: 'Delete the event' }).click();
+    const sure = page.locator('dialog.ask[open]');
+    ok((await sure.locator('h2').innerText()) === 'Delete the event' && (await sure.innerText()).includes(ev3.split(' ')[0]), 'the event dialog asks first: ' + await sure.innerText());
+    await sure.getByRole('button', { name: 'Cancel' }).click();
+    await sure.waitFor({ state: 'detached' });
+    ok((await page.locator('dialog.modal[open]').count()) === 1 && (await page.locator('.dp-table thead th[scope=col]:not(.addcol)').count()) === 4, 'Cancel keeps the event and its dialog');
+    await dialog.getByRole('button', { name: 'Delete the event' }).click();
+    await sure.getByRole('button', { name: 'Delete', exact: true }).click();
     await until(page, () => document.querySelectorAll('.dp-table thead th[scope=col]:not(.addcol)').length === 3, null, 'the event is deleted');
 
     // --- the organisation: a plan to delete, rename ---
@@ -581,6 +590,7 @@ const { spawn } = require('child_process');
     ok(page.url().endsWith('/p/spring-2027'), 'a rename keeps the address');
     await page.getByRole('button', { name: 'Plan settings' }).click();
     await dialog.getByRole('button', { name: 'Delete the plan' }).click();
+    await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
     await page.waitForURL('**/o/sports-club');
     await msgHas(page, 'The plan “Spring 2027 (draft)” was deleted.');
     await page.click('header a[aria-label="Settings"]');
@@ -889,6 +899,14 @@ const { spawn } = require('child_process');
       const copied = await pg.evaluate(() => navigator.clipboard.readText());
       ok(/^http:\/\/127\.0\.0\.1:\d+\/s\/[\w-]{20,}$/.test(copied), 'the new link is copied: ' + copied);
       ok((await dlg.locator('.link-row .lvl').first().innerText()) === 'Can edit', 'the link says what it allows');
+      // no clipboard (an old browser, or not https): the link, selected, in the page's own dialog
+      await pg.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('no clipboard')); });
+      await dlg.first().locator('.link-row button[aria-label="Copy"]').click();
+      const byHand = pg.locator('dialog.copy-by-hand[open]');
+      await byHand.waitFor();
+      ok((await byHand.locator('input').inputValue()) === copied && await byHand.locator('input').evaluate((i) => document.activeElement === i && i.selectionEnd - i.selectionStart === i.value.length), 'without a clipboard the link is shown selected');
+      await pg.keyboard.press('Escape');
+      await byHand.waitFor({ state: 'detached' });
       await dlg.locator('button[aria-label="Delete the link For the volunteers"]').click();
       await pg.click('dialog.ask button.yes');  // asked first
       await until(pg, () => !document.querySelector('dialog[open] .link-row'), null, 'the deleted link is gone');
