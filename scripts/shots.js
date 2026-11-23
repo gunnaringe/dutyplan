@@ -246,6 +246,15 @@ const CHOICES = {
     await phone.selectOption('select.find', { label: 'Kari Test' });
     await phone.screenshot({ path: path.join(OUT, '17-view-phone.png') });
 
+    // «My answers», what an answer link opens (this server has no login: the organisation is made to say level answer)
+    step = '18-my-answers';
+    const answering = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
+    await answering.route(`**/api/orgs/${ORG.slug}`, async (route) => { const res = await route.fetch(); route.fulfill({ json: { ...(await res.json()), role: '', level: 'answer', plan: PLAN.slug } }); });
+    await go(answering, planPath, '.me-page');
+    await answering.click('button.me-pick:has-text("Kari Test")');
+    await answering.waitForSelector('.me-list');
+    await answering.screenshot({ path: path.join(OUT, '18-my-answers.png') });
+
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));
     await go(nb, planPath, '.dp-table');
     await range(nb, '15-norwegian', nb.locator('main h1'), nb.locator('.grid-scroll'));

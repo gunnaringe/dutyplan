@@ -17,7 +17,7 @@ import (
 //   - a member, admin or member. Only an admin renames or deletes the organisation, changes its members and makes or
 //     deletes invitations; members do everything else, links to plans included.
 //   - someone with a link to one plan (a cookie holds the tokens of the links opened in this browser, signed in or not):
-//     view = read only, edit = change. It reaches that plan and what its page needs from the organisation (people, tasks,
+//     view = read only, answer = read and set the answers and notes of anyone on the list, edit = change. It reaches that plan and what its page needs from the organisation (people, tasks,
 //     sections), but not the other plans, the plan list, the members or the links: a link never makes links.
 // Anyone else gets 404, so nobody learns which organisations exist (401 «signed_out» when not signed in, so the page can
 // offer to sign in). Without a login (--no-login) everything goes through.
@@ -90,7 +90,20 @@ func linkAllows(l store.Link, r *http.Request, rest []string) bool {
 	if reading(r) {
 		return true
 	}
+	if l.Level == store.LevelAnswer {
+		return answering(r, rest)
+	}
 	return l.Level == store.LevelEdit && len(rest) > 0
+}
+
+// answering: the writes of an answer link, one person's availability or a note on an answer, in the link's plan
+// (plans/{plan}/people/{id}/availability, plans/{plan}/events/{id}/notes/{person}).
+func answering(r *http.Request, rest []string) bool {
+	if r.Method != http.MethodPut || len(rest) < 5 || rest[0] != "plans" {
+		return false
+	}
+	return len(rest) == 5 && rest[2] == "people" && rest[4] == "availability" ||
+		len(rest) == 6 && rest[2] == "events" && rest[4] == "notes"
 }
 
 // adminOnly: requests only an admin may make (invitations are checked where links are made and deleted). Leaving
@@ -206,8 +219,10 @@ func (s *server) access(next http.Handler) http.Handler {
 	})
 }
 
-// wider: edit before view.
-func wider(a, b store.Link) bool { return a.Level == store.LevelEdit && b.Level != store.LevelEdit }
+// wider: edit before answer before view.
+func wider(a, b store.Link) bool { return linkRank[a.Level] > linkRank[b.Level] }
+
+var linkRank = map[string]int{store.LevelView: 1, store.LevelAnswer: 2, store.LevelEdit: 3}
 
 func adminOnlyErr(w http.ResponseWriter) {
 	writeJSON(w, 403, apiError{Error: "forbidden", Code: "admin_only", Message: "only an admin of the organisation may do this"})

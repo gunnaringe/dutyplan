@@ -911,6 +911,7 @@ const { spawn } = require('child_process');
       await pg.click('button.share');
       await until(pg, () => (document.querySelector('dialog[open] h2') || {}).textContent === 'Share «Autumn 2026»', null, 'the share dialog opens');
       await dlg.locator('input[aria-label="Label"]').fill('For the volunteers');
+      ok((await dlg.locator('select[aria-label="What the link allows"] option').allInnerTexts()).join(',') === 'Can view,Can answer,Can edit', 'a link can view, answer or edit');
       await dlg.locator('select[aria-label="What the link allows"]').selectOption('edit');
       await dlg.locator('button:has-text("Make link")').click();
       await until(pg, () => [...document.querySelectorAll('dialog[open] .link-row')].some((li) => li.textContent.includes('For the volunteers')), null, 'the new link is listed');
@@ -962,6 +963,54 @@ const { spawn } = require('child_process');
       await pg.click('.title-bar .mode button[data-mode=edit]');
       await pg.waitForSelector('.view-only');
       ok(!(await pg.locator('button.share').count()), 'a view link shows no Share');
+      await pg.unroute('**/api/orgs/sports-club');
+      // an answer link: «My answers» first; who are you, then every date with yes / maybe / no and a note; kept after a reload
+      await pg.route('**/api/orgs/sports-club', asLink({ level: 'answer', plan: 'autumn-2026' }));
+      await pg.goto(base + '/o/sports-club/p/autumn-2026');
+      await pg.waitForSelector('.me-page');
+      ok((await pg.innerText('.me-page h2')) === 'Who are you?' && (await pg.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'My answers View', 'an answer link asks who you are, with My answers and View');
+      ok(!(await pg.locator('.dp-table, button.share, .title-bar .settings').count()), 'no table, Share or settings for an answer link');
+      await pg.click('button.me-pick:has-text("Pia Demo")');
+      await until(pg, () => (document.querySelector('.me-head h2') || {}).textContent === 'Pia Demo', null, 'the name chosen is shown');
+      const first = pg.locator('.me-ev').first();
+      const n = await pg.locator('.me-ev').count();
+      ok(n > 1, 'a line per date: ' + n);
+      await first.locator('button.me-ans.never').click();
+      await until(pg, () => !document.querySelector('#msg.err'), null, 'the answer was refused');
+      await first.locator('input.me-note').fill('Away that weekend');
+      await first.locator('input.me-note').press('Tab');
+      await msgHas(pg, 'Note saved');
+      await pg.reload();
+      await pg.waitForSelector('.me-list');
+      ok((await pg.innerText('.me-head h2')) === 'Pia Demo', 'the name chosen is kept');
+      ok((await first.locator('button.me-ans.never').getAttribute('aria-pressed')) === 'true' && (await first.locator('input.me-note').inputValue()) === 'Away that weekend', 'the answer and the note are kept');
+      await first.locator('button.me-ans.never').click();  // the same again: not answered
+      await until(pg, () => document.querySelector('.me-ev button.me-ans.never').getAttribute('aria-pressed') === 'false', null, 'a second click takes the answer back');
+      await first.locator('input.me-note').fill('');
+      await first.locator('input.me-note').press('Tab');
+      await msgHas(pg, 'Note saved');
+      // View has the plan, with the name chosen found
+      await pg.click('.title-bar .mode button[data-mode=show]');
+      await pg.waitForSelector('.show-tools');
+      ok((await pg.locator('select.find option:checked').innerText()) === 'Pia Demo', 'View finds the name chosen');
+      await pg.click('.title-bar .mode button[data-mode=me]');
+      await pg.waitForSelector('.me-list');
+      await pg.getByRole('button', { name: 'Not you? Switch' }).click();
+      await until(pg, () => (document.querySelector('.me-page h2') || {}).textContent === 'Who are you?', null, 'Switch asks again');
+      // Yes, Maybe, No quickly: the last one is what stays (the writes go one after the other)
+      await pg.click('button.me-pick:has-text("Pia Demo")');
+      await pg.waitForSelector('.me-list');
+      for (const l of ['good', 'poor', 'never', 'never', 'good']) await first.locator(`button.me-ans.${l}`).click();
+      await pg.waitForTimeout(400);
+      await pg.reload();
+      await pg.waitForSelector('.me-list');
+      ok((await first.locator('button.me-ans.good').getAttribute('aria-pressed')) === 'true', 'quick clicks end as the last one');
+      await first.locator('button.me-ans.good').click();
+      // the organisation's page leads an answer link to its plan, and the plan has no way back to it
+      await pg.goto(base + '/o/sports-club');
+      await pg.waitForURL('**/o/sports-club/p/autumn-2026');
+      await pg.waitForSelector('.me-page');
+      ok(!(await pg.locator('.title-bar .back').count()), 'no link back to the organisation for a link');
       await pg.unroute('**/api/orgs/sports-club');
       // an edit link to one plan opens that plan, not the organisation, and makes no links
       await pg.route('**/api/orgs/sports-club', asLink({ level: 'edit', plan: 'autumn-2026' }));

@@ -10,12 +10,13 @@ import (
 	"time"
 )
 
-// Link levels. A view or edit link is to one plan; LevelJoin is an invitation to the organisation: whoever opens it
-// while signed in becomes a member.
+// Link levels. A view, answer or edit link is to one plan; LevelJoin is an invitation to the organisation: whoever opens it
+// while signed in becomes a member. LevelAnswer sees the plan and sets the answers and notes of anyone on the list.
 const (
-	LevelView = "view"
-	LevelEdit = "edit"
-	LevelJoin = "join"
+	LevelView   = "view"
+	LevelAnswer = "answer"
+	LevelEdit   = "edit"
+	LevelJoin   = "join"
 )
 
 // Link shares one plan (view, edit), or invites to the organisation (join, Plan empty). Token is the secret in its address (/s/<token>).
@@ -62,14 +63,14 @@ func newToken() string {
 // CreateLink makes a view or edit link to one plan, or an invitation (join, planSlug ""). expiresDays 0: it never runs out.
 // singleUse: an invitation that ends when someone becomes a member with it.
 func (s *Store) CreateLink(ctx context.Context, orgSlug, planSlug, level, label string, expiresDays int, singleUse bool, userID int64) (Link, error) {
-	if level != LevelView && level != LevelEdit && level != LevelJoin {
-		return Link{}, Invalid("link_level", nil, "the level must be view, edit or join")
+	if level != LevelView && level != LevelAnswer && level != LevelEdit && level != LevelJoin {
+		return Link{}, Invalid("link_level", nil, "the level must be view, answer, edit or join")
 	}
 	if level == LevelJoin && planSlug != "" {
 		return Link{}, Invalid("link_join_plan", nil, "an invitation is to the whole organisation")
 	}
 	if level != LevelJoin && planSlug == "" {
-		return Link{}, Invalid("link_plan", nil, "a view or edit link is to one plan")
+		return Link{}, Invalid("link_plan", nil, "a view, answer or edit link is to one plan")
 	}
 	if singleUse && level != LevelJoin {
 		return Link{}, Invalid("link_single_use", nil, "only an invitation can be for one person")
