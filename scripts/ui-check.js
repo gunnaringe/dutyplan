@@ -175,6 +175,43 @@ const { spawn } = require('child_process');
     await reopens(() => dialog.locator('select[aria-label="Place in the table"]').selectOption({ label: 'After Video' }), 'moving draws the page again');
     await closeDialog();
     ok((await taskOrder()) === 'Sound,Video,Café', 'the dialog moves a task: ' + await taskOrder());
+    // task sections: headings like the people's; a task dropped on one goes last in it; the draft shows the heading too
+    {
+      const tsOrder = () => page.evaluate(() => [...document.querySelectorAll('tr.task-row .cellbtn, tr.task-sect input.fname')]
+        .map((b) => (b.tagName === 'INPUT' ? '| ' + b.value : b.firstChild.textContent)).join(','));
+      await addNamed('Add a task section', 'Tech');
+      await page.waitForSelector('tr.task-sect');
+      ok((await page.innerText('tr.task-sect')).includes('Drag tasks here'), 'a new task section is empty');
+      await taskRowOf('Sound').locator('.grip').dragTo(page.locator('tr.task-sect'));
+      await until(page, () => document.querySelector('tr.task-sect').innerText.includes('1 task'), null, 'a task dropped on its heading goes into it');
+      ok((await tsOrder()) === 'Video,Café,| Tech,Sound', 'without a section first, then the section: ' + await tsOrder());
+      ok((await page.evaluate(() => [...document.querySelectorAll('tr.draft-row:not(.foot) th, tr.draft-sect th')].map((x) => x.textContent).join(','))) === 'Video,Café,Tech,Sound', 'the draft has the heading too');
+      await addNamed('Add a task to Tech', 'Lights');
+      await until(page, () => document.querySelector('tr.task-sect').innerText.includes('2 tasks'), null, 'a task added in the section');
+      ok((await tsOrder()) === 'Video,Café,| Tech,Sound,Lights', 'last in the section: ' + await tsOrder());
+      await taskRowOf('Lights').locator('.grip').dragTo(taskRowOf('Sound'), { targetPosition: { x: 20, y: 3 } });
+      await until(page, (want) => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === want, 'Video,Café,Lights,Sound', 'dragged above a task in the section');
+      await page.getByRole('button', { name: 'Open the task Video' }).click();
+      await reopens(() => dialog.locator('select[aria-label="Section in the table"]').selectOption({ label: 'Tech' }), 'the task dialog opens again');
+      await closeDialog();
+      ok((await tsOrder()) === 'Café,| Tech,Lights,Sound,Video', 'the dialog puts a task last in a section: ' + await tsOrder());
+      await taskRowOf('Video').locator('.grip').dragTo(page.locator('tr.sect', { hasText: 'Tasks' }).first());
+      await until(page, (want) => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === want, 'Café,Video,Lights,Sound', 'dropped on the Tasks heading: last of those without a section');
+      const name = () => page.locator('tr.task-sect input.fname');
+      await name().fill('');
+      await name().press('Enter');
+      await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
+      await until(page, () => !document.querySelector('tr.task-sect'), null, 'the task section is gone');
+      ok((await taskOrder()) === 'Café,Video,Lights,Sound', 'its tasks come back: ' + await taskOrder());
+      await page.getByRole('button', { name: 'Open the task Lights' }).click();
+      await dialog.getByRole('button', { name: 'Delete the task' }).click();
+      await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
+      await until(page, () => !document.querySelector('button[aria-label="Open the task Lights"]'), null, 'Lights deleted again');
+      await taskRowOf('Café').locator('.grip').dragTo(taskRowOf('Video'), { targetPosition: { x: 20, y: 25 } });
+      await until(page, (want) => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === want, 'Video,Café,Sound', 'dragged below');
+      await taskRowOf('Sound').locator('.grip').dragTo(taskRowOf('Video'), { targetPosition: { x: 20, y: 3 } });
+      await until(page, (want) => [...document.querySelectorAll('tr.task-row .cellbtn')].map((b) => b.firstChild.textContent).join(',') === want, 'Sound,Video,Café', 'the order is back');
+    }
 
     // details rows: a cell is a field; ⋮⋮ moves a row; the name is a field (empty deletes); the pin freezes; values are suggested
     const value = (row, e) => page.locator(`input[aria-label="${row} ${e}"]`);

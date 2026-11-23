@@ -51,15 +51,21 @@ type Task struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
 	Planned bool   `json:"planned"`
+	Section int64  `json:"section"` // 0: no section (only placement in the table)
 }
 
-// CreateTask adds a task the planner distributes (switch that off with UpdateTask).
+// CreateTask adds a task the planner distributes (switch that off with UpdateTask), last of those without a section.
 func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, error) {
+	return s.CreateTaskIn(ctx, orgSlug, name, 0)
+}
+
+// CreateTaskIn adds a task last in a section (0: without a section).
+func (s *Store) CreateTaskIn(ctx context.Context, orgSlug, name string, section int64) (Task, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Task{}, err
 	}
-	t := Task{Name: name, Planned: true}
+	t := Task{Name: name, Planned: true, Section: section}
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		oid, err := orgID(ctx, tx, orgSlug)
 		if err != nil {
@@ -72,7 +78,15 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, err
 		if n >= MaxTasksPerOrg {
 			return Invalid("too_many_tasks", map[string]any{"max": MaxTasksPerOrg}, "at most %d tasks", MaxTasksPerOrg)
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, position, created_at) VALUES (?, ?, ?, ?, ?)`, oid, t.Name, t.Planned, n, s.stamp())
+		if section != 0 {
+			if _, err := sectionName(ctx, tx, Tasks, oid, section); err != nil {
+				return err
+			}
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE org_id = ? AND section_id IS ?`, oid, sectionScope(section)[0]).Scan(&n); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, position, section_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`, oid, t.Name, t.Planned, n, sectionScope(section)[0], s.stamp())
 		if isUnique(err) {
 			return exists("task", t.Name)
 		}
@@ -85,13 +99,16 @@ func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, err
 	return t, err
 }
 
-// ListTasks gives the organisation's tasks in their order (MoveTask), the same in every plan's table.
+// ListTasks gives the organisation's tasks in their order (MoveTask), the same in every plan's table: those without a
+// section first, then each section's in the order of the sections.
 func (s *Store) ListTasks(ctx context.Context, orgSlug string) ([]Task, error) {
 	oid, err := orgID(ctx, s.db, orgSlug)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, planned FROM task WHERE org_id = ? ORDER BY position, id`, oid)
+	rows, err := s.db.QueryContext(ctx, `SELECT t.id, t.name, t.planned, COALESCE(t.section_id, 0) FROM task t
+		LEFT JOIN task_section x ON x.id = t.section_id AND x.org_id = t.org_id
+		WHERE t.org_id = ? ORDER BY COALESCE(x.position, -1), t.position, t.id`, oid)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +116,7 @@ func (s *Store) ListTasks(ctx context.Context, orgSlug string) ([]Task, error) {
 	out := []Task{}
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.Name, &t.Planned); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Planned, &t.Section); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -126,7 +143,7 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 		if err != nil {
 			return err
 		}
-		err = tx.QueryRowContext(ctx, `SELECT id, name, planned FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&t.ID, &t.Name, &t.Planned)
+		err = tx.QueryRowContext(ctx, `SELECT id, name, planned, COALESCE(section_id, 0) FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&t.ID, &t.Name, &t.Planned, &t.Section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -166,7 +183,8 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 			return err
 		}
 		var name string
-		err = tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&name)
+		var section sql.NullInt64
+		err = tx.QueryRowContext(ctx, `SELECT name, section_id FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&name, &section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -178,52 +196,10 @@ func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error 
 		} else if err != nil {
 			return err
 		}
-		return renumberTasks(ctx, tx, oid, 0, 0)
+		return renumber(ctx, tx, "task", oid, sectionScope(section.Int64), 0, 0)
 	})
 }
 
-// MoveTask puts a task at a position in the table (0 = the top; past the end = the bottom) and renumbers the others. The
-// order is the organisation's, so it is the same in every plan; the planner does not see it.
-func (s *Store) MoveTask(ctx context.Context, orgSlug string, id int64, position int) error {
-	if position < 0 {
-		return Invalid("position_invalid", nil, "the position must be 0 or more")
-	}
-	return s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
-		if err != nil {
-			return err
-		}
-		if err := inOrg(ctx, tx, "task", oid, id); err != nil {
-			return err
-		}
-		return renumberTasks(ctx, tx, oid, id, position)
-	})
-}
-
-// renumberTasks gives the organisation's tasks the positions 0, 1, ... in their order, with the task moved (if any) at position.
-func renumberTasks(ctx context.Context, tx *sql.Tx, oid, moved int64, position int) error {
-	var order []int64
-	if err := scanAll(ctx, tx, `SELECT id FROM task WHERE org_id = ? AND id <> ? ORDER BY position, id`, []any{oid, moved},
-		func(r *sql.Rows) error {
-			var id int64
-			err := r.Scan(&id)
-			order = append(order, id)
-			return err
-		}); err != nil {
-		return err
-	}
-	if moved != 0 {
-		order = insertAt(order, moved, position)
-	}
-	for i, id := range order {
-		if _, err := tx.ExecContext(ctx, `UPDATE task SET position = ? WHERE id = ? AND org_id = ?`, i, id, oid); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// insertAt puts id into order at position (past the end = last).
 func insertAt(order []int64, id int64, position int) []int64 {
 	position = min(position, len(order))
 	return append(order[:position], append([]int64{id}, order[position:]...)...)

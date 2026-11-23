@@ -133,7 +133,7 @@ func (s *Store) DeleteOrg(ctx context.Context, orgSlug, confirm string) (Org, er
 			return Conflict("org_has_plans", map[string]any{"name": o.Name, "count": plans}, "organisation %q still has %d plan(s); delete them first", o.Name, plans)
 		}
 		// Children before parents: what refers to people and tasks first.
-		for _, table := range []string{"task_combination", "person_task", "task", "person", "person_section", "membership", "share_link"} {
+		for _, table := range []string{"task_combination", "person_task", "task", "task_section", "person", "person_section", "membership", "share_link"} {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE org_id = ?`, id); err != nil {
 				return err
 			}

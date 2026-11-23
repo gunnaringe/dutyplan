@@ -42,6 +42,9 @@ func makeRich(t *testing.T, s *Store, orgName, planName string) rich {
 	r.section, err = s.CreateSection(ctx, slug, "Guests")
 	must(err)
 	must(s.MovePerson(ctx, slug, r.people[1].ID, r.section.ID, 0))
+	ts, err := s.CreateSectionOf(ctx, Tasks, slug, "Tech")
+	must(err)
+	must(s.MoveTask(ctx, slug, r.camera.ID, &ts.ID, 0))
 	must(s.SetPersonTask(ctx, slug, r.people[0].ID, r.sound.ID, "good"))
 
 	r.plan, err = s.CreatePlan(ctx, slug, planName)
@@ -153,7 +156,7 @@ func TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions(t *testing.T) {
 	if want := "answer_note event event_field event_task manual_cell person_event plan_field plan_run pool_member share_link"; got("plan_id") != want {
 		t.Errorf("tables with plan_id: %s\nwant: %s", got("plan_id"), want)
 	}
-	want := "answer_note event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination"
+	want := "answer_note event event_field event_task manual_cell membership person person_event person_section person_task plan plan_field plan_run pool_member share_link task task_combination task_section"
 	if got("org_id") != want {
 		t.Errorf("tables with org_id: %s\nwant: %s", got("org_id"), want)
 	}

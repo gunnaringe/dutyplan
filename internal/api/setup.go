@@ -56,12 +56,13 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Name string `json:"name"`
+		Name    string `json:"name"`
+		Section int64  `json:"section"` // a task section to add it to (0: none)
 	}
 	if !decode(w, r, &b) {
 		return
 	}
-	t, err := s.st.CreateTask(r.Context(), r.PathValue("org"), b.Name)
+	t, err := s.st.CreateTaskIn(r.Context(), r.PathValue("org"), b.Name, b.Section)
 	if err != nil {
 		writeErr(w, s.log, err)
 		return
