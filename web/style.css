@@ -694,3 +694,14 @@ td.draft.editing { background: var(--bg); box-shadow: inset 0 0 0 2px var(--acce
 .draft-bar button.changes.on, .draft-bar button.undo { border-color: currentColor; }
 .dp-table td.draft.changed { box-shadow: inset 3px 0 0 var(--warn); }
 .dp-table td.draft .slot.new .nm, .dp-table td.draft .slot.new:not(:has(.nm)) { background: color-mix(in srgb, var(--warn) 20%, transparent); border-radius: .3rem; padding: 0 .15rem; }
+
+/* «What matters»: a priority per row, Less / Normal / More on the right */
+.prio { display: grid; grid-template-columns: 1fr auto; gap: .2rem 1rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid var(--line); }
+.prio > .small.muted:last-child:not(:first-child) { grid-column: 1 / -1; }
+.prio .plabel { font-weight: 700; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: .5rem; overflow: hidden; }
+.seg button { background: none; color: var(--fg); border: 0; border-radius: 0; padding: .3rem .7rem; min-height: 0; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--bg); font-weight: 700; }
+ul.rules { margin: .2rem 0 .8rem; padding-left: 1.2rem; }
+@media (max-width: 520px) { .prio { grid-template-columns: 1fr; } }

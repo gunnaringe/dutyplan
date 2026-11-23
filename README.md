@@ -140,16 +140,20 @@ own afterwards: nothing remembers the rhythm.
 ![Copying an event every other week](docs/img/08-copy.png)
 
 **Fair, and yours to tune.** «Even» means an equal *total* load: someone who only takes one task does not end up with half of
-someone who takes two. The distribution shows how many turns each person got against their fair share. The weights behind the
-proposal are configuration per plan, under ⚙ *Plan settings*, with defaults that work and limits that keep them sane.
+someone who takes two. The distribution shows how many turns each person got against their fair share. **What matters most**
+(in the draft's bar, and in ⚙ *Plan settings*) sets three things per plan: *even distribution*, *people's wishes* and *tasks
+that go well together*, each *Less*, *Normal* or *More*. It also lists the rules the planner always keeps. The numbers behind
+it are under *Advanced*, with defaults that work and limits that keep them sane.
+
+![What matters most: three priorities, the rules that always hold](docs/img/20-what-matters.png)
 
 ![The distribution: turns against the fair share](docs/img/12-distribution.png)
 
 **Every draft is kept, and one is the current plan.** Try again and compare. **Pin** a draft as the plan's current plan: the
 page opens with it; with nothing pinned it opens with the newest. The earlier drafts are under ⚙,
-with the weighting and the plan's name.
+with what matters and the plan's name.
 
-![Plan settings: the name, the weighting and the earlier drafts](docs/img/11-settings.png)
+![Plan settings: the name, what matters and the earlier drafts](docs/img/11-settings.png)
 
 **Edit or View.** The same page has two modes, a switch by the title: *Edit* is the table above, *View* is the plan as it stands
 and nothing else: the events down the page, the tasks across, with who has each place (the current plan, else the newest

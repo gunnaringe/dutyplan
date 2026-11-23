@@ -863,6 +863,36 @@ function weightsForm(path, wr, saved) {
         h('button', { type: 'button', class: 'ghost', onclick: save({}, t('weights.reset_done')) }, t('weights.reset')))));
 }
 
+// «What matters» (2026-11-23, the user: "Make the settings page for the plan have simple settings for what is important. Setting
+// the numbers manually could be hidden as a advanced setting."): three choices, each Less / Normal / More, that set a group of
+// weights to fixed values (Normal = the defaults); the numbers stay under «Advanced». Page only: the same PUT weights.
+const PRIORITIES = [
+  { key: 'fair', levels: { less: { w_fair: 4, w_fair_range: 4 }, normal: { w_fair: 10, w_fair_range: 10 }, more: { w_fair: 25, w_fair_range: 25 } } },
+  { key: 'wishes', levels: { less: { 'w_task.good': 1, 'w_task.poor': -2, 'w_date.good': 1, 'w_date.poor': -3 },
+    normal: { 'w_task.good': 2, 'w_task.poor': -4, 'w_date.good': 3, 'w_date.poor': -6 },
+    more: { 'w_task.good': 5, 'w_task.poor': -10, 'w_date.good': 8, 'w_date.poor': -15 } } },
+  { key: 'combos', levels: { less: { 'w_combo.practical': 1, 'w_combo.impractical': -2 }, normal: { 'w_combo.practical': 2, 'w_combo.impractical': -5 },
+    more: { 'w_combo.practical': 5, 'w_combo.impractical': -12 } } },
+];
+const weightNow = (wr, k) => (k in (wr.values || {}) ? wr.values[k] : (wr.specs.find((x) => x.key === k) || {}).default);
+// the level a priority is at now, or '' when its numbers were set by hand to something else
+const priorityLevel = (wr, p) => Object.keys(p.levels).find((l) => Object.entries(p.levels[l]).every(([k, v]) => weightNow(wr, k) === v)) || '';
+const prioritySummary = (wr) => PRIORITIES.map((p) => t('prio.' + p.key + '.short') + ': ' + t('prio.level.' + (priorityLevel(wr, p) || 'custom'))).join(' · ');
+
+function prioritiesForm(path, wr, saved) {
+  const rows = PRIORITIES.map((p) => {
+    const now = priorityLevel(wr, p);
+    return h('div', { class: 'prio' }, h('div', {}, h('div', { class: 'plabel' }, t('prio.' + p.key)), h('div', { class: 'small muted' }, t('prio.' + p.key + '.hint'))),
+      h('div', { class: 'seg', role: 'group', 'aria-label': t('prio.' + p.key) }, ['less', 'normal', 'more'].map((l) => h('button', { type: 'button', 'aria-pressed': String(now === l),
+        onclick: async () => {
+          if (now === l) return;
+          if (await write(() => api('PUT', path, { values: { ...(wr.values || {}), ...p.levels[l] } }))) saved(t('prio.saved', { what: t('prio.' + p.key), level: t('prio.level.' + l) }));
+        } }, t('prio.level.' + l)))),
+      now ? '' : h('div', { class: 'small muted' }, t('prio.custom_hint')));
+  });
+  return h('div', { class: 'stack' }, rows);
+}
+
 // What the page keeps between redraws of the same plan: the draft picked under the earlier drafts.
 const planState = { key: '', runId: null, aside: false, undo: [] };
 // Ctrl+Z (⌘Z) outside a text field undoes the newest change in the draft (planState.undoLast, set by the plan page).
@@ -1716,6 +1746,16 @@ async function pagePlan(r, org, people) {
   }
 
   // ⚙: the plan's name, the weighting, the earlier drafts and the pin, delete.
+  // «What matters»: the three priorities, the rules the planner always keeps, and the numbers under «Advanced»
+  function prioritiesDialog() {
+    keyed(modal(t('weights.title'), { info: [t('weights.hint')] },
+      prioritiesForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
+      h('h3', {}, t('prio.always')),
+      h('ul', { class: 'small rules' }, ['takes', 'no', 'combo', 'pool', 'kept'].map((k) => h('li', {}, t('prio.rule.' + k)))),
+      weightsForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
+      foot('', closeBtn())), 'priorities', 0);
+  }
+
   function settingsDialog() {
     let dlg;
     const name = h('input', { type: 'text', value: plan.name, maxlength: '80', 'aria-label': t('settings.name') });
@@ -1734,7 +1774,7 @@ async function pagePlan(r, org, people) {
         if (name.value.trim() !== plan.name && await write(() => api('PATCH', pbase, { name: name.value }))) { dlg.close(); await render(); say(t('settings.renamed')); }
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('weights.title')),
-      weightsForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
+      h('p', { class: 'small' }, prioritySummary(weights), ' · ', linkBtn(t('prio.change'), () => { dlg.close(); prioritiesDialog(); })),
       h('h3', {}, t('run.history')),
       runs.length ? h('table', { class: 'mini' }, h('tbody', {}, runRows)) : h('p', { class: 'muted small' }, t('run.no_history')),
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
@@ -2543,6 +2583,8 @@ async function pagePlan(r, org, people) {
     view.weak.length ? linkBtn(tn('draft.compromises', view.weak.length), () => listDialog(tn('draft.compromises', view.weak.length), view.weak)) : '',
     view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
     runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
+  // «What matters» on the plan page itself, before the first draft too (the user: "add a link … for the rules/weights on the plan page directly")
+  if (org.level !== 'view') bar.querySelector('.row-inline').append(h('button', { type: 'button', class: 'link-button prio-link', title: prioritySummary(weights), onclick: prioritiesDialog }, t('weights.title')));
 
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
@@ -2631,6 +2673,7 @@ async function pagePlan(r, org, people) {
     person: (id) => { const x = people.find((p) => p.id === id); if (x) personDialog(x); },
     place: (k) => { const [e, tk] = k.split('/').map(Number); const ev = events.find((x) => x.id === e), task = tasks.find((x) => x.id === tk); if (ev && task) placeDialog(ev, task); },
     settings: () => settingsDialog(),
+    priorities: () => prioritiesDialog(),
   });
   return root;
 }
