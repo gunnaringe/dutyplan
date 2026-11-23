@@ -12,7 +12,8 @@ export const store = {
 export const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 // A page's content; shown() runs once it is in the document (to open a dialog again, or a field).
-export type Page = HTMLElement & { shown?: () => unknown };
+// shown runs once the page is in the document; gone when it is replaced (a redraw too): what it set up outside itself goes with it
+export type Page = HTMLElement & { shown?: () => unknown; gone?: () => void };
 
 // What h() takes as properties: attributes, class, the value/checked/disabled properties, and on<event> listeners.
 export type Props = Record<string, any> | null | undefined;
@@ -66,10 +67,16 @@ export const ICONS = {
 };
 // mark: the square that says a place is locked (kept by the planner) or set by hand.
 export const mark = (kind) => h('span', { class: 'mark ' + kind, title: t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), 'aria-label': t(kind === 'lock' ? 'draft.key_locked' : 'draft.key_hand'), role: 'img' }, icon(kind));
+// Each icon is parsed once and then cloned: the table has thousands, and parsing each was a large part of a redraw.
+const iconMade = new Map<string, HTMLElement>();
 export function icon(name) {
-  const s = h('span', { class: 'ic ic-' + name, 'aria-hidden': 'true' });
-  s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
-  return s;
+  let s = iconMade.get(name);
+  if (!s) {
+    s = h('span', { class: 'ic ic-' + name, 'aria-hidden': 'true' });
+    s.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+    iconMade.set(name, s);
+  }
+  return s.cloneNode(true) as HTMLElement;
 }
 // The three levels every choice has: can't (red thumb down), if needed (yellow ?), good (green thumb up).
 export const LEVEL_ICON = { never: 'down', '': 'down', cannot: 'down', poor: 'maybe', standard: 'maybe', good: 'up', practical: 'up' };

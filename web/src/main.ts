@@ -1,8 +1,8 @@
-import { changedBy, errorText, fetched, forget, get, Org, probe, Setup } from './api';
+import { Account, changedBy, errorText, fetched, forget, get, Org, probe, Setup } from './api';
 import type { Person } from './gen/dutyplan/v1/dutyplan_pb';
 import { CLIENT, h, say, store, type Page } from './core';
 import { pageHome, pageMembers, pageOrg, pageSettings } from './org';
-import { pagePlan } from './plan';
+import { pagePlan, planReads } from './plan';
 import { headerSignedOut, link, me, pageLanding, renderHeader, route } from './shell';
 import { focusKey, refocus } from './ui';
 import { enc } from './util';
@@ -14,6 +14,7 @@ export async function render() {
   const main = document.getElementById('main')!;
   const r = route();
   try {
+    if (r.page === 'plan') { planReads(r).catch(() => {}); get(Setup.listPeople, { org: r.org, plan: r.plan }).catch(() => {}); get(Org.getOrg, { org: r.org }).catch(() => {}); get(Account.listOrgs, {}).catch(() => {}); }  // all at once
     const who = await me();
     if (seq !== renderSeq) return;
     if (who.login && !who.user && (!(who.links || []).length || new URLSearchParams(location.search).has('invite'))) {
@@ -38,6 +39,8 @@ export async function render() {
     const y = same ? window.scrollY : 0;
     const sideways = same ? [...main.querySelectorAll<HTMLElement>('.grid-scroll')].map((g) => [g.scrollLeft, g.scrollTop]) : [];
     const focus = same ? focusKey(main) : null;
+    const old = main.firstElementChild as Page | null;
+    if (old && old !== body && old.gone) old.gone();
     main.replaceChildren(body);
     lastPath = location.pathname;
     main.querySelectorAll<HTMLElement>('.grid-scroll').forEach((g, i) => { if (sideways[i]) [g.scrollLeft, g.scrollTop] = sideways[i]; });

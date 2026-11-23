@@ -92,6 +92,7 @@ export async function call<M extends Unary>(m: M, req: In<M>, key?: keyof Out<M>
   const write = !reads(m);
   const org = (req as { org?: string }).org || '';
   if (m.name === 'GetRun') req = { ...req, lang: currentLang } as In<M>;  // the server writes explanations and warnings in the page's language
+  if (write) writesOut++;
   try {
     const res = await clientOf(m)[m.localName](req, write ? { headers: { 'X-Dutyplan-Client': CLIENT } } : {});
     if (write) forget(changedBy(m.name), org);
@@ -100,8 +101,12 @@ export async function call<M extends Unary>(m: M, req: In<M>, key?: keyof Out<M>
     const f = failure(e);
     if (write && !f.connection) forget(changedBy(m.name), org);
     throw f;
+  } finally {
+    if (write) writesOut--;
   }
 }
+// the writes this tab has sent that have not been answered yet (a redraw that can wait does: redrawSoon)
+export let writesOut = 0;
 
 // ---- the connection: signed out, or the server out of reach ----------------------------------------------------------
 // A bar at the top that says so and offers the way back: sign in again (a reload goes through the sign-in and comes back to

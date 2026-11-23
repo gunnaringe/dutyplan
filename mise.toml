@@ -127,6 +127,12 @@ depends = ["app:build"]
 quiet = true
 run = "node scripts/ui-check.js"
 
+[tasks."app:perf"]
+description = "How quick the plan page feels on a big invented plan (50 people × 40 events; PEOPLE/EVENTS/DELAY/RUNS change it): a table of the time to show, to settle, the requests and the blocked main thread per action. Needs playwright-core from ../scoreboard"
+depends = ["app:build"]
+quiet = true
+run = "node scripts/perf.js"
+
 [tasks."app:shots"]
 description = "The pictures of the README (docs/img) from the real app on invented data (about 30 s). Needs playwright-core from ../scoreboard; run it again when the page changes visibly"
 depends = ["app:build"]

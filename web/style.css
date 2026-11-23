@@ -89,6 +89,9 @@ form.addrow button { padding: .05rem .7rem; font-size: .8rem; }
 .plans { display: grid; gap: .6rem; }
 .plan-item { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .8rem; }
 .plan-item .nm { font-weight: 700; flex: 1; }
+.dp-table span.glock { display: contents; }
+.draft-bar span.done-slot, .draft-bar span.undo-slot { display: contents; }
+.dp-table tr.pending { opacity: .55; pointer-events: none; }  /* shown before the server has answered */
 .plan-item.new { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .dropdown.plan-menu > summary { width: var(--ctl); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .new-plan select { flex: 0 1 auto; }

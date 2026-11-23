@@ -269,6 +269,12 @@ plan, main; `gen/` is the Connect client made from the .proto, committed), `solv
 - **Redraws must stay cheap** (2026-11-23, the user: lag when setting a person's tasks): a change redraws the whole table, so anything done
   per cell counts. Dates go through cached `Intl.DateTimeFormat`s (`formatted`): `toLocaleDateString` per cell was over half of a redraw
   with 50 people. Level buttons (`cycle`) never drop a quick click; one save at a time, the last level shown is what is saved.
+  **Instant** (2026-11-23, the user: "Make the calls async and ensure everything feels and looks instant"): a click shows before the
+  server answers and goes back if it refuses: answers, places, details values, locks (`setLocks` edits `cellsAt` and repaints the cells, the
+  group locks, the bar's Done and Undo), a new person or task (`addRow` with `preview`). The full redraw after it waits (`redrawSoon`: no
+  write out, no text being typed). A page's `gone()` removes what it set up outside itself (document listeners, observers), else every redraw
+  kept the old table. Opening a plan fetches its reads at once (`planReads`, also the draft last shown). Measure with `mise run app:perf`
+  (50 × 40, 80 ms delay; `BIN=` another build, `PROFILE=<action>` a CPU profile); keep «shown» near 0 for clicks.
 - **Moving rows and the add lines** (2026-11-23, the user: "Let the drag and drop of people easier. Hide the add people icon under a small
   plus symbol at the end of the last cells, where clicking it makes it a minus and collapse it"): rows move by pointer events, not HTML
   drag (`onRowDown` on the table; `handleFor` marks ⋮⋮, `dropOn(row, accept, act(item, after, kind), into)`): with a mouse the whole name
