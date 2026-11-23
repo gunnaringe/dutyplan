@@ -83,9 +83,12 @@ under *Availability* picks who the table shows: tick tasks to show only those wh
 still have everyone). Selecting is for a
 mouse; on a phone you answer one cell at a time.
 
-People are in the order you put them: ⋮⋮ drags a person to another row. *Sections* (for example *Guests* or *Not this term*)
-are headings with their people below; drag a person onto one, or pick it in the person's dialog. They only place people in
-the table, the same in every plan, and the planner never sees them. Deleting a section puts its people back at the top.
+People are in the order you put them: drag a name (or ⋮⋮ on a phone) to another row; a line shows where it lands, and the
+table scrolls on near its edges. *Sections* (for example *Guests* or *Not this term*) are headings with their people below;
+drop a person on one to put them last in it, or pick it in the person's dialog. Type over a section's name to rename it
+(empty deletes it, after asking). They only place people in the table, the same in every plan, and the planner never sees
+them. Deleting a section puts its people back at the top. To add a person, a row, a task or a section, click the small **+**
+at the end of the last name of the list (− closes it again).
 *Show tasks*, in the Availability heading, puts the tasks each person is willing to take under their name: green for good,
 yellow for if needed. It is off at first and kept in that browser.
 
