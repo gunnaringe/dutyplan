@@ -128,7 +128,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   apply to the event. The planner's «dates» are events (the id is arbitrary text).
 - **Pin = the light form of publishing.** One finished run per plan can be pinned as the current plan; the page opens with it (else the newest run).
   Pinned runs are never pruned. There is still no approval flow or publishing.
-- **One table per plan, one view** (2026-11-19, from the sketches): events across (date, time, ⧉ copy; **+** adds one), then four sections:
+- **One table per plan, one view** (2026-11-19, from the sketches): events across (date, time, copy; **+** adds one), then four sections:
   *Event details* (the plan's rows, `plan_field`/`event_field`: ⋮⋮ drags a row, its name is a field (empty deletes, asked), the pin freezes it (`frozen`, migration 010, shared: sticky under the dates via `--stick` measured by a ResizeObserver), values suggest the row's texts (`suggest`/`rowValues`; another case is saved in the spelling used); no ✎ dialog since 2026-11-23, the user: "Remove the edit meny of about. Renaming can be done directly"; text for people, never sent to the planner, not in the hash),
   *Tasks* (the places per event, typed into the cells; empty = not needed; ⋮⋮ drags a task, in the organisation's order `task.position`, not in the planner's input;
   ⇥ selects the row for the bar at the bottom: no «Fill row» since 2026-11-22; ⚡ by the name = `task.planned`, as by a person), the green *Draft allocation* (the run on show merged with what is set by hand), and
@@ -213,7 +213,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Folding and less text** (2026-11-22, the user: "collapsible sections and less text"): every table section and every section of people folds
   (`foldBtn`/`folds`/`applyFolds`, rows tagged `data-fold`, remembered per plan in localStorage `fold:<org>/<plan>`). Detail goes into
   hover titles instead of text: the tasks a person takes are the name's title, the draft bar shows `#<id>` (its title the time and
-  quality) and a pin toggle, the copy ⧉ shows on hovering its date. The draft's compromises/distribution/earlier drafts sit in its bar.
+  quality) and a pin toggle, the copy button (`icon('copy')`) shows on hovering its date; its dialog suggests the first free date in the rhythm, lists the dates it makes (`ul.copy-dates`, one with an event marked) and says «Make n copies»; «Places» is «People needed» there (2026-11-23, the user: "Improve the copy button for events"). The draft's compromises/distribution/earlier drafts sit in its bar.
 - **The logo** is `web/logo.svg` (a green rota tile; favicon, header, landing page), drawn 2026-11-22 at the user's request.
 - **Assets are versioned** (2026-11-20): the server links `app.js`, `i18n.js` and `style.css` from `index.html` as `?v=<hash of the content>`
   and lets only that exact address be cached (a year, immutable); the page and bare or old addresses are `no-cache`. A new asset must be

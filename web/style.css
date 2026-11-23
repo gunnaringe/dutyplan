@@ -252,6 +252,14 @@ input.wide { width: 100%; }
 .row-inline.repeat { align-items: flex-end; }
 .row-inline.repeat > span { padding-bottom: .7rem; }
 .dates { display: flex; flex-direction: column; gap: .3rem; align-items: flex-start; }
+/* the copy: the dates it makes, one that already has an event marked; the icon in the date's header */
+ul.copy-dates { display: flex; flex-wrap: wrap; gap: .3rem; margin: 0; padding: 0; list-style: none; }
+ul.copy-dates[hidden] { display: none; }
+ul.copy-dates li { padding: .1rem .5rem; border: 1px solid var(--line); border-radius: 1rem; font-size: .85rem; background: color-mix(in srgb, var(--accent) 8%, var(--bg)); }
+ul.copy-dates li.taken { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--bg)); }
+ul.copy-dates li.more { background: none; border-style: dashed; color: var(--muted); }
+.dp-table thead button.edit.copy { display: inline-flex; align-items: center; justify-content: center; }
+.dp-table thead button.edit.copy svg { width: .85rem; height: .85rem; }
 .weight-row { padding: .4rem 0; border-bottom: 1px solid var(--line); }
 .weight-row label { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; justify-content: space-between; }
 .weight-row .wlabel { flex: 1 1 12rem; }

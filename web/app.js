@@ -1347,13 +1347,13 @@ async function pagePlan(r, org, people) {
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
           if (await write(async () => { await confirmed(t('event.delete'), t('event.delete_confirm', { date: fmtDate(ev.date) }), t('common.delete')); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
         } }, t('event.delete')),
-        h('button', { type: 'button', class: 'ghost', onclick: () => { dlg.close(); copyDialog(ev); } }, '⧉ ' + t('event.copy')),
+        h('button', { type: 'button', class: 'ghost', onclick: () => { dlg.close(); copyDialog(ev); } }, icon('copy'), ' ' + t('event.copy')),
         h('button', { type: 'submit' }, t('common.save')))));
   }
 
   // «Repeat»: does not repeat, every week, every other week … every 8 weeks, until a date, and how many events that gives.
   // onEvery is told when the choice changes (the dialogs move a date they suggested into the new rhythm).
-  function repeat(dates, onEvery) {
+  function repeat(dates, onEvery, preview) {
     const everyText = (n) => (n === 1 ? t('copy.every_1') : n === 2 ? t('copy.every_2') : t('copy.every_n', { n }));
     const sel = h('select', { 'aria-label': t('copy.repeat') }, h('option', { value: '0' }, t('copy.once')),
       Array.from({ length: MAX_EVERY }, (_, i) => h('option', { value: String(i + 1) }, everyText(i + 1))));
@@ -1365,8 +1365,10 @@ async function pagePlan(r, org, people) {
       until.disabled = !every();
       untilField.hidden = !every();
       until.required = !!every();
-      const n = repeatDates(dates(), until.value, every()).length;
-      count.textContent = n ? '→ ' + tn('copy.count', n) : '';
+      const all = repeatDates(dates(), until.value, every()).sort();
+      const n = all.length;
+      count.textContent = n && !preview ? '→ ' + tn('copy.count', n) : '';  // (a preview lists the dates instead)
+      if (preview) preview(all);
     };
     sel.addEventListener('change', () => { if (onEvery) onEvery(every()); update(); });
     until.addEventListener('input', update);
@@ -1377,14 +1379,29 @@ async function pagePlan(r, org, people) {
   }
 
   // A copy of an event on one or more dates. What comes along is chosen; answers and the draft are never copied.
+  // (2026-11-23, the user: "Improve the copy button for events"): the first date suggested is the first one in the rhythm with no
+  // event yet; the dates it makes are listed, a date that already has an event marked (it gets a second one); the button says how many.
   function copyDialog(ev) {
     let dlg;
     const inputs = [];
     const list = h('div', { class: 'dates' });
     const dates = () => inputs.map((i) => i.value).filter(Boolean);
+    const taken = new Set(events.map((x) => x.date));
+    const free = (d, step) => { for (let i = 0; i < 60 && taken.has(d); i++) d = addDays(d, step); return d; };
     // The first new date is a suggestion one step after the event, in the rhythm chosen, until it is changed by hand.
     let suggested = true;
-    const week = repeat(dates, (n) => { if (suggested) inputs[0].value = addDays(ev.date, 7 * Math.max(n, 1)); });
+    const shown = h('ul', { class: 'copy-dates', 'aria-label': t('copy.made') });
+    const submit = h('button', { type: 'submit' }, t('copy.button'));
+    const preview = (all) => {
+      const max = 14;
+      shown.replaceChildren(...all.slice(0, max).map((d) => h('li', { class: taken.has(d) ? 'taken' : '', title: taken.has(d) ? t('copy.taken') : '' },
+        fmtShortDate(d), taken.has(d) ? h('span', { class: 'small' }, ' · ' + t('copy.taken_short')) : '')),
+        all.length > max ? h('li', { class: 'more' }, t('copy.more', { n: all.length - max })) : '');
+      shown.hidden = !all.length;
+      submit.textContent = all.length ? tn('copy.make', all.length) : t('copy.button');
+      submit.disabled = !all.length;
+    };
+    const week = repeat(dates, (n) => { if (suggested) inputs[0].value = free(addDays(ev.date, 7 * Math.max(n, 1)), 7 * Math.max(n, 1)); }, preview);
     const addDate = (v) => {
       const i = h('input', { type: 'date', value: v || '', 'aria-label': t('copy.date') });
       i.addEventListener('input', week.update);
@@ -1392,7 +1409,7 @@ async function pagePlan(r, org, people) {
       list.append(i);
       return i;
     };
-    addDate(addDays(ev.date, 7)).addEventListener('input', () => { suggested = false; });
+    addDate(free(addDays(ev.date, 7), 7)).addEventListener('input', () => { suggested = false; });
     const check = (on, text, detail) => {
       const box = h('input', { type: 'checkbox', checked: on, 'aria-label': text });
       return { box, el: h('label', { class: 'check' }, box, ' ' + text, detail ? h('span', { class: 'muted small' }, ' ' + detail) : '') };
@@ -1414,9 +1431,10 @@ async function pagePlan(r, org, people) {
         field(t('copy.date'), list),
         h('div', {}, linkBtn('+ ' + t('copy.another_date'), () => { addDate('').focus(); week.update(); })),
         week.el,
+        shown,
         h('h3', {}, t('copy.comes_along')),
         times.el, det.el, pl.el, hand.el,
-        foot('', h('button', { type: 'submit' }, t('copy.button')))));
+        foot('', submit)));
     week.update();
   }
 
@@ -1658,7 +1676,7 @@ async function pagePlan(r, org, people) {
   const head = h('tr', {}, h('th', { scope: 'row', class: 'corner' }, t('table.date')),
     events.map((ev) => h('th', { scope: 'col' }, h('div', { class: 'rl' },
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.event_aria', { label: label(ev) }), onclick: () => eventDialog(ev) }, fmtShortDate(ev.date)),
-      h('button', { type: 'button', class: 'edit', title: t('copy.title'), 'aria-label': t('copy.aria', { label: label(ev) }), onclick: () => copyDialog(ev) }, '⧉')),
+      h('button', { type: 'button', class: 'edit copy', title: t('copy.title'), 'aria-label': t('copy.aria', { label: label(ev) }), onclick: () => copyDialog(ev) }, icon('copy'))),
       clock(ev) ? h('span', { class: 'sub' }, clock(ev)) : '')),
     h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), onclick: newEventDialog }, events.length ? '+' : '+ ' + t('table.add_event'))));  // with no event yet it says what it does
 
