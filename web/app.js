@@ -214,8 +214,9 @@ function errorText(e) {
 }
 
 const cancelled = () => Object.assign(new Error('cancelled'), { cancelled: true });
-// Ask before something destructive; inside a write() action, a «no» ends the action quietly.
-function confirmed(text) { if (!confirm(text)) throw cancelled(); }
+// Ask before something destructive, in the page's own dialog (ask); inside a write() action, a «no» ends the action quietly.
+// (2026-11-22, the user: "La alle dialoger og bekreftelser være pent rendret." — no confirm() or prompt() of the browser.)
+async function confirmed(title, text, yes) { if (!(await ask(title, text, yes))) throw cancelled(); }
 
 // A write: shows the error instead of throwing, and says whether it went through.
 async function write(action) {
@@ -649,7 +650,10 @@ async function copyLink(l, button) {
     setTimeout(() => { button.classList.remove('done'); button.replaceChildren(icon('copy')); }, 1500);
     say(t(join ? 'members.invite_copied' : 'share.copied'));
   } catch (e) {
-    window.prompt(t('share.copy_prompt'), linkURL(l));  // no clipboard (an old browser, or not https): to copy by hand
+    // no clipboard (an old browser, or not https): the link selected in a dialog, to copy by hand
+    const input = h('input', { type: 'text', class: 'wide', readonly: true, value: linkURL(l), 'aria-label': t('share.copy_prompt'), onfocus: (ev) => ev.target.select() });
+    modal(t('share.copy_prompt'), input, foot('', closeBtn())).classList.add('copy-by-hand');
+    input.focus();
   }
 }
 
@@ -1180,7 +1184,7 @@ async function pagePlan(r, org, people) {
         h('div', { class: 'row-inline' }, field(t('event.starts'), start), field(t('event.ends'), end)),
         values.map(({ f, input }) => field(f.name, input)),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { confirmed(t('event.delete_confirm', { date: fmtDate(ev.date) })); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
+          if (await write(async () => { await confirmed(t('event.delete'), t('event.delete_confirm', { date: fmtDate(ev.date) }), t('common.delete')); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
         } }, t('event.delete')),
         h('button', { type: 'button', class: 'ghost', onclick: () => { dlg.close(); copyDialog(ev); } }, '⧉ ' + t('event.copy')),
         h('button', { type: 'submit' }, t('common.save')))));
@@ -1313,7 +1317,7 @@ async function pagePlan(r, org, people) {
         field(t('common.name'), name),
         others.length ? field(t('section.where'), where) : '',
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { confirmed(t('section.delete_confirm', { name: x.name })); await api('DELETE', `${base}/sections/${x.id}`); })) { dlg.close(); render(); }
+          if (await write(async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); await api('DELETE', `${base}/sections/${x.id}`); })) { dlg.close(); render(); }
         } }, t('section.delete')), h('button', { type: 'submit' }, t('common.save')))));
   }
 
@@ -1338,7 +1342,7 @@ async function pagePlan(r, org, people) {
         field(t('common.name'), name),
         others.length ? field(t('field.where'), where) : '',
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { confirmed(t('field.delete_confirm', { name: f.name })); await api('DELETE', `${pbase}/fields/${f.id}`); })) { dlg.close(); render(); }
+          if (await write(async () => { await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete')); await api('DELETE', `${pbase}/fields/${f.id}`); })) { dlg.close(); render(); }
         } }, t('field.delete')), h('button', { type: 'submit' }, t('common.save')))));
   }
 
@@ -1353,7 +1357,7 @@ async function pagePlan(r, org, people) {
     aloneBox.addEventListener('change', async () => {
       const on = aloneBox.checked;
       // unticking sets every pair with this task back to standard, also ones set by hand: ask first
-      if (await write(async () => { if (!on) confirmed(t('task.alone_off_confirm', { name: tk.name })); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
+      if (await write(async () => { if (!on) await confirmed(t('task.alone'), t('task.alone_off_confirm', { name: tk.name }), t('task.alone_off_yes')); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
       else aloneBox.checked = !on;
     });
     const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next) => {
@@ -1378,7 +1382,7 @@ async function pagePlan(r, org, people) {
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
       pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { confirmed(t('task.delete_confirm', { name: tk.name })); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
+        if (await write(async () => { await confirmed(t('task.delete'), t('task.delete_confirm', { name: tk.name }), t('common.delete')); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
       } }, t('task.delete')), closeBtn())), 'task', tk.id);
   }
 
@@ -1471,7 +1475,7 @@ async function pagePlan(r, org, people) {
       h('h3', {}, t('place.set_by_hand')), peopleForm, setForm,
       poolPart,
       foot(hands.length ? h('button', { type: 'button', class: 'danger', onclick: act(async () => {
-        confirmed(t('place.clear_confirm', { task: tk.name, date: fmtShortDate(ev.date) }));
+        await confirmed(t('place.clear'), t('place.clear_confirm', { task: tk.name, date: fmtShortDate(ev.date) }), t('place.clear_yes'));
         for (const x of hands) await api('DELETE', `${pbase}/cells/${x.cell.id}`);
       }) }, t('place.clear')) : '', closeBtn())), 'place', k);
   }
@@ -1499,7 +1503,7 @@ async function pagePlan(r, org, people) {
       h('h3', {}, t('run.history')),
       runs.length ? h('table', { class: 'mini' }, h('tbody', {}, runRows)) : h('p', { class: 'muted small' }, t('run.no_history')),
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { confirmed(t('settings.delete_confirm', { name: plan.name })); await api('DELETE', pbase); })) { dlg.close(); go(`/o/${enc(r.org)}`); say(t('settings.deleted', { name: plan.name })); }
+        if (await write(async () => { await confirmed(t('settings.delete'), t('settings.delete_confirm', { name: plan.name }), t('common.delete')); await api('DELETE', pbase); })) { dlg.close(); go(`/o/${enc(r.org)}`); say(t('settings.deleted', { name: plan.name })); }
       } }, t('settings.delete')), closeBtn())), 'settings', 0);
   }
 
