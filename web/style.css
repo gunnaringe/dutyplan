@@ -627,10 +627,15 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 .grid-scroll.main tr.field-row.frozen > td.suggesting { z-index: 5; }
 /* every other date a little darker, down the whole table, to follow a column (2026-11-23, the user: "alternativt background colors to
    aid navigation"); an image over the cell's own colour, so the colours of answers, the draft and a selection stay */
-.dp-table { --alt: color-mix(in srgb, var(--fg) 5.5%, transparent); }
+.dp-table { --alt: color-mix(in srgb, #2f7fd8 13%, transparent); }
+@media (prefers-color-scheme: dark) { .dp-table { --alt: color-mix(in srgb, #5aa2f0 13%, transparent); } }
 .dp-table thead th:nth-child(even):not(.corner), .dp-table tbody tr > td:nth-child(even):not([colspan]):not(.addcol) { background-image: linear-gradient(var(--alt), var(--alt)); }
 /* suggestions under a field of a details row: the list of the draft's name field */
 .dp-table td.text { position: relative; }
+/* a details value fills its cell, only rounded; the column's shade shows through until it is typed in */
+.dp-table tr.field-row > td.text { padding: 2px 2px; height: 1px; } /* height 1px: a definite height, so the field can take 100 % of the row */
+.dp-table tr.field-row td.text input { height: 100%; min-height: 1.7rem; border-radius: .4rem; background: transparent; border-color: color-mix(in srgb, var(--line) 70%, transparent); }
+.dp-table tr.field-row td.text input:focus { background: var(--bg); }
 .dp-table td.text.suggesting { z-index: 4; }
 .dp-table td.text .elist { position: absolute; z-index: 6; top: 100%; left: 0; min-width: 100%; margin: 2px 0 0; padding: .2rem; list-style: none; max-height: 14rem; overflow: auto;
   background: var(--bg); border: 1px solid var(--line); border-radius: .4rem; box-shadow: 0 6px 20px rgba(0, 0, 0, .14); font-size: .85rem; }
