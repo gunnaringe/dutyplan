@@ -101,7 +101,7 @@ const { spawn } = require('child_process');
     }
     for (const name of ['Note', 'Theme']) {
       await addNamed('Add a row', name);
-      await page.waitForSelector(`button[aria-label="Change the row ${name}"]`);
+      await page.waitForSelector(`input.fname[aria-label="The name of the row ${name}"]`);
     }
     // a new event, every other week until a date
     await page.getByRole('button', { name: 'Add an event' }).click();
@@ -173,19 +173,82 @@ const { spawn } = require('child_process');
     await closeDialog();
     ok((await taskOrder()) === 'Sound,Video,Café', 'the dialog moves a task: ' + await taskOrder());
 
-    // details rows: a cell is a field; ✎ moves a row
+    // details rows: a cell is a field; ⋮⋮ moves a row; the name is a field (empty deletes); the pin freezes; values are suggested
     const value = (row, e) => page.locator(`input[aria-label="${row} ${e}"]`);
+    const fieldNames = () => page.evaluate(() => [...document.querySelectorAll('tr.field-row input.fname')].map((x) => x.value).join(','));
+    const fieldRowOf = (name) => page.locator('tr.field-row', { has: page.locator(`input.fname[aria-label="The name of the row ${name}"]`) });
     await value('Note', ev[0]).fill('Kick-off');
     await value('Note', ev[0]).press('Enter');
     await until(page, (x) => document.activeElement && document.activeElement.getAttribute('aria-label') === x, 'Note ' + ev[1], 'Enter moves on to the next event');
     await value('Note', ev[1]).fill('Away');
     await value('Note', ev[1]).press('Tab');
     await page.waitForTimeout(200);
-    await page.click('button[aria-label="Change the row Theme"]');
-    await dialog.locator('select[aria-label="Where"]').selectOption({ label: 'At the top' });
-    await dialog.getByRole('button', { name: 'Save' }).click();
-    await dialog.waitFor({ state: 'detached' });
-    await until(page, () => [...document.querySelectorAll('tr.field-row .nm')].map((x) => x.textContent).join(',') === 'Theme,Note', null, 'Theme is moved to the top');
+    ok((await page.locator('tr.field-row button.edit').count()) === 0, 'no ✎ menu on a details row any more');
+    await fieldRowOf('Theme').locator('.grip').dragTo(fieldRowOf('Note'));
+    await until(page, () => [...document.querySelectorAll('tr.field-row input.fname')].map((x) => x.value).join(',') === 'Theme,Note', null, 'dragging ⋮⋮ moves Theme to the top');
+    // the values of a row are suggested; Enter takes the best match (and moves on); another spelling is saved as the one used
+    await value('Note', ev[2]).fill('AWAY');
+    await value('Note', ev[2]).press('Tab');
+    await until(page, (x) => document.querySelector(`input[aria-label="${x}"]`).value === 'Away', 'Note ' + ev[2], 'a text in other letters is saved in the spelling used');
+    await value('Note', ev[2]).fill('');
+    await value('Note', ev[2]).pressSequentially('ki');
+    const sugg = page.locator('tr.field-row td.text ul.elist:not([hidden]) li');
+    ok((await sugg.allInnerTexts()).join('|') === 'Kick-off' && (await sugg.first().getAttribute('aria-selected')) === 'true', 'typing suggests the row’s text, picked: ' + (await sugg.allInnerTexts()).join('|'));
+    await value('Note', ev[2]).press('Enter');
+    await until(page, (x) => document.querySelector(`input[aria-label="${x}"]`).value === 'Kick-off', 'Note ' + ev[2], 'Enter takes the suggestion');
+    await page.waitForTimeout(200);
+    await page.reload();
+    await page.waitForSelector('.dp-table');
+    ok((await value('Note', ev[2]).inputValue()) === 'Kick-off', 'and it is saved');
+    await value('Note', ev[2]).fill('');
+    await value('Note', ev[2]).press('Tab');
+    await page.waitForTimeout(200);
+    // renamed in place (Enter), and back
+    await fieldRowOf('Note').locator('input.fname').fill('Notes');
+    await fieldRowOf('Note').locator('input.fname').press('Enter');
+    await until(page, () => [...document.querySelectorAll('tr.field-row input.fname')].map((x) => x.value).join(',') === 'Theme,Notes', null, 'the name is changed in place');
+    ok((await value('Notes', ev[0]).inputValue()) === 'Kick-off', 'the values stay with a new name');
+    await fieldRowOf('Notes').locator('input.fname').fill('Note');
+    await fieldRowOf('Notes').locator('input.fname').press('Enter');
+    await until(page, () => [...document.querySelectorAll('tr.field-row input.fname')].map((x) => x.value).join(',') === 'Theme,Note', null, 'and back');
+    // a name emptied deletes the row, asked in the page's own dialog
+    await page.waitForTimeout(300);  // (the rename's redraw can still be on its way, and would take what is typed below with it)
+    await addNamed('Add a row', 'Spare');
+    await until(page, () => document.querySelectorAll('tr.field-row').length === 3, null, 'a row is added');
+    await fieldRowOf('Spare').locator('input.fname').fill('');
+    await fieldRowOf('Spare').locator('input.fname').press('Enter');
+    await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();
+    await until(page, () => document.querySelectorAll('tr.field-row').length === 2, null, 'an emptied name deletes the row');
+    ok((await fieldNames()) === 'Theme,Note', 'the others stay: ' + await fieldNames());
+    // the pin freezes a row: it stays under the dates while the table scrolls, also after a reload; and back
+    {
+      const pin = () => fieldRowOf('Note').locator('button.freeze');
+      ok((await pin().getAttribute('aria-pressed')) === 'false', 'a row is not frozen at first');
+      await pin().click();
+      await until(page, () => !!document.querySelector('tr.field-row.frozen button.freeze[aria-pressed=true]'), null, 'the pin freezes the row');
+      await page.reload();
+      await page.waitForSelector('tr.field-row.frozen');
+      await page.setViewportSize({ width: 1280, height: 330 });  // (the table is short so far: a low window makes it scroll)
+      await page.waitForTimeout(150);
+      const under = await page.evaluate(() => {
+        const box = document.querySelector('.grid-scroll.main');
+        box.scrollTop = box.scrollHeight;
+        const head = box.querySelector('thead th[scope=col]').getBoundingClientRect().bottom;
+        const row = box.querySelector('tr.field-row.frozen td').getBoundingClientRect().top;
+        const theme = box.querySelector('tr.field-row:not(.frozen) td').getBoundingClientRect().top;
+        box.scrollTop = 0;
+        return { head, row, theme };
+      });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      ok(Math.abs(under.row - under.head) < 2 && under.theme < under.head, 'scrolled down, the frozen row stays right under the dates, the other goes: ' + JSON.stringify(under));
+      await pin().click();
+      await until(page, () => !document.querySelector('tr.field-row.frozen'), null, 'a second click unfreezes it');
+    }
+    // every other date is shaded, down the table
+    ok(await page.evaluate(() => { const tds = document.querySelector('tr.field-row').querySelectorAll('td.text');
+      return getComputedStyle(tds[0]).backgroundImage !== 'none' && getComputedStyle(tds[1]).backgroundImage === 'none'; }) === true ||
+       await page.evaluate(() => { const tds = document.querySelector('tr.field-row').querySelectorAll('td.text');
+      return getComputedStyle(tds[0]).backgroundImage === 'none' && getComputedStyle(tds[1]).backgroundImage !== 'none'; }), 'every other date column is shaded');
     ok((await value('Note', ev[0]).inputValue()) === 'Kick-off', 'a value stays');
 
     // the event dialog: times and details, the end needs a start
@@ -690,7 +753,7 @@ const { spawn } = require('child_process');
         const hs = (sel) => [...document.querySelectorAll(sel)].map((e) => Math.round(e.getBoundingClientRect().height));
         return { title: hs('.title-bar > button:not(.info), .title-bar .sideways button'),
           table: hs('.dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table thead button.edit'),
-          slim: hs('.dp-table tr.adds form.addrow button, .dp-table tr.field-row button.edit') };  // the add lines and the details rows are slimmer
+          slim: hs('.dp-table tr.adds form.addrow button, .dp-table tr.field-row button.freeze') };  // the add lines and the details rows are slimmer
       });
       ok(a.slim.length >= 3 && a.slim.every((x) => x === a.slim[0]) && a.slim[0] < a.table[0], 'the add lines and details rows have one smaller height: ' + a.slim);
       ok(a.title.length >= 4 && a.title.every((x) => x === a.title[0]), 'the title bar’s buttons are one height: ' + a.title);

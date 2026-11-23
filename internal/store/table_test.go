@@ -227,7 +227,7 @@ func TestDetailsRowsOfAPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Theme 0} {%d Speaker 1}]", theme.ID, speaker.ID) ||
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Theme 0 false} {%d Speaker 1 false}]", theme.ID, speaker.ID) ||
 		fmt.Sprint(got.Values) != fmt.Sprintf("[{%d %d Light} {%d %d Guest}]", w.ev.ID, theme.ID, w.ev.ID, speaker.ID) {
 		t.Errorf("list: %+v", got)
 	}
@@ -242,11 +242,17 @@ func TestDetailsRowsOfAPlan(t *testing.T) {
 	if _, err := s.RenameField(ctx, org, plan, theme.ID, "Speaker"); !errors.Is(err, ErrConflict) {
 		t.Errorf("rename to a taken name: want a conflict, got %v", err)
 	}
+	if err := s.FreezeField(ctx, org, plan, speaker.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.FreezeField(ctx, org, plan, 999999, true); !errors.Is(err, ErrNotFound) {
+		t.Errorf("freezing an unknown row: want not found, got %v", err)
+	}
 	if err := s.DeleteField(ctx, org, plan, theme.ID); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = s.ListFields(ctx, org, plan)
-	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Speaker 0}]", speaker.ID) || len(got.Values) != 1 || got.Values[0].FieldID != speaker.ID {
+	if fmt.Sprint(got.Fields) != fmt.Sprintf("[{%d Speaker 0 true}]", speaker.ID) || len(got.Values) != 1 || got.Values[0].FieldID != speaker.ID {
 		t.Errorf("after deleting a row its values must be gone: %+v", got)
 	}
 	if n := count(t, s, `SELECT COUNT(*) FROM event_field WHERE field_id = ?`, theme.ID); n != 0 {

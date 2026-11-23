@@ -1482,31 +1482,6 @@ async function pagePlan(r, org, people) {
         } }, t('section.delete')), h('button', { type: 'submit' }, t('common.save')))));
   }
 
-  // ✎ on a details row: its name, where it goes, delete.
-  function fieldDialog(f) {
-    let dlg;
-    const name = h('input', { type: 'text', value: f.name, maxlength: '80', 'aria-label': t('common.name') });
-    const others = fields.fields.filter((x) => x.id !== f.id);
-    const now = fields.fields.findIndex((x) => x.id === f.id);
-    const where = h('select', { 'aria-label': t('field.where') }, h('option', { value: '0', selected: now === 0 }, t('field.at_top')),
-      others.map((x, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: x.name }))));
-    dlg = modal(t('field.title', { name: f.name }), { info: [t('field.hint')] },
-      h('form', { class: 'stack', onsubmit: async (e) => {
-        e.preventDefault();
-        const pos = parseInt(where.value, 10);
-        if (name.value.trim() === f.name && pos === now) { dlg.close(); return; }
-        if (await write(async () => {
-          if (name.value.trim() !== f.name) await api('PATCH', `${pbase}/fields/${f.id}`, { name: name.value });
-          if (pos !== now) await api('PUT', `${pbase}/fields/${f.id}/position`, { position: pos });
-        })) { dlg.close(); render(); }
-      } },
-        field(t('common.name'), name),
-        others.length ? field(t('field.where'), where) : '',
-        foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete')); await api('DELETE', `${pbase}/fields/${f.id}`); })) { dlg.close(); render(); }
-        } }, t('field.delete')), h('button', { type: 'submit' }, t('common.save')))));
-  }
-
   function taskDialog(tk) {
     let dlg;
     const changed = () => render();
@@ -1688,15 +1663,69 @@ async function pagePlan(r, org, people) {
     h('th', { scope: 'col', class: 'addcol' }, h('button', { type: 'button', class: 'ghost', 'aria-label': t('table.add_event'), title: t('table.add_event'), onclick: newEventDialog }, events.length ? '+' : '+ ' + t('table.add_event'))));  // with no event yet it says what it does
 
   // A text in a cell is saved when the field is left, without redrawing the page (so the next field keeps the focus).
-  const textCell = (cur, placeholder, aria, save) => {
+  // A text field in the table. With values (a function: the texts used in the row so far, most used first) it suggests them
+  // as you type, as the field for a name in the draft does: the best match that starts with what is typed is picked, so Enter
+  // takes it (and moves on, as Enter always does); ↓ ↑ choose another, Escape or a click elsewhere closes the list. A text that
+  // is one of them in other letters (case) is saved in the spelling already used, so the row stays consistent.
+  const textCell = (cur, placeholder, aria, save, values) => {
     let value = cur;
-    const input = enterMovesOn(h('input', { type: 'text', value, maxlength: '200', placeholder, 'aria-label': aria }));
+    const input = h('input', { type: 'text', value, maxlength: '200', placeholder, 'aria-label': aria, autocomplete: 'off' });
+    const td = h('td', { class: 'text' }, input);
+    if (values) suggest(input, td, values);
+    enterMovesOn(input);
     input.addEventListener('change', async () => {
-      if (input.value.trim() === value) { input.value = value; return; }
-      if (await write(() => save(input.value))) value = input.value.trim();
+      let v = input.value.trim();
+      const same = values && values().find((x) => x.toLowerCase() === v.toLowerCase());
+      if (same) v = same;
+      if (v === value) { input.value = value; return; }
+      if (await write(() => save(v))) value = v;
       input.value = value;
     });
-    return h('td', { class: 'text' }, input);
+    return td;
+  };
+  let suggestN = 0;
+  const suggest = (input, td, values) => {
+    const id = 'sugg-' + ++suggestN;
+    const list = h('ul', { class: 'elist sugg', id, role: 'listbox', hidden: true });
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-autocomplete', 'list');
+    input.setAttribute('aria-controls', id);
+    input.setAttribute('aria-expanded', 'false');
+    td.append(list);
+    let hits = [], active = -1;
+    const show = (on) => { list.hidden = !on; input.setAttribute('aria-expanded', String(on)); td.classList.toggle('suggesting', on); };
+    const activate = (i) => {
+      active = i;
+      [...list.children].forEach((li, j) => li.setAttribute('aria-selected', String(j === i)));
+      if (list.children[i]) { list.children[i].scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', list.children[i].id); }
+      else input.removeAttribute('aria-activedescendant');
+    };
+    const take = (v) => { input.value = v; show(false); };
+    const fill = (all) => {
+      const q = input.value.trim().toLowerCase();
+      const known = values();
+      hits = known.filter((v) => v.toLowerCase() !== q && (all || q) && v.toLowerCase().includes(q))
+        .sort((a, b) => Number(!a.toLowerCase().startsWith(q)) - Number(!b.toLowerCase().startsWith(q))).slice(0, 8);
+      list.replaceChildren(...hits.map((v, i) => h('li', { role: 'option', id: id + '-' + i, onmousedown: (e) => { e.preventDefault(); take(v); input.dispatchEvent(new Event('change')); } }, v)));
+      show(hits.length > 0);
+      // the best match is picked only when it starts with what is typed and what is typed is not a text of its own already used
+      activate(q && hits.length && hits[0].toLowerCase().startsWith(q) && !known.some((v) => v.toLowerCase() === q) ? 0 : -1);
+    };
+    input.addEventListener('input', () => fill(false));
+    // before Enter moves on (capture): Enter takes the picked text; Escape only closes the list
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) fill(true); else activate(Math.min(hits.length - 1, active + 1)); }
+      else if (e.key === 'ArrowUp' && !list.hidden) { e.preventDefault(); activate(Math.max(0, active - 1)); }
+      else if (e.key === 'Enter' && !list.hidden && hits[active] !== undefined) take(hits[active]);
+      else if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); e.stopPropagation(); show(false); }
+    }, true);
+    input.addEventListener('blur', () => show(false));
+  };
+  // The texts of a details row, most used first (for its suggestions).
+  const rowValues = (f) => () => {
+    const n = new Map();
+    for (const ev of events) { const v = fieldValue[ev.id + '/' + f.id]; if (v) n.set(v, (n.get(v) || 0) + 1); }
+    return [...n.keys()].sort((a, b) => n.get(b) - n.get(a) || a.localeCompare(b, locale()));
   };
   // ⋮⋮ drags a row (a details row, a task, a person, a section). dropOn makes a row take what accept(kind, item) allows;
   // act(item) saves the move. dragRow is the usual case: a row of a kind takes the others of that kind at its position.
@@ -1724,13 +1753,32 @@ async function pagePlan(r, org, people) {
     handleFor(handle, kind, item);
     return dropOn(row, (k, d) => k === kind && d.id !== item.id, (d) => move(d, i));
   };
-  // Details rows: ⋮⋮ drags a row to another place, ✎ opens it.
+  // Details rows (2026-11-23, the user: "Remove the edit meny of about. Renaming can be done directly"): the name is a field
+  // (emptied: the row is deleted, asked first), ⋮⋮ drags the row to another place, the pin freezes it ("similar to having a frozen
+  // Row in excel": it stays under the dates while the table scrolls, for everyone), and the values suggest the texts of the row.
   const fieldRow = (f, i) => {
     const g = grip(t('field.drag'));
-    const row = h('tr', { class: 'field-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('span', { class: 'nm' }, f.name),
-      h('button', { type: 'button', class: 'edit', 'aria-label': t('field.edit_aria', { name: f.name }), onclick: () => fieldDialog(f) }, '✎'))),
+    const name = h('input', { type: 'text', class: 'fname', value: f.name, maxlength: '80', 'aria-label': t('field.name_aria', { name: f.name }), title: t('field.name_hint') });
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
+      else if (e.key === 'Escape') { name.value = f.name; name.blur(); }
+    });
+    name.addEventListener('change', async () => {
+      const v = name.value.trim();
+      if (v === f.name) { name.value = f.name; return; }
+      const ok = await write(async () => {
+        if (v) return api('PATCH', `${pbase}/fields/${f.id}`, { name: v });
+        await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete'));
+        return api('DELETE', `${pbase}/fields/${f.id}`);
+      });
+      if (ok) render(); else name.value = f.name;
+    });
+    const pinName = t(f.frozen ? 'field.unfreeze' : 'field.freeze', { name: f.name });
+    const pin = h('button', { type: 'button', class: 'freeze' + (f.frozen ? ' on' : ''), 'aria-pressed': String(!!f.frozen), title: pinName, 'aria-label': pinName,
+      onclick: async () => { if (await write(() => api('PUT', `${pbase}/fields/${f.id}/frozen`, { frozen: !f.frozen }))) render(); } }, icon('pin'));
+    const row = h('tr', { class: 'field-row' + (f.frozen ? ' frozen' : '') }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, name, pin)),
     events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.add_value', { name: f.name.toLowerCase() }), t('table.value_aria', { name: f.name, label: label(ev) }),
-      async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); })), filler());
+      async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); }, rowValues(f))), filler());
     return dragRow(row, g, 'field', f, i, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
   };
 
@@ -2260,6 +2308,14 @@ async function pagePlan(r, org, people) {
           addLine(addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name })))])])));
   applyFolds(table);
   table.addEventListener('pointerdown', onCellDown);
+  // Frozen details rows stay in sight: each sticks under the dates and the frozen rows above it (measured again when the table
+  // changes size, as when a section folds or the dates wrap).
+  const stick = () => {
+    const tb = table.querySelector('table');
+    let top = tb.tHead.offsetHeight;
+    for (const tr of tb.querySelectorAll('tr.field-row.frozen')) { tr.style.setProperty('--stick', top + 'px'); top += tr.offsetHeight; }
+  };
+  new ResizeObserver(stick).observe(table.querySelector('table'));
   if (planState.sel) {
     const keys = new Set(planState.sel.keys.filter((k) => grids.draft.cells.has(k)));
     if (keys.size) { sel = { grid: 'draft', keys, anchor: planState.sel.anchor, base: new Set(keys) }; paintSel(); }

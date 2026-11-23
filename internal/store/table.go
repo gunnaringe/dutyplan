@@ -93,11 +93,12 @@ func setPlaces(ctx context.Context, tx *sql.Tx, oid, pid, eventID, taskID int64,
 }
 
 // PlanField is a details row of a plan (for example «Note» or «Theme»); FieldValue is its text for one event. Position
-// orders the rows from the top (0, 1, ...).
+// orders the rows from the top (0, 1, ...). Frozen: the row stays in sight under the dates while the table scrolls.
 type PlanField struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name"`
 	Position int    `json:"position"`
+	Frozen   bool   `json:"frozen"`
 }
 
 type FieldValue struct {
@@ -121,10 +122,10 @@ func (s *Store) ListFields(ctx context.Context, orgSlug, planSlug string) (PlanF
 	if err != nil {
 		return out, err
 	}
-	if err := scanAll(ctx, s.db, `SELECT id, name, position FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY position, id`, []any{oid, pid},
+	if err := scanAll(ctx, s.db, `SELECT id, name, position, frozen FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY position, id`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			var f PlanField
-			err := r.Scan(&f.ID, &f.Name, &f.Position)
+			err := r.Scan(&f.ID, &f.Name, &f.Position, &f.Frozen)
 			out.Fields = append(out.Fields, f)
 			return err
 		}); err != nil {
@@ -142,7 +143,7 @@ func (s *Store) ListFields(ctx context.Context, orgSlug, planSlug string) (PlanF
 
 func getField(ctx context.Context, q dbq, oid, pid, id int64) (PlanField, error) {
 	var f PlanField
-	err := q.QueryRowContext(ctx, `SELECT id, name, position FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid).Scan(&f.ID, &f.Name, &f.Position)
+	err := q.QueryRowContext(ctx, `SELECT id, name, position, frozen FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?`, id, oid, pid).Scan(&f.ID, &f.Name, &f.Position, &f.Frozen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return f, ErrNotFound
 	}
@@ -211,10 +212,29 @@ func (s *Store) RenameField(ctx context.Context, orgSlug, planSlug string, id in
 		} else if err != nil {
 			return err
 		}
-		f = PlanField{ID: id, Name: name, Position: old.Position}
+		f = PlanField{ID: id, Name: name, Position: old.Position, Frozen: old.Frozen}
 		return nil
 	})
 	return f, err
+}
+
+// FreezeField freezes a details row (it stays in sight under the dates) or lets it go.
+func (s *Store) FreezeField(ctx context.Context, orgSlug, planSlug string, id int64, frozen bool) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		pid, err := planID(ctx, tx, oid, planSlug)
+		if err != nil {
+			return err
+		}
+		if _, err := getField(ctx, tx, oid, pid, id); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, frozen, id, oid, pid)
+		return err
+	})
 }
 
 // MoveField puts a details row at a position (0 = the top; past the end = the bottom) and renumbers the others.

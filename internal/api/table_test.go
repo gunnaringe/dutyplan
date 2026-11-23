@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
@@ -52,13 +53,35 @@ func TestTheTablesDataOverHTTP(t *testing.T) {
 	e.mustDo(201, "POST", base+"/fields", map[string]string{"name": "Note"}).json(&note)
 	var fields store.PlanFields
 	e.mustDo(200, "GET", base+"/fields", nil).json(&fields)
-	if fmt.Sprint(fields.Fields) != fmt.Sprintf("[{%d Motto 0} {%d Note 1}]", f.ID, note.ID) || fmt.Sprint(fields.Values) != fmt.Sprintf("[{%d %d Light}]", ev.ID, f.ID) {
+	if fmt.Sprint(fields.Fields) != fmt.Sprintf("[{%d Motto 0 false} {%d Note 1 false}]", f.ID, note.ID) || fmt.Sprint(fields.Values) != fmt.Sprintf("[{%d %d Light}]", ev.ID, f.ID) {
 		t.Errorf("fields: %+v", fields)
 	}
+	// a frozen row: kept, and kept through a rename; off again
+	e.mustDo(204, "PUT", base+"/fields/"+itoa(note.ID)+"/frozen", map[string]bool{"frozen": true})
+	e.mustDo(200, "PATCH", base+"/fields/"+itoa(note.ID), map[string]string{"name": "Notes"}).json(&note)
+	if !note.Frozen || note.Name != "Notes" {
+		t.Errorf("frozen and renamed: %+v", note)
+	}
+	e.mustDo(200, "GET", base+"/fields", nil).json(&fields)
+	if !fields.Fields[1].Frozen || fields.Fields[0].Frozen {
+		t.Errorf("only Notes is frozen: %+v", fields.Fields)
+	}
+	if r := e.do("PUT", base+"/fields/"+itoa(note.ID)+"/frozen", map[string]any{}); r.code != 400 || !strings.Contains(string(r.body), "frozen_missing") {
+		t.Errorf("frozen left out: %d %s", r.code, r.body)
+	}
+	if r := e.do("PUT", base+"/fields/999999/frozen", map[string]bool{"frozen": true}); r.code != 404 {
+		t.Errorf("an unknown row: %d %s", r.code, r.body)
+	}
+	e.mustDo(204, "PUT", base+"/fields/"+itoa(note.ID)+"/frozen", map[string]bool{"frozen": false})
+	e.mustDo(200, "GET", base+"/fields", nil).json(&fields)
+	if fields.Fields[1].Frozen {
+		t.Errorf("frozen off: %+v", fields.Fields)
+	}
+	e.mustDo(200, "PATCH", base+"/fields/"+itoa(note.ID), map[string]string{"name": "Note"}).json(&note)
 	// moving a row to the top
 	e.mustDo(204, "PUT", base+"/fields/"+itoa(note.ID)+"/position", map[string]int{"position": 0})
 	e.mustDo(200, "GET", base+"/fields", nil).json(&fields)
-	if fmt.Sprint(fields.Fields) != fmt.Sprintf("[{%d Note 0} {%d Motto 1}]", note.ID, f.ID) {
+	if fmt.Sprint(fields.Fields) != fmt.Sprintf("[{%d Note 0 false} {%d Motto 1 false}]", note.ID, f.ID) {
 		t.Errorf("moved: %+v", fields.Fields)
 	}
 	for name, body := range map[string]any{"negative": map[string]int{"position": -1}, "missing": map[string]any{}} {

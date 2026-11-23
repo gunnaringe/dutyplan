@@ -89,6 +89,11 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("answer: an answer link writes answers only", "internal/api/access.go", "||\n\t\tlen(rest) == 6 && rest[2] == \"events\" && rest[4] == \"notes\"", "|| false"),
     ("answer: the narrower link wins", "internal/api/access.go", "return linkRank[a.Level] > linkRank[b.Level]", "return linkRank[a.Level] < linkRank[b.Level]"),
     ("answer: no answer links can be made", "internal/store/links.go", "level != LevelView && level != LevelAnswer &&", "level != LevelView &&"),
+    # frozen details rows (2026-11-23): kept, per row, through a rename; an unknown row is 404
+    ("frozen: freezing is not kept", "internal/store/table.go", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, frozen,", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, false,"),
+    ("frozen: freezing one row freezes them all", "internal/store/table.go", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, frozen, id, oid, pid)", "`UPDATE plan_field SET frozen = ? WHERE id != ? OR (org_id = ? AND plan_id = ?)`, frozen, id, oid, pid)"),
+    ("frozen: a rename unfreezes", "internal/store/table.go", "Position: old.Position, Frozen: old.Frozen}", "Position: old.Position}"),
+    ("frozen: an unknown row is frozen", "internal/store/table.go", "\t\tif _, err := getField(ctx, tx, oid, pid, id); err != nil {\n\t\t\treturn err\n\t\t}\n\t\t_, err = tx.ExecContext(ctx, `UPDATE plan_field SET frozen", "\t\t_, err = tx.ExecContext(ctx, `UPDATE plan_field SET frozen"),
     ("share: a view or edit link to the whole organisation", "internal/store/links.go", "if level != LevelJoin && planSlug == \"\" {", "if false {"),
     ("share: an editor changes members", "internal/api/access.go", "return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))", "return false"),
     ("share: nobody may leave", "internal/api/access.go", "return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))", "return true"),
@@ -315,9 +320,9 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     # the table: places per event, info rows, everyone's answers, one task against all the others
     ("tenant: places per event are listed without the plan", "internal/store/table.go", "FROM event_task WHERE org_id = ? AND plan_id = ? ORDER BY", "FROM event_task WHERE org_id = ? AND ? > 0 ORDER BY"),
     ("tenant: a task gets places without the org", "internal/store/table.go", "if err := inOrg(ctx, tx, \"task\", oid, taskID); err != nil {", "if err := error(nil); err != nil {"),
-    ("tenant: details rows are listed without the plan", "internal/store/table.go", "SELECT id, name, position FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY", "SELECT id, name, position FROM plan_field WHERE org_id = ? AND ? > 0 ORDER BY"),
+    ("tenant: details rows are listed without the plan", "internal/store/table.go", "SELECT id, name, position, frozen FROM plan_field WHERE org_id = ? AND plan_id = ? ORDER BY", "SELECT id, name, position, frozen FROM plan_field WHERE org_id = ? AND ? > 0 ORDER BY"),
     ("tenant: info values are listed without the plan", "internal/store/table.go", "FROM event_field WHERE org_id = ? AND plan_id = ? ORDER BY", "FROM event_field WHERE org_id = ? AND ? > 0 ORDER BY"),
-    ("tenant: a details row is fetched without the plan", "internal/store/table.go", "SELECT id, name, position FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?", "SELECT id, name, position FROM plan_field WHERE id = ? AND org_id = ? AND ? > 0"),
+    ("tenant: a details row is fetched without the plan", "internal/store/table.go", "SELECT id, name, position, frozen FROM plan_field WHERE id = ? AND org_id = ? AND plan_id = ?", "SELECT id, name, position, frozen FROM plan_field WHERE id = ? AND org_id = ? AND ? > 0"),
     ("tenant: the table's answers are listed without the plan", "internal/store/table.go", "FROM person_event WHERE org_id = ? AND plan_id = ? ORDER BY", "FROM person_event WHERE org_id = ? AND ? > 0 ORDER BY"),
     ("tenant: the table's task choices are listed without the org", "internal/store/table.go", "FROM person_task WHERE org_id = ? ORDER BY", "FROM person_task WHERE ? > 0 ORDER BY"),
     ("tenant: one task against all is looked up without the org", "internal/store/table.go", "SELECT name FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&name)", "SELECT name FROM task WHERE id = ? AND ? > 0`, taskID, oid).Scan(&name)"),

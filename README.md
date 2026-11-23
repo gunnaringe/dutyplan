@@ -43,8 +43,10 @@ you get a proposal that follows every hard rule, is as even as it can be, and sa
 is, what it needs, who got it, and who can come. Two events can fall on the same day.
 
 **Event details are yours.** Below the date and time come the plan's own rows (a note, a theme, who hosts: whatever you need).
-You add them yourself, type straight into the cells, drag ⋮⋮ to move a row, and ✎ renames, moves or deletes it. The planner
-never reads them.
+You add them yourself and type straight into the cells; a cell suggests what the row already says, so *Concert* stays *Concert*.
+Type over a row's name to rename it (empty deletes it, after asking), and drag ⋮⋮ to move it. The pin freezes a row, as in a
+spreadsheet: it stays under the dates while you scroll. Every other date is shaded, to follow a column down the table. The
+planner never reads the rows.
 
 **Each event has its own places.** A *task* is something to do (Sound, Video, Doors, Coffee). For every task and event you
 type how many places there are: a concert needs two on the door, a rehearsal none. Nothing is built in. ⇥ at the end of a
