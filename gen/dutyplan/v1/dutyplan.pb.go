@@ -1,9 +1,17 @@
 // The API of Tjenesteplan (dutyplan): everything the page does, and nothing more.
 //
-// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json). Field
-// names on the wire are the ones written here (snake_case), every field is sent (also empty ones), and ids are numbers.
+// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json), or binary
+// protobuf (application/proto, which the page sends). In JSON, field names on the wire are the ones written here
+// (snake_case), every field is sent (also empty ones), ids are numbers, and an unknown field is refused. A field left out
+// of a request is empty (0, "", false), except where it says «left out stays». The server also answers gRPC reflection
+// (with these comments) where HTTP/2 reaches it.
+//
 // A request about an organisation names it in `org`, one about a plan also in `plan` (slugs); the server decides
-// access from those alone (internal/api/procs.go).
+// access from those alone (internal/api/procs.go). Who may call: a member of the organisation, unless the call says
+// otherwise. «Admin»: an admin only. «Open»: anyone, signed in or not. «Links read»: a view, answer or edit link to a plan
+// may call it too (an edit link reaches its own plan only). «Edit link»: an edit link may make this change too.
+// «Answer link»: an answer link (and an edit link) may make it. Somebody else's organisation or plan is 404, as if it
+// did not exist. Positions (Move*) count from 0.
 //
 // Levels are strings, as everywhere on the wire: an answer per event never|poor|good ("" = not answered), a person's
 // task poor|good, a combination cannot|practical|standard, a role admin|member, a link view|answer|edit|join.
@@ -97,11 +105,14 @@ func (x *Problem) GetParams() *structpb.Struct {
 	return nil
 }
 
+// An organisation: a group with members, tasks, people and plans.
 type Org struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the address (org in every request), made from the name; it never changes
+	Slug string `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// RFC 3339
+	CreatedAt     string `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -157,11 +168,13 @@ func (x *Org) GetCreatedAt() string {
 	return ""
 }
 
+// A plan, for example «Spring 2027»: events, places, answers and drafts.
 type Plan struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Slug      string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	CreatedAt string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the address (plan in every request); it never changes
+	Slug      string `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name      string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	CreatedAt string `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// «Remove unlocked» set the drafts aside: no draft is shown until a new run or a pin.
 	DraftAside    bool `protobuf:"varint,4,opt,name=draft_aside,json=draftAside,proto3" json:"draft_aside,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -226,6 +239,7 @@ func (x *Plan) GetDraftAside() bool {
 	return false
 }
 
+// The one signed in.
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -278,12 +292,14 @@ func (x *User) GetEmail() string {
 	return ""
 }
 
+// A member of an organisation (someone with a login).
 type Member struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Email string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
-	Role  string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
+	// admin | member
+	Role string `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
 	// the one asking
 	You           bool `protobuf:"varint,5,opt,name=you,proto3" json:"you,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -357,18 +373,22 @@ func (x *Member) GetYou() bool {
 
 // A share link: to one plan (view, answer, edit) or an invitation (join, no plan).
 type Link struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Id        int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Org       string                 `protobuf:"bytes,2,opt,name=org,proto3" json:"org,omitempty"`
-	OrgName   string                 `protobuf:"bytes,3,opt,name=org_name,json=orgName,proto3" json:"org_name,omitempty"`
-	Plan      string                 `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
-	PlanName  string                 `protobuf:"bytes,5,opt,name=plan_name,json=planName,proto3" json:"plan_name,omitempty"`
-	Level     string                 `protobuf:"bytes,6,opt,name=level,proto3" json:"level,omitempty"`
-	Label     string                 `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
-	Token     string                 `protobuf:"bytes,8,opt,name=token,proto3" json:"token,omitempty"`
-	CreatedBy string                 `protobuf:"bytes,9,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	CreatedAt string                 `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	ExpiresAt string                 `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Org      string                 `protobuf:"bytes,2,opt,name=org,proto3" json:"org,omitempty"`
+	OrgName  string                 `protobuf:"bytes,3,opt,name=org_name,json=orgName,proto3" json:"org_name,omitempty"`
+	Plan     string                 `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
+	PlanName string                 `protobuf:"bytes,5,opt,name=plan_name,json=planName,proto3" json:"plan_name,omitempty"`
+	// view | answer | edit | join
+	Level string `protobuf:"bytes,6,opt,name=level,proto3" json:"level,omitempty"`
+	// what it is for, the maker's own words
+	Label string `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
+	// the secret part of the link https://<server>/s/<token>
+	Token     string `protobuf:"bytes,8,opt,name=token,proto3" json:"token,omitempty"`
+	CreatedBy string `protobuf:"bytes,9,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt string `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// RFC 3339, "" = never
+	ExpiresAt string `protobuf:"bytes,11,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	// an invitation for one person: it ends when someone joins with it
 	SingleUse     bool `protobuf:"varint,12,opt,name=single_use,json=singleUse,proto3" json:"single_use,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -489,6 +509,7 @@ func (x *Link) GetSingleUse() bool {
 	return false
 }
 
+// A job, for example «Sound» or «Coffee»: the organisation's own, the same in every plan, in an order.
 type Task struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -561,10 +582,11 @@ func (x *Task) GetSection() int32 {
 
 // Two tasks one person may do on the same event; a is the smaller id. No row = impractical («bad»).
 type Combination struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	A             int32                  `protobuf:"varint,1,opt,name=a,proto3" json:"a,omitempty"`
-	B             int32                  `protobuf:"varint,2,opt,name=b,proto3" json:"b,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	A     int32                  `protobuf:"varint,1,opt,name=a,proto3" json:"a,omitempty"`
+	B     int32                  `protobuf:"varint,2,opt,name=b,proto3" json:"b,omitempty"`
+	// cannot | practical
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -620,6 +642,7 @@ func (x *Combination) GetLevel() string {
 	return ""
 }
 
+// Someone who can be given tasks: a name only, no contact details.
 type Person struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -743,13 +766,15 @@ func (x *Section) GetName() string {
 	return ""
 }
 
+// A date of a plan, with an optional time. What is said about it goes in a details row.
 type Event struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// YYYY-MM-DD
 	Date string `protobuf:"bytes,2,opt,name=date,proto3" json:"date,omitempty"`
 	// HH:MM or ""
-	StartTime     string `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	StartTime string `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// HH:MM or "" (needs a start time, and comes after it)
 	EndTime       string `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -813,6 +838,7 @@ func (x *Event) GetEndTime() string {
 	return ""
 }
 
+// How many people a task needs on an event (no row = none).
 type EventPlaces struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventId       int32                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
@@ -875,10 +901,11 @@ func (x *EventPlaces) GetSlots() int32 {
 
 // A details row of the plan («Theme», «Note»): one text per event, for people only.
 type PlanField struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Position int32                  `protobuf:"varint,3,opt,name=position,proto3" json:"position,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// from 0
+	Position int32 `protobuf:"varint,3,opt,name=position,proto3" json:"position,omitempty"`
 	// stays in sight under the dates
 	Frozen        bool `protobuf:"varint,4,opt,name=frozen,proto3" json:"frozen,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -943,6 +970,7 @@ func (x *PlanField) GetFrozen() bool {
 	return false
 }
 
+// The text of a details row for one event.
 type FieldValue struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EventId       int32                  `protobuf:"varint,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
@@ -1003,11 +1031,13 @@ func (x *FieldValue) GetValue() string {
 	return ""
 }
 
+// A person's answer for an event (no row = not answered).
 type EventAnswer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PersonId      int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
-	EventId       int32                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	PersonId int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
+	EventId  int32                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// good (gladly) | poor (if needed) | never
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1063,11 +1093,13 @@ func (x *EventAnswer) GetLevel() string {
 	return ""
 }
 
+// A task a person takes (no row = not at all).
 type TaskAnswer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PersonId      int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
-	TaskId        int32                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	PersonId int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
+	TaskId   int32                  `protobuf:"varint,2,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// good (gladly) | poor (if needed)
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1123,6 +1155,7 @@ func (x *TaskAnswer) GetLevel() string {
 	return ""
 }
 
+// A person's note on their answer for an event («only before 12»).
 type AnswerNote struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PersonId      int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
@@ -1185,13 +1218,16 @@ func (x *AnswerNote) GetNote() string {
 
 // A place set by hand: a person, or a text that fills some places.
 type ManualCell struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Id       int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	EventId  int32                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	TaskId   int32                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	PersonId *int32                 `protobuf:"varint,4,opt,name=person_id,json=personId,proto3,oneof" json:"person_id,omitempty"`
-	Label    string                 `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
-	Fills    int32                  `protobuf:"varint,6,opt,name=fills,proto3" json:"fills,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Id      int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	EventId int32                  `protobuf:"varint,2,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	TaskId  int32                  `protobuf:"varint,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// the person; not set for a text
+	PersonId *int32 `protobuf:"varint,4,opt,name=person_id,json=personId,proto3,oneof" json:"person_id,omitempty"`
+	// the text, when it is not a person («Youth group»)
+	Label string `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
+	// the places a text fills
+	Fills int32 `protobuf:"varint,6,opt,name=fills,proto3" json:"fills,omitempty"`
 	// a planner's name that was locked (not set by hand)
 	Locked        bool `protobuf:"varint,7,opt,name=locked,proto3" json:"locked,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1340,10 +1376,11 @@ func (x *Pool) GetPeople() []int32 {
 
 // One answer in a bulk write.
 type Answer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Person        int32                  `protobuf:"varint,1,opt,name=person,proto3" json:"person,omitempty"`
-	Event         int32                  `protobuf:"varint,2,opt,name=event,proto3" json:"event,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Person int32                  `protobuf:"varint,1,opt,name=person,proto3" json:"person,omitempty"`
+	Event  int32                  `protobuf:"varint,2,opt,name=event,proto3" json:"event,omitempty"`
+	// good | poor | never | "" (not answered)
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1521,12 +1558,16 @@ func (x *Lock) GetPerson() int32 {
 	return 0
 }
 
+// One setting of the planner's weighting, and the range it may be set within.
 type WeightSpec struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Default       float64                `protobuf:"fixed64,2,opt,name=default,proto3" json:"default,omitempty"`
-	Min           float64                `protobuf:"fixed64,3,opt,name=min,proto3" json:"min,omitempty"`
-	Max           float64                `protobuf:"fixed64,4,opt,name=max,proto3" json:"max,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// w_fair, w_fair_range (an even total load per person), w_task_fair, w_task_range (even per task), w_task.good,
+	// w_task.poor, w_date.good, w_date.poor (people's wishes for tasks and dates; the .poor ones are negative),
+	// w_combo.practical, w_combo.impractical (two tasks for one person on one event)
+	Key           string  `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Default       float64 `protobuf:"fixed64,2,opt,name=default,proto3" json:"default,omitempty"`
+	Min           float64 `protobuf:"fixed64,3,opt,name=min,proto3" json:"min,omitempty"`
+	Max           float64 `protobuf:"fixed64,4,opt,name=max,proto3" json:"max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1594,9 +1635,11 @@ type Run struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// running | done | failed
-	Status     string `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
-	Seed       int32  `protobuf:"varint,3,opt,name=seed,proto3" json:"seed,omitempty"`
-	TimeLimit  int32  `protobuf:"varint,4,opt,name=time_limit,json=timeLimit,proto3" json:"time_limit,omitempty"`
+	Status string `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
+	Seed   int32  `protobuf:"varint,3,opt,name=seed,proto3" json:"seed,omitempty"`
+	// seconds
+	TimeLimit int32 `protobuf:"varint,4,opt,name=time_limit,json=timeLimit,proto3" json:"time_limit,omitempty"`
+	// why it failed
 	Error      string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
 	StartedAt  string `protobuf:"bytes,6,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	FinishedAt string `protobuf:"bytes,7,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
@@ -1709,7 +1752,8 @@ type RunInfo struct {
 	SolverStatus string  `protobuf:"bytes,10,opt,name=solver_status,json=solverStatus,proto3" json:"solver_status,omitempty"`
 	WallTime     float64 `protobuf:"fixed64,11,opt,name=wall_time,json=wallTime,proto3" json:"wall_time,omitempty"`
 	// the independent checker has looked at the plan
-	Checked       bool     `protobuf:"varint,12,opt,name=checked,proto3" json:"checked,omitempty"`
+	Checked bool `protobuf:"varint,12,opt,name=checked,proto3" json:"checked,omitempty"`
+	// what the checker found wrong (empty when all is well)
 	Violations    []string `protobuf:"bytes,13,rep,name=violations,proto3" json:"violations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1836,6 +1880,7 @@ func (x *RunInfo) GetViolations() []string {
 	return nil
 }
 
+// A task as it was when the run was made.
 type SnapTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1896,6 +1941,7 @@ func (x *SnapTask) GetPlanned() bool {
 	return false
 }
 
+// A person in a place of the draft.
 type CellPerson struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -1975,10 +2021,12 @@ func (x *CellPerson) GetKept() bool {
 	return false
 }
 
+// A text set by hand in a place of the draft («Youth group»).
 type CellText struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	Fills         int32                  `protobuf:"varint,2,opt,name=fills,proto3" json:"fills,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Text  string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// the places it fills
+	Fills         int32 `protobuf:"varint,2,opt,name=fills,proto3" json:"fills,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2027,14 +2075,18 @@ func (x *CellText) GetFills() int32 {
 	return 0
 }
 
+// One task on one event in the draft.
 type Cell struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        int32                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Slots         int32                  `protobuf:"varint,2,opt,name=slots,proto3" json:"slots,omitempty"`
-	People        []*CellPerson          `protobuf:"bytes,3,rep,name=people,proto3" json:"people,omitempty"`
-	Texts         []*CellText            `protobuf:"bytes,4,rep,name=texts,proto3" json:"texts,omitempty"`
-	Missing       int32                  `protobuf:"varint,5,opt,name=missing,proto3" json:"missing,omitempty"`
-	Explanation   string                 `protobuf:"bytes,6,opt,name=explanation,proto3" json:"explanation,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	TaskId int32                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// the places: filled + missing (more than the event's places when more were set by hand)
+	Slots  int32         `protobuf:"varint,2,opt,name=slots,proto3" json:"slots,omitempty"`
+	People []*CellPerson `protobuf:"bytes,3,rep,name=people,proto3" json:"people,omitempty"`
+	Texts  []*CellText   `protobuf:"bytes,4,rep,name=texts,proto3" json:"texts,omitempty"`
+	// places nobody could fill
+	Missing int32 `protobuf:"varint,5,opt,name=missing,proto3" json:"missing,omitempty"`
+	// why places are missing, in plain words (in the language asked for)
+	Explanation   string `protobuf:"bytes,6,opt,name=explanation,proto3" json:"explanation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2111,13 +2163,16 @@ func (x *Cell) GetExplanation() string {
 	return ""
 }
 
+// An event in the draft.
 type EventRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Date          string                 `protobuf:"bytes,2,opt,name=date,proto3" json:"date,omitempty"`
-	StartTime     string                 `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       string                 `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	Cells         []*Cell                `protobuf:"bytes,5,rep,name=cells,proto3" json:"cells,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Date  string                 `protobuf:"bytes,2,opt,name=date,proto3" json:"date,omitempty"`
+	// the event's time now while it exists, else the one from when the run was made
+	StartTime string `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime   string `protobuf:"bytes,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// in the order of the run's tasks; a task with nothing in this event is left out
+	Cells         []*Cell `protobuf:"bytes,5,rep,name=cells,proto3" json:"cells,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2187,12 +2242,15 @@ func (x *EventRow) GetCells() []*Cell {
 	return nil
 }
 
+// How much one person was given in the draft.
 type LoadRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PersonId      int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	Target        float64                `protobuf:"fixed64,4,opt,name=target,proto3" json:"target,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	PersonId int32                  `protobuf:"varint,1,opt,name=person_id,json=personId,proto3" json:"person_id,omitempty"`
+	Name     string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// the places they were given
+	Count int32 `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	// their fair share
+	Target        float64 `protobuf:"fixed64,4,opt,name=target,proto3" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2292,9 +2350,10 @@ func (*HealthRequest) Descriptor() ([]byte, []int) {
 }
 
 type HealthResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	Planner       bool                   `protobuf:"varint,2,opt,name=planner,proto3" json:"planner,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ok    bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	// false: drafts cannot be made here (StartRun answers unavailable)
+	Planner       bool `protobuf:"varint,2,opt,name=planner,proto3" json:"planner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2381,7 +2440,8 @@ func (*MeRequest) Descriptor() ([]byte, []int) {
 
 type MeResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Login bool                   `protobuf:"varint,1,opt,name=login,proto3" json:"login,omitempty"`
+	// the server has a login (false: everyone who reaches it may do everything)
+	Login bool `protobuf:"varint,1,opt,name=login,proto3" json:"login,omitempty"`
 	// null when nobody is signed in
 	User  *User   `protobuf:"bytes,2,opt,name=user,proto3" json:"user,omitempty"`
 	Links []*Link `protobuf:"bytes,3,rep,name=links,proto3" json:"links,omitempty"`
@@ -2662,13 +2722,16 @@ func (x *GetOrgRequest) GetOrg() string {
 }
 
 type GetOrgResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Slug          string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Role          string                 `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
-	Level         string                 `protobuf:"bytes,5,opt,name=level,proto3" json:"level,omitempty"`
-	Plan          string                 `protobuf:"bytes,6,opt,name=plan,proto3" json:"plan,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Slug      string                 `protobuf:"bytes,1,opt,name=slug,proto3" json:"slug,omitempty"`
+	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	CreatedAt string                 `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// admin | member; "" when you come through a link
+	Role string `protobuf:"bytes,4,opt,name=role,proto3" json:"role,omitempty"`
+	// the link's level (view | answer | edit); "" for a member
+	Level string `protobuf:"bytes,5,opt,name=level,proto3" json:"level,omitempty"`
+	// the plan the link is to; "" for a member
+	Plan          string `protobuf:"bytes,6,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2842,9 +2905,10 @@ func (x *RenameOrgResponse) GetOrg() *Org {
 }
 
 type DeleteOrgRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Confirm       string                 `protobuf:"bytes,2,opt,name=confirm,proto3" json:"confirm,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	// the slug again, so a stray call cannot delete
+	Confirm       string `protobuf:"bytes,2,opt,name=confirm,proto3" json:"confirm,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3018,10 +3082,12 @@ func (x *ListMembersResponse) GetMembers() []*Member {
 }
 
 type SetMemberRoleRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	// the member's id
+	Id int32 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	// admin | member
+	Role          string `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3114,9 +3180,10 @@ func (*SetMemberRoleResponse) Descriptor() ([]byte, []int) {
 }
 
 type RemoveMemberRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	// the member's id (your own to leave)
+	Id            int32 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3293,11 +3360,15 @@ type CreateLinkRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
 	// the plan the link is to ("" for an invitation)
-	Plan          string `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
-	Label         string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
-	ExpiresDays   int32  `protobuf:"varint,5,opt,name=expires_days,json=expiresDays,proto3" json:"expires_days,omitempty"`
-	SingleUse     bool   `protobuf:"varint,6,opt,name=single_use,json=singleUse,proto3" json:"single_use,omitempty"`
+	Plan string `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	// view (read) | answer (read, and set anyone's answers and notes) | edit (change the plan) | join (an invitation)
+	Level string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	// what it is for, to tell links apart
+	Label string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	// it runs out after 1 to 366 days; 0 = never
+	ExpiresDays int32 `protobuf:"varint,5,opt,name=expires_days,json=expiresDays,proto3" json:"expires_days,omitempty"`
+	// an invitation only: it ends when someone joins with it
+	SingleUse     bool `protobuf:"varint,6,opt,name=single_use,json=singleUse,proto3" json:"single_use,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3700,11 +3771,12 @@ func (x *CreateTaskResponse) GetTask() *Task {
 }
 
 type UpdateTaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name          *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Planned       *bool                  `protobuf:"varint,4,opt,name=planned,proto3,oneof" json:"planned,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// false: the planner leaves it alone (only what is set by hand)
+	Planned       *bool `protobuf:"varint,4,opt,name=planned,proto3,oneof" json:"planned,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4094,11 +4166,13 @@ func (x *ListCombinationsResponse) GetCombinations() []*Combination {
 }
 
 type SetCombinationRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	A             int32                  `protobuf:"varint,2,opt,name=a,proto3" json:"a,omitempty"`
-	B             int32                  `protobuf:"varint,3,opt,name=b,proto3" json:"b,omitempty"`
-	Level         string                 `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	// two task ids, in either order
+	A int32 `protobuf:"varint,2,opt,name=a,proto3" json:"a,omitempty"`
+	B int32 `protobuf:"varint,3,opt,name=b,proto3" json:"b,omitempty"`
+	// cannot | practical | standard
+	Level         string `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4198,10 +4272,11 @@ func (*SetCombinationResponse) Descriptor() ([]byte, []int) {
 }
 
 type SetTaskCombinationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Task          int32                  `protobuf:"varint,2,opt,name=task,proto3" json:"task,omitempty"`
-	Level         string                 `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Task  int32                  `protobuf:"varint,2,opt,name=task,proto3" json:"task,omitempty"`
+	// cannot | practical | standard
+	Level         string `protobuf:"bytes,3,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4487,11 +4562,12 @@ func (x *CreatePersonResponse) GetPerson() *Person {
 }
 
 type UpdatePersonRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
-	Name          *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Proposable    *bool                  `protobuf:"varint,4,opt,name=proposable,proto3,oneof" json:"proposable,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Id    int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *string                `protobuf:"bytes,3,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	// false: the planner never picks them
+	Proposable    *bool `protobuf:"varint,4,opt,name=proposable,proto3,oneof" json:"proposable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4705,11 +4781,12 @@ func (*MovePersonResponse) Descriptor() ([]byte, []int) {
 }
 
 type SetPersonTaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Person        int32                  `protobuf:"varint,2,opt,name=person,proto3" json:"person,omitempty"`
-	Task          int32                  `protobuf:"varint,3,opt,name=task,proto3" json:"task,omitempty"`
-	Level         string                 `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Org    string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Person int32                  `protobuf:"varint,2,opt,name=person,proto3" json:"person,omitempty"`
+	Task   int32                  `protobuf:"varint,3,opt,name=task,proto3" json:"task,omitempty"`
+	// good | poor
+	Level         string `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6419,14 +6496,18 @@ func (x *ListEventsResponse) GetEvents() []*Event {
 }
 
 type AddEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Date          string                 `protobuf:"bytes,3,opt,name=date,proto3" json:"date,omitempty"`
-	Until         string                 `protobuf:"bytes,4,opt,name=until,proto3" json:"until,omitempty"`
-	Every         int32                  `protobuf:"varint,5,opt,name=every,proto3" json:"every,omitempty"`
-	StartTime     string                 `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       string                 `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	// the first (or only) date, YYYY-MM-DD
+	Date string `protobuf:"bytes,3,opt,name=date,proto3" json:"date,omitempty"`
+	// with it, a series up to and including this date ("" = one event)
+	Until string `protobuf:"bytes,4,opt,name=until,proto3" json:"until,omitempty"`
+	// a series every N weeks, 1 to 8 (0 = every week)
+	Every int32 `protobuf:"varint,5,opt,name=every,proto3" json:"every,omitempty"`
+	// HH:MM or ""
+	StartTime     string `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       string `protobuf:"bytes,7,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6555,19 +6636,27 @@ func (x *AddEventsResponse) GetEvents() []*Event {
 }
 
 type CopyEventRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Id            int32                  `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
-	Dates         []string               `protobuf:"bytes,4,rep,name=dates,proto3" json:"dates,omitempty"`
-	Until         string                 `protobuf:"bytes,5,opt,name=until,proto3" json:"until,omitempty"`
-	Every         int32                  `protobuf:"varint,6,opt,name=every,proto3" json:"every,omitempty"`
-	Times         bool                   `protobuf:"varint,7,opt,name=times,proto3" json:"times,omitempty"`
-	StartTime     string                 `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       string                 `protobuf:"bytes,9,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	Details       bool                   `protobuf:"varint,10,opt,name=details,proto3" json:"details,omitempty"`
-	Places        bool                   `protobuf:"varint,11,opt,name=places,proto3" json:"places,omitempty"`
-	Hand          bool                   `protobuf:"varint,12,opt,name=hand,proto3" json:"hand,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	// the event to copy
+	Id int32 `protobuf:"varint,3,opt,name=id,proto3" json:"id,omitempty"`
+	// the dates of the copies (YYYY-MM-DD); with until, each of them again every N weeks
+	Dates []string `protobuf:"bytes,4,rep,name=dates,proto3" json:"dates,omitempty"`
+	// repeat up to and including this date ("" = only the dates)
+	Until string `protobuf:"bytes,5,opt,name=until,proto3" json:"until,omitempty"`
+	// every N weeks, 1 to 8 (0 = every week)
+	Every int32 `protobuf:"varint,6,opt,name=every,proto3" json:"every,omitempty"`
+	// copy the start and end time (else the copies get start_time and end_time)
+	Times     bool   `protobuf:"varint,7,opt,name=times,proto3" json:"times,omitempty"`
+	StartTime string `protobuf:"bytes,8,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime   string `protobuf:"bytes,9,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// copy the details rows' values
+	Details bool `protobuf:"varint,10,opt,name=details,proto3" json:"details,omitempty"`
+	// copy the places
+	Places bool `protobuf:"varint,11,opt,name=places,proto3" json:"places,omitempty"`
+	// copy the cells set by hand
+	Hand          bool `protobuf:"varint,12,opt,name=hand,proto3" json:"hand,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7048,7 +7137,7 @@ type SetPlacesRequest struct {
 	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	Event int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
 	Task  int32                  `protobuf:"varint,4,opt,name=task,proto3" json:"task,omitempty"`
-	// required
+	// required; 0 = not needed
 	Slots         *int32 `protobuf:"varint,5,opt,name=slots,proto3,oneof" json:"slots,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7982,12 +8071,13 @@ func (*DeleteFieldResponse) Descriptor() ([]byte, []int) {
 }
 
 type SetFieldValueRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Event         int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
-	Field         int32                  `protobuf:"varint,4,opt,name=field,proto3" json:"field,omitempty"`
-	Value         string                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Event int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
+	Field int32                  `protobuf:"varint,4,opt,name=field,proto3" json:"field,omitempty"`
+	// "" removes it
+	Value         string `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8311,12 +8401,13 @@ func (*SetAvailabilityResponse) Descriptor() ([]byte, []int) {
 }
 
 type SetNoteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Event         int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
-	Person        int32                  `protobuf:"varint,4,opt,name=person,proto3" json:"person,omitempty"`
-	Note          string                 `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Org    string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan   string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Event  int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
+	Person int32                  `protobuf:"varint,4,opt,name=person,proto3" json:"person,omitempty"`
+	// at most 300 characters; "" removes it
+	Note          string `protobuf:"bytes,5,opt,name=note,proto3" json:"note,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8624,8 +8715,9 @@ type AddCellRequest struct {
 	Person int32  `protobuf:"varint,5,opt,name=person,proto3" json:"person,omitempty"`
 	Label  string `protobuf:"bytes,6,opt,name=label,proto3" json:"label,omitempty"`
 	// places a text fills (default 1)
-	Fills         int32 `protobuf:"varint,7,opt,name=fills,proto3" json:"fills,omitempty"`
-	Locked        bool  `protobuf:"varint,8,opt,name=locked,proto3" json:"locked,omitempty"`
+	Fills int32 `protobuf:"varint,7,opt,name=fills,proto3" json:"fills,omitempty"`
+	// a planner's name kept, not set by hand
+	Locked        bool `protobuf:"varint,8,opt,name=locked,proto3" json:"locked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8953,12 +9045,13 @@ func (x *ListPoolsResponse) GetPools() []*Pool {
 }
 
 type SetPoolRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Event         int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
-	Task          int32                  `protobuf:"varint,4,opt,name=task,proto3" json:"task,omitempty"`
-	People        []int32                `protobuf:"varint,5,rep,packed,name=people,proto3" json:"people,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Event int32                  `protobuf:"varint,3,opt,name=event,proto3" json:"event,omitempty"`
+	Task  int32                  `protobuf:"varint,4,opt,name=task,proto3" json:"task,omitempty"`
+	// person ids; none removes the selection
+	People        []int32 `protobuf:"varint,5,rep,packed,name=people,proto3" json:"people,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9065,11 +9158,12 @@ func (*SetPoolResponse) Descriptor() ([]byte, []int) {
 }
 
 type SetLocksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Locks         []*Lock                `protobuf:"bytes,3,rep,name=locks,proto3" json:"locks,omitempty"`
-	Locked        bool                   `protobuf:"varint,4,opt,name=locked,proto3" json:"locked,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	Locks []*Lock                `protobuf:"bytes,3,rep,name=locks,proto3" json:"locks,omitempty"`
+	// true locks them, false unlocks them
+	Locked        bool `protobuf:"varint,4,opt,name=locked,proto3" json:"locked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9397,9 +9491,10 @@ func (x *GetWeightsRequest) GetPlan() string {
 }
 
 type GetWeightsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Specs         []*WeightSpec          `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"`
-	Values        *structpb.Struct       `protobuf:"bytes,2,opt,name=values,proto3" json:"values,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Specs []*WeightSpec          `protobuf:"bytes,1,rep,name=specs,proto3" json:"specs,omitempty"`
+	// key -> number, only what differs from the default
+	Values        *structpb.Struct `protobuf:"bytes,2,opt,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9449,10 +9544,11 @@ func (x *GetWeightsResponse) GetValues() *structpb.Struct {
 }
 
 type SetWeightsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Org           string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
-	Plan          string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
-	Values        *structpb.Struct       `protobuf:"bytes,3,opt,name=values,proto3" json:"values,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Org   string                 `protobuf:"bytes,1,opt,name=org,proto3" json:"org,omitempty"`
+	Plan  string                 `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
+	// key -> number; every value you keep (a key left out goes back to its default)
+	Values        *structpb.Struct `protobuf:"bytes,3,opt,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9622,8 +9718,9 @@ func (x *StartRunRequest) GetTimeLimit() int32 {
 }
 
 type StartRunResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the run, for GetRun
+	Id            int32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9838,9 +9935,11 @@ type GetRunResponse struct {
 	Tasks  []*SnapTask `protobuf:"bytes,2,rep,name=tasks,proto3" json:"tasks,omitempty"`
 	Events []*EventRow `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`
 	// the compromises, in plain words
-	Weak          []string   `protobuf:"bytes,4,rep,name=weak,proto3" json:"weak,omitempty"`
-	Load          []*LoadRow `protobuf:"bytes,5,rep,name=load,proto3" json:"load,omitempty"`
-	Warnings      []string   `protobuf:"bytes,6,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	Weak []string `protobuf:"bytes,4,rep,name=weak,proto3" json:"weak,omitempty"`
+	// each person's count against their fair share
+	Load []*LoadRow `protobuf:"bytes,5,rep,name=load,proto3" json:"load,omitempty"`
+	// what the planner noticed (a locked name that goes against an answer), in plain words
+	Warnings      []string `protobuf:"bytes,6,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

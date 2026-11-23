@@ -102,6 +102,10 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    16 << 10,
 	}
+	// HTTP/2 without TLS as well (h2c), for gRPC reflection, a stream that HTTP/1.1 cannot carry (internal/api/reflect.go)
+	srv.Protocols = new(http.Protocols)
+	srv.Protocols.SetHTTP1(true)
+	srv.Protocols.SetUnencryptedHTTP2(true)
 	fmt.Printf("dutyplan: http://%s\n", ln.Addr()) // the one line scripts and people look for
 
 	stop := make(chan os.Signal, 1)

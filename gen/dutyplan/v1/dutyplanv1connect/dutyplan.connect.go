@@ -1,9 +1,17 @@
 // The API of Tjenesteplan (dutyplan): everything the page does, and nothing more.
 //
-// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json). Field
-// names on the wire are the ones written here (snake_case), every field is sent (also empty ones), and ids are numbers.
+// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json), or binary
+// protobuf (application/proto, which the page sends). In JSON, field names on the wire are the ones written here
+// (snake_case), every field is sent (also empty ones), ids are numbers, and an unknown field is refused. A field left out
+// of a request is empty (0, "", false), except where it says «left out stays». The server also answers gRPC reflection
+// (with these comments) where HTTP/2 reaches it.
+//
 // A request about an organisation names it in `org`, one about a plan also in `plan` (slugs); the server decides
-// access from those alone (internal/api/procs.go).
+// access from those alone (internal/api/procs.go). Who may call: a member of the organisation, unless the call says
+// otherwise. «Admin»: an admin only. «Open»: anyone, signed in or not. «Links read»: a view, answer or edit link to a plan
+// may call it too (an edit link reaches its own plan only). «Edit link»: an edit link may make this change too.
+// «Answer link»: an answer link (and an edit link) may make it. Somebody else's organisation or plan is 404, as if it
+// did not exist. Positions (Move*) count from 0.
 //
 // Levels are strings, as everywhere on the wire: an answer per event never|poor|good ("" = not answered), a person's
 // task poor|good, a combination cannot|practical|standard, a role admin|member, a link view|answer|edit|join.
@@ -236,13 +244,13 @@ const (
 
 // AccountServiceClient is a client for the dutyplan.v1.AccountService service.
 type AccountServiceClient interface {
-	// Can this server plan at all? Open to everyone.
+	// Is the server up, and can it plan (is the solver there)? Open.
 	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
-	// Whether there is a login, who is signed in, and the share links open in this browser. Open to everyone.
+	// Whether there is a login, who is signed in, and the share links open in this browser. Open.
 	Me(context.Context, *connect.Request[v1.MeRequest]) (*connect.Response[v1.MeResponse], error)
 	// The organisations you reach (as a member, or through a link).
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
-	// Make an organisation; you become its admin. A taken address gets -2, -3.
+	// Make an organisation; you become its admin. Its slug comes from the name (a taken one gets -2, -3, ...). Signed in.
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
 }
 
@@ -314,13 +322,13 @@ func (c *accountServiceClient) CreateOrg(ctx context.Context, req *connect.Reque
 
 // AccountServiceHandler is an implementation of the dutyplan.v1.AccountService service.
 type AccountServiceHandler interface {
-	// Can this server plan at all? Open to everyone.
+	// Is the server up, and can it plan (is the solver there)? Open.
 	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
-	// Whether there is a login, who is signed in, and the share links open in this browser. Open to everyone.
+	// Whether there is a login, who is signed in, and the share links open in this browser. Open.
 	Me(context.Context, *connect.Request[v1.MeRequest]) (*connect.Response[v1.MeResponse], error)
 	// The organisations you reach (as a member, or through a link).
 	ListOrgs(context.Context, *connect.Request[v1.ListOrgsRequest]) (*connect.Response[v1.ListOrgsResponse], error)
-	// Make an organisation; you become its admin. A taken address gets -2, -3.
+	// Make an organisation; you become its admin. Its slug comes from the name (a taken one gets -2, -3, ...). Signed in.
 	CreateOrg(context.Context, *connect.Request[v1.CreateOrgRequest]) (*connect.Response[v1.CreateOrgResponse], error)
 }
 
@@ -392,11 +400,11 @@ func (UnimplementedAccountServiceHandler) CreateOrg(context.Context, *connect.Re
 
 // OrgServiceClient is a client for the dutyplan.v1.OrgService service.
 type OrgServiceClient interface {
-	// The organisation, with what you may do: role admin|member, or a link's level and plan.
+	// The organisation, with what you may do: your role, or a link's level and plan. Links read.
 	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
 	// Rename (admin). The slug stays.
 	RenameOrg(context.Context, *connect.Request[v1.RenameOrgRequest]) (*connect.Response[v1.RenameOrgResponse], error)
-	// Delete an organisation without plans (admin); confirm is its slug.
+	// Delete an organisation that has no plans left (admin); confirm is its slug again. It cannot be undone.
 	DeleteOrg(context.Context, *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error)
 	// Members with a login.
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
@@ -404,9 +412,9 @@ type OrgServiceClient interface {
 	SetMemberRole(context.Context, *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error)
 	// Remove a member (admin), or leave (yourself).
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
-	// The share links.
+	// The share links and invitations.
 	ListLinks(context.Context, *connect.Request[v1.ListLinksRequest]) (*connect.Response[v1.ListLinksResponse], error)
-	// Make a link to a plan (view|answer|edit), or an invitation (join, admin, no plan).
+	// Make a link to a plan (view | answer | edit), or an invitation to become a member (join: admin, no plan).
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
 	// Delete a link (an invitation: admin).
 	DeleteLink(context.Context, *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error)
@@ -540,11 +548,11 @@ func (c *orgServiceClient) DeleteLink(ctx context.Context, req *connect.Request[
 
 // OrgServiceHandler is an implementation of the dutyplan.v1.OrgService service.
 type OrgServiceHandler interface {
-	// The organisation, with what you may do: role admin|member, or a link's level and plan.
+	// The organisation, with what you may do: your role, or a link's level and plan. Links read.
 	GetOrg(context.Context, *connect.Request[v1.GetOrgRequest]) (*connect.Response[v1.GetOrgResponse], error)
 	// Rename (admin). The slug stays.
 	RenameOrg(context.Context, *connect.Request[v1.RenameOrgRequest]) (*connect.Response[v1.RenameOrgResponse], error)
-	// Delete an organisation without plans (admin); confirm is its slug.
+	// Delete an organisation that has no plans left (admin); confirm is its slug again. It cannot be undone.
 	DeleteOrg(context.Context, *connect.Request[v1.DeleteOrgRequest]) (*connect.Response[v1.DeleteOrgResponse], error)
 	// Members with a login.
 	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
@@ -552,9 +560,9 @@ type OrgServiceHandler interface {
 	SetMemberRole(context.Context, *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error)
 	// Remove a member (admin), or leave (yourself).
 	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
-	// The share links.
+	// The share links and invitations.
 	ListLinks(context.Context, *connect.Request[v1.ListLinksRequest]) (*connect.Response[v1.ListLinksResponse], error)
-	// Make a link to a plan (view|answer|edit), or an invitation (join, admin, no plan).
+	// Make a link to a plan (view | answer | edit), or an invitation to become a member (join: admin, no plan).
 	CreateLink(context.Context, *connect.Request[v1.CreateLinkRequest]) (*connect.Response[v1.CreateLinkResponse], error)
 	// Delete a link (an invitation: admin).
 	DeleteLink(context.Context, *connect.Request[v1.DeleteLinkRequest]) (*connect.Response[v1.DeleteLinkResponse], error)
@@ -688,36 +696,54 @@ func (UnimplementedOrgServiceHandler) DeleteLink(context.Context, *connect.Reque
 
 // SetupServiceClient is a client for the dutyplan.v1.SetupService service.
 type SetupServiceClient interface {
+	// The tasks, in their order.
 	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
+	// Add a task; it goes last (in its section).
 	CreateTask(context.Context, *connect.Request[v1.CreateTaskRequest]) (*connect.Response[v1.CreateTaskResponse], error)
 	// Rename, or turn the planner on or off for it; a field left out stays.
 	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
+	// Delete a task, with its places and the people's answers about it; refused (conflict) while a cell set by hand or a
+	// selection uses it.
 	DeleteTask(context.Context, *connect.Request[v1.DeleteTaskRequest]) (*connect.Response[v1.DeleteTaskResponse], error)
 	// Move a task; section left out = the one it is in.
 	MoveTask(context.Context, *connect.Request[v1.MoveTaskRequest]) (*connect.Response[v1.MoveTaskResponse], error)
+	// Which pairs of tasks one person can do on the same event (pairs not listed: impractical).
 	ListCombinations(context.Context, *connect.Request[v1.ListCombinationsRequest]) (*connect.Response[v1.ListCombinationsResponse], error)
+	// Set a pair: cannot | practical | standard (standard removes it: impractical, the planner's default).
 	SetCombination(context.Context, *connect.Request[v1.SetCombinationRequest]) (*connect.Response[v1.SetCombinationResponse], error)
-	// One task against all others.
+	// Set one task against all others, the same levels.
 	SetTaskCombinations(context.Context, *connect.Request[v1.SetTaskCombinationsRequest]) (*connect.Response[v1.SetTaskCombinationsResponse], error)
+	// The people, in their order.
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+	// Add a person (a name only); they go last (in their section).
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	// Rename, or whether the planner may propose them; a field left out stays.
 	UpdatePerson(context.Context, *connect.Request[v1.UpdatePersonRequest]) (*connect.Response[v1.UpdatePersonResponse], error)
+	// Move a person, into a section or out of one.
 	MovePerson(context.Context, *connect.Request[v1.MovePersonRequest]) (*connect.Response[v1.MovePersonResponse], error)
-	// A person takes a task: good | poor.
+	// A person takes a task: good (gladly) | poor (if needed).
 	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
+	// A person no longer takes a task.
 	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
-	// Sections of people.
+	// Sections of people: headings, placement only.
 	ListSections(context.Context, *connect.Request[v1.ListSectionsRequest]) (*connect.Response[v1.ListSectionsResponse], error)
+	// Add a section of people.
 	CreateSection(context.Context, *connect.Request[v1.CreateSectionRequest]) (*connect.Response[v1.CreateSectionResponse], error)
+	// Rename a section of people.
 	RenameSection(context.Context, *connect.Request[v1.RenameSectionRequest]) (*connect.Response[v1.RenameSectionResponse], error)
+	// Move a section of people.
 	MoveSection(context.Context, *connect.Request[v1.MoveSectionRequest]) (*connect.Response[v1.MoveSectionResponse], error)
+	// Delete a section of people; the people stay, without a section.
 	DeleteSection(context.Context, *connect.Request[v1.DeleteSectionRequest]) (*connect.Response[v1.DeleteSectionResponse], error)
-	// Sections of tasks.
+	// Sections of tasks: headings, placement only (tasks without one come first).
 	ListTaskSections(context.Context, *connect.Request[v1.ListTaskSectionsRequest]) (*connect.Response[v1.ListTaskSectionsResponse], error)
+	// Add a section of tasks.
 	CreateTaskSection(context.Context, *connect.Request[v1.CreateTaskSectionRequest]) (*connect.Response[v1.CreateTaskSectionResponse], error)
+	// Rename a section of tasks.
 	RenameTaskSection(context.Context, *connect.Request[v1.RenameTaskSectionRequest]) (*connect.Response[v1.RenameTaskSectionResponse], error)
+	// Move a section of tasks.
 	MoveTaskSection(context.Context, *connect.Request[v1.MoveTaskSectionRequest]) (*connect.Response[v1.MoveTaskSectionResponse], error)
+	// Delete a section of tasks; the tasks stay, without a section.
 	DeleteTaskSection(context.Context, *connect.Request[v1.DeleteTaskSectionRequest]) (*connect.Response[v1.DeleteTaskSectionResponse], error)
 }
 
@@ -1029,36 +1055,54 @@ func (c *setupServiceClient) DeleteTaskSection(ctx context.Context, req *connect
 
 // SetupServiceHandler is an implementation of the dutyplan.v1.SetupService service.
 type SetupServiceHandler interface {
+	// The tasks, in their order.
 	ListTasks(context.Context, *connect.Request[v1.ListTasksRequest]) (*connect.Response[v1.ListTasksResponse], error)
+	// Add a task; it goes last (in its section).
 	CreateTask(context.Context, *connect.Request[v1.CreateTaskRequest]) (*connect.Response[v1.CreateTaskResponse], error)
 	// Rename, or turn the planner on or off for it; a field left out stays.
 	UpdateTask(context.Context, *connect.Request[v1.UpdateTaskRequest]) (*connect.Response[v1.UpdateTaskResponse], error)
+	// Delete a task, with its places and the people's answers about it; refused (conflict) while a cell set by hand or a
+	// selection uses it.
 	DeleteTask(context.Context, *connect.Request[v1.DeleteTaskRequest]) (*connect.Response[v1.DeleteTaskResponse], error)
 	// Move a task; section left out = the one it is in.
 	MoveTask(context.Context, *connect.Request[v1.MoveTaskRequest]) (*connect.Response[v1.MoveTaskResponse], error)
+	// Which pairs of tasks one person can do on the same event (pairs not listed: impractical).
 	ListCombinations(context.Context, *connect.Request[v1.ListCombinationsRequest]) (*connect.Response[v1.ListCombinationsResponse], error)
+	// Set a pair: cannot | practical | standard (standard removes it: impractical, the planner's default).
 	SetCombination(context.Context, *connect.Request[v1.SetCombinationRequest]) (*connect.Response[v1.SetCombinationResponse], error)
-	// One task against all others.
+	// Set one task against all others, the same levels.
 	SetTaskCombinations(context.Context, *connect.Request[v1.SetTaskCombinationsRequest]) (*connect.Response[v1.SetTaskCombinationsResponse], error)
+	// The people, in their order.
 	ListPeople(context.Context, *connect.Request[v1.ListPeopleRequest]) (*connect.Response[v1.ListPeopleResponse], error)
+	// Add a person (a name only); they go last (in their section).
 	CreatePerson(context.Context, *connect.Request[v1.CreatePersonRequest]) (*connect.Response[v1.CreatePersonResponse], error)
 	// Rename, or whether the planner may propose them; a field left out stays.
 	UpdatePerson(context.Context, *connect.Request[v1.UpdatePersonRequest]) (*connect.Response[v1.UpdatePersonResponse], error)
+	// Move a person, into a section or out of one.
 	MovePerson(context.Context, *connect.Request[v1.MovePersonRequest]) (*connect.Response[v1.MovePersonResponse], error)
-	// A person takes a task: good | poor.
+	// A person takes a task: good (gladly) | poor (if needed).
 	SetPersonTask(context.Context, *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error)
+	// A person no longer takes a task.
 	RemovePersonTask(context.Context, *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error)
-	// Sections of people.
+	// Sections of people: headings, placement only.
 	ListSections(context.Context, *connect.Request[v1.ListSectionsRequest]) (*connect.Response[v1.ListSectionsResponse], error)
+	// Add a section of people.
 	CreateSection(context.Context, *connect.Request[v1.CreateSectionRequest]) (*connect.Response[v1.CreateSectionResponse], error)
+	// Rename a section of people.
 	RenameSection(context.Context, *connect.Request[v1.RenameSectionRequest]) (*connect.Response[v1.RenameSectionResponse], error)
+	// Move a section of people.
 	MoveSection(context.Context, *connect.Request[v1.MoveSectionRequest]) (*connect.Response[v1.MoveSectionResponse], error)
+	// Delete a section of people; the people stay, without a section.
 	DeleteSection(context.Context, *connect.Request[v1.DeleteSectionRequest]) (*connect.Response[v1.DeleteSectionResponse], error)
-	// Sections of tasks.
+	// Sections of tasks: headings, placement only (tasks without one come first).
 	ListTaskSections(context.Context, *connect.Request[v1.ListTaskSectionsRequest]) (*connect.Response[v1.ListTaskSectionsResponse], error)
+	// Add a section of tasks.
 	CreateTaskSection(context.Context, *connect.Request[v1.CreateTaskSectionRequest]) (*connect.Response[v1.CreateTaskSectionResponse], error)
+	// Rename a section of tasks.
 	RenameTaskSection(context.Context, *connect.Request[v1.RenameTaskSectionRequest]) (*connect.Response[v1.RenameTaskSectionResponse], error)
+	// Move a section of tasks.
 	MoveTaskSection(context.Context, *connect.Request[v1.MoveTaskSectionRequest]) (*connect.Response[v1.MoveTaskSectionResponse], error)
+	// Delete a section of tasks; the tasks stay, without a section.
 	DeleteTaskSection(context.Context, *connect.Request[v1.DeleteTaskSectionRequest]) (*connect.Response[v1.DeleteTaskSectionResponse], error)
 }
 
@@ -1370,13 +1414,17 @@ func (UnimplementedSetupServiceHandler) DeleteTaskSection(context.Context, *conn
 
 // PlanServiceClient is a client for the dutyplan.v1.PlanService service.
 type PlanServiceClient interface {
+	// The organisation's plans. Members only.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
+	// Make a plan; its slug comes from the name. Members only.
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	// One plan.
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
-	// The slug stays.
+	// Rename a plan; the slug stays.
 	RenamePlan(context.Context, *connect.Request[v1.RenamePlanRequest]) (*connect.Response[v1.RenamePlanResponse], error)
-	// Refused while a run is in progress.
+	// Delete a plan with everything in it. Refused while a run is in progress. It cannot be undone.
 	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
+	// The events, in date and time order.
 	ListEvents(context.Context, *connect.Request[v1.ListEventsRequest]) (*connect.Response[v1.ListEventsResponse], error)
 	// One event, or a series: every N weeks (at most 8) until a date.
 	AddEvents(context.Context, *connect.Request[v1.AddEventsRequest]) (*connect.Response[v1.AddEventsResponse], error)
@@ -1384,28 +1432,35 @@ type PlanServiceClient interface {
 	CopyEvent(context.Context, *connect.Request[v1.CopyEventRequest]) (*connect.Response[v1.CopyEventResponse], error)
 	// Change the times; a field left out stays.
 	UpdateEvent(context.Context, *connect.Request[v1.UpdateEventRequest]) (*connect.Response[v1.UpdateEventResponse], error)
+	// Delete an event with its places, details, answers and cells.
 	DeleteEvent(context.Context, *connect.Request[v1.DeleteEventRequest]) (*connect.Response[v1.DeleteEventResponse], error)
 	// How many people each task needs on each event.
 	ListPlaces(context.Context, *connect.Request[v1.ListPlacesRequest]) (*connect.Response[v1.ListPlacesResponse], error)
+	// Set how many people a task needs on an event (0 = not needed).
 	SetPlaces(context.Context, *connect.Request[v1.SetPlacesRequest]) (*connect.Response[v1.SetPlacesResponse], error)
 	// Back to none.
 	ResetPlaces(context.Context, *connect.Request[v1.ResetPlacesRequest]) (*connect.Response[v1.ResetPlacesResponse], error)
 	// Many at once (at most 5000), all or nothing.
 	SetPlacesMany(context.Context, *connect.Request[v1.SetPlacesManyRequest]) (*connect.Response[v1.SetPlacesManyResponse], error)
-	// The details rows and their values.
+	// The details rows («Theme», «Note»: one text per event) and their values.
 	ListFields(context.Context, *connect.Request[v1.ListFieldsRequest]) (*connect.Response[v1.ListFieldsResponse], error)
+	// Add a details row; it goes last.
 	AddField(context.Context, *connect.Request[v1.AddFieldRequest]) (*connect.Response[v1.AddFieldResponse], error)
+	// Rename a details row.
 	RenameField(context.Context, *connect.Request[v1.RenameFieldRequest]) (*connect.Response[v1.RenameFieldResponse], error)
+	// Move a details row.
 	MoveField(context.Context, *connect.Request[v1.MoveFieldRequest]) (*connect.Response[v1.MoveFieldResponse], error)
+	// Freeze a details row (it stays in sight under the dates), or unfreeze it.
 	FreezeField(context.Context, *connect.Request[v1.FreezeFieldRequest]) (*connect.Response[v1.FreezeFieldResponse], error)
+	// Delete a details row with its values.
 	DeleteField(context.Context, *connect.Request[v1.DeleteFieldRequest]) (*connect.Response[v1.DeleteFieldResponse], error)
-	// "" removes the value.
+	// The text of a details row for one event; "" removes it.
 	SetFieldValue(context.Context, *connect.Request[v1.SetFieldValueRequest]) (*connect.Response[v1.SetFieldValueResponse], error)
-	// Everyone's answers per event, their tasks, and the notes.
+	// Everyone's answers per event, the tasks each person takes, and the notes.
 	ListAnswers(context.Context, *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error)
-	// One person's answers (an answer link may do this).
+	// One person's answers for some events. Answer link.
 	SetAvailability(context.Context, *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error)
-	// A note on an answer, at most 300 characters; "" removes (an answer link may do this).
+	// A note on an answer, at most 300 characters; "" removes it. Answer link.
 	SetNote(context.Context, *connect.Request[v1.SetNoteRequest]) (*connect.Response[v1.SetNoteResponse], error)
 	// Many answers at once (at most 5000), all or nothing.
 	SetAnswers(context.Context, *connect.Request[v1.SetAnswersRequest]) (*connect.Response[v1.SetAnswersResponse], error)
@@ -1731,13 +1786,17 @@ func (c *planServiceClient) SetAnswers(ctx context.Context, req *connect.Request
 
 // PlanServiceHandler is an implementation of the dutyplan.v1.PlanService service.
 type PlanServiceHandler interface {
+	// The organisation's plans. Members only.
 	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
+	// Make a plan; its slug comes from the name. Members only.
 	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	// One plan.
 	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
-	// The slug stays.
+	// Rename a plan; the slug stays.
 	RenamePlan(context.Context, *connect.Request[v1.RenamePlanRequest]) (*connect.Response[v1.RenamePlanResponse], error)
-	// Refused while a run is in progress.
+	// Delete a plan with everything in it. Refused while a run is in progress. It cannot be undone.
 	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
+	// The events, in date and time order.
 	ListEvents(context.Context, *connect.Request[v1.ListEventsRequest]) (*connect.Response[v1.ListEventsResponse], error)
 	// One event, or a series: every N weeks (at most 8) until a date.
 	AddEvents(context.Context, *connect.Request[v1.AddEventsRequest]) (*connect.Response[v1.AddEventsResponse], error)
@@ -1745,28 +1804,35 @@ type PlanServiceHandler interface {
 	CopyEvent(context.Context, *connect.Request[v1.CopyEventRequest]) (*connect.Response[v1.CopyEventResponse], error)
 	// Change the times; a field left out stays.
 	UpdateEvent(context.Context, *connect.Request[v1.UpdateEventRequest]) (*connect.Response[v1.UpdateEventResponse], error)
+	// Delete an event with its places, details, answers and cells.
 	DeleteEvent(context.Context, *connect.Request[v1.DeleteEventRequest]) (*connect.Response[v1.DeleteEventResponse], error)
 	// How many people each task needs on each event.
 	ListPlaces(context.Context, *connect.Request[v1.ListPlacesRequest]) (*connect.Response[v1.ListPlacesResponse], error)
+	// Set how many people a task needs on an event (0 = not needed).
 	SetPlaces(context.Context, *connect.Request[v1.SetPlacesRequest]) (*connect.Response[v1.SetPlacesResponse], error)
 	// Back to none.
 	ResetPlaces(context.Context, *connect.Request[v1.ResetPlacesRequest]) (*connect.Response[v1.ResetPlacesResponse], error)
 	// Many at once (at most 5000), all or nothing.
 	SetPlacesMany(context.Context, *connect.Request[v1.SetPlacesManyRequest]) (*connect.Response[v1.SetPlacesManyResponse], error)
-	// The details rows and their values.
+	// The details rows («Theme», «Note»: one text per event) and their values.
 	ListFields(context.Context, *connect.Request[v1.ListFieldsRequest]) (*connect.Response[v1.ListFieldsResponse], error)
+	// Add a details row; it goes last.
 	AddField(context.Context, *connect.Request[v1.AddFieldRequest]) (*connect.Response[v1.AddFieldResponse], error)
+	// Rename a details row.
 	RenameField(context.Context, *connect.Request[v1.RenameFieldRequest]) (*connect.Response[v1.RenameFieldResponse], error)
+	// Move a details row.
 	MoveField(context.Context, *connect.Request[v1.MoveFieldRequest]) (*connect.Response[v1.MoveFieldResponse], error)
+	// Freeze a details row (it stays in sight under the dates), or unfreeze it.
 	FreezeField(context.Context, *connect.Request[v1.FreezeFieldRequest]) (*connect.Response[v1.FreezeFieldResponse], error)
+	// Delete a details row with its values.
 	DeleteField(context.Context, *connect.Request[v1.DeleteFieldRequest]) (*connect.Response[v1.DeleteFieldResponse], error)
-	// "" removes the value.
+	// The text of a details row for one event; "" removes it.
 	SetFieldValue(context.Context, *connect.Request[v1.SetFieldValueRequest]) (*connect.Response[v1.SetFieldValueResponse], error)
-	// Everyone's answers per event, their tasks, and the notes.
+	// Everyone's answers per event, the tasks each person takes, and the notes.
 	ListAnswers(context.Context, *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error)
-	// One person's answers (an answer link may do this).
+	// One person's answers for some events. Answer link.
 	SetAvailability(context.Context, *connect.Request[v1.SetAvailabilityRequest]) (*connect.Response[v1.SetAvailabilityResponse], error)
-	// A note on an answer, at most 300 characters; "" removes (an answer link may do this).
+	// A note on an answer, at most 300 characters; "" removes it. Answer link.
 	SetNote(context.Context, *connect.Request[v1.SetNoteRequest]) (*connect.Response[v1.SetNoteResponse], error)
 	// Many answers at once (at most 5000), all or nothing.
 	SetAnswers(context.Context, *connect.Request[v1.SetAnswersRequest]) (*connect.Response[v1.SetAnswersResponse], error)
@@ -2092,13 +2158,15 @@ func (UnimplementedPlanServiceHandler) SetAnswers(context.Context, *connect.Requ
 
 // DraftServiceClient is a client for the dutyplan.v1.DraftService service.
 type DraftServiceClient interface {
-	// Places set by hand.
+	// Places set by hand (and the planner's names that were locked).
 	ListCells(context.Context, *connect.Request[v1.ListCellsRequest]) (*connect.Response[v1.ListCellsResponse], error)
 	// A person (or a text) in a place; locked = a planner's name kept.
 	AddCell(context.Context, *connect.Request[v1.AddCellRequest]) (*connect.Response[v1.AddCellResponse], error)
+	// Take a place set by hand away.
 	DeleteCell(context.Context, *connect.Request[v1.DeleteCellRequest]) (*connect.Response[v1.DeleteCellResponse], error)
-	// Selections: only these can be picked.
+	// Selections: only these people can be picked for a task on an event.
 	ListPools(context.Context, *connect.Request[v1.ListPoolsRequest]) (*connect.Response[v1.ListPoolsResponse], error)
+	// Set a selection; no people removes it.
 	SetPool(context.Context, *connect.Request[v1.SetPoolRequest]) (*connect.Response[v1.SetPoolResponse], error)
 	// Lock the planner's names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays).
 	SetLocks(context.Context, *connect.Request[v1.SetLocksRequest]) (*connect.Response[v1.SetLocksResponse], error)
@@ -2110,13 +2178,15 @@ type DraftServiceClient interface {
 	GetWeights(context.Context, *connect.Request[v1.GetWeightsRequest]) (*connect.Response[v1.GetWeightsResponse], error)
 	// Replaces them: a key left out goes back to its default, {} resets all.
 	SetWeights(context.Context, *connect.Request[v1.SetWeightsRequest]) (*connect.Response[v1.SetWeightsResponse], error)
-	// Make a draft; poll GetRun until its status is done or failed.
+	// Make a draft; poll GetRun until its status is done or failed. One run at a time per plan (else busy).
 	StartRun(context.Context, *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error)
+	// The newest drafts (and the pinned one), the newest first.
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	// A draft with its places, compromises and load; id 0 = the newest.
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
-	// The current plan, what everyone sees.
+	// Pin a draft: the current plan, what everyone sees (at most one per plan).
 	PinRun(context.Context, *connect.Request[v1.PinRunRequest]) (*connect.Response[v1.PinRunResponse], error)
+	// Unpin it again (the locks stay).
 	UnpinRun(context.Context, *connect.Request[v1.UnpinRunRequest]) (*connect.Response[v1.UnpinRunResponse], error)
 }
 
@@ -2320,13 +2390,15 @@ func (c *draftServiceClient) UnpinRun(ctx context.Context, req *connect.Request[
 
 // DraftServiceHandler is an implementation of the dutyplan.v1.DraftService service.
 type DraftServiceHandler interface {
-	// Places set by hand.
+	// Places set by hand (and the planner's names that were locked).
 	ListCells(context.Context, *connect.Request[v1.ListCellsRequest]) (*connect.Response[v1.ListCellsResponse], error)
 	// A person (or a text) in a place; locked = a planner's name kept.
 	AddCell(context.Context, *connect.Request[v1.AddCellRequest]) (*connect.Response[v1.AddCellResponse], error)
+	// Take a place set by hand away.
 	DeleteCell(context.Context, *connect.Request[v1.DeleteCellRequest]) (*connect.Response[v1.DeleteCellResponse], error)
-	// Selections: only these can be picked.
+	// Selections: only these people can be picked for a task on an event.
 	ListPools(context.Context, *connect.Request[v1.ListPoolsRequest]) (*connect.Response[v1.ListPoolsResponse], error)
+	// Set a selection; no people removes it.
 	SetPool(context.Context, *connect.Request[v1.SetPoolRequest]) (*connect.Response[v1.SetPoolResponse], error)
 	// Lock the planner's names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays).
 	SetLocks(context.Context, *connect.Request[v1.SetLocksRequest]) (*connect.Response[v1.SetLocksResponse], error)
@@ -2338,13 +2410,15 @@ type DraftServiceHandler interface {
 	GetWeights(context.Context, *connect.Request[v1.GetWeightsRequest]) (*connect.Response[v1.GetWeightsResponse], error)
 	// Replaces them: a key left out goes back to its default, {} resets all.
 	SetWeights(context.Context, *connect.Request[v1.SetWeightsRequest]) (*connect.Response[v1.SetWeightsResponse], error)
-	// Make a draft; poll GetRun until its status is done or failed.
+	// Make a draft; poll GetRun until its status is done or failed. One run at a time per plan (else busy).
 	StartRun(context.Context, *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error)
+	// The newest drafts (and the pinned one), the newest first.
 	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
 	// A draft with its places, compromises and load; id 0 = the newest.
 	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
-	// The current plan, what everyone sees.
+	// Pin a draft: the current plan, what everyone sees (at most one per plan).
 	PinRun(context.Context, *connect.Request[v1.PinRunRequest]) (*connect.Response[v1.PinRunResponse], error)
+	// Unpin it again (the locks stay).
 	UnpinRun(context.Context, *connect.Request[v1.UnpinRunRequest]) (*connect.Response[v1.UnpinRunResponse], error)
 }
 

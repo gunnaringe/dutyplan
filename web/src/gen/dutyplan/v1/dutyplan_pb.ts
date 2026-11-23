@@ -1,9 +1,17 @@
 // The API of Tjenesteplan (dutyplan): everything the page does, and nothing more.
 //
-// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json). Field
-// names on the wire are the ones written here (snake_case), every field is sent (also empty ones), and ids are numbers.
+// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json), or binary
+// protobuf (application/proto, which the page sends). In JSON, field names on the wire are the ones written here
+// (snake_case), every field is sent (also empty ones), ids are numbers, and an unknown field is refused. A field left out
+// of a request is empty (0, "", false), except where it says «left out stays». The server also answers gRPC reflection
+// (with these comments) where HTTP/2 reaches it.
+//
 // A request about an organisation names it in `org`, one about a plan also in `plan` (slugs); the server decides
-// access from those alone (internal/api/procs.go).
+// access from those alone (internal/api/procs.go). Who may call: a member of the organisation, unless the call says
+// otherwise. «Admin»: an admin only. «Open»: anyone, signed in or not. «Links read»: a view, answer or edit link to a plan
+// may call it too (an edit link reaches its own plan only). «Edit link»: an edit link may make this change too.
+// «Answer link»: an answer link (and an edit link) may make it. Somebody else's organisation or plan is 404, as if it
+// did not exist. Positions (Move*) count from 0.
 //
 // Levels are strings, as everywhere on the wire: an answer per event never|poor|good ("" = not answered), a person's
 // task poor|good, a combination cannot|practical|standard, a role admin|member, a link view|answer|edit|join.
@@ -57,10 +65,14 @@ export const ProblemSchema: GenMessage<Problem> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 0);
 
 /**
+ * An organisation: a group with members, tasks, people and plans.
+ *
  * @generated from message dutyplan.v1.Org
  */
 export type Org = Message<"dutyplan.v1.Org"> & {
   /**
+   * the address (org in every request), made from the name; it never changes
+   *
    * @generated from field: string slug = 1;
    */
   slug: string;
@@ -71,6 +83,8 @@ export type Org = Message<"dutyplan.v1.Org"> & {
   name: string;
 
   /**
+   * RFC 3339
+   *
    * @generated from field: string created_at = 3;
    */
   createdAt: string;
@@ -84,10 +98,14 @@ export const OrgSchema: GenMessage<Org> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 1);
 
 /**
+ * A plan, for example «Spring 2027»: events, places, answers and drafts.
+ *
  * @generated from message dutyplan.v1.Plan
  */
 export type Plan = Message<"dutyplan.v1.Plan"> & {
   /**
+   * the address (plan in every request); it never changes
+   *
    * @generated from field: string slug = 1;
    */
   slug: string;
@@ -118,6 +136,8 @@ export const PlanSchema: GenMessage<Plan> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 2);
 
 /**
+ * The one signed in.
+ *
  * @generated from message dutyplan.v1.User
  */
 export type User = Message<"dutyplan.v1.User"> & {
@@ -140,6 +160,8 @@ export const UserSchema: GenMessage<User> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 3);
 
 /**
+ * A member of an organisation (someone with a login).
+ *
  * @generated from message dutyplan.v1.Member
  */
 export type Member = Message<"dutyplan.v1.Member"> & {
@@ -159,6 +181,8 @@ export type Member = Message<"dutyplan.v1.Member"> & {
   email: string;
 
   /**
+   * admin | member
+   *
    * @generated from field: string role = 4;
    */
   role: string;
@@ -210,16 +234,22 @@ export type Link = Message<"dutyplan.v1.Link"> & {
   planName: string;
 
   /**
+   * view | answer | edit | join
+   *
    * @generated from field: string level = 6;
    */
   level: string;
 
   /**
+   * what it is for, the maker's own words
+   *
    * @generated from field: string label = 7;
    */
   label: string;
 
   /**
+   * the secret part of the link https://<server>/s/<token>
+   *
    * @generated from field: string token = 8;
    */
   token: string;
@@ -235,6 +265,8 @@ export type Link = Message<"dutyplan.v1.Link"> & {
   createdAt: string;
 
   /**
+   * RFC 3339, "" = never
+   *
    * @generated from field: string expires_at = 11;
    */
   expiresAt: string;
@@ -255,6 +287,8 @@ export const LinkSchema: GenMessage<Link> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 5);
 
 /**
+ * A job, for example «Sound» or «Coffee»: the organisation's own, the same in every plan, in an order.
+ *
  * @generated from message dutyplan.v1.Task
  */
 export type Task = Message<"dutyplan.v1.Task"> & {
@@ -307,6 +341,8 @@ export type Combination = Message<"dutyplan.v1.Combination"> & {
   b: number;
 
   /**
+   * cannot | practical
+   *
    * @generated from field: string level = 3;
    */
   level: string;
@@ -320,6 +356,8 @@ export const CombinationSchema: GenMessage<Combination> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 7);
 
 /**
+ * Someone who can be given tasks: a name only, no contact details.
+ *
  * @generated from message dutyplan.v1.Person
  */
 export type Person = Message<"dutyplan.v1.Person"> & {
@@ -380,6 +418,8 @@ export const SectionSchema: GenMessage<Section> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 9);
 
 /**
+ * A date of a plan, with an optional time. What is said about it goes in a details row.
+ *
  * @generated from message dutyplan.v1.Event
  */
 export type Event = Message<"dutyplan.v1.Event"> & {
@@ -403,6 +443,8 @@ export type Event = Message<"dutyplan.v1.Event"> & {
   startTime: string;
 
   /**
+   * HH:MM or "" (needs a start time, and comes after it)
+   *
    * @generated from field: string end_time = 4;
    */
   endTime: string;
@@ -416,6 +458,8 @@ export const EventSchema: GenMessage<Event> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 10);
 
 /**
+ * How many people a task needs on an event (no row = none).
+ *
  * @generated from message dutyplan.v1.EventPlaces
  */
 export type EventPlaces = Message<"dutyplan.v1.EventPlaces"> & {
@@ -459,6 +503,8 @@ export type PlanField = Message<"dutyplan.v1.PlanField"> & {
   name: string;
 
   /**
+   * from 0
+   *
    * @generated from field: int32 position = 3;
    */
   position: number;
@@ -479,6 +525,8 @@ export const PlanFieldSchema: GenMessage<PlanField> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 12);
 
 /**
+ * The text of a details row for one event.
+ *
  * @generated from message dutyplan.v1.FieldValue
  */
 export type FieldValue = Message<"dutyplan.v1.FieldValue"> & {
@@ -506,6 +554,8 @@ export const FieldValueSchema: GenMessage<FieldValue> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 13);
 
 /**
+ * A person's answer for an event (no row = not answered).
+ *
  * @generated from message dutyplan.v1.EventAnswer
  */
 export type EventAnswer = Message<"dutyplan.v1.EventAnswer"> & {
@@ -520,6 +570,8 @@ export type EventAnswer = Message<"dutyplan.v1.EventAnswer"> & {
   eventId: number;
 
   /**
+   * good (gladly) | poor (if needed) | never
+   *
    * @generated from field: string level = 3;
    */
   level: string;
@@ -533,6 +585,8 @@ export const EventAnswerSchema: GenMessage<EventAnswer> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 14);
 
 /**
+ * A task a person takes (no row = not at all).
+ *
  * @generated from message dutyplan.v1.TaskAnswer
  */
 export type TaskAnswer = Message<"dutyplan.v1.TaskAnswer"> & {
@@ -547,6 +601,8 @@ export type TaskAnswer = Message<"dutyplan.v1.TaskAnswer"> & {
   taskId: number;
 
   /**
+   * good (gladly) | poor (if needed)
+   *
    * @generated from field: string level = 3;
    */
   level: string;
@@ -560,6 +616,8 @@ export const TaskAnswerSchema: GenMessage<TaskAnswer> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 15);
 
 /**
+ * A person's note on their answer for an event («only before 12»).
+ *
  * @generated from message dutyplan.v1.AnswerNote
  */
 export type AnswerNote = Message<"dutyplan.v1.AnswerNote"> & {
@@ -608,16 +666,22 @@ export type ManualCell = Message<"dutyplan.v1.ManualCell"> & {
   taskId: number;
 
   /**
+   * the person; not set for a text
+   *
    * @generated from field: optional int32 person_id = 4;
    */
   personId?: number | undefined;
 
   /**
+   * the text, when it is not a person («Youth group»)
+   *
    * @generated from field: string label = 5;
    */
   label: string;
 
   /**
+   * the places a text fills
+   *
    * @generated from field: int32 fills = 6;
    */
   fills: number;
@@ -683,6 +747,8 @@ export type Answer = Message<"dutyplan.v1.Answer"> & {
   event: number;
 
   /**
+   * good | poor | never | "" (not answered)
+   *
    * @generated from field: string level = 3;
    */
   level: string;
@@ -754,10 +820,16 @@ export const LockSchema: GenMessage<Lock> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 21);
 
 /**
+ * One setting of the planner's weighting, and the range it may be set within.
+ *
  * @generated from message dutyplan.v1.WeightSpec
  */
 export type WeightSpec = Message<"dutyplan.v1.WeightSpec"> & {
   /**
+   * w_fair, w_fair_range (an even total load per person), w_task_fair, w_task_range (even per task), w_task.good,
+   * w_task.poor, w_date.good, w_date.poor (people's wishes for tasks and dates; the .poor ones are negative),
+   * w_combo.practical, w_combo.impractical (two tasks for one person on one event)
+   *
    * @generated from field: string key = 1;
    */
   key: string;
@@ -809,11 +881,15 @@ export type Run = Message<"dutyplan.v1.Run"> & {
   seed: number;
 
   /**
+   * seconds
+   *
    * @generated from field: int32 time_limit = 4;
    */
   timeLimit: number;
 
   /**
+   * why it failed
+   *
    * @generated from field: string error = 5;
    */
   error: string;
@@ -916,6 +992,8 @@ export type RunInfo = Message<"dutyplan.v1.RunInfo"> & {
   checked: boolean;
 
   /**
+   * what the checker found wrong (empty when all is well)
+   *
    * @generated from field: repeated string violations = 13;
    */
   violations: string[];
@@ -929,6 +1007,8 @@ export const RunInfoSchema: GenMessage<RunInfo> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 24);
 
 /**
+ * A task as it was when the run was made.
+ *
  * @generated from message dutyplan.v1.SnapTask
  */
 export type SnapTask = Message<"dutyplan.v1.SnapTask"> & {
@@ -956,6 +1036,8 @@ export const SnapTaskSchema: GenMessage<SnapTask> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 25);
 
 /**
+ * A person in a place of the draft.
+ *
  * @generated from message dutyplan.v1.CellPerson
  */
 export type CellPerson = Message<"dutyplan.v1.CellPerson"> & {
@@ -999,6 +1081,8 @@ export const CellPersonSchema: GenMessage<CellPerson> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 26);
 
 /**
+ * A text set by hand in a place of the draft («Youth group»).
+ *
  * @generated from message dutyplan.v1.CellText
  */
 export type CellText = Message<"dutyplan.v1.CellText"> & {
@@ -1008,6 +1092,8 @@ export type CellText = Message<"dutyplan.v1.CellText"> & {
   text: string;
 
   /**
+   * the places it fills
+   *
    * @generated from field: int32 fills = 2;
    */
   fills: number;
@@ -1021,6 +1107,8 @@ export const CellTextSchema: GenMessage<CellText> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 27);
 
 /**
+ * One task on one event in the draft.
+ *
  * @generated from message dutyplan.v1.Cell
  */
 export type Cell = Message<"dutyplan.v1.Cell"> & {
@@ -1030,6 +1118,8 @@ export type Cell = Message<"dutyplan.v1.Cell"> & {
   taskId: number;
 
   /**
+   * the places: filled + missing (more than the event's places when more were set by hand)
+   *
    * @generated from field: int32 slots = 2;
    */
   slots: number;
@@ -1045,11 +1135,15 @@ export type Cell = Message<"dutyplan.v1.Cell"> & {
   texts: CellText[];
 
   /**
+   * places nobody could fill
+   *
    * @generated from field: int32 missing = 5;
    */
   missing: number;
 
   /**
+   * why places are missing, in plain words (in the language asked for)
+   *
    * @generated from field: string explanation = 6;
    */
   explanation: string;
@@ -1063,6 +1157,8 @@ export const CellSchema: GenMessage<Cell> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 28);
 
 /**
+ * An event in the draft.
+ *
  * @generated from message dutyplan.v1.EventRow
  */
 export type EventRow = Message<"dutyplan.v1.EventRow"> & {
@@ -1077,6 +1173,8 @@ export type EventRow = Message<"dutyplan.v1.EventRow"> & {
   date: string;
 
   /**
+   * the event's time now while it exists, else the one from when the run was made
+   *
    * @generated from field: string start_time = 3;
    */
   startTime: string;
@@ -1087,6 +1185,8 @@ export type EventRow = Message<"dutyplan.v1.EventRow"> & {
   endTime: string;
 
   /**
+   * in the order of the run's tasks; a task with nothing in this event is left out
+   *
    * @generated from field: repeated dutyplan.v1.Cell cells = 5;
    */
   cells: Cell[];
@@ -1100,6 +1200,8 @@ export const EventRowSchema: GenMessage<EventRow> = /*@__PURE__*/
   messageDesc(file_dutyplan_v1_dutyplan, 29);
 
 /**
+ * How much one person was given in the draft.
+ *
  * @generated from message dutyplan.v1.LoadRow
  */
 export type LoadRow = Message<"dutyplan.v1.LoadRow"> & {
@@ -1114,11 +1216,15 @@ export type LoadRow = Message<"dutyplan.v1.LoadRow"> & {
   name: string;
 
   /**
+   * the places they were given
+   *
    * @generated from field: int32 count = 3;
    */
   count: number;
 
   /**
+   * their fair share
+   *
    * @generated from field: double target = 4;
    */
   target: number;
@@ -1154,6 +1260,8 @@ export type HealthResponse = Message<"dutyplan.v1.HealthResponse"> & {
   ok: boolean;
 
   /**
+   * false: drafts cannot be made here (StartRun answers unavailable)
+   *
    * @generated from field: bool planner = 2;
    */
   planner: boolean;
@@ -1184,6 +1292,8 @@ export const MeRequestSchema: GenMessage<MeRequest> = /*@__PURE__*/
  */
 export type MeResponse = Message<"dutyplan.v1.MeResponse"> & {
   /**
+   * the server has a login (false: everyone who reaches it may do everything)
+   *
    * @generated from field: bool login = 1;
    */
   login: boolean;
@@ -1316,16 +1426,22 @@ export type GetOrgResponse = Message<"dutyplan.v1.GetOrgResponse"> & {
   createdAt: string;
 
   /**
+   * admin | member; "" when you come through a link
+   *
    * @generated from field: string role = 4;
    */
   role: string;
 
   /**
+   * the link's level (view | answer | edit); "" for a member
+   *
    * @generated from field: string level = 5;
    */
   level: string;
 
   /**
+   * the plan the link is to; "" for a member
+   *
    * @generated from field: string plan = 6;
    */
   plan: string;
@@ -1387,6 +1503,8 @@ export type DeleteOrgRequest = Message<"dutyplan.v1.DeleteOrgRequest"> & {
   org: string;
 
   /**
+   * the slug again, so a stray call cannot delete
+   *
    * @generated from field: string confirm = 2;
    */
   confirm: string;
@@ -1456,11 +1574,15 @@ export type SetMemberRoleRequest = Message<"dutyplan.v1.SetMemberRoleRequest"> &
   org: string;
 
   /**
+   * the member's id
+   *
    * @generated from field: int32 id = 2;
    */
   id: number;
 
   /**
+   * admin | member
+   *
    * @generated from field: string role = 3;
    */
   role: string;
@@ -1496,6 +1618,8 @@ export type RemoveMemberRequest = Message<"dutyplan.v1.RemoveMemberRequest"> & {
   org: string;
 
   /**
+   * the member's id (your own to leave)
+   *
    * @generated from field: int32 id = 2;
    */
   id: number;
@@ -1572,21 +1696,29 @@ export type CreateLinkRequest = Message<"dutyplan.v1.CreateLinkRequest"> & {
   plan: string;
 
   /**
+   * view (read) | answer (read, and set anyone's answers and notes) | edit (change the plan) | join (an invitation)
+   *
    * @generated from field: string level = 3;
    */
   level: string;
 
   /**
+   * what it is for, to tell links apart
+   *
    * @generated from field: string label = 4;
    */
   label: string;
 
   /**
+   * it runs out after 1 to 366 days; 0 = never
+   *
    * @generated from field: int32 expires_days = 5;
    */
   expiresDays: number;
 
   /**
+   * an invitation only: it ends when someone joins with it
+   *
    * @generated from field: bool single_use = 6;
    */
   singleUse: boolean;
@@ -1751,6 +1883,8 @@ export type UpdateTaskRequest = Message<"dutyplan.v1.UpdateTaskRequest"> & {
   name?: string | undefined;
 
   /**
+   * false: the planner leaves it alone (only what is set by hand)
+   *
    * @generated from field: optional bool planned = 4;
    */
   planned?: boolean | undefined;
@@ -1908,6 +2042,8 @@ export type SetCombinationRequest = Message<"dutyplan.v1.SetCombinationRequest">
   org: string;
 
   /**
+   * two task ids, in either order
+   *
    * @generated from field: int32 a = 2;
    */
   a: number;
@@ -1918,6 +2054,8 @@ export type SetCombinationRequest = Message<"dutyplan.v1.SetCombinationRequest">
   b: number;
 
   /**
+   * cannot | practical | standard
+   *
    * @generated from field: string level = 4;
    */
   level: string;
@@ -1958,6 +2096,8 @@ export type SetTaskCombinationsRequest = Message<"dutyplan.v1.SetTaskCombination
   task: number;
 
   /**
+   * cannot | practical | standard
+   *
    * @generated from field: string level = 3;
    */
   level: string;
@@ -2083,6 +2223,8 @@ export type UpdatePersonRequest = Message<"dutyplan.v1.UpdatePersonRequest"> & {
   name?: string | undefined;
 
   /**
+   * false: the planner never picks them
+   *
    * @generated from field: optional bool proposable = 4;
    */
   proposable?: boolean | undefined;
@@ -2181,6 +2323,8 @@ export type SetPersonTaskRequest = Message<"dutyplan.v1.SetPersonTaskRequest"> &
   task: number;
 
   /**
+   * good | poor
+   *
    * @generated from field: string level = 4;
    */
   level: string;
@@ -2879,21 +3023,29 @@ export type AddEventsRequest = Message<"dutyplan.v1.AddEventsRequest"> & {
   plan: string;
 
   /**
+   * the first (or only) date, YYYY-MM-DD
+   *
    * @generated from field: string date = 3;
    */
   date: string;
 
   /**
+   * with it, a series up to and including this date ("" = one event)
+   *
    * @generated from field: string until = 4;
    */
   until: string;
 
   /**
+   * a series every N weeks, 1 to 8 (0 = every week)
+   *
    * @generated from field: int32 every = 5;
    */
   every: number;
 
   /**
+   * HH:MM or ""
+   *
    * @generated from field: string start_time = 6;
    */
   startTime: string;
@@ -2943,26 +3095,36 @@ export type CopyEventRequest = Message<"dutyplan.v1.CopyEventRequest"> & {
   plan: string;
 
   /**
+   * the event to copy
+   *
    * @generated from field: int32 id = 3;
    */
   id: number;
 
   /**
+   * the dates of the copies (YYYY-MM-DD); with until, each of them again every N weeks
+   *
    * @generated from field: repeated string dates = 4;
    */
   dates: string[];
 
   /**
+   * repeat up to and including this date ("" = only the dates)
+   *
    * @generated from field: string until = 5;
    */
   until: string;
 
   /**
+   * every N weeks, 1 to 8 (0 = every week)
+   *
    * @generated from field: int32 every = 6;
    */
   every: number;
 
   /**
+   * copy the start and end time (else the copies get start_time and end_time)
+   *
    * @generated from field: bool times = 7;
    */
   times: boolean;
@@ -2978,16 +3140,22 @@ export type CopyEventRequest = Message<"dutyplan.v1.CopyEventRequest"> & {
   endTime: string;
 
   /**
+   * copy the details rows' values
+   *
    * @generated from field: bool details = 10;
    */
   details: boolean;
 
   /**
+   * copy the places
+   *
    * @generated from field: bool places = 11;
    */
   places: boolean;
 
   /**
+   * copy the cells set by hand
+   *
    * @generated from field: bool hand = 12;
    */
   hand: boolean;
@@ -3175,7 +3343,7 @@ export type SetPlacesRequest = Message<"dutyplan.v1.SetPlacesRequest"> & {
   task: number;
 
   /**
-   * required
+   * required; 0 = not needed
    *
    * @generated from field: optional int32 slots = 5;
    */
@@ -3583,6 +3751,8 @@ export type SetFieldValueRequest = Message<"dutyplan.v1.SetFieldValueRequest"> &
   field: number;
 
   /**
+   * "" removes it
+   *
    * @generated from field: string value = 5;
    */
   value: string;
@@ -3729,6 +3899,8 @@ export type SetNoteRequest = Message<"dutyplan.v1.SetNoteRequest"> & {
   person: number;
 
   /**
+   * at most 300 characters; "" removes it
+   *
    * @generated from field: string note = 5;
    */
   note: string;
@@ -3877,6 +4049,8 @@ export type AddCellRequest = Message<"dutyplan.v1.AddCellRequest"> & {
   fills: number;
 
   /**
+   * a planner's name kept, not set by hand
+   *
    * @generated from field: bool locked = 8;
    */
   locked: boolean;
@@ -4010,6 +4184,8 @@ export type SetPoolRequest = Message<"dutyplan.v1.SetPoolRequest"> & {
   task: number;
 
   /**
+   * person ids; none removes the selection
+   *
    * @generated from field: repeated int32 people = 5;
    */
   people: number[];
@@ -4055,6 +4231,8 @@ export type SetLocksRequest = Message<"dutyplan.v1.SetLocksRequest"> & {
   locks: Lock[];
 
   /**
+   * true locks them, false unlocks them
+   *
    * @generated from field: bool locked = 4;
    */
   locked: boolean;
@@ -4182,6 +4360,8 @@ export type GetWeightsResponse = Message<"dutyplan.v1.GetWeightsResponse"> & {
   specs: WeightSpec[];
 
   /**
+   * key -> number, only what differs from the default
+   *
    * @generated from field: google.protobuf.Struct values = 2;
    */
   values?: JsonObject | undefined;
@@ -4209,6 +4389,8 @@ export type SetWeightsRequest = Message<"dutyplan.v1.SetWeightsRequest"> & {
   plan: string;
 
   /**
+   * key -> number; every value you keep (a key left out goes back to its default)
+   *
    * @generated from field: google.protobuf.Struct values = 3;
    */
   values?: JsonObject | undefined;
@@ -4277,6 +4459,8 @@ export const StartRunRequestSchema: GenMessage<StartRunRequest> = /*@__PURE__*/
  */
 export type StartRunResponse = Message<"dutyplan.v1.StartRunResponse"> & {
   /**
+   * the run, for GetRun
+   *
    * @generated from field: int32 id = 1;
    */
   id: number;
@@ -4393,11 +4577,15 @@ export type GetRunResponse = Message<"dutyplan.v1.GetRunResponse"> & {
   weak: string[];
 
   /**
+   * each person's count against their fair share
+   *
    * @generated from field: repeated dutyplan.v1.LoadRow load = 5;
    */
   load: LoadRow[];
 
   /**
+   * what the planner noticed (a locked name that goes against an answer), in plain words
+   *
    * @generated from field: repeated string warnings = 6;
    */
   warnings: string[];
@@ -4497,7 +4685,7 @@ export const UnpinRunResponseSchema: GenMessage<UnpinRunResponse> = /*@__PURE__*
  */
 export const AccountService: GenService<{
   /**
-   * Can this server plan at all? Open to everyone.
+   * Is the server up, and can it plan (is the solver there)? Open.
    *
    * @generated from rpc dutyplan.v1.AccountService.Health
    */
@@ -4507,7 +4695,7 @@ export const AccountService: GenService<{
     output: typeof HealthResponseSchema;
   },
   /**
-   * Whether there is a login, who is signed in, and the share links open in this browser. Open to everyone.
+   * Whether there is a login, who is signed in, and the share links open in this browser. Open.
    *
    * @generated from rpc dutyplan.v1.AccountService.Me
    */
@@ -4527,7 +4715,7 @@ export const AccountService: GenService<{
     output: typeof ListOrgsResponseSchema;
   },
   /**
-   * Make an organisation; you become its admin. A taken address gets -2, -3.
+   * Make an organisation; you become its admin. Its slug comes from the name (a taken one gets -2, -3, ...). Signed in.
    *
    * @generated from rpc dutyplan.v1.AccountService.CreateOrg
    */
@@ -4540,11 +4728,13 @@ export const AccountService: GenService<{
   serviceDesc(file_dutyplan_v1_dutyplan, 0);
 
 /**
+ * The organisation itself, its members and its share links. Members only, unless a call says otherwise.
+ *
  * @generated from service dutyplan.v1.OrgService
  */
 export const OrgService: GenService<{
   /**
-   * The organisation, with what you may do: role admin|member, or a link's level and plan.
+   * The organisation, with what you may do: your role, or a link's level and plan. Links read.
    *
    * @generated from rpc dutyplan.v1.OrgService.GetOrg
    */
@@ -4564,7 +4754,7 @@ export const OrgService: GenService<{
     output: typeof RenameOrgResponseSchema;
   },
   /**
-   * Delete an organisation without plans (admin); confirm is its slug.
+   * Delete an organisation that has no plans left (admin); confirm is its slug again. It cannot be undone.
    *
    * @generated from rpc dutyplan.v1.OrgService.DeleteOrg
    */
@@ -4604,7 +4794,7 @@ export const OrgService: GenService<{
     output: typeof RemoveMemberResponseSchema;
   },
   /**
-   * The share links.
+   * The share links and invitations.
    *
    * @generated from rpc dutyplan.v1.OrgService.ListLinks
    */
@@ -4614,7 +4804,7 @@ export const OrgService: GenService<{
     output: typeof ListLinksResponseSchema;
   },
   /**
-   * Make a link to a plan (view|answer|edit), or an invitation (join, admin, no plan).
+   * Make a link to a plan (view | answer | edit), or an invitation to become a member (join: admin, no plan).
    *
    * @generated from rpc dutyplan.v1.OrgService.CreateLink
    */
@@ -4637,10 +4827,14 @@ export const OrgService: GenService<{
   serviceDesc(file_dutyplan_v1_dutyplan, 1);
 
 /**
+ * The organisation's tasks, people and sections: the same in every plan. Every call: links read, edit link.
+ *
  * @generated from service dutyplan.v1.SetupService
  */
 export const SetupService: GenService<{
   /**
+   * The tasks, in their order.
+   *
    * @generated from rpc dutyplan.v1.SetupService.ListTasks
    */
   listTasks: {
@@ -4649,6 +4843,8 @@ export const SetupService: GenService<{
     output: typeof ListTasksResponseSchema;
   },
   /**
+   * Add a task; it goes last (in its section).
+   *
    * @generated from rpc dutyplan.v1.SetupService.CreateTask
    */
   createTask: {
@@ -4667,6 +4863,9 @@ export const SetupService: GenService<{
     output: typeof UpdateTaskResponseSchema;
   },
   /**
+   * Delete a task, with its places and the people's answers about it; refused (conflict) while a cell set by hand or a
+   * selection uses it.
+   *
    * @generated from rpc dutyplan.v1.SetupService.DeleteTask
    */
   deleteTask: {
@@ -4685,6 +4884,8 @@ export const SetupService: GenService<{
     output: typeof MoveTaskResponseSchema;
   },
   /**
+   * Which pairs of tasks one person can do on the same event (pairs not listed: impractical).
+   *
    * @generated from rpc dutyplan.v1.SetupService.ListCombinations
    */
   listCombinations: {
@@ -4693,6 +4894,8 @@ export const SetupService: GenService<{
     output: typeof ListCombinationsResponseSchema;
   },
   /**
+   * Set a pair: cannot | practical | standard (standard removes it: impractical, the planner's default).
+   *
    * @generated from rpc dutyplan.v1.SetupService.SetCombination
    */
   setCombination: {
@@ -4701,7 +4904,7 @@ export const SetupService: GenService<{
     output: typeof SetCombinationResponseSchema;
   },
   /**
-   * One task against all others.
+   * Set one task against all others, the same levels.
    *
    * @generated from rpc dutyplan.v1.SetupService.SetTaskCombinations
    */
@@ -4711,6 +4914,8 @@ export const SetupService: GenService<{
     output: typeof SetTaskCombinationsResponseSchema;
   },
   /**
+   * The people, in their order.
+   *
    * @generated from rpc dutyplan.v1.SetupService.ListPeople
    */
   listPeople: {
@@ -4719,6 +4924,8 @@ export const SetupService: GenService<{
     output: typeof ListPeopleResponseSchema;
   },
   /**
+   * Add a person (a name only); they go last (in their section).
+   *
    * @generated from rpc dutyplan.v1.SetupService.CreatePerson
    */
   createPerson: {
@@ -4737,6 +4944,8 @@ export const SetupService: GenService<{
     output: typeof UpdatePersonResponseSchema;
   },
   /**
+   * Move a person, into a section or out of one.
+   *
    * @generated from rpc dutyplan.v1.SetupService.MovePerson
    */
   movePerson: {
@@ -4745,7 +4954,7 @@ export const SetupService: GenService<{
     output: typeof MovePersonResponseSchema;
   },
   /**
-   * A person takes a task: good | poor.
+   * A person takes a task: good (gladly) | poor (if needed).
    *
    * @generated from rpc dutyplan.v1.SetupService.SetPersonTask
    */
@@ -4755,6 +4964,8 @@ export const SetupService: GenService<{
     output: typeof SetPersonTaskResponseSchema;
   },
   /**
+   * A person no longer takes a task.
+   *
    * @generated from rpc dutyplan.v1.SetupService.RemovePersonTask
    */
   removePersonTask: {
@@ -4763,7 +4974,7 @@ export const SetupService: GenService<{
     output: typeof RemovePersonTaskResponseSchema;
   },
   /**
-   * Sections of people.
+   * Sections of people: headings, placement only.
    *
    * @generated from rpc dutyplan.v1.SetupService.ListSections
    */
@@ -4773,6 +4984,8 @@ export const SetupService: GenService<{
     output: typeof ListSectionsResponseSchema;
   },
   /**
+   * Add a section of people.
+   *
    * @generated from rpc dutyplan.v1.SetupService.CreateSection
    */
   createSection: {
@@ -4781,6 +4994,8 @@ export const SetupService: GenService<{
     output: typeof CreateSectionResponseSchema;
   },
   /**
+   * Rename a section of people.
+   *
    * @generated from rpc dutyplan.v1.SetupService.RenameSection
    */
   renameSection: {
@@ -4789,6 +5004,8 @@ export const SetupService: GenService<{
     output: typeof RenameSectionResponseSchema;
   },
   /**
+   * Move a section of people.
+   *
    * @generated from rpc dutyplan.v1.SetupService.MoveSection
    */
   moveSection: {
@@ -4797,6 +5014,8 @@ export const SetupService: GenService<{
     output: typeof MoveSectionResponseSchema;
   },
   /**
+   * Delete a section of people; the people stay, without a section.
+   *
    * @generated from rpc dutyplan.v1.SetupService.DeleteSection
    */
   deleteSection: {
@@ -4805,7 +5024,7 @@ export const SetupService: GenService<{
     output: typeof DeleteSectionResponseSchema;
   },
   /**
-   * Sections of tasks.
+   * Sections of tasks: headings, placement only (tasks without one come first).
    *
    * @generated from rpc dutyplan.v1.SetupService.ListTaskSections
    */
@@ -4815,6 +5034,8 @@ export const SetupService: GenService<{
     output: typeof ListTaskSectionsResponseSchema;
   },
   /**
+   * Add a section of tasks.
+   *
    * @generated from rpc dutyplan.v1.SetupService.CreateTaskSection
    */
   createTaskSection: {
@@ -4823,6 +5044,8 @@ export const SetupService: GenService<{
     output: typeof CreateTaskSectionResponseSchema;
   },
   /**
+   * Rename a section of tasks.
+   *
    * @generated from rpc dutyplan.v1.SetupService.RenameTaskSection
    */
   renameTaskSection: {
@@ -4831,6 +5054,8 @@ export const SetupService: GenService<{
     output: typeof RenameTaskSectionResponseSchema;
   },
   /**
+   * Move a section of tasks.
+   *
    * @generated from rpc dutyplan.v1.SetupService.MoveTaskSection
    */
   moveTaskSection: {
@@ -4839,6 +5064,8 @@ export const SetupService: GenService<{
     output: typeof MoveTaskSectionResponseSchema;
   },
   /**
+   * Delete a section of tasks; the tasks stay, without a section.
+   *
    * @generated from rpc dutyplan.v1.SetupService.DeleteTaskSection
    */
   deleteTaskSection: {
@@ -4850,10 +5077,15 @@ export const SetupService: GenService<{
   serviceDesc(file_dutyplan_v1_dutyplan, 2);
 
 /**
+ * Plans, and what is in one: events, places, details rows and everyone's answers. Every call from GetPlan on: links read,
+ * edit link (an edit link: its own plan only).
+ *
  * @generated from service dutyplan.v1.PlanService
  */
 export const PlanService: GenService<{
   /**
+   * The organisation's plans. Members only.
+   *
    * @generated from rpc dutyplan.v1.PlanService.ListPlans
    */
   listPlans: {
@@ -4862,6 +5094,8 @@ export const PlanService: GenService<{
     output: typeof ListPlansResponseSchema;
   },
   /**
+   * Make a plan; its slug comes from the name. Members only.
+   *
    * @generated from rpc dutyplan.v1.PlanService.CreatePlan
    */
   createPlan: {
@@ -4870,6 +5104,8 @@ export const PlanService: GenService<{
     output: typeof CreatePlanResponseSchema;
   },
   /**
+   * One plan.
+   *
    * @generated from rpc dutyplan.v1.PlanService.GetPlan
    */
   getPlan: {
@@ -4878,7 +5114,7 @@ export const PlanService: GenService<{
     output: typeof GetPlanResponseSchema;
   },
   /**
-   * The slug stays.
+   * Rename a plan; the slug stays.
    *
    * @generated from rpc dutyplan.v1.PlanService.RenamePlan
    */
@@ -4888,7 +5124,7 @@ export const PlanService: GenService<{
     output: typeof RenamePlanResponseSchema;
   },
   /**
-   * Refused while a run is in progress.
+   * Delete a plan with everything in it. Refused while a run is in progress. It cannot be undone.
    *
    * @generated from rpc dutyplan.v1.PlanService.DeletePlan
    */
@@ -4898,6 +5134,8 @@ export const PlanService: GenService<{
     output: typeof DeletePlanResponseSchema;
   },
   /**
+   * The events, in date and time order.
+   *
    * @generated from rpc dutyplan.v1.PlanService.ListEvents
    */
   listEvents: {
@@ -4936,6 +5174,8 @@ export const PlanService: GenService<{
     output: typeof UpdateEventResponseSchema;
   },
   /**
+   * Delete an event with its places, details, answers and cells.
+   *
    * @generated from rpc dutyplan.v1.PlanService.DeleteEvent
    */
   deleteEvent: {
@@ -4954,6 +5194,8 @@ export const PlanService: GenService<{
     output: typeof ListPlacesResponseSchema;
   },
   /**
+   * Set how many people a task needs on an event (0 = not needed).
+   *
    * @generated from rpc dutyplan.v1.PlanService.SetPlaces
    */
   setPlaces: {
@@ -4982,7 +5224,7 @@ export const PlanService: GenService<{
     output: typeof SetPlacesManyResponseSchema;
   },
   /**
-   * The details rows and their values.
+   * The details rows («Theme», «Note»: one text per event) and their values.
    *
    * @generated from rpc dutyplan.v1.PlanService.ListFields
    */
@@ -4992,6 +5234,8 @@ export const PlanService: GenService<{
     output: typeof ListFieldsResponseSchema;
   },
   /**
+   * Add a details row; it goes last.
+   *
    * @generated from rpc dutyplan.v1.PlanService.AddField
    */
   addField: {
@@ -5000,6 +5244,8 @@ export const PlanService: GenService<{
     output: typeof AddFieldResponseSchema;
   },
   /**
+   * Rename a details row.
+   *
    * @generated from rpc dutyplan.v1.PlanService.RenameField
    */
   renameField: {
@@ -5008,6 +5254,8 @@ export const PlanService: GenService<{
     output: typeof RenameFieldResponseSchema;
   },
   /**
+   * Move a details row.
+   *
    * @generated from rpc dutyplan.v1.PlanService.MoveField
    */
   moveField: {
@@ -5016,6 +5264,8 @@ export const PlanService: GenService<{
     output: typeof MoveFieldResponseSchema;
   },
   /**
+   * Freeze a details row (it stays in sight under the dates), or unfreeze it.
+   *
    * @generated from rpc dutyplan.v1.PlanService.FreezeField
    */
   freezeField: {
@@ -5024,6 +5274,8 @@ export const PlanService: GenService<{
     output: typeof FreezeFieldResponseSchema;
   },
   /**
+   * Delete a details row with its values.
+   *
    * @generated from rpc dutyplan.v1.PlanService.DeleteField
    */
   deleteField: {
@@ -5032,7 +5284,7 @@ export const PlanService: GenService<{
     output: typeof DeleteFieldResponseSchema;
   },
   /**
-   * "" removes the value.
+   * The text of a details row for one event; "" removes it.
    *
    * @generated from rpc dutyplan.v1.PlanService.SetFieldValue
    */
@@ -5042,7 +5294,7 @@ export const PlanService: GenService<{
     output: typeof SetFieldValueResponseSchema;
   },
   /**
-   * Everyone's answers per event, their tasks, and the notes.
+   * Everyone's answers per event, the tasks each person takes, and the notes.
    *
    * @generated from rpc dutyplan.v1.PlanService.ListAnswers
    */
@@ -5052,7 +5304,7 @@ export const PlanService: GenService<{
     output: typeof ListAnswersResponseSchema;
   },
   /**
-   * One person's answers (an answer link may do this).
+   * One person's answers for some events. Answer link.
    *
    * @generated from rpc dutyplan.v1.PlanService.SetAvailability
    */
@@ -5062,7 +5314,7 @@ export const PlanService: GenService<{
     output: typeof SetAvailabilityResponseSchema;
   },
   /**
-   * A note on an answer, at most 300 characters; "" removes (an answer link may do this).
+   * A note on an answer, at most 300 characters; "" removes it. Answer link.
    *
    * @generated from rpc dutyplan.v1.PlanService.SetNote
    */
@@ -5085,11 +5337,16 @@ export const PlanService: GenService<{
   serviceDesc(file_dutyplan_v1_dutyplan, 3);
 
 /**
+ * What is set by hand, and the planner: weights, runs (drafts) and the pinned one. Every call: links read, edit link.
+ *
+ * To make a plan: StartRun, poll GetRun until done, fix places with AddCell and DeleteCell, then SetLocks with every
+ * name the planner put in (so a new draft keeps them) and PinRun.
+ *
  * @generated from service dutyplan.v1.DraftService
  */
 export const DraftService: GenService<{
   /**
-   * Places set by hand.
+   * Places set by hand (and the planner's names that were locked).
    *
    * @generated from rpc dutyplan.v1.DraftService.ListCells
    */
@@ -5109,6 +5366,8 @@ export const DraftService: GenService<{
     output: typeof AddCellResponseSchema;
   },
   /**
+   * Take a place set by hand away.
+   *
    * @generated from rpc dutyplan.v1.DraftService.DeleteCell
    */
   deleteCell: {
@@ -5117,7 +5376,7 @@ export const DraftService: GenService<{
     output: typeof DeleteCellResponseSchema;
   },
   /**
-   * Selections: only these can be picked.
+   * Selections: only these people can be picked for a task on an event.
    *
    * @generated from rpc dutyplan.v1.DraftService.ListPools
    */
@@ -5127,6 +5386,8 @@ export const DraftService: GenService<{
     output: typeof ListPoolsResponseSchema;
   },
   /**
+   * Set a selection; no people removes it.
+   *
    * @generated from rpc dutyplan.v1.DraftService.SetPool
    */
   setPool: {
@@ -5185,7 +5446,7 @@ export const DraftService: GenService<{
     output: typeof SetWeightsResponseSchema;
   },
   /**
-   * Make a draft; poll GetRun until its status is done or failed.
+   * Make a draft; poll GetRun until its status is done or failed. One run at a time per plan (else busy).
    *
    * @generated from rpc dutyplan.v1.DraftService.StartRun
    */
@@ -5195,6 +5456,8 @@ export const DraftService: GenService<{
     output: typeof StartRunResponseSchema;
   },
   /**
+   * The newest drafts (and the pinned one), the newest first.
+   *
    * @generated from rpc dutyplan.v1.DraftService.ListRuns
    */
   listRuns: {
@@ -5213,7 +5476,7 @@ export const DraftService: GenService<{
     output: typeof GetRunResponseSchema;
   },
   /**
-   * The current plan, what everyone sees.
+   * Pin a draft: the current plan, what everyone sees (at most one per plan).
    *
    * @generated from rpc dutyplan.v1.DraftService.PinRun
    */
@@ -5223,6 +5486,8 @@ export const DraftService: GenService<{
     output: typeof PinRunResponseSchema;
   },
   /**
+   * Unpin it again (the locks stay).
+   *
    * @generated from rpc dutyplan.v1.DraftService.UnpinRun
    */
   unpinRun: {

@@ -69,7 +69,10 @@ Dates: a spreadsheet may store dates from a copied year; check the weekdays agai
 
 [Connect](https://connectrpc.com) with JSON: every call is `POST /dutyplan.v1.<Service>/<Method>` with
 `Content-Type: application/json` and a JSON object as the body; the answer is a JSON object (`{}` for a write that has
-nothing to say). The schema is `proto/dutyplan/v1/dutyplan.proto` in the source. Field names are snake_case; ids are
+nothing to say). The schema is `proto/dutyplan/v1/dutyplan.proto` in the source: every call there says what it does and who may
+make it, and its fields what they mean. A server you run yourself also answers gRPC reflection over HTTP/2 (e.g. `buf curl
+--http2-prior-knowledge --protocol grpc --list-services http://127.0.0.1:8080`); a server behind a proxy that speaks HTTP/1.1 does
+not. Field names are snake_case; ids are
 numbers; `org` and `plan` are slugs and go in the body of every call that needs them. A field left out is empty (0, "",
 false); an unknown field is refused. Example:
 

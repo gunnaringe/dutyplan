@@ -4,6 +4,9 @@ modules:
 lint:
   use:
     - STANDARD
+    # every service and call says what it is for: the comments are the API's documentation (reflection serves them)
+    - COMMENT_SERVICE
+    - COMMENT_RPC
 breaking:
   use:
     - FILE

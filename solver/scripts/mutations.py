@@ -77,6 +77,8 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("access: the gate reads no org from a binary body", "internal/api/procs.go", "org = v.String()", "_ = v"),
     ("access: the gate reads no plan from a binary body", "internal/api/procs.go", "plan = v.String()", "_ = v"),
     ("access: the gate reads no id from a binary body", "internal/api/procs.go", "id = float64(v.Int()) // as JSON numbers are", "_ = v"),
+    ("API: reflection lists no services", "internal/api/reflect.go", "func() []string { return names }", "func() []string { return names[:0] }"),
+    ("API: reflection answers without the comments", "internal/api/reflect.go", "return names }),\n\t\tgrpcreflect.WithDescriptorResolver(schema))", "return names }))"),
     ("access: the organisation list is everyone's", "internal/api/org.go", "orgs, err = s.st.ListOrgsOf(ctx, u.ID)", "_ = u\n\t\torgs, err = s.st.ListOrgs(ctx)"),
     ("access: the API is open without a session", "internal/api/procs.go", "case !signedIn:\n\t\treturn g, errSignedOut", "case !signedIn:\n\t\treturn g, nil"),
     ("access: anyone signed in reaches every organisation", "internal/api/procs.go", "default:\n\t\treturn g, errNotFound", "default:\n\t\treturn g, nil"),
