@@ -1,6 +1,6 @@
-import { api, fetched, get } from './api';
+import { Account, call, fetched, get, Org } from './api';
 import { h, icon, store } from './core';
-import { live, render } from './main';
+import { render } from './main';
 import { enc } from './util';
 
 export function go(path) {
@@ -16,7 +16,7 @@ export const linkBtn = (text, onclick, aria?) => h('button', { type: 'button', c
 // AccountService/Me: {login: false} when the server has no login (everyone may do everything), else {login: true, user: {name, email} or null}.
 export let ME: any = null;
 export async function me() {
-  if (!ME) ME = await api('GET', '/me');
+  if (!ME) ME = await call(Account.me, {});
   return ME;
 }
 // to the sign-in, and back to this page afterwards (without a login: the sign-in in front of the app, by loading again)
@@ -127,12 +127,12 @@ export function route() {
 }
 
 export async function renderHeader(r) {
-  const orgs = await get('/orgs');
+  const orgs = await get(Account.listOrgs, {}, 'orgs');
   const select = h('select', { 'aria-label': t('header.org'), onchange: (e) => go(e.target.value === '' ? '/?switch' : '/o/' + enc(e.target.value)) },
     h('option', { value: '' }, r.org ? t('header.switch_org') : t('header.choose_org')),
     orgs.map((o) => h('option', { value: o.slug, selected: o.slug === r.org }, o.name)));
   const who = ME && ME.user;
-  const org = r.org ? await get('/orgs/' + enc(r.org)).catch(() => null) : null;
+  const org = r.org ? await get(Org.getOrg, { org: r.org }).catch(() => null) : null;
   const role = org ? org.role || '' : '';
   const nav = (page, ic, label) => {
     const a = link(`/o/${enc(r.org)}/${page}`, '', { class: 'icon-btn' + (r.page === page ? ' on' : ''), title: label, 'aria-label': label });

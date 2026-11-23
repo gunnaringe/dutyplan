@@ -5,7 +5,7 @@ Public GitHub repo (since 2026-11-20, the user's choice): `gunnaringe/dutyplan` 
 program *Tjenesteplan*, and the binary, the Python package and `DUTYPLAN_SOLVER` keep the `dutyplan` name). Everything pushed is public: check that nothing personal has been added before you push (see
 «Testing and data»). `README.md` is the user-facing documentation (what it is, install, flags, backups, signing in); keep it true when behaviour changes.
 
-Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + vanilla JS): organisations, plans, people, tasks, combinations, sections, events with
+Status: the planner (`solver/`, Python) is connected to the app (Go + SQLite + a TypeScript page): organisations, plans, people, tasks, combinations, sections, events with
 their own places, details rows, answers, drafts (runs) with set-by-hand places, locks and selections, a pinned current plan, rename and delete, a page in English and
 Norwegian. Since 2026-11-19 the page follows the sketches: **one table per plan** (details, tasks with places, the draft allocation, availability), dialogs for the rest,
 and an organisation page with the plans (the setup page is gone). There is no change log and no name/actor (removed 2026-11-19), and no day types.
@@ -24,7 +24,8 @@ kate runs the published image through Flux image automation (`clusters/kate/flux
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
 starts the Python planner, turns the answer into a view with explanations), `internal/api` (the Connect API + serves the frontend), `internal/i18n` (server texts),
 `proto/` (the API's schema), `gen/` (Go code made from it by buf, committed),
-`web/` (index.html, i18n.js, app.js, style.css, embedded in the binary), `solver/` (Python/CP-SAT), `scripts/` (smoke test, browser check).
+`web/` (index.html, i18n.js, style.css and app.js, embedded in the binary), `web/src/` (the page in TypeScript: core, api, util, shell, ui, org,
+plan, main; `gen/` is the Connect client made from the .proto, committed), `solver/` (Python/CP-SAT), `scripts/` (smoke test, browser check).
 
 ## Run cheaply (read this first)
 
@@ -34,6 +35,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - The usual loop: change → `mise run test:fast` (Go + Python rules, about 5 s) → `mise run test` (everything, about 15 s) → after a rule change
   `mise run mutations -- --only <word>` (the whole set takes about 7 min) → before a commit `mise run verify` (`lint` = prek: gofmt, JS syntax, YAML/JSON/TOML, keys, big files; tests; all mutations; smoke test of the app).
   For a change to the page also `mise run app:ui` (browser check in both languages, about 20 s).
+- **The page is TypeScript** (2026-11-23, the user: "Please proceed" on the plan): edit `web/src/*.ts`, never `web/app.js`, which is the bundle
+  esbuild makes from them and is committed (the binary embeds it, no Node at run time). `npm ci` once (exact versions in `package.json`),
+  then `mise run web:build` (tsc + esbuild, about 1 s) after a change; `web:check`, the `web` hook and CI fail when app.js is out of date.
+  The bundle is minified in whitespace and syntax only, names kept (about 330 KB, 83 KB gzipped; the protobuf runtime is half of it; the large-file hook stops at 500 KB). After changing the .proto: `mise run gen`, then `web:build`.
 - **The Python mutations edit `solver/dutyplan_solver/` in place** while they run (restored at the end, on Ctrl-C and on SIGTERM; a leftover is restored from
   `solver/.mutation-backup/` by the next run). Never run tests, the smoke test or the app against the real planner at the same time; `verify` runs the mutations last for this reason.
 - **Do not read** `PLAN.md` in full (about 300 lines). `grep -n '^## ' PLAN.md`, read only the section you need.
@@ -138,8 +143,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   stranger gets 404/401, never 400; `requireJSON` caps the body first (64 KB, 512 KB for `big`) and wants `application/json` after the gate.
   The interceptor only announces writes on the stream. The stream stays Server-Sent Events (`GET /api/orgs/{org}/stream`, not Connect: an
   EventSource cannot read Connect). The Go tests still speak the old REST shapes through `legacy()` (`internal/api/legacy_test.go`,
-  translated to Connect calls); the page maps its old (method, path) calls through `ROUTES` in `web/app.js`. Both go when the page moves to
-  TypeScript with a generated client (the next step of the same plan).
+  translated to Connect calls; it stays for now). The page calls the generated client (`web/src/api.ts`: `call(Plan.setPlaces, {...})`, `get()`
+  for reads; the wire stays snake_case through `useProtoFieldName`, the code uses the generated camelCase names).
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time); the planner does not use them, so they must not change the input or hash of a run. It has **no description** (removed 2026-11-22, the user: "let description just be a field. Remove that from header."; migration 006 moved existing ones into a details row «Description» at the top): what is said about an event is a details row. Availability («can I»), combinations, places
@@ -209,23 +214,23 @@ starts the Python planner, turns the answer into a view with explanations), `int
   Distribution per task is off by default (`w_task_fair`/`w_task_range` 0). Do not make the per-task term the main term again without asking.
 - **What matters most** (2026-11-23, the user: "simple settings for what is important. Setting the numbers manually could be hidden
   as a advanced setting … a link … on the plan page directly"): a dialog (`prioritiesDialog`, from the draft's bar and a line in ⚙) with
-  three priorities, Less / Normal / More (`PRIORITIES` in `web/app.js`: each level is fixed values for a group of weights, Normal = the
+  three priorities, Less / Normal / More (`PRIORITIES` in `web/src/plan.ts`: each level is fixed values for a group of weights, Normal = the
   defaults; numbers set by hand show as Custom), the rules that always hold, and the numbers under «Advanced». Page only: the same PUT
   weights. A dialog, not a page, following «dialogs for the rest» below. If a default weight changes, change Normal with it.
 - **The weights are configuration per plan** (2026-11-09): `store.WeightSpecs` (default and limits), stored as what differs from the default, and part of the hash. The defaults must be copies of
-  the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/app.js`.
+  the planner's (`--defaults`; a test checks it). A new weight = one line in `WeightSpecs`, a label and a hint (`weight.<key>.label`/`.hint`) in both languages in `web/i18n.js`, and a group in `WEIGHT_GROUP` in `web/src/plan.ts`.
 
 - **Live and without flicker** (2026-11-20, the user's choice: "no loading or flickering", "webhooks for all state", where they meant WebSockets;
   Server-Sent Events kept at their choice ("Behold, men lag mer effektivt"), since the page only needs the push). Every write that went
   through, and the end of a planning run, is announced on the organisation's stream (`GET /api/orgs/{org}/stream`, Server-Sent Events,
-  `internal/api/stream.go`; the procedure of the write (`SetPlaces`; `RunFinished`, `Joined`), its plan and the origin tab from `X-Dutyplan-Client`, no data). The page (`follow()` in `web/app.js`)
+  `internal/api/stream.go`; the procedure of the write (`SetPlaces`; `RunFinished`, `Joined`), its plan and the origin tab from `X-Dutyplan-Client`, no data). The page (`follow()` in `web/src/main.ts`)
   keeps what it has fetched (`get()`), forgets only what the write can have changed (`changedBy()`: a new write procedure needs a line in `CHANGES` there,
   else everything is fetched again) and redraws in place: scroll (also sideways), focus and open dialogs are kept, a dialog's contents are swapped
   (`keyed()`/`reopened()`, never closed and opened again), and a redraw waits while a text field is being typed in. Clicks on answers,
   levels and ⚡ show at once and go back if the server refuses. Hosting will be behind Cloudflare: the stream pings every 25 s (its idle
   limit is 100 s) and has no write timeout; after 5 failed reconnects in a row (an expired sign-in in front) the page stops and tries again when the tab is shown or after a minute. Do not add polling or full reloads back.
 - **Signed out or out of reach** (2026-11-22, the user: "should offer a reauth/refresh instead of showing Object object and failed to fetch"): the
-  app's own login answers 401; a sign-in in front of it (forward auth, kate) answers an expired session with a redirect (303). `api()` fetches with `redirect: 'manual'`, so a
+  app's own login answers 401; a sign-in in front of it (forward auth, kate) answers an expired session with a redirect (303). `pageFetch` (the client's fetch, `web/src/api.ts`) fetches with `redirect: 'manual'`, so a
   redirect, a 401 or a non-JSON answer means *signed out*, and a network error means *out of reach*; `connection()` then shows a bar at the top with
   «Sign in again» (to `/auth/login?next=<this page>`, or a reload through the sign-in in front) or «Try again», the page stays as it was, a click is taken back, and an open dialog says it too.
   Never show a raw error («Failed to fetch») for these. modal() flattens its parts like h(): `append()` writes a list as «[object …]».
@@ -269,10 +274,10 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **On the wire everything is English and ASCII**: an answer per event `never|poor|good` (blank = not answered), a person's task `poor|good` (no row = not),
   a combination `cannot|practical` (no row = `impractical`, «bad»); error kinds and codes. Texts for people are made at the edge.
 - **The page** (`web/i18n.js`): `MESSAGES = {en: {...}, nb: {...}}`, one `'key': 'text',` per line, `{placeholders}`, `.one`/`.other` for anything that counts (`tn`). Use `’` (not `'`) inside texts.
-  `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key `app.js` names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
+  `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key the page (`web/src/`) names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
 - **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
   (a test checks parity).
-- **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the answer is a Connect error with a `dutyplan.v1.Problem` detail `{error, code, params}` (`fail()` in `internal/api/rpc.go`; the page reads `details[0].debug`). A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
+- **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the answer is a Connect error with a `dutyplan.v1.Problem` detail `{error, code, params}` (`fail()` in `internal/api/rpc.go`; the page reads it with `findDetails(ProblemSchema)` in `failure()`). A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
 - Page addresses are English: `/o/<org>` and `/o/<org>/p/<plan>`; anything else is «Page not found».
 
 ## Testing and data

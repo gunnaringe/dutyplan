@@ -18,7 +18,7 @@ hooks = [
   { id = "check-merge-conflict" },
   { id = "check-added-large-files" },  # the README pictures stay small (pngquant)
   { id = "detect-private-key" },       # the repo is public
-  { id = "end-of-file-fixer" },
+  { id = "end-of-file-fixer", exclude = '^web/src/gen/' },  # generated, as buf writes it
   { id = "trailing-whitespace", exclude = '\.png$' },
 ]
 
@@ -29,7 +29,7 @@ hooks = [
     entry = "sh -c 'out=$(gofmt -l cmd internal web); [ -z \"$out\" ] || { echo \"$out\"; exit 1; }'" },
   { id = "node-check", name = "node --check (page and scripts)", language = "system", files = '^(web|scripts)/[^/]+\.js$',
     entry = "node --check" },
-  { id = "gen", name = "buf lint, gen/ up to date with proto/", language = "system", files = '^(proto/|gen/|buf\.)', pass_filenames = false,
+  { id = "gen", name = "buf lint, gen/ up to date with proto/", language = "system", files = '^(proto/|gen/|web/src/gen/|buf\.)', pass_filenames = false,
     entry = "mise run gen:check" },
   { id = "web", name = "tsc, web/app.js up to date with web/src", language = "system", files = '^(web/src/|web/app\.js|tsconfig\.json|package)', pass_filenames = false,
     entry = "mise run web:check" },

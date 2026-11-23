@@ -1,114 +1,104 @@
+import type { DescMessage, DescMethodUnary, DescService, MessageInitShape, MessageShape } from '@bufbuild/protobuf';
+import { Code, ConnectError, createClient } from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-web';
+import { AccountService, DraftService, OrgService, PlanService, ProblemSchema, SetupService } from './gen/dutyplan/v1/dutyplan_pb';
 import { CLIENT, cap, h, say } from './core';
 import { follow, live, render } from './main';
 import { ask } from './org';
-import { link, me, route, signIn } from './shell';
-import { field } from './ui';
-import { enc } from './util';
+import { route, signIn } from './shell';
 
-// ---- the API: Connect (proto/dutyplan/v1/dutyplan.proto) ---------------------------------------------------------------
-// Every call is POST /dutyplan.v1.<Service>/<Method> with a JSON body. The page still names what it wants by method and
-// path (and keeps what it fetched by path, see get()); ROUTES turns that into the call: each {name} of the path is a
-// field of the request (ids are numbers; org and plan text), the body's fields are added, and `unwrap` is the field of
-// the answer that holds what the page uses. Kept until the page has a generated client (TypeScript).
-export const ROUTES = [
-  ['GET', '/health', 'AccountService/Health'], ['GET', '/me', 'AccountService/Me'],
-  ['GET', '/orgs', 'AccountService/ListOrgs', 'orgs'], ['POST', '/orgs', 'AccountService/CreateOrg', 'org'],
-  ['GET', '/orgs/{org}', 'OrgService/GetOrg'], ['PATCH', '/orgs/{org}', 'OrgService/RenameOrg', 'org'],
-  ['DELETE', '/orgs/{org}', 'OrgService/DeleteOrg'],
-  ['GET', '/orgs/{org}/members', 'OrgService/ListMembers', 'members'], ['PATCH', '/orgs/{org}/members/{id}', 'OrgService/SetMemberRole'],
-  ['DELETE', '/orgs/{org}/members/{id}', 'OrgService/RemoveMember'],
-  ['GET', '/orgs/{org}/links', 'OrgService/ListLinks', 'links'], ['POST', '/orgs/{org}/links', 'OrgService/CreateLink', 'link'],
-  ['DELETE', '/orgs/{org}/links/{id}', 'OrgService/DeleteLink'],
-  ['GET', '/orgs/{org}/tasks', 'SetupService/ListTasks', 'tasks'], ['POST', '/orgs/{org}/tasks', 'SetupService/CreateTask', 'task'],
-  ['PATCH', '/orgs/{org}/tasks/{id}', 'SetupService/UpdateTask', 'task'], ['DELETE', '/orgs/{org}/tasks/{id}', 'SetupService/DeleteTask'],
-  ['PUT', '/orgs/{org}/tasks/{id}/position', 'SetupService/MoveTask'],
-  ['GET', '/orgs/{org}/combinations', 'SetupService/ListCombinations', 'combinations'], ['PUT', '/orgs/{org}/combinations', 'SetupService/SetCombination'],
-  ['PUT', '/orgs/{org}/tasks/{task}/combinations', 'SetupService/SetTaskCombinations'],
-  ['GET', '/orgs/{org}/people', 'SetupService/ListPeople', 'people'], ['POST', '/orgs/{org}/people', 'SetupService/CreatePerson', 'person'],
-  ['PATCH', '/orgs/{org}/people/{id}', 'SetupService/UpdatePerson', 'person'], ['PUT', '/orgs/{org}/people/{id}/position', 'SetupService/MovePerson'],
-  ['PUT', '/orgs/{org}/people/{person}/tasks/{task}', 'SetupService/SetPersonTask'], ['DELETE', '/orgs/{org}/people/{person}/tasks/{task}', 'SetupService/RemovePersonTask'],
-  ['GET', '/orgs/{org}/sections', 'SetupService/ListSections', 'sections'], ['POST', '/orgs/{org}/sections', 'SetupService/CreateSection', 'section'],
-  ['PATCH', '/orgs/{org}/sections/{id}', 'SetupService/RenameSection', 'section'], ['PUT', '/orgs/{org}/sections/{id}/position', 'SetupService/MoveSection'],
-  ['DELETE', '/orgs/{org}/sections/{id}', 'SetupService/DeleteSection'],
-  ['GET', '/orgs/{org}/task-sections', 'SetupService/ListTaskSections', 'sections'], ['POST', '/orgs/{org}/task-sections', 'SetupService/CreateTaskSection', 'section'],
-  ['PATCH', '/orgs/{org}/task-sections/{id}', 'SetupService/RenameTaskSection', 'section'], ['PUT', '/orgs/{org}/task-sections/{id}/position', 'SetupService/MoveTaskSection'],
-  ['DELETE', '/orgs/{org}/task-sections/{id}', 'SetupService/DeleteTaskSection'],
-  ['GET', '/orgs/{org}/plans', 'PlanService/ListPlans', 'plans'], ['POST', '/orgs/{org}/plans', 'PlanService/CreatePlan', 'plan'],
-  ['GET', '/orgs/{org}/plans/{plan}', 'PlanService/GetPlan', 'plan'], ['PATCH', '/orgs/{org}/plans/{plan}', 'PlanService/RenamePlan', 'plan'],
-  ['DELETE', '/orgs/{org}/plans/{plan}', 'PlanService/DeletePlan'],
-  ['GET', '/orgs/{org}/plans/{plan}/events', 'PlanService/ListEvents', 'events'], ['POST', '/orgs/{org}/plans/{plan}/events', 'PlanService/AddEvents', 'events'],
-  ['POST', '/orgs/{org}/plans/{plan}/events/{id}/copy', 'PlanService/CopyEvent', 'events'], ['PATCH', '/orgs/{org}/plans/{plan}/events/{id}', 'PlanService/UpdateEvent', 'event'],
-  ['DELETE', '/orgs/{org}/plans/{plan}/events/{id}', 'PlanService/DeleteEvent'],
-  ['GET', '/orgs/{org}/plans/{plan}/places', 'PlanService/ListPlaces', 'places'], ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/places/{task}', 'PlanService/SetPlaces'],
-  ['DELETE', '/orgs/{org}/plans/{plan}/events/{event}/places/{task}', 'PlanService/ResetPlaces'], ['PUT', '/orgs/{org}/plans/{plan}/places', 'PlanService/SetPlacesMany'],
-  ['GET', '/orgs/{org}/plans/{plan}/fields', 'PlanService/ListFields'], ['POST', '/orgs/{org}/plans/{plan}/fields', 'PlanService/AddField', 'field'],
-  ['PATCH', '/orgs/{org}/plans/{plan}/fields/{id}', 'PlanService/RenameField', 'field'], ['PUT', '/orgs/{org}/plans/{plan}/fields/{id}/position', 'PlanService/MoveField'],
-  ['PUT', '/orgs/{org}/plans/{plan}/fields/{id}/frozen', 'PlanService/FreezeField'], ['DELETE', '/orgs/{org}/plans/{plan}/fields/{id}', 'PlanService/DeleteField'],
-  ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/fields/{field}', 'PlanService/SetFieldValue'],
-  ['GET', '/orgs/{org}/plans/{plan}/answers', 'PlanService/ListAnswers'], ['PUT', '/orgs/{org}/plans/{plan}/people/{person}/availability', 'PlanService/SetAvailability'],
-  ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/notes/{person}', 'PlanService/SetNote'], ['PUT', '/orgs/{org}/plans/{plan}/answers', 'PlanService/SetAnswers'],
-  ['GET', '/orgs/{org}/plans/{plan}/cells', 'DraftService/ListCells', 'cells'], ['POST', '/orgs/{org}/plans/{plan}/cells', 'DraftService/AddCell', 'cell'],
-  ['DELETE', '/orgs/{org}/plans/{plan}/cells/{id}', 'DraftService/DeleteCell'],
-  ['GET', '/orgs/{org}/plans/{plan}/pools', 'DraftService/ListPools', 'pools'], ['PUT', '/orgs/{org}/plans/{plan}/pools', 'DraftService/SetPool'],
-  ['PUT', '/orgs/{org}/plans/{plan}/locks', 'DraftService/SetLocks'],
-  ['DELETE', '/orgs/{org}/plans/{plan}/draft', 'DraftService/SetDraftAside'], ['PUT', '/orgs/{org}/plans/{plan}/draft', 'DraftService/ClearDraftAside'],
-  ['GET', '/orgs/{org}/plans/{plan}/weights', 'DraftService/GetWeights'], ['PUT', '/orgs/{org}/plans/{plan}/weights', 'DraftService/SetWeights'],
-  ['POST', '/orgs/{org}/plans/{plan}/runs', 'DraftService/StartRun'], ['GET', '/orgs/{org}/plans/{plan}/runs', 'DraftService/ListRuns', 'runs'],
-  ['GET', '/orgs/{org}/plans/{plan}/runs/{id}', 'DraftService/GetRun'],
-  ['PUT', '/orgs/{org}/plans/{plan}/runs/{id}/pin', 'DraftService/PinRun'], ['DELETE', '/orgs/{org}/plans/{plan}/runs/{id}/pin', 'DraftService/UnpinRun'],
-].map(([method, path, proc, unwrap]) => ({ method, parts: path.split('/').filter(Boolean), proc, unwrap }));
+// ---- the API: Connect (proto/dutyplan/v1/dutyplan.proto), with the client generated into web/src/gen ------------------
+// call(Plan.setPlaces, { org, plan, event, task, slots }) makes one call; get(Plan.listPlaces, { org, plan }, 'places') reads
+// through the page's cache (see «what has been fetched»). The last argument picks the field of the answer the page uses.
+// On the wire the JSON is the API's own (snake_case, as in web/llms.txt); in the page the fields are camelCase.
+export const Account = AccountService.method;
+export const Org = OrgService.method;
+export const Setup = SetupService.method;
+export const Plan = PlanService.method;
+export const Draft = DraftService.method;
 
-// call: the route of a method and path, and the request it makes (a query's confirm and lang are fields too).
-export function call(method, path, body?) {
-  const [p, query] = path.split('?');
-  const segs = p.split('/').filter(Boolean).map(decodeURIComponent);
-  for (const r of ROUTES) {
-    if (r.method !== method || r.parts.length !== segs.length) continue;
-    const req: Record<string, any> = {};
-    if (!r.parts.every((part, i) => {
-      if (part[0] !== '{') return part === segs[i];
-      const name = part.slice(1, -1);
-      req[name] = name === 'org' || name === 'plan' ? segs[i] : segs[i] === 'latest' ? 0 : Number(segs[i]);
-      return true;
-    })) continue;
-    for (const [k, v] of new URLSearchParams(query || '')) req[k] = v;
-    return { route: r, req: { ...body, ...req }, org: req.org || '' };
-  }
-  throw new Error('no route for ' + method + ' ' + path);
+export type Unary = DescMethodUnary<DescMessage, DescMessage>;
+export type In<M extends Unary> = MessageInitShape<M['input']>;
+// An answer as the server sends it: every field is on the wire (rpc.go), so the page takes a message inside one as there
+// (an unset one comes as null, as before Connect); only the `optional` fields of the proto may be missing.
+type Msg = { $typeName: string };
+type MsgKeys<T> = { [K in keyof T]-?: [NonNullable<T[K]>] extends [Msg] ? K : never }[keyof T];
+export type Sent<T> = T extends Msg ? { [K in MsgKeys<T>]-?: Sent<NonNullable<T[K]>> } & { [K in Exclude<keyof T, MsgKeys<T>>]: Sent<T[K]> }
+  : T extends readonly (infer E)[] ? Sent<E>[] : T;
+export type Out<M extends Unary> = Sent<MessageShape<M['output']>>;
+
+// The names of the procedures («SetPlaces»; the stream says these, and «RunFinished» and «Joined»), and which only read.
+type Methods<S> = S extends { method: infer M } ? Capitalize<keyof M & string> : never;
+export type Procedure = Methods<typeof AccountService> | Methods<typeof OrgService> | Methods<typeof SetupService>
+  | Methods<typeof PlanService> | Methods<typeof DraftService>;
+export type Read = Extract<Procedure, `List${string}` | `Get${string}` | 'Health' | 'Me'>;
+export type Write = Exclude<Procedure, Read>;
+const reads = (m: Unary) => /^(List|Get)/.test(m.name) || m.name === 'Health' || m.name === 'Me';
+
+// What went wrong, for errorText() and the pages: a refusal of the server (kind and code from its Problem detail), or the
+// connection (signed out, out of reach: the bar at the top says it).
+export type Failure = Error & {
+  kind?: string; apiCode?: string; params?: Record<string, unknown>; status?: number;
+  connection?: 'offline' | 'signed_out'; cancelled?: boolean; keepOrg?: boolean;
+};
+const lost = (state: 'offline' | 'signed_out'): Failure => Object.assign(new Error(t(state === 'signed_out' ? 'net.signed_out' : 'net.offline')), { connection: state });
+// Connect's codes as the HTTP statuses the server answers with (rpc.go); the pages ask for 404.
+const STATUS: Partial<Record<Code, number>> = { [Code.InvalidArgument]: 400, [Code.Unauthenticated]: 401, [Code.PermissionDenied]: 403,
+  [Code.NotFound]: 404, [Code.Aborted]: 409, [Code.ResourceExhausted]: 429, [Code.Unavailable]: 503 };
+function failure(e: unknown): Failure {
+  const ce = ConnectError.from(e);
+  const lostBy = [e, ce.cause].find((x) => x && (x as Failure).connection);  // pageFetch's, which the transport wraps
+  if (lostBy) return lostBy as Failure;
+  const p = ce.findDetails(ProblemSchema)[0];
+  return Object.assign(new Error(ce.rawMessage), { kind: p ? p.error : ce.code === Code.InvalidArgument ? 'invalid' : Code[ce.code],
+    apiCode: p && p.code ? p.code : undefined, params: p && p.params ? p.params : undefined, status: STATUS[ce.code] || 500 });
 }
 
-export async function api(method, path, body?) {
-  const { route: r, req, org } = call(method, path, body);
-  if (r.proc === 'DraftService/GetRun') req.lang = currentLang;  // the server writes explanations and warnings in the page's language
-  const headers = { 'Content-Type': 'application/json' };
-  if (method !== 'GET') headers['X-Dutyplan-Client'] = CLIENT;  // the stream tells this tab's own changes apart
-  let res;
+// A sign-in in front of the app (forward auth) answers an expired session with a redirect to its own site, which a fetch
+// cannot follow (another origin): «manual» turns that into an answer the page can recognise. Signed out: a redirect, a
+// refusal from the sign-in, or a page that is not ours (the API always answers JSON).
+const pageFetch: typeof fetch = async (input, init) => {
+  let res: Response;
   try {
-    // A sign-in in front of the app (forward auth) answers an expired session with a redirect to its own site, which a fetch
-    // cannot follow (another origin): «manual» turns that into an answer the page can recognise.
-    res = await fetch('/dutyplan.v1.' + r.proc, { method: 'POST', headers, redirect: 'manual', body: JSON.stringify(req) });
+    res = await fetch(input, { ...init, redirect: 'manual' });
   } catch (e) {
     connection('offline');
-    throw Object.assign(new Error(t('net.offline')), { connection: 'offline' });
+    throw lost('offline');
   }
-  // Signed out: a redirect, a refusal from the sign-in, or a page that is not ours (the API always answers JSON).
   const json = (res.headers.get('Content-Type') || '').startsWith('application/json');
   if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !json)) {
     connection('signed_out');
-    throw Object.assign(new Error(t('net.signed_out')), { connection: 'signed_out' });
+    throw lost('signed_out');
   }
   connection('');
-  const data = await res.json().catch(() => ({}));
-  if (method !== 'GET') forget(changedBy(procOf(r.proc)), org);  // also when refused: what is shown may be out of date
-  if (!res.ok) {
-    // A Connect error: its first detail is the Problem (kind, code, params) the texts are made from.
-    const p = (data.details && data.details[0] && data.details[0].debug) || {};
-    const kind = p.error || (data.code === 'invalid_argument' ? 'invalid' : data.error || data.code);
-    throw Object.assign(new Error(data.message || res.statusText), { kind, apiCode: p.code || (data.error ? data.code : undefined), params: p.params || data.params, status: res.status });
+  return res;
+};
+// Unknown fields are ignored: a tab opened before a deploy must still read answers that gained a field.
+const transport = createConnectTransport({ baseUrl: '/', fetch: pageFetch, jsonOptions: { useProtoFieldName: true, ignoreUnknownFields: true } });
+const clients = new Map<DescService, any>();
+const clientOf = (m: Unary) => {
+  if (!clients.has(m.parent)) clients.set(m.parent, createClient(m.parent, transport));
+  return clients.get(m.parent);
+};
+
+// call makes one call. A write tells the stream which tab made it (X-Dutyplan-Client), and forgets what it can have changed,
+// also when refused (what is shown may be out of date).
+export async function call<M extends Unary>(m: M, req: In<M>): Promise<Out<M>>;
+export async function call<M extends Unary, K extends keyof Out<M>>(m: M, req: In<M>, key: K): Promise<Out<M>[K]>;
+export async function call<M extends Unary>(m: M, req: In<M>, key?: keyof Out<M>) {
+  const write = !reads(m);
+  const org = (req as { org?: string }).org || '';
+  if (m.name === 'GetRun') req = { ...req, lang: currentLang } as In<M>;  // the server writes explanations and warnings in the page's language
+  try {
+    const res = await clientOf(m)[m.localName](req, write ? { headers: { 'X-Dutyplan-Client': CLIENT } } : {});
+    if (write) forget(changedBy(m.name), org);
+    return key ? res[key] : res;
+  } catch (e) {
+    const f = failure(e);
+    if (write && !f.connection) forget(changedBy(m.name), org);
+    throw f;
   }
-  return r.unwrap ? data[r.unwrap] : data;
 }
-export const procOf = (proc) => proc.slice(proc.indexOf('/') + 1);
 
 // ---- the connection: signed out, or the server out of reach ----------------------------------------------------------
 // A bar at the top that says so and offers the way back: sign in again (a reload goes through the sign-in and comes back to
@@ -135,60 +125,61 @@ export function connectionLine(state) {
       : h('button', { type: 'button', onclick: (e) => { const d = e.currentTarget.closest('dialog'); if (d) d.close(); retry(); } }, t('net.retry')));
 }
 // Is the server still there, and are we still signed in? Asked when the stream breaks.
-export const probe = () => api('GET', '/health').then(() => true, () => false);
+export const probe = () => call(Account.health, {}).then(() => true, () => false);
 
 // ---- what has been fetched ------------------------------------------------------------------------------------------
-// The page keeps what it has fetched (GET path -> the answer), and a redraw takes it from here. A write (this tab's, or one
-// the stream announces) forgets only what it can have changed, so a click fetches one or two things again, not everything.
-export const fetched = new Map();
-export function get(path) {
-  if (!fetched.has(path)) {
-    const p = api('GET', path);
-    fetched.set(path, p);
-    p.catch(() => { if (fetched.get(path) === p) fetched.delete(path); });
+// The page keeps what it has fetched (the procedure and its request -> the answer), and a redraw takes it from here. A write
+// (this tab's, or one the stream announces) forgets only what it can have changed, so a click fetches one or two things
+// again, not everything.
+type Fetched = { name: string; org: string; answer: Promise<unknown> };
+export const fetched = new Map<string, Fetched>();
+export function get<M extends Unary>(m: M, req: In<M>): Promise<Out<M>>;
+export function get<M extends Unary, K extends keyof Out<M>>(m: M, req: In<M>, key: K): Promise<Out<M>[K]>;
+export function get<M extends Unary>(m: M, req: In<M>, key?: keyof Out<M>) {
+  const k = m.name + ' ' + JSON.stringify(req);
+  let f = fetched.get(k);
+  if (!f) {
+    const answer = call(m, req);
+    const entry: Fetched = { name: m.name, org: (req as { org?: string }).org || '', answer };
+    fetched.set(k, entry);
+    answer.catch(() => { if (fetched.get(k) === entry) fetched.delete(k); });
+    f = entry;
   }
-  return fetched.get(path);
+  return key ? f.answer.then((x) => (x as Out<M>)[key]) : f.answer;
 }
-// What a fetched path holds: '/orgs' → orgs, '/orgs/x' → org, '/orgs/x/people' → people, '/orgs/x/plans/y' → plan,
-// '/orgs/x/plans/y/runs/7' → runs, '/health' → health.
-export function kindOf(path) {
-  const p = path.split('/').filter(Boolean);
-  if (p[0] !== 'orgs') return p[0];
-  if (p.length === 1) return 'orgs';
-  if (p.length === 2) return 'org';
-  if (p[2] === 'plans' && p.length >= 4) return p.length === 4 ? 'plan' : p[4];
-  return p[2];
-}
-// What a write can have changed, as kinds of fetched paths, by the procedure's name («SetPlaces»; the stream also says
-// «RunFinished» and «Joined»). null = anything (when unsure, everything is fetched again). Every change to the data can
-// make a draft out of date, so the runs are always fetched again (they say «stale»).
-export const RUNS_TOO = (...kinds) => ['runs', ...kinds];
-export const CHANGES = {
-  CreateOrg: ['orgs'], CreatePlan: ['plans'], RenamePlan: ['plan', 'plans'],  // a new plan may get the address again
-  SetNote: ['answers'],  // a note on an answer: never in the planner's input
-  SetPlaces: RUNS_TOO('places'), ResetPlaces: RUNS_TOO('places'), SetPlacesMany: RUNS_TOO('places'),
-  SetFieldValue: ['fields'], AddField: ['fields'], RenameField: ['fields'], MoveField: ['fields'], FreezeField: ['fields'], DeleteField: ['fields'],
-  AddEvents: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'), CopyEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'),
-  UpdateEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'), DeleteEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'),
-  SetAvailability: RUNS_TOO('answers'), SetAnswers: RUNS_TOO('answers'),
-  SetLocks: RUNS_TOO('cells'),  // names of the draft locked or unlocked
-  SetDraftAside: ['plan', 'runs'], ClearDraftAside: ['plan', 'runs'],  // «Remove unlocked»: no draft on show
-  StartRun: ['runs', 'plan'], PinRun: ['runs', 'plan'], UnpinRun: ['runs', 'plan'], RunFinished: ['runs', 'plan'],  // a new draft or a pin ends «Remove unlocked»
-  AddCell: RUNS_TOO('cells'), DeleteCell: RUNS_TOO('cells'), SetPool: RUNS_TOO('pools'), SetWeights: RUNS_TOO('weights'),
-  SetPersonTask: RUNS_TOO('answers'), RemovePersonTask: RUNS_TOO('answers'),
-  CreatePerson: RUNS_TOO('people'), UpdatePerson: RUNS_TOO('people'), MovePerson: RUNS_TOO('people'),
-  SetCombination: RUNS_TOO('combinations'), SetTaskCombinations: RUNS_TOO('combinations'),
-  CreateSection: ['sections', 'people'], RenameSection: ['sections', 'people'], MoveSection: ['sections', 'people'], DeleteSection: ['sections', 'people'],
-  CreateTaskSection: ['task-sections', 'tasks'], RenameTaskSection: ['task-sections', 'tasks'], MoveTaskSection: ['task-sections', 'tasks'],
-  DeleteTaskSection: ['task-sections', 'tasks'],
+// What a write can have changed, as the reads to fetch again, by the procedure's name («SetPlaces»; the stream also says
+// «RunFinished» and «Joined»). Not listed = anything (when unsure, everything is fetched again). Every change to the data
+// can make a draft out of date, so the runs are always fetched again (they say «stale»).
+const RUNS: Read[] = ['ListRuns', 'GetRun'];
+const RUNS_TOO = (...reads: Read[]): Read[] => [...RUNS, ...reads];
+const EVENTS: Read[] = RUNS_TOO('ListEvents', 'ListPlaces', 'ListFields', 'ListCells', 'ListPools', 'ListAnswers');
+const FIELDS: Read[] = ['ListFields'];
+const DRAFT_ON_SHOW: Read[] = ['GetPlan', ...RUNS];  // a new draft or a pin ends «Remove unlocked»
+const SECTIONS: Read[] = ['ListSections', 'ListPeople'];
+const TASK_SECTIONS: Read[] = ['ListTaskSections', 'ListTasks'];
+export const CHANGES: { [P in Write | 'RunFinished']?: Read[] } = {
+  CreateOrg: ['ListOrgs'], CreatePlan: ['ListPlans'], RenamePlan: ['GetPlan', 'ListPlans'],  // a new plan may get the address again
+  SetNote: ['ListAnswers'],  // a note on an answer: never in the planner's input
+  SetPlaces: RUNS_TOO('ListPlaces'), ResetPlaces: RUNS_TOO('ListPlaces'), SetPlacesMany: RUNS_TOO('ListPlaces'),
+  SetFieldValue: FIELDS, AddField: FIELDS, RenameField: FIELDS, MoveField: FIELDS, FreezeField: FIELDS, DeleteField: FIELDS,
+  AddEvents: EVENTS, CopyEvent: EVENTS, UpdateEvent: EVENTS, DeleteEvent: EVENTS,
+  SetAvailability: RUNS_TOO('ListAnswers'), SetAnswers: RUNS_TOO('ListAnswers'),
+  SetLocks: RUNS_TOO('ListCells'),  // names of the draft locked or unlocked
+  SetDraftAside: DRAFT_ON_SHOW, ClearDraftAside: DRAFT_ON_SHOW,  // «Remove unlocked»: no draft on show
+  StartRun: DRAFT_ON_SHOW, PinRun: DRAFT_ON_SHOW, UnpinRun: DRAFT_ON_SHOW, RunFinished: DRAFT_ON_SHOW,
+  AddCell: RUNS_TOO('ListCells'), DeleteCell: RUNS_TOO('ListCells'), SetPool: RUNS_TOO('ListPools'), SetWeights: RUNS_TOO('GetWeights'),
+  SetPersonTask: RUNS_TOO('ListAnswers'), RemovePersonTask: RUNS_TOO('ListAnswers'),
+  CreatePerson: RUNS_TOO('ListPeople'), UpdatePerson: RUNS_TOO('ListPeople'), MovePerson: RUNS_TOO('ListPeople'),
+  SetCombination: RUNS_TOO('ListCombinations'), SetTaskCombinations: RUNS_TOO('ListCombinations'),
+  CreateSection: SECTIONS, RenameSection: SECTIONS, MoveSection: SECTIONS, DeleteSection: SECTIONS,
+  CreateTaskSection: TASK_SECTIONS, RenameTaskSection: TASK_SECTIONS, MoveTaskSection: TASK_SECTIONS, DeleteTaskSection: TASK_SECTIONS,
 };  // tasks, the organisation, members, links, deleting a plan and anything else: everything
-export const changedBy = (proc) => CHANGES[proc] || null;
-// forget drops what a write in an organisation can have changed (kinds; null = everything of the organisation).
-export function forget(kinds, orgSlug) {
-  const org = orgSlug ? '/orgs/' + enc(orgSlug) : '';
-  for (const key of [...fetched.keys()]) {
-    if (!kinds) { if (!org || key.startsWith(org + '/') || key === org || key === '/orgs') fetched.delete(key); continue; }
-    if (kinds.includes(kindOf(key)) && (key === '/orgs' || !org || key === org || key.startsWith(org + '/'))) fetched.delete(key);
+export const changedBy = (name: string): Read[] | null => CHANGES[name as Write] || null;
+// forget drops what a write in an organisation can have changed (reads; null = everything of the organisation).
+export function forget(changed: Read[] | null, org: string) {
+  for (const [k, f] of [...fetched]) {
+    const ours = f.name === 'ListOrgs' || !org || f.org === org;
+    if (ours && (!changed || changed.includes(f.name as Read))) fetched.delete(k);
   }
 }
 

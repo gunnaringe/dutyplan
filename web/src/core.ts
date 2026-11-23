@@ -1,4 +1,3 @@
-import { get } from './api';
 
 // Dutyplan: a small frontend without a framework. The organisation is in the address (/o/<org>/...), so switching
 // organisation is just going to another address. There is no login. All texts come from i18n.js (t, tn); the language is

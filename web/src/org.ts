@@ -1,4 +1,4 @@
-import { api, fetched, get, write } from './api';
+import { Account, call, fetched, get, Org, Plan, write } from './api';
 import { h, icon, locale, say, store } from './core';
 import { render } from './main';
 import { ME, deadLink, go, initials, link } from './shell';
@@ -8,7 +8,7 @@ import { enc } from './util';
 // ---- the start page and the organisation ----------------------------------------------------------------------------
 
 export async function pageHome() {
-  const orgs = await get('/orgs');
+  const orgs = await get(Account.listOrgs, {}, 'orgs');
   const last = store.get('org');
   if (last && !location.search.includes('switch') && !location.search.includes('link=') && orgs.some((o) => o.slug === last)) return go('/o/' + enc(last));
   const name = h('input', { type: 'text', placeholder: t('home.name_placeholder'), maxlength: '80', required: true, 'aria-label': t('home.name_placeholder') });
@@ -24,7 +24,7 @@ export async function pageHome() {
     ME && ME.login && !ME.user ? '' : h('form', { class: 'row new-org', onsubmit: async (e) => {
       e.preventDefault();
       let o;
-      if (await write(async () => { o = await api('POST', '/orgs', { name: name.value }); })) { store.set('org', o.slug); go('/o/' + enc(o.slug)); }
+      if (await write(async () => { o = await call(Account.createOrg, { name: name.value }, 'org'); })) { store.set('org', o.slug); go('/o/' + enc(o.slug)); }
     } }, name, h('button', { type: 'submit' }, t('common.create'))),
     ME && ME.login ? '' : h('p', { class: 'muted small' }, t('home.warning')));
 }
@@ -32,20 +32,19 @@ export async function pageHome() {
 // The organisation: its plans, and rename or delete. Tasks and people are added from a plan's table; they belong to the
 // organisation, so every plan has them.
 export async function pageOrg(r, org) {
-  const base = `/orgs/${enc(r.org)}`;
   if (new URLSearchParams(location.search).has('joined')) {  // just joined through an invitation (/s/<token>)
     history.replaceState({}, '', location.pathname);
     setTimeout(() => say(t('invite.joined', { org: org.name })), 0);
   }
   if (org.plan) return go(`/o/${enc(r.org)}/p/${enc(org.plan)}`);  // a link to one plan: that plan is all there is
-  const plans = await get(base + '/plans');
+  const plans = await get(Plan.listPlans, { org: r.org }, 'plans');
 
   function newPlanForm() {
     const name = h('input', { type: 'text', placeholder: t('org.new_plan_placeholder'), maxlength: '80', required: true, 'aria-label': t('org.new_plan_placeholder') });
     return h('form', { class: 'row', onsubmit: async (e) => {
       e.preventDefault();
       let p;
-      if (await write(async () => { p = await api('POST', base + '/plans', { name: name.value }); })) go(`/o/${enc(r.org)}/p/${enc(p.slug)}`);
+      if (await write(async () => { p = await call(Plan.createPlan, { org: r.org, name: name.value }, 'plan'); })) go(`/o/${enc(r.org)}/p/${enc(p.slug)}`);
     } }, name, h('button', { type: 'submit' }, t('common.create')));
   }
   const root = h('div', { class: 'org-page' },
@@ -62,9 +61,8 @@ export async function pageOrg(r, org) {
 // The organisation's settings (admins): rename (the address stays) or delete. Deleting needs the organisation to have no
 // plans, and its name typed in.
 export async function pageSettings(r, org) {
-  const base = `/orgs/${enc(r.org)}`;
   if (org.role !== 'admin') return go('/o/' + enc(r.org));
-  const plans = await get(base + '/plans');
+  const plans = await get(Plan.listPlans, { org: r.org }, 'plans');
   {
     const name = h('input', { type: 'text', value: org.name, maxlength: '80', 'aria-label': t('org.rename_label') });
     let del;
@@ -76,7 +74,7 @@ export async function pageSettings(r, org) {
       del = h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         if (typed.value.trim() !== org.name) return;
-        if (await write(() => api('DELETE', `${base}?confirm=${enc(r.org)}`))) { store.set('org', ''); go('/?switch'); say(t('org.deleted', { name: org.name })); }
+        if (await write(() => call(Org.deleteOrg, { org: r.org, confirm: r.org }))) { store.set('org', ''); go('/?switch'); say(t('org.deleted', { name: org.name })); }
       } }, h('p', { class: 'muted small' }, t('org.delete_hint')), h('div', { class: 'row-inline' }, typed, button));
     }
     return h('div', { class: 'org-page settings-page' },
@@ -84,7 +82,7 @@ export async function pageSettings(r, org) {
       h('h2', {}, t('org.rename_label')),
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (await write(() => api('PATCH', base, { name: name.value }))) { await render(); say(t('org.renamed')); }
+        if (await write(() => call(Org.renameOrg, { org: r.org, name: name.value }, 'org'))) { await render(); say(t('org.renamed')); }
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h2', {}, t('org.delete_title')), del);
   }
@@ -140,25 +138,25 @@ export const LINK_ICON = { view: 'eye', answer: 'check', edit: 'hand', join: 'jo
 export const LINK_ACCESS = { view: 'share.access_view', answer: 'share.access_answer', edit: 'share.access_edit', join: 'share.access_join' };
 // A link: what it is (the plan and its label, or whom an invitation is for) on top, what it gives and how long under it,
 // then share (where the device can), copy and delete.
-export function linkRow(l, base, again, withPlan?) {
-  const gone = l.expires_at && new Date(l.expires_at) < new Date();
+export function linkRow(l, org: string, again, withPlan?) {
+  const gone = l.expiresAt && new Date(l.expiresAt) < new Date();
   const join = l.level === 'join';
   const name = join ? (l.label ? t('members.invite_for', { name: l.label }) : t('members.invite_link')) : l.label || t('share.no_label');
   const share = !gone && navigator.share ? iconBtn('share', t('share.share'), () => navigator.share({ title: name, url: linkURL(l) }).catch(() => {})) : '';
   return h('li', { class: 'link-row' + (gone ? ' gone' : '') },
     h('span', { class: 'link-ic ' + l.level, 'aria-hidden': 'true' }, icon(LINK_ICON[l.level])),
     h('span', { class: 'what' },
-      h('span', { class: 'title' }, withPlan && l.plan_name ? h('strong', {}, l.plan_name) : '', withPlan && l.plan_name ? ' · ' : '',
+      h('span', { class: 'title' }, withPlan && l.planName ? h('strong', {}, l.planName) : '', withPlan && l.planName ? ' · ' : '',
         h('span', { class: l.label || l.level === 'join' ? '' : 'muted' }, name)),
       h('span', { class: 'meta muted small' }, h('span', { class: 'lvl ' + l.level }, t(LINK_ACCESS[l.level])), ' · ',
-        join ? [h('span', { class: 'uses' }, t(l.single_use ? 'members.invite_once_meta' : 'members.invite_many_meta')), ' · '] : '',
-        gone ? t('share.ran_out') : l.expires_at ? t('share.until', { date: new Date(l.expires_at).toLocaleDateString(locale()) }) : t('share.forever'),
-        l.created_by ? ' · ' + t('share.by', { name: l.created_by }) : '')),
+        join ? [h('span', { class: 'uses' }, t(l.singleUse ? 'members.invite_once_meta' : 'members.invite_many_meta')), ' · '] : '',
+        gone ? t('share.ran_out') : l.expiresAt ? t('share.until', { date: new Date(l.expiresAt).toLocaleDateString(locale()) }) : t('share.forever'),
+        l.createdBy ? ' · ' + t('share.by', { name: l.createdBy }) : '')),
     h('span', { class: 'acts' }, share,
       gone ? '' : iconBtn('copy', t('share.copy'), (e) => copyLink(l, e.currentTarget)),
       iconBtn('trash', t(join ? 'members.invite_delete_aria' : 'share.delete_aria', { name }), async () => {
         if (!(await ask(t(join ? 'members.invite_delete_title' : 'share.delete_title'), t(join ? 'share.delete_join' : 'share.delete_text', { name }), t('common.remove')))) return;
-        if (await write(() => api('DELETE', `${base}/links/${l.id}`))) again();
+        if (await write(() => call(Org.deleteLink, { org, id: l.id }))) again();
       }, 'danger')));
 }
 
@@ -167,10 +165,9 @@ export const expirySelect = (dflt) => h('select', { 'aria-label': t('share.expir
 
 // Share one plan: its links, and a new one.
 export async function shareDialog(orgSlug, org, plan) {
-  const base = `/orgs/${enc(orgSlug)}`;
   let dlg;
   const build = async (key?) => {
-    const all = await api('GET', base + '/links');
+    const all = await call(Org.listLinks, { org: orgSlug }, 'links');
     const mine = all.filter((l) => l.level !== 'join' && l.plan === plan.slug);
     const level = h('select', { 'aria-label': t('share.level') }, ['view', 'answer', 'edit'].map((x) => h('option', { value: x }, t(LINK_ACCESS[x]))));
     const label = h('input', { type: 'text', maxlength: '80', placeholder: t('share.label_placeholder'), 'aria-label': t('share.label') });
@@ -178,12 +175,12 @@ export async function shareDialog(orgSlug, org, plan) {
     const title = t('share.title_plan', { name: plan.name });
     if (key) setRefreshKey(key);
     dlg = modal(title, { info: [t('share.info'), t('share.info_levels')] },
-      mine.length ? h('ul', { class: 'plain links' }, mine.map((l) => linkRow(l, base, () => redraw(dlg, build)))) : h('p', { class: 'muted' }, t('share.none')),
+      mine.length ? h('ul', { class: 'plain links' }, mine.map((l) => linkRow(l, orgSlug, () => redraw(dlg, build)))) : h('p', { class: 'muted' }, t('share.none')),
       h('h3', {}, t('share.new')),
       h('form', { class: 'new-link', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        if (await write(async () => { made = await api('POST', base + '/links', { plan: plan.slug, level: level.value, label: label.value, expires_days: Number(expires.value) }); })) {
+        if (await write(async () => { made = await call(Org.createLink, { org: orgSlug, plan: plan.slug, level: level.value, label: label.value, expiresDays: Number(expires.value) }, 'link'); })) {
           redraw(dlg, build);
           try { await navigator.clipboard.writeText(linkURL(made)); say(t('share.made_copied')); } catch (err) { say(t('share.made')); }
         }
@@ -197,10 +194,9 @@ export async function shareDialog(orgSlug, org, plan) {
 // «Share» on each plan; listed here so they can be seen and deleted in one place). An admin changes roles and invites;
 // everyone may leave. Leaving, removing someone and changing one's own role are asked about first.
 export async function pageMembers(r, org) {
-  const base = `/orgs/${enc(r.org)}`;
   if (!org.role) return go('/o/' + enc(r.org));
   const admin = org.role === 'admin';
-  const [members, links] = await Promise.all([api('GET', base + '/members'), api('GET', base + '/links')]);
+  const [members, links] = await Promise.all([call(Org.listMembers, { org: r.org }, 'members'), call(Org.listLinks, { org: r.org }, 'links')]);
   const again = () => render();
   const invites = links.filter((l) => l.level === 'join');
   const shared = links.filter((l) => l.level !== 'join');
@@ -208,7 +204,7 @@ export async function pageMembers(r, org) {
     const yes = m.you ? await ask(t('members.leave_title'), t('members.leave_confirm', { name: org.name }), t('members.leave'))
       : await ask(t('members.remove_title'), t('members.remove_confirm', { name: m.name }), t('members.remove'));
     if (!yes) return;
-    if (await write(() => api('DELETE', `${base}/members/${m.id}`))) { if (m.you) { store.set('org', ''); fetched.clear(); go('/?switch'); } else again(); }
+    if (await write(() => call(Org.removeMember, { org: r.org, id: m.id }))) { if (m.you) { store.set('org', ''); fetched.clear(); go('/?switch'); } else again(); }
   };
   const row = (m) => h('li', { class: 'member' },
     h('span', { class: 'avatar sm', 'aria-hidden': 'true' }, initials(m.name)),
@@ -218,7 +214,7 @@ export async function pageMembers(r, org) {
       admin ? h('select', { 'aria-label': t('members.role_aria', { name: m.name }), onchange: async (e) => {
         const to = e.target.value;
         if (m.you && !(await ask(t('members.own_role_title'), t('members.own_role_confirm', { role: t(ROLE[to]).toLowerCase() }), t('members.own_role_yes')))) { e.target.value = m.role; return; }
-        if (await write(() => api('PATCH', `${base}/members/${m.id}`, { role: to }))) again(); else e.target.value = m.role;
+        if (await write(() => call(Org.setMemberRole, { org: r.org, id: m.id, role: to }))) again(); else e.target.value = m.role;
       } }, ['admin', 'member'].map((x) => h('option', { value: x, selected: x === m.role }, t(ROLE[x])))) : h('span', { class: 'muted small' }, t(ROLE[m.role])),
       admin || m.you ? iconBtn(m.you ? 'logout' : 'trash', m.you ? t('members.leave') : t('members.remove_aria', { name: m.name }), () => leave(m), 'danger') : ''));
   const expires = expirySelect(7);
@@ -232,16 +228,16 @@ export async function pageMembers(r, org) {
     h('ul', { class: 'plain members' }, members.map(row)),
     admin ? [h('h2', {}, t('members.invite')),
       h('p', { class: 'muted small lead' }, t('members.invite_hint')),
-      invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, base, again))) : '',
+      invites.length ? h('ul', { class: 'plain links' }, invites.map((l) => linkRow(l, r.org, again))) : '',
       h('form', { class: 'new-link', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        if (await write(async () => { made = await api('POST', base + '/links', { level: 'join', label: who.value.trim(), single_use: uses.value === 'once', expires_days: Number(expires.value) }); })) {
+        if (await write(async () => { made = await call(Org.createLink, { org: r.org, level: 'join', label: who.value.trim(), singleUse: uses.value === 'once', expiresDays: Number(expires.value) }, 'link'); })) {
           again();
           try { await navigator.clipboard.writeText(linkURL(made)); say(t('members.invite_made_copied')); } catch (err) { say(t('members.invite_made')); }
         }
       } }, field(t('members.invite_who'), who), field(t('members.invite_uses'), uses), field(t('share.expires'), expires), h('button', { type: 'submit' }, t('members.invite_create')))] : '',
     h('h2', {}, t('members.plan_links')),
     h('p', { class: 'muted small lead' }, t('members.plan_links_hint')),
-    shared.length ? h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, base, again, true))) : h('p', { class: 'muted' }, t('share.none')));
+    shared.length ? h('ul', { class: 'plain links' }, shared.map((l) => linkRow(l, r.org, again, true))) : h('p', { class: 'muted' }, t('share.none')));
 }

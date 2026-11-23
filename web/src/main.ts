@@ -1,8 +1,9 @@
-import { api, changedBy, errorText, fetched, forget, get, probe } from './api';
+import { changedBy, errorText, fetched, forget, get, Org, probe, Setup } from './api';
+import type { Person } from './gen/dutyplan/v1/dutyplan_pb';
 import { CLIENT, h, say, store, type Page } from './core';
 import { pageHome, pageMembers, pageOrg, pageSettings } from './org';
-import { pagePlan, sideways } from './plan';
-import { brand, headerSignedOut, link, me, pageLanding, renderHeader, route } from './shell';
+import { pagePlan } from './plan';
+import { headerSignedOut, link, me, pageLanding, renderHeader, route } from './shell';
 import { focusKey, refocus } from './ui';
 import { enc } from './util';
 
@@ -22,10 +23,10 @@ export async function render() {
       if (new URLSearchParams(location.search).get('signin') === 'failed') say(t('landing.failed'), 'err');
       return;
     }
-    let people = [];
+    let people: Person[] = [];
     let org: any = null;
     if (r.org) {
-      [org, people] = await Promise.all([get('/orgs/' + enc(r.org)), get(`/orgs/${enc(r.org)}/people`)]);
+      [org, people] = await Promise.all([get(Org.getOrg, { org: r.org }), get(Setup.listPeople, { org: r.org }, 'people')]);
       store.set('org', r.org);
     }
     if (r.page === 'none') throw Object.assign(new Error(t('page.not_found')), { status: 404, keepOrg: !!org });

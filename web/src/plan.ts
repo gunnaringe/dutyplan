@@ -1,8 +1,8 @@
-import { api, call, changedBy, confirmed, errorText, forget, get, write } from './api';
+import { Account, call, changedBy, confirmed, Draft, errorText, forget, get, Plan, Setup, write } from './api';
 import { LEVEL_ICON, h, icon, locale, mark, say, store, type Kid, type Page } from './core';
-import { live, render, typing } from './main';
+import { live, render } from './main';
 import { ask, shareDialog, viewOnly } from './org';
-import { ME, about, go, link, linkBtn, me } from './shell';
+import { ME, go, link, linkBtn, me } from './shell';
 import { addRow, closeBtn, enterMovesOn, field, foot, infoBtn, keyed, modal, reopened } from './ui';
 import { MAX_EVERY, addDays, clock, enc, fmtDate, fmtShortDate, fmtTime, repeatDates } from './util';
 
@@ -58,7 +58,7 @@ export const WEIGHT_GROUP = {
 export const weightLabel = (key) => t('weight.' + key + '.label');
 export const weightGroup = (key) => t('weight.group.' + (WEIGHT_GROUP[key] || 'fair'));
 
-export function weightsForm(path, wr, saved) {
+export function weightsForm(at: { org: string; plan: string }, wr, saved) {
   const inputs = wr.specs.map((spec) => {
     const cur = spec.key in wr.values ? wr.values[spec.key] : spec.default;
     const input = h('input', { type: 'number', min: String(spec.min), max: String(spec.max), step: 'any', value: String(cur), 'aria-label': weightLabel(spec.key) });
@@ -72,7 +72,7 @@ export function weightsForm(path, wr, saved) {
         h('label', {}, h('span', { class: 'wlabel' }, weightLabel(spec.key), changed ? h('span', { class: 'tag' }, t('weights.changed')) : ''), input),
         h('div', { class: 'small muted' }, t('weights.default', { value: def })));
     })));
-  const save = (values, text) => async () => { if (await write(() => api('PUT', path, { values }))) saved(text); };
+  const save = (values, text) => async () => { if (await write(() => call(Draft.setWeights, { ...at, values }))) saved(text); };
   const nChanged = Object.keys(wr.values || {}).length;
   return h('details', {}, h('summary', {}, nChanged ? t('weights.show_changed', { n: nChanged }) : t('weights.show')),
     h('div', { class: 'row-inline' }, infoBtn(t('weights.title'), [t('weights.hint'), ...wr.specs.map((x) => `${weightLabel(x.key)}: ${t('weight.' + x.key + '.hint')}`)])),
@@ -104,14 +104,14 @@ export const weightNow = (wr, k) => (k in (wr.values || {}) ? wr.values[k] : (wr
 export const priorityLevel = (wr, p) => Object.keys(p.levels).find((l) => Object.entries(p.levels[l]).every(([k, v]) => weightNow(wr, k) === v)) || '';
 export const prioritySummary = (wr) => PRIORITIES.map((p) => t('prio.' + p.key + '.short') + ': ' + t('prio.level.' + (priorityLevel(wr, p) || 'custom'))).join(' · ');
 
-export function prioritiesForm(path, wr, saved) {
+export function prioritiesForm(at: { org: string; plan: string }, wr, saved) {
   const rows = PRIORITIES.map((p) => {
     const now = priorityLevel(wr, p);
     return h('div', { class: 'prio' }, h('div', {}, h('div', { class: 'plabel' }, t('prio.' + p.key)), h('div', { class: 'small muted' }, t('prio.' + p.key + '.hint'))),
       h('div', { class: 'seg', role: 'group', 'aria-label': t('prio.' + p.key) }, ['less', 'normal', 'more'].map((l) => h('button', { type: 'button', 'aria-pressed': String(now === l),
         onclick: async () => {
           if (now === l) return;
-          if (await write(() => api('PUT', path, { values: { ...(wr.values || {}), ...p.levels[l] } }))) saved(t('prio.saved', { what: t('prio.' + p.key), level: t('prio.level.' + l) }));
+          if (await write(() => call(Draft.setWeights, { ...at, values: { ...(wr.values || {}), ...p.levels[l] } }))) saved(t('prio.saved', { what: t('prio.' + p.key), level: t('prio.level.' + l) }));
         } }, t('prio.level.' + l)))),
       now ? '' : h('div', { class: 'small muted' }, t('prio.custom_hint')));
   });
@@ -203,51 +203,48 @@ export function dragScroll(grid) {
 }
 
 export async function pagePlan(r, org, people) {
-  const base = `/orgs/${enc(r.org)}`;
-  const pbase = `${base}/plans/${enc(r.plan)}`;
-  const epath = pbase + '/events';
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [] });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await Promise.all([
-    get(pbase), get(epath), get(base + '/tasks'), get(base + '/combinations'),
-    get(pbase + '/fields'), get(pbase + '/answers'), get(pbase + '/places'), get(pbase + '/cells'),
-    get(pbase + '/pools'), get(pbase + '/weights'), get('/health'), get(pbase + '/runs'), get(base + '/sections'), get(base + '/task-sections')]);
+    get(Plan.getPlan, { org: r.org, plan: r.plan }, 'plan'), get(Plan.listEvents, { org: r.org, plan: r.plan }, 'events'), get(Setup.listTasks, { org: r.org }, 'tasks'), get(Setup.listCombinations, { org: r.org }, 'combinations'),
+    get(Plan.listFields, { org: r.org, plan: r.plan }), get(Plan.listAnswers, { org: r.org, plan: r.plan }), get(Plan.listPlaces, { org: r.org, plan: r.plan }, 'places'), get(Draft.listCells, { org: r.org, plan: r.plan }, 'cells'),
+    get(Draft.listPools, { org: r.org, plan: r.plan }, 'pools'), get(Draft.getWeights, { org: r.org, plan: r.plan }), get(Account.health, {}), get(Draft.listRuns, { org: r.org, plan: r.plan }, 'runs'), get(Setup.listSections, { org: r.org }, 'sections'), get(Setup.listTaskSections, { org: r.org }, 'sections')]);
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest; none
   // when «Remove unlocked» set the drafts aside (also when another tab did it).
-  if (plan.draft_aside && !planState.aside) planState.runId = null;
-  planState.aside = plan.draft_aside;
+  if (plan.draftAside && !planState.aside) planState.runId = null;
+  planState.aside = plan.draftAside;
   const pinned = runs.find((x) => x.pinned);
-  const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : plan.draft_aside ? null : pinned ? pinned.id : runs.length ? runs[0].id : null;
+  const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : plan.draftAside ? null : pinned ? pinned.id : runs.length ? runs[0].id : null;
   // «Edit | View» (see showPage): View always shows the current plan, else the newest finished draft, not one picked in Edit
   const modeKey = 'mode:' + key;
   // an answer link has «My answers» and View; the others Edit (Table) and View
   const modes = org.level === 'answer' ? ['me', 'show'] : ['edit', 'show'];
   const stored = store.get(modeKey);
   const mode = modes.includes(stored) ? stored : org.level === 'answer' ? 'me' : org.level === 'view' ? 'show' : 'edit';
-  const viewId = mode === 'edit' ? shownId : plan.draft_aside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
-  const view = viewId ? await get(`${pbase}/runs/${viewId}`) : null;
+  const viewId = mode === 'edit' ? shownId : plan.draftAside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
+  const view = viewId ? await get(Draft.getRun, { org: r.org, plan: r.plan, id: viewId }) : null;
   const done = !!view && view.run.status === 'done';
 
-  const label = (ev) => fmtShortDate(ev.date) + (ev.start_time ? ' ' + ev.start_time : '');
+  const label = (ev) => fmtShortDate(ev.date) + (ev.startTime ? ' ' + ev.startTime : '');
   const nameOf = (list, id) => (list.find((x) => x.id === id) || { name: '?' }).name;
   const at = (ev, tk) => ev.id + '/' + tk.id;
   const ans = {};  // person -> event -> never | poor | good ('' or missing = not answered)
-  answers.events.forEach((a) => { (ans[a.person_id] ||= {})[a.event_id] = a.level; });
+  answers.events.forEach((a) => { (ans[a.personId] ||= {})[a.eventId] = a.level; });
   const notes = {};  // person -> event -> the note on that answer
-  (answers.notes || []).forEach((n) => { (notes[n.person_id] ||= {})[n.event_id] = n.note; });
+  (answers.notes || []).forEach((n) => { (notes[n.personId] ||= {})[n.eventId] = n.note; });
   const chosen = {};  // person -> the tasks they take part in, with how willingly
-  answers.tasks.forEach((a) => { (chosen[a.person_id] ||= []).push(a); });
+  answers.tasks.forEach((a) => { (chosen[a.personId] ||= []).push(a); });
   const placesAt = {};  // 'event/task' -> places (missing = not needed)
-  places.forEach((p) => { placesAt[p.event_id + '/' + p.task_id] = p.slots; });
+  places.forEach((p) => { placesAt[p.eventId + '/' + p.taskId] = p.slots; });
   const fieldValue = {};  // 'event/field' -> text
-  fields.values.forEach((v) => { fieldValue[v.event_id + '/' + v.field_id] = v.value; });
+  fields.values.forEach((v) => { fieldValue[v.eventId + '/' + v.fieldId] = v.value; });
   const cellsAt = {};  // 'event/task' -> the cells set by hand and the locked names, as they are now
-  cells.forEach((c) => { (cellsAt[c.event_id + '/' + c.task_id] ||= []).push(c); });
+  cells.forEach((c) => { (cellsAt[c.eventId + '/' + c.taskId] ||= []).push(c); });
   const poolAt = {};  // 'event/task' -> whom the planner may pick
-  pools.forEach((p) => { poolAt[p.event_id + '/' + p.task_id] = p; });
+  pools.forEach((p) => { poolAt[p.eventId + '/' + p.taskId] = p; });
   const planCell = {};  // 'event/task' -> the cell of the draft on show
-  if (done) for (const ev of view.events) for (const c of ev.cells) planCell[ev.id + '/' + c.task_id] = c;
+  if (done) for (const ev of view.events) for (const c of ev.cells) planCell[ev.id + '/' + c.taskId] = c;
   // The drafts one by one (2026-11-23, the user: "show the different drafts"): ‹ › in the draft's bar step to an older or newer
   // draft, and «Show changes» marks the planner's names that are new since the finished draft before it (the old names in the
   // cell's title). Kept per plan in this browser.
@@ -256,7 +253,7 @@ export async function pagePlan(r, org, people) {
   const olderId = shownAt < 0 ? null : (runs.slice(shownAt + 1).find((x) => x.status === 'done') || {}).id;
   const comparing = mode === 'edit' && !!olderId && store.get(changesKey) === '1';
   const before = {};  // 'event/task' -> the planner's names there in the draft before
-  if (comparing) for (const ev of (await get(`${pbase}/runs/${olderId}`)).events) for (const c of ev.cells) before[ev.id + '/' + c.task_id] = c.people;
+  if (comparing) for (const ev of (await get(Draft.getRun, { org: r.org, plan: r.plan, id: olderId })).events) for (const c of ev.cells) before[ev.id + '/' + c.taskId] = c.people;
 
   // What a place in the draft holds now: the cells set by hand and the locked names (always as they are now), then the
   // planner's names in the draft on show that are not among them (also one that was locked then and is unlocked now), then
@@ -264,8 +261,8 @@ export async function pagePlan(r, org, people) {
   const slotsAt = (ev, tk) => {
     const k = at(ev, tk);
     const n = placesAt[k] || 0;
-    const items = (cellsAt[k] || []).map((c) => ({ cell: c, kind: c.person_id ? 'person' : 'text', id: c.person_id || 0,
-      name: c.person_id ? nameOf(people, c.person_id) : c.label, fills: c.fills || 1, hand: !c.locked, locked: c.locked }));
+    const items = (cellsAt[k] || []).map((c) => ({ cell: c, kind: c.personId ? 'person' : 'text', id: c.personId || 0,
+      name: c.personId ? nameOf(people, c.personId) : c.label, fills: c.fills || 1, hand: !c.locked, locked: c.locked }));
     const rc = planCell[k];
     if (rc) {
       const has = (kind, id) => items.some((x) => x.kind === kind && x.id === id);
@@ -283,8 +280,8 @@ export async function pagePlan(r, org, people) {
     .filter((x) => x.kind === 'person' && (on ? !x.cell : x.locked)).map((x) => ({ event: ev.id, task: tk.id, person: x.id })));
   const setLocks = async (list, on) => {
     if (!list.length) { say(t(on ? 'sel.nothing_to_lock' : 'sel.nothing_to_unlock')); return; }
-    if (!(await write(() => api('PUT', pbase + '/locks', { locks: list, locked: on })))) return;
-    undoable(tn(on ? 'undo.lock' : 'undo.unlock', list.length), () => api('PUT', pbase + '/locks', { locks: list, locked: !on }));
+    if (!(await write(() => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: on })))) return;
+    undoable(tn(on ? 'undo.lock' : 'undo.unlock', list.length), () => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: !on }));
     if (sel && sel.grid === 'draft') planState.sel = { keys: [...sel.keys], anchor: sel.anchor };  // a selection of the draft stays
     render();
   };
@@ -297,7 +294,7 @@ export async function pagePlan(r, org, people) {
     if (!u) return;
     if (await write(u.undo)) { await render(); say(t('undo.done', { what: u.label })); } else render();
   };
-  const cellBack = (c) => ({ event: c.event_id, task: c.task_id, ...(c.person_id ? { person: c.person_id } : { label: c.label }), fills: c.fills, locked: c.locked });
+  const cellBack = (c) => ({ event: c.eventId, task: c.taskId, ...(c.personId ? { person: c.personId } : { label: c.label }), fills: c.fills, locked: c.locked });
   // A lock for a whole row (a task) or column (an event) of the draft (2026-11-23, the user: "Let it be possible to lock a column
   // or a row"): pressed when every planner name in it is locked; a press locks the rest, or unlocks them all.
   const groupLock = (pairs, lockAria, unlockAria) => {
@@ -341,7 +338,7 @@ export async function pagePlan(r, org, people) {
       return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, t('me.who')), h('p', { class: 'muted small' }, t('me.who_hint')),
         people.length ? [find, h('div', { class: 'me-picks' }, picks)] : h('p', { class: 'muted' }, t('me.nobody')));
     }
-    const mine = events.flatMap((ev) => showTasksOf(ev).filter((tk) => slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === me.id)).map((tk) => [ev, tk]));
+    const mine = events.flatMap((ev) => showTasksOf(ev).filter((tk) => slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === me.id)).map((tk) => [ev, tk] as const));
     const level = (ev) => (ans[me.id] || {})[ev.id] || '';
     let saving = Promise.resolve();  // one write after the other: Yes then No quickly must end as No
     const answerRow = (ev) => {
@@ -350,11 +347,11 @@ export async function pagePlan(r, org, people) {
       const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(level(ev) === b.dataset.level)));
       btns.forEach((b) => b.addEventListener('click', async () => {
         const was = level(ev);
-        const next = was === b.dataset.level ? '' : b.dataset.level;  // the same again: not answered
+        const next = was === b.dataset.level ? '' : b.dataset.level!;  // the same again: not answered
         (ans[me.id] ||= {})[ev.id] = next;
         paint();
         saving = saving.then(async () => {
-          if (!(await write(() => api('PUT', `${pbase}/people/${me.id}/availability`, { levels: { [ev.id]: next } })))) { ans[me.id][ev.id] = was; paint(); }
+          if (!(await write(() => call(Plan.setAvailability, { org: r.org, plan: r.plan, person: me.id, levels: { [ev.id]: next } })))) { ans[me.id][ev.id] = was; paint(); }
         });
       }));
       let saved = (notes[me.id] || {})[ev.id] || '';
@@ -363,7 +360,7 @@ export async function pagePlan(r, org, people) {
         const value = note.value.trim();
         if (value === saved) return;
         saving = saving.then(async () => {
-          if (await write(() => api('PUT', `${pbase}/events/${ev.id}/notes/${me.id}`, { note: value }))) { saved = value; (notes[me.id] ||= {})[ev.id] = value; say(t('me.note_saved')); }
+          if (await write(() => call(Plan.setNote, { org: r.org, plan: r.plan, event: ev.id, person: me.id, note: value }))) { saved = value; (notes[me.id] ||= {})[ev.id] = value; say(t('me.note_saved')); }
         });
       });
       const tasksHere = mine.filter(([e]) => e.id === ev.id).map(([, tk]) => tk.name);
@@ -434,7 +431,7 @@ export async function pagePlan(r, org, people) {
       body.replaceChildren(h('div', { class: 'show-scroll' }, (across ? acrossTable : down)(evs)), cards(evs));
       body.querySelectorAll<HTMLElement>('.nm[data-person]').forEach((x) => x.classList.toggle('hit', !!found && x.dataset.person === String(found)));
       const hits = new Set(events.filter((ev) => found && hasTask(ev, found)).map((ev) => String(ev.id)));
-      body.querySelectorAll<HTMLElement>('[data-ev]').forEach((x) => x.classList.toggle('miss', !!found && !hits.has(x.dataset.ev)));
+      body.querySelectorAll<HTMLElement>('[data-ev]').forEach((x) => x.classList.toggle('miss', !!found && !hits.has(x.dataset.ev!)));
       count.textContent = found ? tn('show.found', hits.size) : '';
       const p = people.find((x) => x.id === found);
       onlyField.hidden = !p;
@@ -484,7 +481,7 @@ export async function pagePlan(r, org, people) {
       else if (e.key === 'Enter') { e.preventDefault(); const o = options()[active]; if (o) pick(sorted.find((p) => p.name === o.textContent)); }
       else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); close(); } }
     });
-    const source = done ? t('show.source', { id: view.run.id, time: fmtTime(view.run.finished_at || view.run.started_at) }) + (view.run.pinned ? ' · ' + t('run.current') : '')
+    const source = done ? t('show.source', { id: view.run.id, time: fmtTime(view.run.finishedAt || view.run.startedAt) }) + (view.run.pinned ? ' · ' + t('run.current') : '')
       : t('show.no_draft');
     const root = h('div', { class: 'plan-page show' },
       h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [t('show.info')]), modeSwitch, shareBtn()),
@@ -500,13 +497,12 @@ export async function pagePlan(r, org, people) {
   }
 
   // ---- the draft: make one or try again, and what the draft on show is
-  const runsPath = pbase + '/runs';
   const newest = runs[0];
   const running = !!newest && newest.status === 'running';
   const pin = async (id, on) => {
     const was = (runs.find((x) => x.pinned) || {}).id;
-    if (!(await write(() => api(on ? 'PUT' : 'DELETE', `${runsPath}/${id}/pin`)))) return;
-    undoable(t(on ? 'undo.pin' : 'undo.unpin', { id }), () => (was ? api('PUT', `${runsPath}/${was}/pin`) : api('DELETE', `${runsPath}/${id}/pin`)));
+    if (!(await write(() => call(on ? Draft.pinRun : Draft.unpinRun, { org: r.org, plan: r.plan, id })))) return;
+    undoable(t(on ? 'undo.pin' : 'undo.unpin', { id }), () => (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.unpinRun, { org: r.org, plan: r.plan, id })));
     planState.runId = id;
     await render();
     say(on ? t('run.pin_done', { id }) : t('run.unpin_done'));
@@ -539,7 +535,7 @@ export async function pagePlan(r, org, people) {
   const taskKey = 'whotasks:' + r.org + '/' + r.plan;
   const byTask = new Set((() => { try { return JSON.parse(store.get(taskKey) || '[]'); } catch { return []; } })()
     .filter((id) => tasks.some((tk) => tk.id === id && tk.planned)));
-  const takes = (p) => (chosen[p.id] || []).some((x) => byTask.has(x.task_id) && (x.level === 'good' || x.level === 'poor'));
+  const takes = (p) => (chosen[p.id] || []).some((x) => byTask.has(x.taskId) && (x.level === 'good' || x.level === 'poor'));
   const shown = (id) => { const p = people.find((x) => x.id === id); return !p || (!hidden.has(id) && (!byTask.size || takes(p))); };
   const filtering = () => hidden.size > 0 || byTask.size > 0;
   const whoLabel = () => {
@@ -605,9 +601,9 @@ export async function pagePlan(r, org, people) {
   const poll = async () => {
     if (!bar.isConnected) return;  // the page has been replaced
     try {
-      const latest = await api('GET', runsPath + '/latest');
+      const latest = await call(Draft.getRun, { org: r.org, plan: r.plan, id: 0 });
       if (latest.run.status === 'running') setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000);  // the stream says when it ends
-      else { planState.runId = latest.run.id; forget(changedBy('RunFinished'), call('GET', runsPath).org); render(); }
+      else { planState.runId = latest.run.id; forget(changedBy('RunFinished'), r.org); render(); }
     } catch (e) { say(errorText(e), 'err'); }
   };
   {
@@ -616,23 +612,23 @@ export async function pagePlan(r, org, people) {
     limitSel.addEventListener('change', () => store.set('limit', limitSel.value));
     const start = async () => {
       let id;
-      if (await write(async () => { id = (await api('POST', runsPath, { time_limit: parseInt(limitSel.value, 10) })).id; })) { planState.runId = id; render(); }
+      if (await write(async () => { id = (await call(Draft.startRun, { org: r.org, plan: r.plan, timeLimit: parseInt(limitSel.value, 10) })).id; })) { planState.runId = id; render(); }
     };
     const nothing = !events.length || !people.length || !Object.values(placesAt).some(Boolean);  // no event, person or place: nothing to plan
     const line: HTMLElement[] = [h('button', { type: 'button', disabled: !health.planner || running || nothing, title: nothing && !running ? t('run.nothing') : null, onclick: start },
       running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel];
     const notes: HTMLElement[] = [];
     if (!health.planner) line.push(h('span', { class: 'small' }, t('run.no_planner')));
-    if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.time_limit }))); setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000); }
-    if (!view) { if (!running) line.push(h('span', { class: 'small' }, plan.draft_aside && runs.length ? t('run.aside') : t('run.none_yet'))); }
+    if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.timeLimit }))); setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000); }
+    if (!view) { if (!running) line.push(h('span', { class: 'small' }, plan.draftAside && runs.length ? t('run.aside') : t('run.none_yet'))); }
     else if (view.run.status === 'failed') notes.push(h('p', { class: 'err', role: 'alert' }, t('run.failed', { error: view.run.error || t('run.unknown_error') })));
     else if (done) {
       const run = view.run;
-      const about = t('run.label', { id: run.id, time: fmtTime(run.finished_at || run.started_at) }) + ' · ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'));
+      const about = t('run.label', { id: run.id, time: fmtTime(run.finishedAt || run.startedAt) }) + ' · ' + (run.solverStatus === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'));
       const step = (i, aria, ic) => h('button', { type: 'button', class: 'ghost icon step', disabled: !runs[i], 'aria-label': aria, title: aria,
         onclick: () => { planState.runId = runs[i].id; render(); } }, icon(ic));
       line.push(h('span', { class: 'steps' }, step(shownAt + 1, t('run.older'), 'left'),
-        h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solver_status === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')),
+        h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solverStatus === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')),
         step(shownAt - 1, t('run.newer'), 'right')));
       if (olderId) line.push(h('button', { type: 'button', class: 'ghost sm changes' + (comparing ? ' on' : ''), 'aria-pressed': String(comparing),
         title: t('run.changes_hint', { id: olderId }), onclick: () => { store.set(changesKey, comparing ? '' : '1'); render(); } }, t('run.changes')));
@@ -648,19 +644,19 @@ export async function pagePlan(r, org, people) {
         if (run.pinned && !toLock.length) {
           line.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
           line.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
-            if (await write(() => api('DELETE', `${runsPath}/${run.id}/pin`))) {
-              undoable(t('undo.reopen'), () => api('PUT', `${runsPath}/${run.id}/pin`));
+            if (await write(() => call(Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }))) {
+              undoable(t('undo.reopen'), () => call(Draft.pinRun, { org: r.org, plan: r.plan, id: run.id }));
               planState.runId = run.id; await render(); say(t('draft.reopened'));
             }
           } }, t('draft.reopen')));
         } else {
           line.push(h('button', { type: 'button', class: 'done', disabled: running, title: t('draft.done_hint'), onclick: async () => {
             const was = (runs.find((x) => x.pinned) || {}).id;
-            if (toLock.length && !(await write(() => api('PUT', pbase + '/locks', { locks: toLock, locked: true })))) return;
-            if (!run.pinned && !(await write(() => api('PUT', `${runsPath}/${run.id}/pin`)))) return;
+            if (toLock.length && !(await write(() => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: toLock, locked: true })))) return;
+            if (!run.pinned && !(await write(() => call(Draft.pinRun, { org: r.org, plan: r.plan, id: run.id })))) return;
             undoable(t('undo.done_mark'), async () => {
-              if (toLock.length) await api('PUT', pbase + '/locks', { locks: toLock, locked: false });
-              if (!run.pinned) await (was ? api('PUT', `${runsPath}/${was}/pin`) : api('DELETE', `${runsPath}/${run.id}/pin`));
+              if (toLock.length) await call(Draft.setLocks, { org: r.org, plan: r.plan, locks: toLock, locked: false });
+              if (!run.pinned) await (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }));
             });
             planState.runId = run.id;
             store.set(modeKey, 'show');
@@ -671,8 +667,8 @@ export async function pagePlan(r, org, people) {
         line.push(h('button', { type: 'button', class: 'ghost sm', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
           if (!(await ask(t('draft.aside'), t('draft.aside_confirm'), t('draft.aside_yes')))) return;
           const was = (runs.find((x) => x.pinned) || {}).id;
-          if (await write(() => api('DELETE', pbase + '/draft'))) {
-            undoable(t('undo.aside'), () => (was ? api('PUT', `${runsPath}/${was}/pin`) : api('PUT', pbase + '/draft')));
+          if (await write(() => call(Draft.setDraftAside, { org: r.org, plan: r.plan }))) {
+            undoable(t('undo.aside'), () => (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.clearDraftAside, { org: r.org, plan: r.plan })));
             planState.runId = null; await render(); say(t('draft.aside_done'));
           }
         } }, t('draft.aside')));
@@ -696,27 +692,27 @@ export async function pagePlan(r, org, people) {
   // ---- dialogs
   function eventDialog(ev) {
     let dlg;
-    const start = h('input', { type: 'time', value: ev.start_time, 'aria-label': t('event.starts') });
-    const end = h('input', { type: 'time', value: ev.end_time, 'aria-label': t('event.ends') });
+    const start = h('input', { type: 'time', value: ev.startTime, 'aria-label': t('event.starts') });
+    const end = h('input', { type: 'time', value: ev.endTime, 'aria-label': t('event.ends') });
     const values = fields.fields.map((f) => ({ f, input: h('input', { type: 'text', maxlength: '200', value: fieldValue[ev.id + '/' + f.id] || '', 'aria-label': f.name }) }));
     dlg = modal(fmtDate(ev.date), { info: [t('event.planner_ignores')] },
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         const body: Record<string, string> = {};
         const endWanted = start.value ? end.value : '';  // an end time needs a start time
-        if (start.value !== ev.start_time) body.start_time = start.value;
-        if (endWanted !== ev.end_time) body.end_time = endWanted;
+        if (start.value !== ev.startTime) body.startTime = start.value;
+        if (endWanted !== ev.endTime) body.endTime = endWanted;
         const todo = values.filter(({ f, input }) => input.value.trim() !== (fieldValue[ev.id + '/' + f.id] || ''));
         if (!Object.keys(body).length && !todo.length) { dlg.close(); return; }
         if (await write(async () => {
-          if (Object.keys(body).length) await api('PATCH', `${epath}/${ev.id}`, body);
-          for (const { f, input } of todo) await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: input.value });
+          if (Object.keys(body).length) await call(Plan.updateEvent, { org: r.org, plan: r.plan, id: ev.id, ...body }, 'event');
+          for (const { f, input } of todo) await call(Plan.setFieldValue, { org: r.org, plan: r.plan, event: ev.id, field: f.id, value: input.value });
         })) { dlg.close(); render(); }
       } },
         h('div', { class: 'row-inline' }, field(t('event.starts'), start), field(t('event.ends'), end)),
         values.map(({ f, input }) => field(f.name, input)),
         foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-          if (await write(async () => { await confirmed(t('event.delete'), t('event.delete_confirm', { date: fmtDate(ev.date) }), t('common.delete')); await api('DELETE', `${epath}/${ev.id}`); })) { dlg.close(); render(); }
+          if (await write(async () => { await confirmed(t('event.delete'), t('event.delete_confirm', { date: fmtDate(ev.date) }), t('common.delete')); await call(Plan.deleteEvent, { org: r.org, plan: r.plan, id: ev.id }); })) { dlg.close(); render(); }
         } }, t('event.delete')),
         h('button', { type: 'button', class: 'ghost', onclick: () => { dlg.close(); copyDialog(ev); } }, icon('copy'), ' ' + t('event.copy')),
         h('button', { type: 'submit' }, t('common.save')))));
@@ -796,7 +792,7 @@ export async function pagePlan(r, org, people) {
         e.preventDefault();
         let made;
         if (await write(async () => {
-          made = await api('POST', `${epath}/${ev.id}/copy`, { dates: dates(), until: week.until(), every: week.every(), times: times.box.checked, details: det.box.checked, places: pl.box.checked, hand: hand.box.checked });
+          made = await call(Plan.copyEvent, { org: r.org, plan: r.plan, id: ev.id, dates: dates(), until: week.until(), every: week.every(), times: times.box.checked, details: det.box.checked, places: pl.box.checked, hand: hand.box.checked }, 'events');
         })) { dlg.close(); await render(); say(tn('copy.done', made.length)); }
       } },
         field(t('copy.date'), list),
@@ -829,11 +825,11 @@ export async function pagePlan(r, org, people) {
       h('form', { class: 'stack', onsubmit: async (e) => {
         e.preventDefault();
         let made;
-        const times = { start_time: start.value, end_time: start.value ? end.value : '' };
+        const times = { startTime: start.value, endTime: start.value ? end.value : '' };
         if (await write(async () => {
           made = from.value
-            ? await api('POST', `${epath}/${from.value}/copy`, { dates: [date.value], until: week.until(), every: week.every(), times: !start.value, ...times, details: true, places: true, hand: false })
-            : await api('POST', epath, { date: date.value, until: week.until(), every: week.every(), ...times });
+            ? await call(Plan.copyEvent, { org: r.org, plan: r.plan, id: Number(from.value), dates: [date.value], until: week.until(), every: week.every(), times: !start.value, ...times, details: true, places: true, hand: false }, 'events')
+            : await call(Plan.addEvents, { org: r.org, plan: r.plan, date: date.value, until: week.until(), every: week.every(), ...times }, 'events');
         })) { dlg.close(); await render(); say(tn('event.added', made.length)); }
       } },
         h('div', { class: 'row-inline' }, field(t('event.date'), date), events.length ? field(t('event.start_from'), from) : ''),
@@ -859,11 +855,11 @@ export async function pagePlan(r, org, people) {
     aloneBox.addEventListener('change', async () => {
       const on = aloneBox.checked;
       // unticking sets every pair with this task back to standard, also ones set by hand: ask first
-      if (await write(async () => { if (!on) await confirmed(t('task.alone'), t('task.alone_off_confirm', { name: tk.name }), t('task.alone_off_yes')); await api('PUT', `${base}/tasks/${tk.id}/combinations`, { level: on ? 'cannot' : 'standard' }); })) changed();
+      if (await write(async () => { if (!on) await confirmed(t('task.alone'), t('task.alone_off_confirm', { name: tk.name }), t('task.alone_off_yes')); await call(Setup.setTaskCombinations, { org: r.org, task: tk.id, level: on ? 'cannot' : 'standard' }); })) changed();
       else aloneBox.checked = !on;
     });
     const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next) => {
-      const ok = await write(() => api('PUT', base + '/combinations', { a: tk.id, b: o.id, level: next }));
+      const ok = await write(() => call(Setup.setCombination, { org: r.org, a: tk.id, b: o.id, level: next }));
       if (ok) changed();
       return ok;
     }))));
@@ -874,17 +870,17 @@ export async function pagePlan(r, org, people) {
     const where = h('select', { 'aria-label': t('task.where') }, h('option', { value: '0', selected: now === 0 }, t('field.at_top')),
       mates.map((x, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: x.name }))));
     where.addEventListener('change', async () => {
-      if (await write(() => api('PUT', `${base}/tasks/${tk.id}/position`, { position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
+      if (await write(() => call(Setup.moveTask, { org: r.org, id: tk.id, position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
     });
     const sectionSel = h('select', { 'aria-label': t('task.section') }, h('option', { value: '0', selected: !tk.section }, t('task.no_section')),
       taskSections.map((x) => h('option', { value: String(x.id), selected: tk.section === x.id }, x.name)));
     sectionSel.addEventListener('change', async () => {
-      if (await write(() => api('PUT', `${base}/tasks/${tk.id}/position`, { section: parseInt(sectionSel.value, 10), position: tasks.length }))) changed(); else sectionSel.value = String(tk.section);
+      if (await write(() => call(Setup.moveTask, { org: r.org, id: tk.id, section: parseInt(sectionSel.value, 10), position: tasks.length }))) changed(); else sectionSel.value = String(tk.section);
     });
     dlg = keyed(modal(tk.name, { info: [t('task.org_wide', { org: org.name }), t('task.auto_hint'), t('task.combine_hint')] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (name.value.trim() !== tk.name && await write(() => api('PATCH', `${base}/tasks/${tk.id}`, { name: name.value }))) changed();
+        if (name.value.trim() !== tk.name && await write(() => call(Setup.updateTask, { org: r.org, id: tk.id, name: name.value }, 'task'))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       mates.length ? field(t('task.where'), where) : '',
       taskSections.length ? field(t('task.section'), sectionSel) : '',
@@ -892,34 +888,32 @@ export async function pagePlan(r, org, people) {
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
       pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { await confirmed(t('task.delete'), t('task.delete_confirm', { name: tk.name }), t('common.delete')); await api('DELETE', `${base}/tasks/${tk.id}`); })) { dlg.close(); render(); }
+        if (await write(async () => { await confirmed(t('task.delete'), t('task.delete_confirm', { name: tk.name }), t('common.delete')); await call(Setup.deleteTask, { org: r.org, id: tk.id }); })) { dlg.close(); render(); }
       } }, t('task.delete')), closeBtn())), 'task', tk.id);
   }
 
   function personDialog(p) {
-    let dlg;
     const changed = () => render();
-    const ppath = `${base}/people/${p.id}`;
     const name = h('input', { type: 'text', value: p.name, maxlength: '80', 'aria-label': t('common.name') });
     // the section the person is placed in (last in it); only where they stand in the table
     const sectionSel = h('select', { 'aria-label': t('person.section') }, h('option', { value: '0', selected: !p.section }, t('person.no_section')),
       sections.map((x) => h('option', { value: String(x.id), selected: p.section === x.id }, x.name)));
     sectionSel.addEventListener('change', async () => {
-      if (await write(() => api('PUT', `${ppath}/position`, { section: parseInt(sectionSel.value, 10), position: people.length }))) changed(); else sectionSel.value = String(p.section);
+      if (await write(() => call(Setup.movePerson, { org: r.org, id: p.id, section: parseInt(sectionSel.value, 10), position: people.length }))) changed(); else sectionSel.value = String(p.section);
     });
-    const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || { level: '' }).level;
+    const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.taskId === tk.id) || { level: '' }).level;
     const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
       const cur = levelOf(tk);
       return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, cycle('task', cur, t('person.task_aria', { name: p.name, task: tk.name }), async (next) => {
-        const ok = await write(() => (next ? api('PUT', `${ppath}/tasks/${tk.id}`, { level: next }) : api('DELETE', `${ppath}/tasks/${tk.id}`)));
+        const ok = await write(() => (next ? call(Setup.setPersonTask, { org: r.org, person: p.id, task: tk.id, level: next }) : call(Setup.removePersonTask, { org: r.org, person: p.id, task: tk.id })));
         if (ok) changed();
         return ok;
       })));
     });
-    dlg = keyed(modal(p.name, { info: [t('person.tasks_hint'), t('person.auto_hint'), t('person.org_wide', { org: org.name })] },
+    keyed(modal(p.name, { info: [t('person.tasks_hint'), t('person.auto_hint'), t('person.org_wide', { org: org.name })] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (name.value.trim() !== p.name && await write(() => api('PATCH', ppath, { name: name.value }))) changed();
+        if (name.value.trim() !== p.name && await write(() => call(Setup.updatePerson, { org: r.org, id: p.id, name: name.value }, 'person'))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('person.tasks')),
       taskRows.length ? h('table', { class: 'mini' }, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
@@ -930,7 +924,6 @@ export async function pagePlan(r, org, people) {
   // A place in the draft: what is set by hand (violet), the planner's names (lock one to keep it), and whom the planner
   // may pick there.
   function placeDialog(ev, tk) {
-    let dlg;
     const k = at(ev, tk);
     const changed = () => render();
     const act = (fn) => async () => { if (await write(fn)) changed(); };
@@ -939,9 +932,9 @@ export async function pagePlan(r, org, people) {
       h('td', {}, slot(x)),
       h('td', { class: 'small muted' }, x.hand ? t('place.by_hand') : t('place.from_planner')),
       h('td', { class: 'right' }, x.cell
-        ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
+        ? linkBtn(x.locked ? t('place.unlock') : t('common.remove'), act(() => call(Draft.deleteCell, { org: r.org, plan: r.plan, id: x.cell.id })), t(x.locked ? 'place.unlock_aria' : 'place.remove_aria', { name: x.name }))
         : h('button', { type: 'button', class: 'ghost sm', 'aria-label': t('place.lock_aria', { name: x.name }),
-          onclick: act(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: x.id, locked: true })) }, t('place.lock')))));
+          onclick: act(() => call(Draft.addCell, { org: r.org, plan: r.plan, event: ev.id, task: tk.id, person: x.id, locked: true }, 'cell')) }, t('place.lock')))));
     // By hand: tick any number of people (also more than the places: the place then shows as fuller than needed), or set a
     // text that fills places.
     const inCell = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
@@ -950,7 +943,7 @@ export async function pagePlan(r, org, people) {
       e.preventDefault();
       const ticked = pick.filter((x) => x.box.checked);
       if (!ticked.length) return;
-      if (await write(async () => { for (const { p } of ticked) await api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id }); })) changed();
+      if (await write(async () => { for (const { p } of ticked) await call(Draft.addCell, { org: r.org, plan: r.plan, event: ev.id, task: tk.id, person: p.id }, 'cell'); })) changed();
     } }, h('div', { class: 'chips' }, pick.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
       h('div', { class: 'row-inline' }, h('button', { type: 'submit' }, t('place.add_people')))) : '';
     const textIn = h('input', { type: 'text', maxlength: '80', placeholder: t('place.text_placeholder'), 'aria-label': t('common.text') });
@@ -958,27 +951,26 @@ export async function pagePlan(r, org, people) {
     const setForm = h('form', { class: 'row-inline', onsubmit: async (e) => {
       e.preventDefault();
       const body = { event: ev.id, task: tk.id, label: textIn.value, fills: parseInt(fills.value, 10) || 1 };
-      if (await write(() => api('POST', pbase + '/cells', body))) changed();
+      if (await write(() => call(Draft.addCell, { org: r.org, plan: r.plan, ...body }, 'cell'))) changed();
     } }, textIn, fills, h('button', { type: 'submit', 'aria-label': t('place.add') }, '+'));
 
     let poolPart: Kid = '';
     if (tk.planned) {
       const pool = poolAt[k] || { people: [] };
-      const takes = (p) => (chosen[p.id] || []).some((x) => x.task_id === tk.id && x.level !== 'never');
+      const takes = (p) => (chosen[p.id] || []).some((x) => x.taskId === tk.id && x.level !== 'never');
       const pBoxes = people.filter((p) => takes(p) || pool.people.includes(p.id)).map((p) => ({ p, box: h('input', { type: 'checkbox', checked: pool.people.includes(p.id), 'aria-label': t('place.pool_person_aria', { name: p.name }) }) }));
       // one line, «The planner can pick: anyone who takes Sound · Change»; Change opens the ticks
       const who = pool.people.length ? pool.people.map((id) => nameOf(people, id)).join(', ') : t('place.pool_all', { task: tk.name });
       const ticks = h('div', { class: 'stack pool-ticks', hidden: true },
         pool.people.length ? h('p', { class: 'muted small' }, t('place.pool_set')) : '',
         pBoxes.length ? [h('div', { class: 'chips' }, pBoxes.map(({ p, box }) => h('label', { class: 'chip' }, box, ' ' + p.name))),
-          h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost sm', onclick: act(() => api('PUT', pbase + '/pools', {
-            event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, t('place.pool_save')))]
+          h('div', { class: 'row-inline' }, h('button', { type: 'button', class: 'ghost sm', onclick: act(() => call(Draft.setPool, { org: r.org, plan: r.plan, event: ev.id, task: tk.id, people: pBoxes.filter((x) => x.box.checked).map((x) => x.p.id) })) }, t('place.pool_save')))]
           : h('p', { class: 'muted small' }, t('place.pool_nobody', { task: tk.name })));
       poolPart = [h('p', { class: 'pool-line small' + (pool.people.length ? ' set' : '') }, pool.people.length ? h('span', { class: 'mark pool', 'aria-hidden': 'true' }, icon('filter')) : '',
         t('place.pool_line', { who }), ' · ', linkBtn(t('place.pool_change'), () => { ticks.hidden = !ticks.hidden; }, t('place.pool_change_aria'))), ticks];
     }
     const hands = s.items.filter((x) => x.hand);
-    dlg = keyed(modal(`${tk.name} · ${fmtShortDate(ev.date)}`, { info: [t('place.add_people_hint'), tk.planned ? t('place.pool_anyone', { task: tk.name }) : t('place.not_planned'), t('place.lock_hint')] },
+    keyed(modal(`${tk.name} · ${fmtShortDate(ev.date)}`, { info: [t('place.add_people_hint'), tk.planned ? t('place.pool_anyone', { task: tk.name }) : t('place.not_planned'), t('place.lock_hint')] },
       h('p', { class: 'muted small' }, tn('place.places', s.n)),
       done && s.open && s.why ? h('p', { class: 'warn small' }, t('place.why', { why: s.why })) : '',
       rows.length ? h('table', { class: 'mini' }, h('tbody', {}, rows)) : h('p', { class: 'muted small' }, t('place.nothing')),
@@ -986,7 +978,7 @@ export async function pagePlan(r, org, people) {
       poolPart,
       foot(hands.length ? h('button', { type: 'button', class: 'danger', onclick: act(async () => {
         await confirmed(t('place.clear'), t('place.clear_confirm', { task: tk.name, date: fmtShortDate(ev.date) }), t('place.clear_yes'));
-        for (const x of hands) await api('DELETE', `${pbase}/cells/${x.cell.id}`);
+        for (const x of hands) await call(Draft.deleteCell, { org: r.org, plan: r.plan, id: x.cell.id });
       }) }, t('place.clear')) : '', closeBtn())), 'place', k);
   }
 
@@ -994,10 +986,10 @@ export async function pagePlan(r, org, people) {
   // «What matters»: the three priorities, the rules the planner always keeps, and the numbers under «Advanced»
   function prioritiesDialog() {
     keyed(modal(t('weights.title'), { info: [t('weights.hint')] },
-      prioritiesForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
+      prioritiesForm({ org: r.org, plan: r.plan }, weights, (text) => { render().then(() => say(text)); }),
       h('h3', {}, t('prio.always')),
       h('ul', { class: 'small rules' }, ['takes', 'no', 'combo', 'pool', 'kept'].map((k) => h('li', {}, t('prio.rule.' + k)))),
-      weightsForm(pbase + '/weights', weights, (text) => { render().then(() => say(text)); }),
+      weightsForm({ org: r.org, plan: r.plan }, weights, (text) => { render().then(() => say(text)); }),
       foot('', closeBtn())), 'priorities', 0);
   }
 
@@ -1007,7 +999,7 @@ export async function pagePlan(r, org, people) {
     const runRows = runs.map((x) => {
       const onShow = !!view && x.id === view.run.id;
       return h('tr', { class: onShow ? 'shown' : false },
-        h('td', {}, t('run.label', { id: x.id, time: fmtTime(x.finished_at || x.started_at) })),
+        h('td', {}, t('run.label', { id: x.id, time: fmtTime(x.finishedAt || x.startedAt) })),
         h('td', {}, x.status !== 'done' ? h('span', { class: 'tag' }, t('run.status.' + x.status)) : '', x.pinned ? h('span', { class: 'chip pin' }, t('run.current')) : ''),
         h('td', { class: 'right' }, onShow ? h('span', { class: 'small muted' }, t('run.on_show'))
           : linkBtn(t('run.show'), () => { planState.runId = x.id; dlg.close(); render(); }, t('run.show_aria', { id: x.id })),
@@ -1016,14 +1008,14 @@ export async function pagePlan(r, org, people) {
     dlg = keyed(modal(plan.name,
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (name.value.trim() !== plan.name && await write(() => api('PATCH', pbase, { name: name.value }))) { dlg.close(); await render(); say(t('settings.renamed')); }
+        if (name.value.trim() !== plan.name && await write(() => call(Plan.renamePlan, { org: r.org, plan: r.plan, name: name.value }, 'plan'))) { dlg.close(); await render(); say(t('settings.renamed')); }
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('weights.title')),
       h('p', { class: 'small' }, prioritySummary(weights), ' · ', linkBtn(t('prio.change'), () => { dlg.close(); prioritiesDialog(); })),
       h('h3', {}, t('run.history')),
       runs.length ? h('table', { class: 'mini' }, h('tbody', {}, runRows)) : h('p', { class: 'muted small' }, t('run.no_history')),
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { await confirmed(t('settings.delete'), t('settings.delete_confirm', { name: plan.name }), t('common.delete')); await api('DELETE', pbase); })) { dlg.close(); go(`/o/${enc(r.org)}`); say(t('settings.deleted', { name: plan.name })); }
+        if (await write(async () => { await confirmed(t('settings.delete'), t('settings.delete_confirm', { name: plan.name }), t('common.delete')); await call(Plan.deletePlan, { org: r.org, plan: r.plan }); })) { dlg.close(); go(`/o/${enc(r.org)}`); say(t('settings.deleted', { name: plan.name })); }
       } }, t('settings.delete')), closeBtn())), 'settings', 0);
   }
 
@@ -1268,15 +1260,15 @@ export async function pagePlan(r, org, people) {
   const fieldRow = (f, i) => {
     const g = grip(t('field.drag'));
     const name = nameField(f.name, t('field.name_aria', { name: f.name }), t('field.name_hint'),
-      (v) => api('PATCH', `${pbase}/fields/${f.id}`, { name: v }),
-      async () => { await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete')); return api('DELETE', `${pbase}/fields/${f.id}`); });
+      (v) => call(Plan.renameField, { org: r.org, plan: r.plan, id: f.id, name: v }, 'field'),
+      async () => { await confirmed(t('field.delete'), t('field.delete_confirm', { name: f.name }), t('common.delete')); return call(Plan.deleteField, { org: r.org, plan: r.plan, id: f.id }); });
     const pinName = t(f.frozen ? 'field.unfreeze' : 'field.freeze', { name: f.name });
     const pin = h('button', { type: 'button', class: 'freeze' + (f.frozen ? ' on' : ''), 'aria-pressed': String(!!f.frozen), title: pinName, 'aria-label': pinName,
-      onclick: async () => { if (await write(() => api('PUT', `${pbase}/fields/${f.id}/frozen`, { frozen: !f.frozen }))) render(); } }, icon('pin'));
+      onclick: async () => { if (await write(() => call(Plan.freezeField, { org: r.org, plan: r.plan, id: f.id, frozen: !f.frozen }))) render(); } }, icon('pin'));
     const row = h('tr', { class: 'field-row' + (f.frozen ? ' frozen' : '') }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, name, pin)),
     events.map((ev) => textCell(fieldValue[ev.id + '/' + f.id] || '', t('table.add_value', { name: f.name.toLowerCase() }), t('table.value_aria', { name: f.name, label: label(ev) }),
-      async (v) => { await api('PUT', `${epath}/${ev.id}/fields/${f.id}`, { value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); }, rowValues(f))), filler());
-    return dragRow(row, g, 'field', f, fields.fields, (d, pos) => api('PUT', `${pbase}/fields/${d.id}/position`, { position: pos }));
+      async (v) => { await call(Plan.setFieldValue, { org: r.org, plan: r.plan, event: ev.id, field: f.id, value: v }); fieldValue[ev.id + '/' + f.id] = v.trim(); }, rowValues(f))), filler());
+    return dragRow(row, g, 'field', f, fields.fields, (d, pos) => call(Plan.moveField, { org: r.org, plan: r.plan, id: d.id, position: pos }));
   };
 
   // Names straight in the cell (2026-11-23, the user: "Let it be possible to click a planning cell to easily add names. Show
@@ -1297,11 +1289,11 @@ export async function pagePlan(r, org, people) {
     const chips = s.items.map((x) => h('span', { class: 'echip' + (x.hand ? ' hand' : '') + (x.locked ? ' locked' : '') },
       x.locked ? mark('lock') : '', h('span', {}, itemText(x)),
       x.hand ? h('button', { type: 'button', class: 'x', 'aria-label': t('place.remove_aria', { name: x.name }), title: t('common.remove'),
-        onclick: () => again(async () => { await api('DELETE', `${pbase}/cells/${x.cell.id}`);
-          undoable(t('undo.remove', { name: x.name }), () => api('POST', pbase + '/cells', cellBack(x.cell))); }) }, '×') : ''));
+        onclick: () => again(async () => { await call(Draft.deleteCell, { org: r.org, plan: r.plan, id: x.cell.id });
+          undoable(t('undo.remove', { name: x.name }), () => call(Draft.addCell, { org: r.org, plan: r.plan, ...(cellBack(x.cell)) }, 'cell')); }) }, '×') : ''));
     const taken = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
     const fromPlanner = new Set(s.items.filter((x) => !x.cell && x.kind === 'person').map((x) => x.id));
-    const taskLevel = (p) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || {}).level || '';
+    const taskLevel = (p) => ((chosen[p.id] || []).find((x) => x.taskId === tk.id) || {}).level || '';
     const level = (p) => (ans[p.id] || {})[ev.id] || '';
     const candidates = people.filter((p) => !taken.has(p.id))
       .sort((a, b) => levelRank[level(a)] - levelRank[level(b)] || taskRank[taskLevel(a)] - taskRank[taskLevel(b)] || a.name.localeCompare(b.name, locale()));
@@ -1315,8 +1307,8 @@ export async function pagePlan(r, org, people) {
       options.forEach((o, j) => o.el.setAttribute('aria-selected', String(j === i)));
       if (options[i]) { options[i].el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', options[i].el.id); }
     };
-    const added = (name, body) => again(async () => { const c = await api('POST', pbase + '/cells', body);
-      undoable(t('undo.add', { name }), () => api('DELETE', `${pbase}/cells/${c.id}`)); });
+    const added = (name, body) => again(async () => { const c = await call(Draft.addCell, { org: r.org, plan: r.plan, ...body }, 'cell');
+      undoable(t('undo.add', { name }), () => call(Draft.deleteCell, { org: r.org, plan: r.plan, id: c.id })); });
     const addPerson = (p) => added(p.name, { event: ev.id, task: tk.id, person: p.id, ...(fromPlanner.has(p.id) ? { locked: true } : {}) });
     const addText = (text) => added(text, { event: ev.id, task: tk.id, label: text, fills: 1 });
     const fill = () => {
@@ -1557,7 +1549,7 @@ export async function pagePlan(r, org, people) {
       const paint = () => { cells.forEach((c) => c.paint()); new Set(cells.map((c) => c.ev.id)).forEach(recount); };
       cells.forEach((c) => { (ans[c.row] ||= {})[c.ev.id] = value; });
       paint();
-      if (!(await write(() => api('PUT', pbase + '/answers', { answers: items })))) { cells.forEach((c, i) => { ans[c.row][c.ev.id] = was[i]; }); paint(); }
+      if (!(await write(() => call(Plan.setAnswers, { org: r.org, plan: r.plan, answers: items })))) { cells.forEach((c, i) => { ans[c.row][c.ev.id] = was[i]; }); paint(); }
     } else {
       const n = Number(value) || 0;
       const was = cells.map((c) => placesAt[at(c.ev, { id: c.row })] || 0);
@@ -1567,7 +1559,7 @@ export async function pagePlan(r, org, people) {
       const paint = () => cells.forEach((c) => { c.paint(); putDraftCell(c.ev, tasks.find((tk) => tk.id === c.row)); });
       cells.forEach((c) => set(c, n));
       paint();
-      if (!(await write(() => api('PUT', pbase + '/places', { places: items })))) { cells.forEach((c, i) => set(c, was[i])); paint(); }
+      if (!(await write(() => call(Plan.setPlacesMany, { org: r.org, plan: r.plan, places: items })))) { cells.forEach((c, i) => set(c, was[i])); paint(); }
     }
   };
   const drawBar = () => {
@@ -1602,8 +1594,7 @@ export async function pagePlan(r, org, people) {
       const n = raw === '' ? 0 : parseInt(raw, 10);
       const cur = placesAt[k] || 0;
       if (Number.isNaN(n) || n === cur) { paint(); return; }
-      const path = `${epath}/${ev.id}/places/${tk.id}`;
-      if (await write(() => (n === 0 ? api('DELETE', path) : api('PUT', path, { slots: n })))) { if (n) placesAt[k] = n; else delete placesAt[k]; putDraftCell(ev, tk); }
+      if (await write(() => (n === 0 ? call(Plan.resetPlaces, { org: r.org, plan: r.plan, event: ev.id, task: tk.id }) : call(Plan.setPlaces, { org: r.org, plan: r.plan, event: ev.id, task: tk.id, slots: n })))) { if (n) placesAt[k] = n; else delete placesAt[k]; putDraftCell(ev, tk); }
       paint();
     });
     paint();
@@ -1616,7 +1607,7 @@ export async function pagePlan(r, org, people) {
     const g = grip(t('task.drag'));
     // ⚡: whether the planner fills the task (off: only what is set by hand); the draft and the titles change with it
     const zap = zapBtn(tk, 'planned', (on) => t(on ? 'task.auto_on' : 'task.auto_off', { name: tk.name }),
-      t('task.planned_aria', { name: tk.name }), `${base}/tasks/${tk.id}`, () => render());
+      t('task.planned_aria', { name: tk.name }), (on) => call(Setup.updateTask, { org: r.org, id: tk.id, planned: on }), () => render());
     const row = h('tr', { class: 'task-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g,
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) }, tk.name), zap)),
     events.map((ev) => placesCell(tk, ev)), rowPick('places', tk.id, tk.name));
@@ -1672,7 +1663,7 @@ export async function pagePlan(r, org, people) {
       if (value === was) return;
       if (value) (notes[p.id] ||= {})[ev.id] = value; else if (notes[p.id]) delete notes[p.id][ev.id];
       repaint();
-      if (!(await write(() => api('PUT', `${pbase}/events/${ev.id}/notes/${p.id}`, { note: value })))) {
+      if (!(await write(() => call(Plan.setNote, { org: r.org, plan: r.plan, event: ev.id, person: p.id, note: value })))) {
         if (was) (notes[p.id] ||= {})[ev.id] = was; else if (notes[p.id]) delete notes[p.id][ev.id];
         repaint();
       }
@@ -1721,7 +1712,7 @@ export async function pagePlan(r, org, people) {
       paint();
       recount(ev.id);
       saving = saving.then(async () => {
-        if (!(await write(() => api('PUT', `${pbase}/people/${p.id}/availability`, { levels: { [ev.id]: next } })))) { ans[p.id][ev.id] = was; paint(); recount(ev.id); }
+        if (!(await write(() => call(Plan.setAvailability, { org: r.org, plan: r.plan, person: p.id, levels: { [ev.id]: next } })))) { ans[p.id][ev.id] = was; paint(); recount(ev.id); }
       });
     });
     paint();
@@ -1750,10 +1741,10 @@ export async function pagePlan(r, org, people) {
     const n = tasksIn(x.id).length;
     const row = h('tr', { class: 'task-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('ts' + x.id, x.name),
       nameField(x.name, t('section.name_aria', { name: x.name }), t('tsect.name_hint'),
-        (v) => api('PATCH', `${base}/task-sections/${x.id}`, { name: v }),
-        async () => { await confirmed(t('section.delete'), t('tsect.delete_confirm', { name: x.name }), t('common.delete')); return api('DELETE', `${base}/task-sections/${x.id}`); }))),
+        (v) => call(Setup.renameTaskSection, { org: r.org, id: x.id, name: v }, 'section'),
+        async () => { await confirmed(t('section.delete'), t('tsect.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteTaskSection, { org: r.org, id: x.id }); }))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('tsect.tasks', n) : t('tsect.empty'))));
-    dragRow(row, g, 'tsect', x, taskSections, (d, pos) => api('PUT', `${base}/task-sections/${d.id}/position`, { position: pos }));
+    dragRow(row, g, 'tsect', x, taskSections, (d, pos) => call(Setup.moveTaskSection, { org: r.org, id: d.id, position: pos }));
     const asSection = row._drop!;  // dragRow() has just set it
     row._drop = {
       accept: (k, d) => k === 'task' || asSection.accept(k, d),
@@ -1762,10 +1753,10 @@ export async function pagePlan(r, org, people) {
     };
     return row;
   };
-  const movePerson = (d, section, position) => api('PUT', `${base}/people/${d.id}/position`, { section, position });
-  const moveTask = (d, section, position) => api('PUT', `${base}/tasks/${d.id}/position`, { section, position });
+  const movePerson = (d, section, position) => call(Setup.movePerson, { org: r.org, id: d.id, section, position });
+  const moveTask = (d, section, position) => call(Setup.moveTask, { org: r.org, id: d.id, section, position });
   // ⚡ by a name: whether the planner may pick the person, or fills the task (one click; set by hand works either way).
-  const zapBtn = (obj, key, title, aria, path, after?) => {
+  const zapBtn = (obj, key, title, aria, save: (on: boolean) => Promise<unknown>, after?) => {
     const b = h('button', { type: 'button', class: 'auto', 'aria-label': aria });
     const paint = () => { b.setAttribute('aria-pressed', String(!!obj[key])); b.title = title(!!obj[key]); };
     b.append(icon('auto'));
@@ -1775,22 +1766,22 @@ export async function pagePlan(r, org, people) {
       busy = true;
       obj[key] = !obj[key];
       paint();
-      if (!(await write(() => api('PATCH', path, { [key]: obj[key] })))) { obj[key] = !obj[key]; paint(); } else if (after) after();
+      if (!(await write(() => save(obj[key])))) { obj[key] = !obj[key]; paint(); } else if (after) after();
       busy = false;
     });
     paint();
     return b;
   };
   const autoBtn = (p) => zapBtn(p, 'proposable', (on) => t(on ? 'person.auto_on' : 'person.auto_off', { name: p.name }),
-    t('person.proposable_aria', { name: p.name }), `${base}/people/${p.id}`);
+    t('person.proposable_aria', { name: p.name }), (on) => call(Setup.updatePerson, { org: r.org, id: p.id, proposable: on }));
   // The tasks a person is willing to take, as tags under the name: green = good, yellow = if needed (2026-11-22, the user: "tags på
   // personer som viser gul/grønn tag for oppgaver de er villige til å ta? Kanskje gjøre det mulig å ekspande for å vise for alle?").
   // Always there, shown for everyone with «Show tasks» in the Availability heading (off by default, kept in this browser).
-  const tagsOf = (p) => tasks.filter((tk) => tk.planned).map((tk) => [tk, ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || {}).level])
+  const tagsOf = (p) => tasks.filter((tk) => tk.planned).map((tk) => [tk, ((chosen[p.id] || []).find((x) => x.taskId === tk.id) || {}).level])
     .filter(([, l]) => l === 'good' || l === 'poor')
     .map(([tk, l]) => h('span', { class: 'tag ' + l, title: tk.name + ': ' + t('pick.' + l) }, tk.name));
   const personRow = (p) => {
-    const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
+    const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.taskId && tk.planned)).map((x) => nameOf(tasks, x.taskId));
     const tags = tagsOf(p);
     const g = grip(t('person.drag'));
     handleFor(g, 'person', p);
@@ -1809,11 +1800,11 @@ export async function pagePlan(r, org, people) {
     const n = inSection(x.id).length;
     const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('s' + x.id, x.name),
       nameField(x.name, t('section.name_aria', { name: x.name }), t('section.name_hint'),
-        (v) => api('PATCH', `${base}/sections/${x.id}`, { name: v }),
-        async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return api('DELETE', `${base}/sections/${x.id}`); }))),
+        (v) => call(Setup.renameSection, { org: r.org, id: x.id, name: v }, 'section'),
+        async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteSection, { org: r.org, id: x.id }); }))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
     // a section is dragged among the sections (a line above or below); a person dropped on it goes last in it
-    dragRow(row, g, 'section', x, sections, (d, pos) => api('PUT', `${base}/sections/${d.id}/position`, { position: pos }));
+    dragRow(row, g, 'section', x, sections, (d, pos) => call(Setup.moveSection, { org: r.org, id: d.id, position: pos }));
     const asSection = row._drop!;  // dragRow() has just set it
     row._drop = {
       accept: (k, d) => k === 'person' || asSection.accept(k, d),
@@ -1833,20 +1824,20 @@ export async function pagePlan(r, org, people) {
 
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x?) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
-    (name) => api('POST', base + '/people', x ? { name, section: x.id } : { name }));
-  const addSection = () => addRow(t('table.new_section'), (name) => api('POST', base + '/sections', { name }));
+    (name) => call(Setup.createPerson, { org: r.org, ...(x ? { name, section: x.id } : { name }) }, 'person'));
+  const addSection = () => addRow(t('table.new_section'), (name) => call(Setup.createSection, { org: r.org, name }, 'section'));
   const detailsHead = sect('details', t('table.details'), [t('table.details_hint')]);
   const tasksHead = dropOn(sect('tasks', t('table.tasks'), [t('table.tasks_hint')]), (k) => k === 'task',
     (d) => moveTask(d, 0, tasksIn(0).filter((o) => o.id !== d.id).length), true);
   const addTask = (x?) => addRow(x ? t('table.new_task_in', { section: x.name }) : t('table.new_task'),
-    (name) => api('POST', base + '/tasks', x ? { name, section: x.id } : { name }));
-  const addTaskSection = () => addRow(t('tsect.new'), (name) => api('POST', base + '/task-sections', { name }));
+    (name) => call(Setup.createTask, { org: r.org, ...(x ? { name, section: x.id } : { name }) }, 'task'));
+  const addTaskSection = () => addRow(t('tsect.new'), (name) => call(Setup.createTaskSection, { org: r.org, name }, 'section'));
   let availHead;
   const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' + (store.get('tags') === '1' ? ' show-tags' : '') },
     h('thead', {}, head),
     h('tbody', {},
       detailsHead,
-      folds('details', adds('field', fields.fields.map(fieldRow), detailsHead, [addRow(t('table.new_field'), (name) => api('POST', pbase + '/fields', { name }))])),
+      folds('details', adds('field', fields.fields.map(fieldRow), detailsHead, [addRow(t('table.new_field'), (name) => call(Plan.addField, { org: r.org, plan: r.plan, name }, 'field'))])),
       tasksHead,
       folds('tasks', [
         adds('task:0', tasksIn(0).map(taskRow), tasksHead, [addTask(), ...(taskSections.length ? [] : [addTaskSection()])]),

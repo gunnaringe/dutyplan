@@ -495,6 +495,18 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       while ((await btn().getAttribute('data-level')) !== was) await reopens(() => btn().click(), 'and back');
       await closeDialog();
     }
+    // A tab opened before a deploy: an answer with a field this page does not know is still read
+    {
+      const newer = async (route) => {
+        const res = await route.fetch();
+        route.fulfill({ response: res, body: JSON.stringify({ ...(await res.json()), zz_added_later: 1 }) });
+      };
+      await page.route('**/dutyplan.v1.OrgService/GetOrg', newer);
+      await page.reload();
+      await page.waitForSelector('button.ans');
+      ok(!(await page.locator('#conn').count()), 'an unknown field in an answer is ignored');
+      await page.unroute('**/dutyplan.v1.OrgService/GetOrg', newer);
+    }
     // Signed out (the sign-in in front answers with a redirect to its own site): a bar with «Sign in again», never «Failed to fetch»
     {
       const signedOut = (route) => route.fulfill({ status: 307, headers: { Location: 'https://auth.example.invalid/login' } });

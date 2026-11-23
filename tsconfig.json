@@ -6,6 +6,7 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "strict": true,
     "noImplicitAny": false,
+    "noUnusedLocals": true,
     "useUnknownInCatchVariables": false,
     "noEmit": true,
     "isolatedModules": true,
