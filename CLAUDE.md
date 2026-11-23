@@ -105,7 +105,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
   until the table has `show-tags`; the «Show tasks» button in the Availability heading toggles it without a redraw, kept in localStorage (`tags`, for all plans).
 - **Who is shown** (2026-11-22, the user: "filtrere hvem du ønsker å vise i plan … en avkryssing, så du kan velge et fritt utvalg"): the 👥 button
   under *Availability* opens a dialog with a ✓ per person. Page only: the hidden ids in localStorage (`hide:<org>/<plan>`), so someone new is
-  shown; counts, planner and draft still have everyone. Not stored on the server.
+  shown; counts, planner and draft still have everyone. Not stored on the server. Also by task (2026-11-23, the user: "be a filter that also can
+  filter on tasks"): tasks ticked at the top of the same dialog (`whotasks:<org>/<plan>`) show only people who take one of them, good or poor;
+  the button (a funnel) says e.g. «Video · 2 of 4».
+- **Space** (2026-11-23, the user: "Use less padding around the about the events field. We want to be more considerate about ensuring we use our
+  space efficiently"): the details rows, the task rows and the add lines are slim (less padding, 1.5rem fields, 1.4rem buttons; ui-check holds
+  them to one smaller height). Think about height and width when adding anything to the table.
 - **The agent guide** (2026-11-22, the user: "I want a llm page to show how to use it. But don't make something others can not make"):
   `web/llms.txt`, served at `/llms.txt`, for agents that *use* a server. Only what any user can do: access by a share link or a login, putting
   a semester in with the existing API, every route. No server-only tools (an import command was made and dropped: "I just want it in"), no

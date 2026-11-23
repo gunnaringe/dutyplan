@@ -77,7 +77,7 @@ answer changes, and everyone who sees the answers sees them.
 extends it, Ctrl+click adds or takes away one cell, a click on ⇥ at the end of a row selects the whole row, and a click on a day's count selects
 everyone that day. A bar at the bottom then sets them all: 👍 ? 👎 or *Clear* for answers (or the keys 1, 2, 3 and Delete), a
 number for places. Escape lets go. With more than eight people a *Filter names* box finds someone quickly, and the 👥 button
-under *Availability* picks who the table shows: tick anyone you like (kept in your browser; the counts, the planner and the draft
+under *Availability* picks who the table shows: tick tasks to show only those who take one of them, and tick anyone you like (kept in your browser; the counts, the planner and the draft
 still have everyone). Selecting is for a
 mouse; on a phone you answer one cell at a time.
 
