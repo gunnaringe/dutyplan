@@ -5,6 +5,7 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const { chromium } = require(process.env.PLAYWRIGHT_CORE || path.join(__dirname, '../../scoreboard/node_modules/playwright-core'));
 const { spawn, spawnSync } = require('child_process');
+const pb = require('./pb');  // a changed answer, in binary as the page reads it
 
 let step = ''; // the picture being made, for the error message
 const OUT = process.env.OUT || path.join(__dirname, '../docs/img');
@@ -264,7 +265,7 @@ const CHOICES = {
     // «My answers», what an answer link opens (this server has no login: the organisation is made to say level answer)
     step = '18-my-answers';
     const answering = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));
-    await answering.route('**/dutyplan.v1.OrgService/GetOrg', async (route) => { const res = await route.fetch(); route.fulfill({ json: { ...(await res.json()), role: '', level: 'answer', plan: PLAN.slug } }); });
+    await answering.route('**/dutyplan.v1.OrgService/GetOrg', (route) => pb.edit(route, (o) => ({ ...o, role: '', level: 'answer', plan: PLAN.slug })));
     await go(answering, planPath, '.me-page');
     await answering.click('button.me-pick:has-text("Kari Test")');
     await answering.waitForSelector('.me-list');

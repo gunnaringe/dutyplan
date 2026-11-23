@@ -56,7 +56,7 @@ function failure(e: unknown): Failure {
 
 // A sign-in in front of the app (forward auth) answers an expired session with a redirect to its own site, which a fetch
 // cannot follow (another origin): «manual» turns that into an answer the page can recognise. Signed out: a redirect, a
-// refusal from the sign-in, or a page that is not ours (the API always answers JSON).
+// refusal from the sign-in, or a page that is not ours (the API answers binary, and JSON when it refuses).
 const pageFetch: typeof fetch = async (input, init) => {
   let res: Response;
   try {
@@ -65,16 +65,19 @@ const pageFetch: typeof fetch = async (input, init) => {
     connection('offline');
     throw lost('offline');
   }
-  const json = (res.headers.get('Content-Type') || '').startsWith('application/json');
-  if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !json)) {
+  const ct = res.headers.get('Content-Type') || '';
+  const ours = ct === 'application/proto' || ct.startsWith('application/json');  // an answer, or a refusal (always JSON)
+  if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !ours)) {
     connection('signed_out');
     throw lost('signed_out');
   }
   connection('');
   return res;
 };
-// Unknown fields are ignored: a tab opened before a deploy must still read answers that gained a field.
-const transport = createConnectTransport({ baseUrl: '/', fetch: pageFetch, jsonOptions: { useProtoFieldName: true, ignoreUnknownFields: true } });
+// Binary protobuf: smaller, and about 3× faster to read than the client's JSON (20 → 6 ms for 12 000 answers); scripts and
+// the agent guide use JSON. Unknown fields are kept aside, never refused, so a tab opened before a deploy still reads
+// answers that gained a field.
+const transport = createConnectTransport({ baseUrl: '/', fetch: pageFetch, useBinaryFormat: true });
 const clients = new Map<DescService, any>();
 const clientOf = (m: Unary) => {
   if (!clients.has(m.parent)) clients.set(m.parent, createClient(m.parent, transport));

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+
+	dutyplanv1 "github.com/gunnaringe/dutyplan/gen/dutyplan/v1"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
@@ -409,5 +414,72 @@ func TestAnInvitationForOnePersonEndsWhenSomeoneJoins(t *testing.T) {
 	e.as(kari, "GET", "/api/orgs/choir/links", nil).json(&left)
 	if len(left) != 1 || left[0].ID != many.ID {
 		t.Fatalf("links left: %+v", left)
+	}
+}
+
+// bin calls a procedure as the page does, in binary protobuf, past legacy(), and checks that the same call in JSON gets
+// the same status (the gate reads `org`, `plan` and `id` from either). Only a read is sent twice.
+func (e *loginEnv) bin(proc string, msg proto.Message, cookies ...*http.Cookie) int {
+	e.t.Helper()
+	send := func(ct string, body []byte) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "/dutyplan.v1."+proc, bytes.NewReader(body))
+		req.Header.Set("Content-Type", ct)
+		for _, c := range cookies {
+			if c != nil {
+				req.AddCookie(c)
+			}
+		}
+		w := httptest.NewRecorder()
+		e.app.ServeHTTP(w, req)
+		return w
+	}
+	b, err := proto.Marshal(msg)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	w := send("application/proto", b)
+	if w.Code == 200 && w.Header().Get("Content-Type") != "application/proto" {
+		e.t.Fatalf("%s answered %q", proc, w.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(proc, "/Remove") {
+		j, _ := protojson.MarshalOptions{UseProtoNames: true}.Marshal(msg)
+		if jw := send("application/json", j); jw.Code != w.Code {
+			e.t.Errorf("%s: %d in binary, %d in JSON", proc, w.Code, jw.Code)
+		}
+	}
+	return w.Code
+}
+
+func TestTheGateReadsBinaryRequestsLikeJSONOnes(t *testing.T) {
+	e, kari := sharedOrg(t)
+	stranger := e.signIn("stranger", "/")
+	// org: a member reaches the organisation, someone else does not
+	if code := e.bin("SetupService/ListPeople", &dutyplanv1.ListPeopleRequest{Org: "choir"}, kari); code != 200 {
+		t.Errorf("a member, in binary: %d", code)
+	}
+	if code := e.bin("SetupService/ListPeople", &dutyplanv1.ListPeopleRequest{Org: "choir"}, stranger); code != 404 {
+		t.Errorf("a stranger, in binary: %d, want 404", code)
+	}
+	// plan: a link to one plan reaches that plan only
+	_, view := e.open(e.link(kari, "autumn", "view").Token)
+	if code := e.bin("PlanService/GetPlan", &dutyplanv1.GetPlanRequest{Org: "choir", Plan: "autumn"}, view); code != 200 {
+		t.Errorf("the link's plan, in binary: %d", code)
+	}
+	if code := e.bin("PlanService/GetPlan", &dutyplanv1.GetPlanRequest{Org: "choir", Plan: "spring"}, view); code != 401 {
+		t.Errorf("another plan by the link (no session), in binary: %d, want 401", code)
+	}
+	// id: a member may remove only themselves (leave)
+	_, _ = e.open(e.link(kari, "", "join").Token, stranger)
+	var members []store.Member
+	e.as(stranger, "GET", "/api/orgs/choir/members", nil).json(&members)
+	if len(members) != 2 {
+		t.Fatalf("members: %+v", members)
+	}
+	kariID, newID := int32(members[0].ID), int32(members[1].ID)
+	if code := e.bin("OrgService/RemoveMember", &dutyplanv1.RemoveMemberRequest{Org: "choir", Id: kariID}, stranger); code != 403 {
+		t.Errorf("a member removes the admin, in binary: %d, want 403", code)
+	}
+	if code := e.bin("OrgService/RemoveMember", &dutyplanv1.RemoveMemberRequest{Org: "choir", Id: newID}, stranger); code != 200 {
+		t.Errorf("a member leaves, in binary: %d", code)
 	}
 }
