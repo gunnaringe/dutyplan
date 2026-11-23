@@ -1097,6 +1097,13 @@ async function pagePlan(r, org, people) {
         h('button', { type: 'button', class: 'ghost', onclick: all(false) }, t('who.select_none'))),
       h('div', { class: 'who-list' }, items), foot('', closeBtn()));
   };
+  const tagsBtn = h('button', { type: 'button', class: 'tags-btn', 'aria-pressed': String(store.get('tags') === '1'), title: t('tags.hint'),
+    onclick: (e) => {
+      const on = store.get('tags') !== '1';
+      store.set('tags', on ? '1' : '');
+      e.currentTarget.setAttribute('aria-pressed', String(on));
+      e.currentTarget.closest('table').classList.toggle('show-tags', on);
+    } }, icon('check'), h('span', { class: 'lbl' }, t('tags.show')));
   // With many people: a filter on the names (only the rows; the sections stay). A selection keeps to the rows shown.
   let filterText = '';
   const filterBox = () => h('input', { type: 'search', class: 'filter', value: filterText, placeholder: t('table.filter'), 'aria-label': t('table.filter'),
@@ -1956,14 +1963,21 @@ async function pagePlan(r, org, people) {
   };
   const autoBtn = (p) => zapBtn(p, 'proposable', (on) => t(on ? 'person.auto_on' : 'person.auto_off', { name: p.name }),
     t('person.proposable_aria', { name: p.name }), `${base}/people/${p.id}`);
+  // The tasks a person is willing to take, as tags under the name: green = good, yellow = if needed (2026-11-22, the user: "tags på
+  // personer som viser gul/grønn tag for oppgaver de er villige til å ta? Kanskje gjøre det mulig å ekspande for å vise for alle?").
+  // Always there, shown for everyone with «Show tasks» in the Availability heading (off by default, kept in this browser).
+  const tagsOf = (p) => tasks.filter((tk) => tk.planned).map((tk) => [tk, ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || {}).level])
+    .filter(([, l]) => l === 'good' || l === 'poor')
+    .map(([tk, l]) => h('span', { class: 'tag ' + l, title: tk.name + ': ' + t('pick.' + l) }, tk.name));
   const personRow = (p) => {
     const mine = (chosen[p.id] || []).filter((x) => x.level !== 'never' && tasks.some((tk) => tk.id === x.task_id && tk.planned)).map((x) => nameOf(tasks, x.task_id));
+    const tags = tagsOf(p);
     const g = grip(t('person.drag'));
     handleFor(g, 'person', p);
     const row = h('tr', { class: 'person-row', 'data-name': p.name.toLowerCase(), 'data-person': String(p.id) },
       h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, h('button', { type: 'button', class: 'cellbtn' + (mine.length ? '' : ' no-tasks'),
         title: mine.length ? mine.join(', ') : t('table.choose_tasks'), 'aria-label': t('table.person_aria', { name: p.name }), onclick: () => personDialog(p) },
-        p.name), autoBtn(p))),
+        p.name), autoBtn(p)), tags.length ? h('div', { class: 'tags' }, tags) : ''),
       events.map((ev) => answerCell(p, ev)), rowPick('answers', p.id, p.name));
     return dropOn(row, (k, d) => k === 'person' && d.id !== p.id, (d) => movePerson(d, p.section, inSection(p.section).findIndex((x) => x.id === p.id)));
   };
@@ -1986,7 +2000,7 @@ async function pagePlan(r, org, people) {
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
     (name) => api('POST', base + '/people', x ? { name, section: x.id } : { name }));
-  const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' },
+  const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' + (store.get('tags') === '1' ? ' show-tags' : '') },
     h('thead', {}, head),
     h('tbody', {},
       sect('details', t('table.details'), [t('table.details_hint')]),
@@ -1997,7 +2011,7 @@ async function pagePlan(r, org, people) {
       folds('draft', [tasks.map((tk) => h('tr', { class: 'draft-row' }, h('th', { scope: 'row' }, tk.name), events.map((ev) => putDraftCell(ev, tk)), rowPick('draft', tk.id, tk.name)))]),
       [
         dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
-          people.length > 1 ? whoBtn : '', people.length > 8 ? filterBox() : ''),
+          people.length > 1 ? whoBtn : '', people.length ? tagsBtn : '', people.length > 8 ? filterBox() : ''),
           events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, 0)),
         folds('avail', [

@@ -94,6 +94,9 @@ starts the Python planner, turns the answer into a view with explanations), `int
   klikker eller på hover"): table `answer_note` (migration 005, same keys as `person_event`, so it stays when the answer is cleared), at most
   `MaxNoteRunes`; `PUT .../events/{id}/notes/{person}` (empty removes), listed in `GET .../answers` as `notes`. Never in the planner's input.
   The page: `.note-tab` in the cell's corner (amber with a note), hover shows it, a click opens the one `.note-pop`. The `notes:` mutations guard it.
+- **Show tasks** (2026-11-22, the user: "tags på personer som viser gul/grønn tag for oppgaver de er villige til å ta? Kanskje gjøre det mulig å
+  ekspande for å vise for alle?"): every person row has its tags (`tagsOf`: planned tasks chosen good = green, poor = yellow) under the name, hidden
+  until the table has `show-tags`; the «Show tasks» button in the Availability heading toggles it without a redraw, kept in localStorage (`tags`, for all plans).
 - **Who is shown** (2026-11-22, the user: "filtrere hvem du ønsker å vise i plan … en avkryssing, så du kan velge et fritt utvalg"): the 👥 button
   under *Availability* opens a dialog with a ✓ per person. Page only: the hidden ids in localStorage (`hide:<org>/<plan>`), so someone new is
   shown; counts, planner and draft still have everyone. Not stored on the server.

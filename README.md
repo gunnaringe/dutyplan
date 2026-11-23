@@ -84,6 +84,8 @@ mouse; on a phone you answer one cell at a time.
 People are in the order you put them: ⋮⋮ drags a person to another row. *Sections* (for example *Guests* or *Not this term*)
 are headings with their people below; drag a person onto one, or pick it in the person's dialog. They only place people in
 the table, the same in every plan, and the planner never sees them. Deleting a section puts its people back at the top.
+*Show tasks*, in the Availability heading, puts the tasks each person is willing to take under their name: green for good,
+yellow for if needed. It is off at first and kept in that browser.
 
 ![Availability: the answers per event, and everyone's row](docs/img/05-availability.png)
 
