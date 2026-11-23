@@ -3,6 +3,10 @@
     mise run mutations                 all (about 7 min); quiet on success
     mise run mutations -- --only selection    only those with «selection» in the name
     mise run mutations -- --list       show the names
+    mise run mutations -- --changed-since origin/main
+                                       only those whose file changed since that commit, and those added or changed in this
+                                       list (what CI runs on a pull request; main gets them all). Every pattern is still
+                                       checked to exist (OUTDATED), which costs nothing.
 
 Prints only what needs action: mutations that survived (a test is missing), patterns that no longer
 exist (OUTDATED) and mutations that cannot be run. Ends with one summary line.
@@ -441,10 +445,27 @@ def run_tests(target: str, go_dir: Path | None = None) -> tuple[int, str]:
     return r.returncode, out
 
 
-def tests_pass() -> int:
-    py, _ = run_tests(MODEL)
-    go, _ = run_tests("x.go")
-    return py or go
+def tests_pass(py: bool = True, go: bool = True) -> int:
+    py_rc = run_tests(MODEL)[0] if py else 0
+    go_rc = run_tests("x.go")[0] if go else 0
+    return py_rc or go_rc
+
+
+def since(ref: str, chosen: list[tuple[str, str, str, str]]) -> list[tuple[str, str, str, str]]:
+    """The mutations whose file changed since ref (git diff ref...HEAD), and those that are new or changed in this list."""
+    def git(*a: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", *a], cwd=REPO, capture_output=True, text=True, check=False)
+    diff = git("diff", "--name-only", f"{ref}...HEAD")
+    if diff.returncode != 0:
+        raise SystemExit(f"git diff against {ref} failed: {diff.stderr.strip()}")
+    changed = set(diff.stdout.split())
+    before: set[tuple[str, str, str, str]] = set()
+    old = git("show", f"{ref}:solver/scripts/mutations.py")
+    if old.returncode == 0:  # the list as it was: run what was added or changed in it
+        ns: dict[str, object] = {"__name__": "mutations_before", "__file__": str(Path(__file__))}
+        exec(compile(old.stdout, "mutations_before", "exec"), ns)  # noqa: S102 (our own file, from git)
+        before = set(ns.get("MUTATIONS", []))  # type: ignore[arg-type]
+    return [m for m in chosen if m[1] in changed or m not in before]
 
 
 def main() -> int:
@@ -454,9 +475,20 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", help="only mutations with this text in the name")
     ap.add_argument("--list", action="store_true", help="show the names and exit")
+    ap.add_argument("--changed-since", metavar="REF", help="only mutations of files changed since REF, and new or changed ones")
     args = ap.parse_args()
 
     chosen = [m for m in MUTATIONS if not args.only or args.only.lower() in m[0].lower()]
+    if args.changed_since:
+        # Every pattern must still exist, run or not: a file changed outside this selection can make one OUTDATED.
+        outdated = [f"OUTDATED  {n}: the pattern is not in {f}" for n, f, old, _new in MUTATIONS if old not in (REPO / f).read_text(encoding="utf-8")]
+        if outdated:
+            print("\n".join(outdated))
+            return 1
+        chosen = since(args.changed_since, chosen)
+        if not chosen:
+            print(f"mutations: none of their files changed since {args.changed_since}")
+            return 0
     if args.list:
         print("\n".join(name for name, *_ in chosen))
         return 0
@@ -470,7 +502,7 @@ def main() -> int:
             saved.unlink()
         BACKUP.rmdir()
         print("restored files after an interrupted run")
-    if tests_pass() != 0:
+    if tests_pass(py=any(f.endswith(".py") for _n, f, _a, _b in chosen), go=any(not f.endswith(".py") for _n, f, _a, _b in chosen)) != 0:
         print("the tests already fail without mutations; fix that first (mise run test)")
         return 1
 
