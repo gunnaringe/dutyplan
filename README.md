@@ -120,8 +120,10 @@ thumb up (*good*), and every task starts as *can’t*. A date opens the event's 
 ![A person: the tasks they take part in, and how willingly](docs/img/09-person.png)
 ![An event: times and details](docs/img/07-event.png)
 
-**Events are easy to copy.** ⧉ on an event copies it to other dates, or repeats it until a date: every week, every other week,
-or every 3 to 8 weeks. The times, the details, the places and the names set by hand come along if you want them. Answers are
+**Events are easy to copy.** The copy button by a date copies the event to other dates, or repeats it until a date: every week,
+every other week, or every 3 to 8 weeks. It suggests the first date in that rhythm with no event yet, lists the dates it will make
+(a date that already has an event is marked), and the button says how many. The times, the details, the people needed and the
+names set by hand come along if you want them. Answers are
 never copied. **+** after the last event adds a new one, empty or as a copy, and can repeat it the same way. Each event is on its
 own afterwards: nothing remembers the rhythm.
 

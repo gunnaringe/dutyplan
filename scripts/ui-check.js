@@ -689,15 +689,29 @@ const { spawn } = require('child_process');
     }
 
     // --- copy an event, delete one ---
+    const newDate = () => dialog.locator('input[aria-label="New date"]').first().inputValue();
+    const made = () => dialog.locator('ul.copy-dates li').allInnerTexts();
+    // the first date suggested has no event yet: from 2 Aug every other week, 16 and 30 Aug are taken, so 13 Sept
+    await page.click(`button[aria-label="Copy the event ${ev[0]}"]`);
+    ok((await page.getAttribute(`button[aria-label="Copy the event ${ev[0]}"]`, 'title')) === 'Copy to other dates' && (await dialog.locator('input[aria-label="New date"]').inputValue()) === '2026-08-09', 'a week on is free: ' + await newDate());
+    await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Every other week' });
+    ok((await newDate()) === '2026-09-13', 'the suggestion skips the dates that have an event: ' + await newDate());
+    await closeDialog();
     await page.click(`button[aria-label="Copy the event ${ev[2]}"]`);
-    const newDate = () => dialog.locator('input[aria-label="New date"]').inputValue();
     ok((await newDate()) === '2026-09-06', 'the copy goes a week later by default');
     await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Every 3 weeks' });
     ok((await newDate()) === '2026-09-20', 'the suggested date follows the rhythm: ' + (await newDate()));
     await dialog.locator('select[aria-label="Repeat"]').selectOption({ label: 'Does not repeat' });
     ok((await newDate()) === '2026-09-06', 'and goes back without a repeat');
-    ok((await dialog.innerText()).includes('11:00–12:30') && (await dialog.innerText()).includes('Sound 1'), 'the dialog shows what comes along');
-    await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+    ok((await dialog.innerText()).includes('11:00–12:30') && (await dialog.innerText()).includes('Sound 1') && (await dialog.innerText()).includes('People needed'), 'the dialog shows what comes along');
+    ok((await made()).join('|') === 'Sun 6 Sept', 'the dialog lists the new dates: ' + (await made()).join('|'));
+    // a date that has an event is marked; the button says how many
+    await dialog.getByRole('button', { name: '+ another date' }).click();
+    await dialog.locator('input[aria-label="New date"]').nth(1).fill('2026-08-16');
+    ok((await made()).join('|') === 'Sun 16 Aug · already has an event|Sun 6 Sept', 'a date with an event is marked: ' + (await made()).join('|'));
+    ok((await dialog.locator('ul.copy-dates li.taken').count()) === 1 && (await dialog.locator('button[type=submit]').innerText()) === 'Make 2 copies', 'the button says how many');
+    await dialog.locator('input[aria-label="New date"]').nth(1).fill('');
+    await dialog.getByRole('button', { name: 'Make 1 copy', exact: true }).click();
     await msgHas(page, '1 copy made.');
     ok((await cols()) === 4, 'the copy is a new column');
     const ev3 = 'Sun 6 Sept 11:00';
