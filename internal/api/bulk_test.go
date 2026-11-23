@@ -148,6 +148,8 @@ func TestLockingTheDraftAndSettingItAsideOverHTTP(t *testing.T) {
 
 	var p store.Plan
 	e.mustDo(204, "DELETE", plan+"/draft", nil)
+	e.mustDo(204, "PUT", plan+"/draft", nil)
+	e.mustDo(204, "DELETE", plan+"/draft", nil)
 	e.mustDo(200, "GET", plan, nil).json(&p)
 	if !p.DraftAside {
 		t.Errorf("the drafts are not set aside: %+v", p)

@@ -44,6 +44,7 @@ const ICONS = {
   check: '<path d="M20 6L9 17l-5-5"/>', caret: '<path d="M6 9l6 6 6-6"/>',
   today: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1.6" fill="currentColor"/>',
   pin: '<path d="M12 17v5M9 3h6l-1 6 4 4H6l4-4z"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
   x: '<path d="M18 6L6 18M6 6l12 12"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   trash: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
@@ -863,7 +864,15 @@ function weightsForm(path, wr, saved) {
 }
 
 // What the page keeps between redraws of the same plan: the draft picked under the earlier drafts.
-const planState = { key: '', runId: null, aside: false };
+const planState = { key: '', runId: null, aside: false, undo: [] };
+// Ctrl+Z (⌘Z) outside a text field undoes the newest change in the draft (planState.undoLast, set by the plan page).
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z' || !planState.undoLast) return;
+  if (!document.querySelector('.draft-bar')) return;  // only on a plan's table
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
+  e.preventDefault();
+  planState.undoLast();
+});
 
 // Sideways through the events: ◀ ▶ move a screenful, «Next» goes to the first event from today. Over the dates the wheel scrolls
 // sideways too. grid is the table's scroll box.
@@ -923,7 +932,7 @@ async function pagePlan(r, org, people) {
   const pbase = `${base}/plans/${enc(r.plan)}`;
   const epath = pbase + '/events';
   const key = r.org + '/' + r.plan;
-  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set() });
+  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [] });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await Promise.all([
     get(pbase), get(epath), get(base + '/tasks'), get(base + '/combinations'),
     get(pbase + '/fields'), get(pbase + '/answers'), get(pbase + '/places'), get(pbase + '/cells'),
@@ -964,6 +973,15 @@ async function pagePlan(r, org, people) {
   pools.forEach((p) => { poolAt[p.event_id + '/' + p.task_id] = p; });
   const planCell = {};  // 'event/task' -> the cell of the draft on show
   if (done) for (const ev of view.events) for (const c of ev.cells) planCell[ev.id + '/' + c.task_id] = c;
+  // The drafts one by one (2026-11-23, the user: "show the different drafts"): ‹ › in the draft's bar step to an older or newer
+  // draft, and «Show changes» marks the planner's names that are new since the finished draft before it (the old names in the
+  // cell's title). Kept per plan in this browser.
+  const changesKey = 'changes:' + key;
+  const shownAt = done ? runs.findIndex((x) => x.id === view.run.id) : -1;
+  const olderId = shownAt < 0 ? null : (runs.slice(shownAt + 1).find((x) => x.status === 'done') || {}).id;
+  const comparing = mode === 'edit' && !!olderId && store.get(changesKey) === '1';
+  const before = {};  // 'event/task' -> the planner's names there in the draft before
+  if (comparing) for (const ev of (await get(`${pbase}/runs/${olderId}`)).events) for (const c of ev.cells) before[ev.id + '/' + c.task_id] = c.people;
 
   // What a place in the draft holds now: the cells set by hand and the locked names (always as they are now), then the
   // planner's names in the draft on show that are not among them (also one that was locked then and is unlocked now), then
@@ -991,10 +1009,20 @@ async function pagePlan(r, org, people) {
   const setLocks = async (list, on) => {
     if (!list.length) { say(t(on ? 'sel.nothing_to_lock' : 'sel.nothing_to_unlock')); return; }
     if (!(await write(() => api('PUT', pbase + '/locks', { locks: list, locked: on })))) return;
+    undoable(tn(on ? 'undo.lock' : 'undo.unlock', list.length), () => api('PUT', pbase + '/locks', { locks: list, locked: !on }));
     if (sel && sel.grid === 'draft') planState.sel = { keys: [...sel.keys], anchor: sel.anchor };  // a selection of the draft stays
     render();
   };
   const everyPlace = () => events.flatMap((ev) => tasks.map((tk) => [ev, tk]));
+  // Undo (2026-11-23, the user: "Add a easier way to regret options"): what this tab changed in the draft, newest last (at most
+  // 30, forgotten with another plan or a reload). Each entry undoes itself with the opposite request(s); not a change log.
+  const undoable = (label, undo) => { planState.undo.push({ label, undo }); if (planState.undo.length > 30) planState.undo.shift(); };
+  const undoLast = planState.undoLast = async () => {
+    const u = planState.undo.pop();
+    if (!u) return;
+    if (await write(u.undo)) { await render(); say(t('undo.done', { what: u.label })); } else render();
+  };
+  const cellBack = (c) => ({ event: c.event_id, task: c.task_id, ...(c.person_id ? { person: c.person_id } : { label: c.label }), fills: c.fills, locked: c.locked });
   // A lock for a whole row (a task) or column (an event) of the draft (2026-11-23, the user: "Let it be possible to lock a column
   // or a row"): pressed when every planner name in it is locked; a press locks the rest, or unlocks them all.
   const groupLock = (pairs, lockAria, unlockAria) => {
@@ -1201,7 +1229,9 @@ async function pagePlan(r, org, people) {
   const newest = runs[0];
   const running = !!newest && newest.status === 'running';
   const pin = async (id, on) => {
+    const was = (runs.find((x) => x.pinned) || {}).id;
     if (!(await write(() => api(on ? 'PUT' : 'DELETE', `${runsPath}/${id}/pin`)))) return;
+    undoable(t(on ? 'undo.pin' : 'undo.unpin', { id }), () => (was ? api('PUT', `${runsPath}/${was}/pin`) : api('DELETE', `${runsPath}/${id}/pin`)));
     planState.runId = id;
     await render();
     say(on ? t('run.pin_done', { id }) : t('run.unpin_done'));
@@ -1324,7 +1354,13 @@ async function pagePlan(r, org, people) {
     else if (done) {
       const run = view.run;
       const about = t('run.label', { id: run.id, time: fmtTime(run.finished_at || run.started_at) }) + ' · ' + (run.solver_status === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'));
-      line.push(h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solver_status === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')));
+      const step = (i, aria, ic) => h('button', { type: 'button', class: 'ghost icon step', disabled: !runs[i], 'aria-label': aria, title: aria,
+        onclick: () => { planState.runId = runs[i].id; render(); } }, icon(ic));
+      line.push(h('span', { class: 'steps' }, step(shownAt + 1, t('run.older'), 'left'),
+        h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solver_status === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')),
+        step(shownAt - 1, t('run.newer'), 'right')));
+      if (olderId) line.push(h('button', { type: 'button', class: 'ghost sm changes' + (comparing ? ' on' : ''), 'aria-pressed': String(comparing),
+        title: t('run.changes_hint', { id: olderId }), onclick: () => { store.set(changesKey, comparing ? '' : '1'); render(); } }, t('run.changes')));
       line.push(h('button', { type: 'button', class: 'ghost icon pin' + (run.pinned ? ' on' : ''), 'aria-pressed': String(!!run.pinned),
         title: run.pinned ? t('run.current') + ' · ' + t('run.unpin') : t('run.pin'), 'aria-label': run.pinned ? t('run.unpin') : t('run.pin'),
         onclick: () => pin(run.id, !run.pinned) }, icon('pin')));
@@ -1337,12 +1373,20 @@ async function pagePlan(r, org, people) {
         if (run.pinned && !toLock.length) {
           line.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
           line.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
-            if (await write(() => api('DELETE', `${runsPath}/${run.id}/pin`))) { planState.runId = run.id; await render(); say(t('draft.reopened')); }
+            if (await write(() => api('DELETE', `${runsPath}/${run.id}/pin`))) {
+              undoable(t('undo.reopen'), () => api('PUT', `${runsPath}/${run.id}/pin`));
+              planState.runId = run.id; await render(); say(t('draft.reopened'));
+            }
           } }, t('draft.reopen')));
         } else {
           line.push(h('button', { type: 'button', class: 'done', disabled: running, title: t('draft.done_hint'), onclick: async () => {
+            const was = (runs.find((x) => x.pinned) || {}).id;
             if (toLock.length && !(await write(() => api('PUT', pbase + '/locks', { locks: toLock, locked: true })))) return;
             if (!run.pinned && !(await write(() => api('PUT', `${runsPath}/${run.id}/pin`)))) return;
+            undoable(t('undo.done_mark'), async () => {
+              if (toLock.length) await api('PUT', pbase + '/locks', { locks: toLock, locked: false });
+              if (!run.pinned) await (was ? api('PUT', `${runsPath}/${was}/pin`) : api('DELETE', `${runsPath}/${run.id}/pin`));
+            });
             planState.runId = run.id;
             store.set(modeKey, 'show');
             await render();
@@ -1351,12 +1395,21 @@ async function pagePlan(r, org, people) {
         }
         line.push(h('button', { type: 'button', class: 'ghost sm', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
           if (!(await ask(t('draft.aside'), t('draft.aside_confirm'), t('draft.aside_yes')))) return;
-          if (await write(() => api('DELETE', pbase + '/draft'))) { planState.runId = null; await render(); say(t('draft.aside_done')); }
+          const was = (runs.find((x) => x.pinned) || {}).id;
+          if (await write(() => api('DELETE', pbase + '/draft'))) {
+            undoable(t('undo.aside'), () => (was ? api('PUT', `${runsPath}/${was}/pin`) : api('PUT', pbase + '/draft')));
+            planState.runId = null; await render(); say(t('draft.aside_done'));
+          }
         } }, t('draft.aside')));
       }
       if (run.stale) notes.push(h('p', { class: 'warn small', role: 'status' }, t('run.stale')));
       if (run.checked && run.violations.length) notes.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
       if (view.warnings.length) notes.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
+    }
+    if (org.level !== 'view' && planState.undo.length) {
+      const last = planState.undo[planState.undo.length - 1];
+      line.push(h('button', { type: 'button', class: 'ghost sm undo', title: t('undo.title', { what: last.label }) + ' (Ctrl+Z)', 'aria-label': t('undo.title', { what: last.label }), onclick: undoLast },
+        icon('undo'), ' ' + t('undo.btn')));
     }
     // what the squares mean is in the ⓘ, not on the bar
     const key = (m, text) => h('span', { class: 'key' }, m, h('span', {}, text));
@@ -1959,7 +2012,8 @@ async function pagePlan(r, org, people) {
     const chips = s.items.map((x) => h('span', { class: 'echip' + (x.hand ? ' hand' : '') + (x.locked ? ' locked' : '') },
       x.locked ? mark('lock') : '', h('span', {}, itemText(x)),
       x.hand ? h('button', { type: 'button', class: 'x', 'aria-label': t('place.remove_aria', { name: x.name }), title: t('common.remove'),
-        onclick: () => again(() => api('DELETE', `${pbase}/cells/${x.cell.id}`)) }, '×') : ''));
+        onclick: () => again(async () => { await api('DELETE', `${pbase}/cells/${x.cell.id}`);
+          undoable(t('undo.remove', { name: x.name }), () => api('POST', pbase + '/cells', cellBack(x.cell))); }) }, '×') : ''));
     const taken = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
     const fromPlanner = new Set(s.items.filter((x) => !x.cell && x.kind === 'person').map((x) => x.id));
     const taskLevel = (p) => ((chosen[p.id] || []).find((x) => x.task_id === tk.id) || {}).level || '';
@@ -1976,8 +2030,10 @@ async function pagePlan(r, org, people) {
       options.forEach((o, j) => o.el.setAttribute('aria-selected', String(j === i)));
       if (options[i]) { options[i].el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', options[i].el.id); }
     };
-    const addPerson = (p) => again(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, person: p.id, ...(fromPlanner.has(p.id) ? { locked: true } : {}) }));
-    const addText = (text) => again(() => api('POST', pbase + '/cells', { event: ev.id, task: tk.id, label: text, fills: 1 }));
+    const added = (name, body) => again(async () => { const c = await api('POST', pbase + '/cells', body);
+      undoable(t('undo.add', { name }), () => api('DELETE', `${pbase}/cells/${c.id}`)); });
+    const addPerson = (p) => added(p.name, { event: ev.id, task: tk.id, person: p.id, ...(fromPlanner.has(p.id) ? { locked: true } : {}) });
+    const addText = (text) => added(text, { event: ev.id, task: tk.id, label: text, fills: 1 });
     const fill = () => {
       const q = input.value.trim().toLowerCase();
       const hits = candidates.filter((p) => p.name.toLowerCase().includes(q))
@@ -2034,7 +2090,10 @@ async function pagePlan(r, org, people) {
     if (!s.n && !s.items.length) return clickable(h('td', { class: 'draft none' }, h('div', { class: 'dcell' }, h('div', { class: 'dlines' }, h('span', { class: 'muted small', 'aria-hidden': 'true' }, '–')),
       edit ? h('div', { class: 'dside' }, plus()) : '')));
     const open = () => placeDialog(ev, tk);
-    const line = (x) => {
+    const was = comparing ? before[at(ev, tk)] || [] : null;
+    const isNew = (x) => was && x.kind === 'person' && !x.hand && !was.some((p) => p.id === x.id);
+    const line = (x) => { const el = line0(x); if (isNew(x)) el.classList.add('new'); return el; };
+    const line0 = (x) => {
       if (!edit || x.hand || x.kind !== 'person') return slot(x);
       const name = t(x.locked ? 'place.unlock_aria' : 'place.lock_aria', { name: x.name });
       return h('span', { class: 'slot' + (x.locked ? ' locked' : '') },
@@ -2051,6 +2110,10 @@ async function pagePlan(r, org, people) {
         h('button', { type: 'button', class: 'dmenu', title: t('draft.open_place'), 'aria-label': t('draft.place_aria', { task: tk.name, label: label(ev) }), onclick: open }, icon('more')),
         edit ? plus() : '',
         pool && pool.people.length ? h('span', { class: 'mark pool', role: 'img', title: t('draft.pool_mark'), 'aria-label': t('draft.pool_mark') }, icon('filter')) : '')));
+    if (was && (s.items.some(isNew) || was.some((p) => !s.items.some((x) => x.kind === 'person' && x.id === p.id)))) {
+      td.classList.add('changed');
+      td.title = t('draft.before', { id: olderId, names: was.map((p) => p.name).join(', ') || '–' });
+    }
     if (done) reg('draft', tk.id, ev, td, () => putDraftCell(ev, tk));
     return clickable(td);
   };

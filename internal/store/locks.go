@@ -87,3 +87,26 @@ func (s *Store) SetDraftAside(ctx context.Context, orgSlug, planSlug string) err
 		return err
 	})
 }
+
+// ClearDraftAside undoes «Remove unlocked» (the page's Undo): the drafts are shown again. A pin it took away is put back by
+// pinning that run (which clears this too).
+func (s *Store) ClearDraftAside(ctx context.Context, orgSlug, planSlug string) error {
+	return s.write(ctx, func(tx *sql.Tx) error {
+		oid, err := orgID(ctx, tx, orgSlug)
+		if err != nil {
+			return err
+		}
+		pid, err := planID(ctx, tx, oid, planSlug)
+		if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE plan SET draft_aside = 0 WHERE id = ? AND org_id = ? AND draft_aside = 1`, pid, oid)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return errNothingToChange()
+		}
+		return nil
+	})
+}

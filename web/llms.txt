@@ -120,4 +120,5 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
 - `PUT /api/orgs/{org}/plans/{plan}/locks` `{"locks": [{"event", "task", "person"}], "locked": true|false}` — lock the planner's
   names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays as it is).
 - `DELETE /api/orgs/{org}/plans/{plan}/draft` — set the drafts aside: the plan shows only what is set by hand and locked
+- `PUT /api/orgs/{org}/plans/{plan}/draft` — bring the drafts back after that (pinning a draft does it too)
   (`"draft_aside": true` in `GET /api/orgs/{org}/plans/{plan}`) until a new draft or a pin.
