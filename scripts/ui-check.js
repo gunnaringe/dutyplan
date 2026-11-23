@@ -212,6 +212,7 @@ const { spawn } = require('child_process');
     await fieldRowOf('Notes').locator('input.fname').press('Enter');
     await until(page, () => [...document.querySelectorAll('tr.field-row input.fname')].map((x) => x.value).join(',') === 'Theme,Note', null, 'and back');
     // a name emptied deletes the row, asked in the page's own dialog
+    await page.waitForTimeout(300);  // (the rename's redraw can still be on its way, and would take what is typed below with it)
     await addNamed('Add a row', 'Spare');
     await until(page, () => document.querySelectorAll('tr.field-row').length === 3, null, 'a row is added');
     await fieldRowOf('Spare').locator('input.fname').fill('');
