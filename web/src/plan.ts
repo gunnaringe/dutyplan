@@ -1,4 +1,4 @@
-import { Account, call, changedBy, confirmed, Draft, errorText, forget, get, Plan, Setup, write } from './api';
+import { Account, call, changedBy, confirmed, Draft, errorText, forget, get, Plan, Setup, write, writesOut } from './api';
 import { LEVEL_ICON, h, icon, locale, mark, say, store, type Kid, type Page } from './core';
 import { live, render } from './main';
 import { ask, shareDialog, viewOnly } from './org';
@@ -122,12 +122,32 @@ export function prioritiesForm(at: { org: string; plan: string }, wr, saved) {
 // A place in a grid of the table: the row (a person, a task) and the event.
 export type At = { row: number; ev: number };
 // An undo step: what it undoes (for the button's title) and the opposite request(s) of the change.
-export type Undo = { label: string; undo: () => Promise<unknown> };
+export type Undo = { label: string; steps: [any, any][] };
 // What a row of the table takes when a row is dropped on it (dropOn), and what a ⋮⋮ handle drags (handleFor).
 export type Drop = { accept: (kind: string, item: any) => boolean; act: (item: any, after: boolean, kind?: string) => unknown; readonly into?: boolean };
 declare global {
   interface HTMLElement { _drop?: Drop; _drag?: { kind: string; item: any } }
 }
+// The whole page drawn again a little after the last change shown at once, when no request is out any more (module level:
+// the timer keeps no drawing alive). A redraw for another reason before then does the same.
+let soonTimer = 0;
+export function redrawSoon(ms = 700) {
+  clearTimeout(soonTimer);
+  soonTimer = window.setTimeout(() => {
+    const typing = document.activeElement as HTMLInputElement | null;
+    if (writesOut || (typing && typing.matches('input[type=text], textarea') && typing.value)) redrawSoon(ms);  // not in the middle of typing
+    else render();
+  }, ms);
+}
+
+// runs an undo entry's calls in order (module level: it keeps no drawing of the page alive)
+async function runSteps(steps: [any, any][]) { for (const [m, req] of steps) await call(m, req); }
+async function undoLast() {
+  const u = planState.undo.pop();
+  if (!u) return;
+  if (await write(() => runSteps(u.steps))) { await render(); say(t('undo.done', { what: u.label })); } else render();
+}
+
 export const planState: {
   key: string;
   runId: number | null;
@@ -138,6 +158,8 @@ export const planState: {
   edit?: string | null;  // the draft cell being edited (its key)
   editInput?: HTMLInputElement;
   undoLast?: () => Promise<void>;
+  viewId?: number | null;  // the drafts drawn last (fetched again at once with the rest on the next drawing)
+  olderId?: number | null;
 } = { key: '', runId: null, aside: false, undo: [], adds: new Set() };
 // Ctrl+Z (⌘Z) outside a text field undoes the newest change in the draft (planState.undoLast, set by the plan page).
 document.addEventListener('keydown', (e) => {
@@ -202,13 +224,22 @@ export function dragScroll(grid) {
   grid.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
 }
 
-export async function pagePlan(r, org, people) {
-  const key = r.org + '/' + r.plan;
-  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [] });
-  const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await Promise.all([
+// What the plan page reads, asked for all at once (also by render() before it knows who is signed in, so nothing waits on
+// anything else; get() keeps the answers). The drafts drawn last time come too: usually the same ones are drawn again.
+export function planReads(r) {
+  const k = r.org + '/' + r.plan;
+  const last = planState.key === k ? [planState.viewId, planState.olderId] : [+store.get('view:' + k) || null];
+  for (const id of last) if (id) get(Draft.getRun, { org: r.org, plan: r.plan, id }).catch(() => {});
+  return Promise.all([
     get(Plan.getPlan, { org: r.org, plan: r.plan }, 'plan'), get(Plan.listEvents, { org: r.org, plan: r.plan }, 'events'), get(Setup.listTasks, { org: r.org, plan: r.plan }, 'tasks'), get(Setup.listCombinations, { org: r.org, plan: r.plan }, 'combinations'),
     get(Plan.listFields, { org: r.org, plan: r.plan }), get(Plan.listAnswers, { org: r.org, plan: r.plan }), get(Plan.listPlaces, { org: r.org, plan: r.plan }, 'places'), get(Draft.listCells, { org: r.org, plan: r.plan }, 'cells'),
     get(Draft.listPools, { org: r.org, plan: r.plan }, 'pools'), get(Draft.getWeights, { org: r.org, plan: r.plan }), get(Account.health, {}), get(Draft.listRuns, { org: r.org, plan: r.plan }, 'runs'), get(Setup.listSections, { org: r.org, plan: r.plan }, 'sections'), get(Setup.listTaskSections, { org: r.org, plan: r.plan }, 'sections')]);
+}
+
+export async function pagePlan(r, org, people) {
+  const key = r.org + '/' + r.plan;
+  if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [], viewId: null, olderId: null });
+  const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await planReads(r);
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest; none
   // when «Remove unlocked» set the drafts aside (also when another tab did it).
@@ -224,6 +255,8 @@ export async function pagePlan(r, org, people) {
   const mode = modes.includes(stored) ? stored : org.level === 'answer' ? 'me' : org.level === 'view' ? 'show' : 'edit';
   const viewId = mode === 'edit' ? shownId : plan.draftAside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
   const view = viewId ? await get(Draft.getRun, { org: r.org, plan: r.plan, id: viewId }) : null;
+  planState.viewId = viewId;
+  store.set('view:' + key, viewId ? String(viewId) : '');  // for the first drawing after a reload
   const done = !!view && view.run.status === 'done';
 
   const label = (ev) => fmtShortDate(ev.date) + (ev.startTime ? ' ' + ev.startTime : '');
@@ -252,6 +285,7 @@ export async function pagePlan(r, org, people) {
   const shownAt = done ? runs.findIndex((x) => x.id === view.run.id) : -1;
   const olderId = shownAt < 0 ? null : (runs.slice(shownAt + 1).find((x) => x.status === 'done') || {}).id;
   const comparing = mode === 'edit' && !!olderId && store.get(changesKey) === '1';
+  planState.olderId = comparing ? olderId : null;
   const before = {};  // 'event/task' -> the planner's names there in the draft before
   if (comparing) for (const ev of (await get(Draft.getRun, { org: r.org, plan: r.plan, id: olderId })).events) for (const c of ev.cells) before[ev.id + '/' + c.taskId] = c.people;
 
@@ -278,26 +312,52 @@ export async function pagePlan(r, org, people) {
   // låse plan?"): the planner's names of places, to lock (those not locked yet) or to unlock (those locked), in one request.
   const lockItems = (pairs, on) => pairs.flatMap(([ev, tk]) => slotsAt(ev, tk).items
     .filter((x) => x.kind === 'person' && (on ? !x.cell : x.locked)).map((x) => ({ event: ev.id, task: tk.id, person: x.id })));
+  // Shown at once: the cells change here and are drawn again one by one (a locked name is a locked cell set by hand, as on the
+  // server); the request goes after, and a refusal puts them back. The whole page is drawn again once the clicks stop
+  // (redrawSoon), for what depends on them (the row and column locks, «out of date»).
   const setLocks = async (list, on) => {
     if (!list.length) { say(t(on ? 'sel.nothing_to_lock' : 'sel.nothing_to_unlock')); return; }
-    if (!(await write(() => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: on })))) return;
-    undoable(tn(on ? 'undo.lock' : 'undo.unlock', list.length), () => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: !on }));
+    const keys = new Set<string>(list.map((l) => l.event + '/' + l.task));
+    const was = new Map([...keys].map((k) => [k, cellsAt[k] ? [...cellsAt[k]] : undefined]));
+    for (const l of list) {
+      const k = l.event + '/' + l.task;
+      const here = cellsAt[k] || [];
+      if (on && !here.some((c) => c.personId === l.person)) cellsAt[k] = [...here, { id: 0, eventId: l.event, taskId: l.task, personId: l.person, label: '', fills: 1, locked: true } as any];
+      if (!on) cellsAt[k] = here.filter((c) => !(c.personId === l.person && c.locked));
+    }
+    const repaint = () => {
+      for (const k of keys) { const [e, tk] = k.split('/').map(Number); const ev = events.find((x) => x.id === e), task = tasks.find((x) => x.id === tk); if (ev && task && draftTd[k]) putDraftCell(ev, task); }
+      paintGroupLocks();
+      paintDone();
+      if (sel) paintSel();
+    };
+    repaint();
     if (sel && sel.grid === 'draft') planState.sel = { keys: [...sel.keys], anchor: sel.anchor };  // a selection of the draft stays
-    render();
+    // Undo is there at once too, and goes with the lock if the server refuses
+    undoable(tn(on ? 'undo.lock' : 'undo.unlock', list.length), [Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: !on }]);
+    const entry = planState.undo[planState.undo.length - 1];
+    const ok = await write(() => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: list, locked: on }));
+    if (!ok) {
+      for (const [k, v] of was) { if (v) cellsAt[k] = v; else delete cellsAt[k]; }
+      planState.undo = planState.undo.filter((u) => u !== entry);
+      paintUndo(); repaint(); return;
+    }
+    redrawSoon();
   };
+  let paintDone = () => {};  // the bar's «We’re done» / «Done · Reopen», set when the bar is drawn
   const everyPlace = () => events.flatMap((ev) => tasks.map((tk) => [ev, tk]));
   // Undo (2026-11-23, the user: "Add a easier way to regret options"): what this tab changed in the draft, newest last (at most
   // 30, forgotten with another plan or a reload). Each entry undoes itself with the opposite request(s); not a change log.
-  const undoable = (label, undo) => { planState.undo.push({ label, undo }); if (planState.undo.length > 30) planState.undo.shift(); };
-  const undoLast = planState.undoLast = async () => {
-    const u = planState.undo.pop();
-    if (!u) return;
-    if (await write(u.undo)) { await render(); say(t('undo.done', { what: u.label })); } else render();
-  };
+  // An entry is data (the calls to make, in order), never a function made here: one would keep this drawing of the page alive.
+  let paintUndo = () => {};  // the bar's Undo, set when the bar is drawn
+  const undoable = (label, ...steps: [any, any][]) => { planState.undo.push({ label, steps }); if (planState.undo.length > 30) planState.undo.shift(); paintUndo(); };
+  planState.undoLast = undoLast;  // Ctrl+Z on this page
   const cellBack = (c) => ({ event: c.eventId, task: c.taskId, ...(c.personId ? { person: c.personId } : { label: c.label }), fills: c.fills, locked: c.locked });
   // A lock for a whole row (a task) or column (an event) of the draft (2026-11-23, the user: "Let it be possible to lock a column
   // or a row"): pressed when every planner name in it is locked; a press locks the rest, or unlocks them all.
-  const groupLock = (pairs, lockAria, unlockAria) => {
+  // (each is kept in groupLocks and drawn again by paintGroupLocks when a lock changes without the page being drawn again)
+  const groupLocks: { at: HTMLElement; pairs; lockAria: string; unlockAria: string }[] = [];
+  const groupLockBtn = (pairs, lockAria, unlockAria) => {
     const toLock = lockItems(pairs, true), toUnlock = lockItems(pairs, false);
     if (!toLock.length && !toUnlock.length) return '';
     const on = !toLock.length;
@@ -305,6 +365,12 @@ export async function pagePlan(r, org, people) {
     return h('button', { type: 'button', class: 'lockbtn group' + (on ? ' on' : ''), 'aria-pressed': String(on), title: name, 'aria-label': name,
       onclick: () => setLocks(on ? toUnlock : toLock, !on) }, icon(on ? 'lock' : 'unlock'));
   };
+  const groupLock = (pairs, lockAria, unlockAria) => {
+    const at = h('span', { class: 'glock' }, groupLockBtn(pairs, lockAria, unlockAria));
+    groupLocks.push({ at, pairs, lockAria, unlockAria });
+    return at;
+  };
+  const paintGroupLocks = () => { for (const g of groupLocks) g.at.replaceChildren(groupLockBtn(g.pairs, g.lockAria, g.unlockAria)); };
 
   // ---- «Edit | View» (2026-11-23, the user: "Kanskje også en visning som er en penere visning uten redigering eller
   // tilgjengelighet? … Ikke egne lenker for nå, bare to moduser for samme data."): the same page, the same data. View shows what
@@ -502,7 +568,7 @@ export async function pagePlan(r, org, people) {
   const pin = async (id, on) => {
     const was = (runs.find((x) => x.pinned) || {}).id;
     if (!(await write(() => call(on ? Draft.pinRun : Draft.unpinRun, { org: r.org, plan: r.plan, id })))) return;
-    undoable(t(on ? 'undo.pin' : 'undo.unpin', { id }), () => (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.unpinRun, { org: r.org, plan: r.plan, id })));
+    undoable(t(on ? 'undo.pin' : 'undo.unpin', { id }), was ? [Draft.pinRun, { org: r.org, plan: r.plan, id: was }] : [Draft.unpinRun, { org: r.org, plan: r.plan, id }]);
     planState.runId = id;
     await render();
     say(on ? t('run.pin_done', { id }) : t('run.unpin_done'));
@@ -645,35 +711,43 @@ export async function pagePlan(r, org, people) {
         // «We’re done» (2026-11-23, the user: "Maybe remove the lock all? … Maybe a more visible "we are done" button?"): locks every
         // name of the draft on show, makes it the current plan and shows it in View. Done = pinned with nothing left to lock;
         // «Reopen» unpins it and keeps the locks. «Remove unlocked»: only what is set by hand and locked is left.
+        // drawn again by paintDone when a lock changes without the page being drawn again (setLocks)
+        const doneSlot = h('span', { class: 'done-slot' });
+        paintDone = () => {
         const toLock = lockItems(everyPlace(), true);
+        const parts: HTMLElement[] = [];
         if (run.pinned && !toLock.length) {
-          line.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
+          parts.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
           line.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
             if (await write(() => call(Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }))) {
-              undoable(t('undo.reopen'), () => call(Draft.pinRun, { org: r.org, plan: r.plan, id: run.id }));
+              undoable(t('undo.reopen'), [Draft.pinRun, { org: r.org, plan: r.plan, id: run.id }]);
               planState.runId = run.id; await render(); say(t('draft.reopened'));
             }
           } }, t('draft.reopen')));
         } else {
-          line.push(h('button', { type: 'button', class: 'done', disabled: running, title: t('draft.done_hint'), onclick: async () => {
+          parts.push(h('button', { type: 'button', class: 'done', disabled: running, title: t('draft.done_hint'), onclick: async () => {
             const was = (runs.find((x) => x.pinned) || {}).id;
             if (toLock.length && !(await write(() => call(Draft.setLocks, { org: r.org, plan: r.plan, locks: toLock, locked: true })))) return;
             if (!run.pinned && !(await write(() => call(Draft.pinRun, { org: r.org, plan: r.plan, id: run.id })))) return;
-            undoable(t('undo.done_mark'), async () => {
-              if (toLock.length) await call(Draft.setLocks, { org: r.org, plan: r.plan, locks: toLock, locked: false });
-              if (!run.pinned) await (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }));
-            });
+            const back: [any, any][] = [];
+            if (toLock.length) back.push([Draft.setLocks, { org: r.org, plan: r.plan, locks: toLock, locked: false }]);
+            if (!run.pinned) back.push(was ? [Draft.pinRun, { org: r.org, plan: r.plan, id: was }] : [Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }]);
+            undoable(t('undo.done_mark'), ...back);
             planState.runId = run.id;
             store.set(modeKey, 'show');
             await render();
             say(t('draft.done_said'));
           } }, icon('check'), ' ' + t('draft.done')));
         }
+        doneSlot.replaceChildren(...parts);
+        };
+        paintDone();
+        line.push(doneSlot);
         more.push(h('button', { type: 'button', class: 'drop-item aside', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
           if (!(await ask(t('draft.aside'), t('draft.aside_confirm'), t('draft.aside_yes')))) return;
           const was = (runs.find((x) => x.pinned) || {}).id;
           if (await write(() => call(Draft.setDraftAside, { org: r.org, plan: r.plan }))) {
-            undoable(t('undo.aside'), () => (was ? call(Draft.pinRun, { org: r.org, plan: r.plan, id: was }) : call(Draft.clearDraftAside, { org: r.org, plan: r.plan })));
+            undoable(t('undo.aside'), was ? [Draft.pinRun, { org: r.org, plan: r.plan, id: was }] : [Draft.clearDraftAside, { org: r.org, plan: r.plan }]);
             planState.runId = null; await render(); say(t('draft.aside_done'));
           }
         } }, t('draft.aside')));
@@ -682,10 +756,16 @@ export async function pagePlan(r, org, people) {
       if (run.checked && run.violations.length) notes.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
       if (view.warnings.length) notes.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
     }
-    if (org.level !== 'view' && planState.undo.length) {
-      const last = planState.undo[planState.undo.length - 1];
-      extra.push(h('button', { type: 'button', class: 'ghost sm undo', title: t('undo.title', { what: last.label }) + ' (Ctrl+Z)', 'aria-label': t('undo.title', { what: last.label }), onclick: undoLast },
-        icon('undo'), ' ' + t('undo.btn')));
+    if (org.level !== 'view') {
+      // drawn again by paintUndo when an action is added without the page being drawn again (setLocks)
+      const undoSlot = h('span', { class: 'undo-slot' });
+      paintUndo = () => {
+        const last = planState.undo[planState.undo.length - 1];
+        undoSlot.replaceChildren(last ? h('button', { type: 'button', class: 'ghost sm undo', title: t('undo.title', { what: last.label }) + ' (Ctrl+Z)', 'aria-label': t('undo.title', { what: last.label }), onclick: undoLast },
+          icon('undo'), ' ' + t('undo.btn')) : '');
+      };
+      paintUndo();
+      extra.push(undoSlot);
     }
     // what the squares mean is in the ⓘ, not on the bar
     const key = (m, text) => h('span', { class: 'key' }, m, h('span', {}, text));
@@ -1298,7 +1378,7 @@ export async function pagePlan(r, org, people) {
       x.locked ? mark('lock') : '', h('span', {}, itemText(x)),
       x.hand ? h('button', { type: 'button', class: 'x', 'aria-label': t('place.remove_aria', { name: x.name }), title: t('common.remove'),
         onclick: () => again(async () => { await call(Draft.deleteCell, { org: r.org, plan: r.plan, id: x.cell.id });
-          undoable(t('undo.remove', { name: x.name }), () => call(Draft.addCell, { org: r.org, plan: r.plan, ...(cellBack(x.cell)) }, 'cell')); }) }, '×') : ''));
+          undoable(t('undo.remove', { name: x.name }), [Draft.addCell, { org: r.org, plan: r.plan, ...(cellBack(x.cell)) }]); }) }, '×') : ''));
     const taken = new Set(s.items.filter((x) => x.cell && x.kind === 'person').map((x) => x.id));
     const fromPlanner = new Set(s.items.filter((x) => !x.cell && x.kind === 'person').map((x) => x.id));
     const taskLevel = (p) => ((chosen[p.id] || []).find((x) => x.taskId === tk.id) || {}).level || '';
@@ -1316,7 +1396,7 @@ export async function pagePlan(r, org, people) {
       if (options[i]) { options[i].el.scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', options[i].el.id); }
     };
     const added = (name, body) => again(async () => { const c = await call(Draft.addCell, { org: r.org, plan: r.plan, ...body }, 'cell');
-      undoable(t('undo.add', { name }), () => call(Draft.deleteCell, { org: r.org, plan: r.plan, id: c.id })); });
+      undoable(t('undo.add', { name }), [Draft.deleteCell, { org: r.org, plan: r.plan, id: c.id }]); });
     const addPerson = (p) => added(p.name, { event: ev.id, task: tk.id, person: p.id, ...(fromPlanner.has(p.id) ? { locked: true } : {}) });
     const addText = (text) => added(text, { event: ev.id, task: tk.id, label: text, fills: 1 });
     const fill = () => {
@@ -1536,9 +1616,7 @@ export async function pagePlan(r, org, people) {
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
   document.addEventListener('keydown', onKey);
-  // the listeners go with the page: a new page has its own
-  const offSel = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('keydown', onKey); };
-  const watchGone = setInterval(() => { if (!selbar.isConnected && document.querySelector('#main > *')) { offSel(); clearInterval(watchGone); } }, 2000);
+  // the listeners go with the page (root.gone): a new page, or a redraw, has its own
 
   // Setting the selection: shown at once, one request, taken back if the server refuses.
   const applySel = async (value) => {
@@ -1864,14 +1942,17 @@ export async function pagePlan(r, org, people) {
   }
 
   // «Add a person» where the person lands: after those without a section, and at the end of each section
+  let fakeId = 0;  // a row shown before the server has answered has an id no row has
   const addPerson = (x?) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
-    (name) => call(Setup.createPerson, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'person'));
+    (name) => call(Setup.createPerson, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'person'),
+    { preview: (name) => personRow({ id: --fakeId, name, section: x ? x.id : 0, proposable: true }), redraw: () => redrawSoon() });
   const addSection = () => addRow(t('table.new_section'), (name) => call(Setup.createSection, { org: r.org, plan: r.plan, name }, 'section'));
   const detailsHead = sect('details', t('table.details'), [t('table.details_hint')]);
   const tasksHead = dropOn(sect('tasks', t('table.tasks'), [t('table.tasks_hint')]), (k) => k === 'task',
     (d) => moveTask(d, 0, tasksIn(0).filter((o) => o.id !== d.id).length), true);
   const addTask = (x?) => addRow(x ? t('table.new_task_in', { section: x.name }) : t('table.new_task'),
-    (name) => call(Setup.createTask, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'task'));
+    (name) => call(Setup.createTask, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'task'),
+    { preview: (name) => taskRow({ id: --fakeId, name, planned: true, section: x ? x.id : 0 }, 0), redraw: () => redrawSoon() });
   const addTaskSection = () => addRow(t('tsect.new'), (name) => call(Setup.createTaskSection, { org: r.org, plan: r.plan, name }, 'section'));
   let availHead;
   const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' + (store.get('tags') === '1' ? ' show-tags' : '') },
@@ -1913,7 +1994,8 @@ export async function pagePlan(r, org, people) {
     let top = tb.tHead!.offsetHeight;
     for (const tr of tb.querySelectorAll<HTMLElement>('tr.field-row.frozen')) { tr.style.setProperty('--stick', top + 'px'); top += tr.offsetHeight; }
   };
-  new ResizeObserver(stick).observe(table.querySelector('table')!);
+  const sticky = new ResizeObserver(stick);
+  sticky.observe(table.querySelector('table')!);
   if (planState.sel) {
     const keys = new Set(planState.sel.keys.filter((k) => grids.draft.cells.has(k)));
     if (keys.size) { sel = { grid: 'draft', keys, anchor: planState.sel.anchor, base: new Set(keys) }; paintSel(); }
@@ -1941,8 +2023,15 @@ export async function pagePlan(r, org, people) {
   // the field in a cell opens again after a change (editCell), for the next name
   const editing: [any, any] | undefined = planState.edit ? events.flatMap((ev) => tasks.map((tk) => [ev, tk] as [any, any])).find(([ev, tk]) => at(ev, tk) === planState.edit) : undefined;
   planState.edit = null;
+  // what the page set up outside itself goes when it is replaced, else every redraw kept the whole old table alive
+  root.gone = () => {
+    for (const [type, fn] of [['pointermove', onMove], ['pointerup', onUp], ['keydown', onKey]] as const) document.removeEventListener(type, fn as EventListener);
+    document.removeEventListener('pointerdown', onNoteAway, true);
+    sticky.disconnect();
+  };
   root.shown = () => {
     if (editing && draftTd[at(...editing)]) editCell(...editing, draftTd[at(...editing)], planState.editInput ? planState.editInput.value : '');
+    else planState.editInput = undefined;  // (an old field would keep the old drawing alive)
     return reopenedPage();
   };
   const reopenedPage = () => reopened({

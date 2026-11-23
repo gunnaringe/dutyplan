@@ -73,11 +73,22 @@ export const closeBtn = () => h('button', { type: 'button', class: 'ghost', oncl
 export const field = (text, input) => h('label', { class: 'field' }, h('span', {}, text), input);
 
 // A small form: a name and «+».
-export function addRow(placeholder, onsubmit) {
+// With preview(name) (a row of the table) the new line shows at once, dimmed, above the form, and the field is empty for the
+// next name; a refusal takes the row away and puts the name back. redraw draws the page again after (default: at once).
+export function addRow(placeholder, onsubmit, opts: { preview?: (name: string) => HTMLElement; redraw?: () => unknown } = {}) {
   const input = h('input', { type: 'text', placeholder, maxlength: '80', required: true, 'aria-label': placeholder });
+  const redraw = opts.redraw || render;
   return h('form', { class: 'addrow', onsubmit: async (e) => {
     e.preventDefault();
-    if (await write(() => onsubmit(input.value))) render();
+    const name = input.value;
+    if (!opts.preview) { if (await write(() => onsubmit(name))) redraw(); return; }
+    if (!name.trim()) return;
+    const row = opts.preview(name.trim());
+    row.classList.add('pending');
+    (input.closest('tr') || input.form!).before(row);
+    input.value = '';
+    if (await write(() => onsubmit(name))) redraw();
+    else { row.remove(); if (!input.value) input.value = name; }
   } }, h('span', { class: 'plus', 'aria-hidden': 'true' }, '+'), input, h('button', { type: 'submit', 'aria-label': placeholder }, t('common.add')));
 }
 
