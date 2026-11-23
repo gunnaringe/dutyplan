@@ -177,9 +177,16 @@ provider), and then they create an organisation, of which they are the admin. No
 | **Edit link** to a plan | change everything in that plan (and the people and tasks its table needs); no account needed |
 | **View link** to a plan | look at that plan |
 
-**Sharing.** A member shares a plan with a link (**Share** on the plan): *view* or *edit*. It works until it is deleted or runs out,
+**Sharing.** A member shares a plan with a link (**Share** on the plan): *view*, *answer* or *edit*. It works until it is deleted or runs out,
 shows only that plan, and never lets whoever has it make links. On the **Members** page (the people icon in the header) everyone sees the plans' links; an admin also makes
 invitation links (whoever opens one and signs in becomes a member). Everyone may leave; there is always one admin.
+
+**One link for the volunteers.** An *answer* link is for everyone on the list: it opens *My answers*, asks *Who are you?* (the
+browser remembers the name, with *Not you? Switch*), and shows that person's tasks and every date with *Yes*, *Maybe* or *No* and
+a note. It can also show the whole plan (*View*), and nothing else: no table, no editing. There are no accounts behind it, so
+anyone with the link can answer for anyone.
+
+![My answers on a phone: the person's tasks and every date with Yes, Maybe or No](docs/img/18-my-answers.png)
 
 Make a client at your OpenID Connect provider: confidential, with PKCE, the redirect address `<your address>/auth/callback` and,
 for signing out at the provider too, the address `<your address>/` after logout. Then start the server with `--oidc-issuer`,

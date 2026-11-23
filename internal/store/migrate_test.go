@@ -97,3 +97,45 @@ func TestDescriptionsBecomeADetailsRowAtTheTop(t *testing.T) {
 		t.Errorf("the column is gone: %d %v", n, err)
 	}
 }
+
+// Migration 009 makes share_link again to allow the level answer: the links there are stay as they were (ids, tokens, labels,
+// one person), and an answer link can be made after it.
+func TestTheLinksSurviveTheAnswerLevel(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := mustOrg(t, s, "Club")
+	p, _ := s.CreatePlan(ctx, o.Slug, "Autumn 2026")
+	view, err1 := s.CreateLink(ctx, o.Slug, p.Slug, LevelView, "For the choir", 0, false, 0)
+	join, err2 := s.CreateLink(ctx, o.Slug, "", LevelJoin, "Treasurer", 7, true, 0)
+	if err1 != nil || err2 != nil {
+		t.Fatal(err1, err2)
+	}
+	if _, err := s.DB().Exec(`DELETE FROM schema_migrations WHERE version = 9`); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if s, err = Open(path); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.LinksByTokens(ctx, []string{view.Token, join.Token})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("links after 009: %+v %v", got, err)
+	}
+	byID := map[int64]Link{got[0].ID: got[0], got[1].ID: got[1]}
+	if v := byID[view.ID]; v.Level != LevelView || v.Label != "For the choir" || v.Plan != p.Slug || v.SingleUse {
+		t.Errorf("the view link: %+v", v)
+	}
+	if j := byID[join.ID]; j.Level != LevelJoin || !j.SingleUse || j.ExpiresAt != join.ExpiresAt {
+		t.Errorf("the invitation: %+v", j)
+	}
+	if _, err := s.CreateLink(ctx, o.Slug, p.Slug, LevelAnswer, "", 0, false, 0); err != nil {
+		t.Errorf("an answer link: %v", err)
+	}
+	if _, err := s.DB().Exec(`INSERT INTO share_link (org_id, plan_id, token, level, created_at) SELECT org_id, plan_id, 'x', 'other', 'now' FROM share_link LIMIT 1`); err == nil {
+		t.Error("the table takes any level")
+	}
+}

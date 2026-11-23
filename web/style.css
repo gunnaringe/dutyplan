@@ -349,6 +349,7 @@ ul.plain .link-row, ul.plain .member { display: flex; gap: .75rem; align-items: 
   background: color-mix(in srgb, var(--line) 45%, var(--bg)); color: var(--muted); }
 .link-ic.edit { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); }
 .link-ic.join { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); }
+.link-ic.answer { background: color-mix(in srgb, var(--yes) 14%, var(--bg)); color: var(--yes); }
 .link-ic .ic svg { width: 1rem; height: 1rem; }
 .link-row .lvl { font-weight: 600; color: var(--fg); }
 .link-row .lvl.edit { color: var(--accent); }
@@ -540,3 +541,32 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 .dp-table button.tags-btn[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
 .dp-table button.tags-btn[aria-pressed=true] svg { visibility: visible; }
 .dp-table button.tags-btn { white-space: normal; text-align: left; }
+
+/* «My answers»: one person, every date down the page with yes / maybe / no and a note; their own tasks on top */
+.me-page { max-width: 44rem; margin: 0 auto; }
+.me-picks { display: flex; flex-wrap: wrap; gap: .4rem; margin: .6rem 0; }
+.me-picks .me-pick { font-size: 1rem; padding: .5rem .9rem; }
+.me-picks .me-pick[hidden] { display: none; }
+.me-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem 1rem; margin-top: .8rem; }
+.me-head h2 { margin: 0; }
+.me-page h3 { margin: 1.2rem 0 .4rem; font-size: 1rem; }
+.me-mine ul li { padding: .25rem 0; }
+.me-list .me-ev { display: grid; grid-template-columns: minmax(10rem, 1fr) auto; gap: .4rem .8rem; align-items: center; padding: .6rem 0; border-bottom: 1px solid var(--line); }
+.me-list .me-when { display: flex; flex-direction: column; gap: .05rem; }
+.me-list .me-when .d { font-weight: 600; }
+.me-list .me-when .tm { color: var(--muted); font-size: .9rem; }
+.me-list .me-task { color: var(--draft-fg); background: var(--draft-bg); border-radius: .3rem; padding: 0 .4rem; font-size: .85rem; font-weight: 600; align-self: flex-start; }
+.me-btns { display: inline-flex; gap: .3rem; }
+.me-btns .me-ans { display: inline-flex; align-items: center; gap: .3rem; background: transparent; color: var(--fg); border: 1px solid var(--line); min-height: var(--ctl); }
+.me-btns .me-ans svg { width: 1rem; height: 1rem; }
+.me-btns .me-ans.good svg { color: var(--yes); } .me-btns .me-ans.poor svg { color: var(--maybe); } .me-btns .me-ans.never svg { color: var(--no); }
+.me-btns .me-ans.good[aria-pressed=true] { background: var(--yes); border-color: var(--yes); color: var(--bg); }
+.me-btns .me-ans.poor[aria-pressed=true] { background: var(--maybe); border-color: var(--maybe); color: var(--bg); }
+.me-btns .me-ans.never[aria-pressed=true] { background: var(--no); border-color: var(--no); color: var(--bg); }
+.me-btns .me-ans[aria-pressed=true] svg { color: var(--bg); }
+.me-list .me-note { grid-column: 1 / -1; width: 100%; }
+@media (max-width: 40rem) {
+  .me-list .me-ev { grid-template-columns: 1fr; }
+  .me-btns { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .me-btns .me-ans { justify-content: center; }
+}

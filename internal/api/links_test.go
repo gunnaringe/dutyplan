@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -103,9 +104,77 @@ func TestAViewLinkToAPlanReadsButNeverWrites(t *testing.T) {
 	}
 }
 
+// An answer link (2026-11-22, the user: "en visning der de kan fylle ut når de selv kan … samme lenke"): it sees the plan and sets
+// the answers and notes of anyone on the list, and nothing else.
+func TestAnAnswerLinkSetsAnswersAndNotesOnly(t *testing.T) {
+	e, kari := sharedOrg(t)
+	var person struct{ ID int64 }
+	e.as(kari, "POST", "/api/orgs/choir/people", map[string]string{"name": "Ola"}).json(&person)
+	var evs []struct{ ID int64 }
+	e.as(kari, "POST", "/api/orgs/choir/plans/autumn/events", map[string]string{"date": "2031-01-12"}).json(&evs)
+	if person.ID == 0 || len(evs) != 1 {
+		t.Fatalf("setup: person %d, events %v", person.ID, evs)
+	}
+	p, ev := strconv.FormatInt(person.ID, 10), strconv.FormatInt(evs[0].ID, 10)
+	l := e.link(kari, "autumn", "answer")
+	to, c := e.open(l.Token)
+	if to != "/o/choir/p/autumn" {
+		t.Fatalf("to %q", to)
+	}
+	var org struct{ Level string }
+	e.as(c, "GET", "/api/orgs/choir", nil).json(&org)
+	if org.Level != "answer" {
+		t.Fatalf("the organisation says level %q", org.Level)
+	}
+	for _, path := range []string{"/api/orgs/choir/plans/autumn", "/api/orgs/choir/plans/autumn/answers", "/api/orgs/choir/people", "/api/orgs/choir/plans/autumn/runs"} {
+		if r := e.as(c, "GET", path, nil); r.code != 200 {
+			t.Errorf("GET %s with an answer link: %d", path, r.code)
+		}
+	}
+	if r := e.as(c, "PUT", "/api/orgs/choir/plans/autumn/people/"+p+"/availability", map[string]any{"levels": map[string]string{ev: "good"}}); r.code != 204 {
+		t.Errorf("an answer: %d %s", r.code, r.body)
+	}
+	if r := e.as(c, "PUT", "/api/orgs/choir/plans/autumn/events/"+ev+"/notes/"+p, map[string]string{"note": "late"}); r.code != 204 {
+		t.Errorf("a note: %d %s", r.code, r.body)
+	}
+	var ans struct {
+		Events []struct{ Level string }
+		Notes  []struct{ Note string }
+	}
+	e.as(kari, "GET", "/api/orgs/choir/plans/autumn/answers", nil).json(&ans)
+	if len(ans.Events) != 1 || ans.Events[0].Level != "good" || len(ans.Notes) != 1 || ans.Notes[0].Note != "late" {
+		t.Fatalf("what the link set: %+v", ans)
+	}
+	for _, req := range [][2]string{{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"},
+		{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/people/" + p}, {"PUT", "/api/orgs/choir/people/" + p + "/tasks/1"},
+		{"PATCH", "/api/orgs/choir/plans/autumn"}, {"POST", "/api/orgs/choir/plans/autumn/runs"}, {"PUT", "/api/orgs/choir/plans/autumn/events/" + ev + "/fields/1"},
+		{"POST", "/api/orgs/choir/plans/autumn/people/" + p + "/availability"}, {"DELETE", "/api/orgs/choir/plans/autumn/events/" + ev}} {
+		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
+			t.Errorf("%s %s with an answer link: %d, want 403", req[0], req[1], r.code)
+		}
+	}
+	if r := e.as(c, "PUT", "/api/orgs/choir/plans/spring/people/"+p+"/availability", map[string]any{"levels": map[string]string{}}); r.code < 400 {
+		t.Errorf("an answer in another plan: %d", r.code)
+	}
+	// with a view link in the same browser it still answers; an edit link to the plan is wider
+	_, c2 := e.open(e.link(kari, "autumn", "view").Token, c)
+	if r := e.as(c2, "PUT", "/api/orgs/choir/plans/autumn/people/"+p+"/availability", map[string]any{"levels": map[string]string{ev: "poor"}}); r.code != 204 {
+		t.Errorf("an answer with a view link too: %d", r.code)
+	}
+	e.as(c2, "GET", "/api/orgs/choir", nil).json(&org)
+	if org.Level != "answer" {
+		t.Errorf("answer and view: level %q", org.Level)
+	}
+	_, c3 := e.open(e.link(kari, "autumn", "edit").Token, c2)
+	e.as(c3, "GET", "/api/orgs/choir", nil).json(&org)
+	if org.Level != "edit" {
+		t.Errorf("answer, view and edit: level %q", org.Level)
+	}
+}
+
 func TestAViewOrEditLinkIsToOnePlan(t *testing.T) {
 	e, kari := sharedOrg(t)
-	for _, level := range []string{"view", "edit"} {
+	for _, level := range []string{"view", "answer", "edit"} {
 		if r := e.as(kari, "POST", "/api/orgs/choir/links", map[string]any{"level": level}); r.code != 400 || r.errCode() != "invalid" {
 			t.Errorf("a %s link to the whole organisation: %d %s", level, r.code, r.body)
 		}

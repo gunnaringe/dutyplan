@@ -657,8 +657,8 @@ async function copyLink(l, button) {
   }
 }
 
-const LINK_ICON = { view: 'eye', edit: 'hand', join: 'join' };
-const LINK_ACCESS = { view: 'share.access_view', edit: 'share.access_edit', join: 'share.access_join' };
+const LINK_ICON = { view: 'eye', answer: 'check', edit: 'hand', join: 'join' };
+const LINK_ACCESS = { view: 'share.access_view', answer: 'share.access_answer', edit: 'share.access_edit', join: 'share.access_join' };
 // A link: what it is (the plan and its label, or whom an invitation is for) on top, what it gives and how long under it,
 // then share (where the device can), copy and delete.
 function linkRow(l, base, again, withPlan) {
@@ -693,7 +693,7 @@ async function shareDialog(orgSlug, org, plan) {
   const build = async (key) => {
     const all = await api('GET', base + '/links');
     const mine = all.filter((l) => l.level !== 'join' && l.plan === plan.slug);
-    const level = h('select', { 'aria-label': t('share.level') }, ['view', 'edit'].map((x) => h('option', { value: x }, t(LINK_ACCESS[x]))));
+    const level = h('select', { 'aria-label': t('share.level') }, ['view', 'answer', 'edit'].map((x) => h('option', { value: x }, t(LINK_ACCESS[x]))));
     const label = h('input', { type: 'text', maxlength: '80', placeholder: t('share.label_placeholder'), 'aria-label': t('share.label') });
     const expires = expirySelect(0);
     const title = t('share.title_plan', { name: plan.name });
@@ -919,8 +919,11 @@ async function pagePlan(r, org, people) {
   const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : plan.draft_aside ? null : pinned ? pinned.id : runs.length ? runs[0].id : null;
   // «Edit | View» (see showPage): View always shows the current plan, else the newest finished draft, not one picked in Edit
   const modeKey = 'mode:' + key;
-  const mode = store.get(modeKey) || (org.level === 'view' ? 'show' : 'edit');
-  const viewId = mode !== 'show' ? shownId : plan.draft_aside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
+  // an answer link has «My answers» and View; the others Edit (Table) and View
+  const modes = org.level === 'answer' ? ['me', 'show'] : ['edit', 'show'];
+  const stored = store.get(modeKey);
+  const mode = modes.includes(stored) ? stored : org.level === 'answer' ? 'me' : org.level === 'view' ? 'show' : 'edit';
+  const viewId = mode === 'edit' ? shownId : plan.draft_aside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
   const view = viewId ? await get(`${pbase}/runs/${viewId}`) : null;
   const done = !!view && view.run.status === 'done';
 
@@ -980,11 +983,75 @@ async function pagePlan(r, org, people) {
   // each place holds now (as the draft shows it: the current plan, else the newest finished draft), with the event details, and
   // nothing to change. Remembered per plan in this browser; one who may only view starts in View.
   const modeSwitch = h('div', { class: 'mode', role: 'group', 'aria-label': t('mode.aria') },
-    ['edit', 'show'].map((m) => h('button', { type: 'button', 'aria-pressed': String(mode === m), 'data-mode': m,
+    modes.map((m) => h('button', { type: 'button', 'aria-pressed': String(mode === m), 'data-mode': m,
       onclick: () => { if (m !== mode) { store.set(modeKey, m); render(); } } }, t(m === 'edit' && org.level === 'view' ? 'mode.table' : 'mode.' + m))));
   const shareBtn = () => (ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '');
-  const back = () => link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) });
+  // back to the organisation; not for a link, whose organisation page leads straight back here
+  const back = () => (org.plan ? '' : link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }));
+  // only tasks some event needs or has a name in
+  const showTasksOf = (ev) => tasks.filter((tk) => placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]);
   if (mode === 'show') return showPage();
+  if (mode === 'me') return mePage();
+  // «My answers» (2026-11-22, the user: "Vi trenger også en visning for én person. Full planlegging av alt blir litt mye for en frivillig å
+  // forholde seg til, så gjerne en visning der de kan fylle ut når de selv kan. Foreløpig uten noen bruker-management, så samme lenke."):
+  // what an answer link opens. «Who are you?» picks a name from the list (kept in this browser, «Not you? Switch»); then the person's
+  // own tasks and every date down the page with yes / maybe / no and a note. The same link for everyone: anyone may answer for anyone.
+  function mePage() {
+    const meKey = 'me:' + key;
+    const me = people.find((p) => String(p.id) === store.get(meKey));
+    const title = h('div', { class: 'title-bar' }, h('h1', {}, plan.name), infoBtn(plan.name, [t('me.info')]), modeSwitch);
+    if (!me) {
+      const picks = [...people].sort((a, b) => a.name.localeCompare(b.name, locale())).map((p) => h('button', { type: 'button', class: 'ghost me-pick', 'data-name': p.name.toLowerCase(),
+        onclick: () => { store.set(meKey, String(p.id)); render(); } }, p.name));
+      const find = people.length > 8 ? h('input', { type: 'search', class: 'wide', placeholder: t('table.filter'), 'aria-label': t('table.filter'), oninput: (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        picks.forEach((b) => { b.hidden = !!q && !b.dataset.name.includes(q); });
+      } }) : '';
+      return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, t('me.who')), h('p', { class: 'muted small' }, t('me.who_hint')),
+        people.length ? [find, h('div', { class: 'me-picks' }, picks)] : h('p', { class: 'muted' }, t('me.nobody')));
+    }
+    const mine = events.flatMap((ev) => showTasksOf(ev).filter((tk) => slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === me.id)).map((tk) => [ev, tk]));
+    const level = (ev) => (ans[me.id] || {})[ev.id] || '';
+    let saving = Promise.resolve();  // one write after the other: Yes then No quickly must end as No
+    const answerRow = (ev) => {
+      const btns = ['good', 'poor', 'never'].map((l) => h('button', { type: 'button', class: 'me-ans ' + l, 'data-level': l, 'aria-pressed': String(level(ev) === l),
+        'aria-label': t('me.answer_aria', { label: label(ev), answer: t('me.' + l) }) }, icon(LEVEL_ICON[l]), h('span', {}, t('me.' + l))));
+      const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(level(ev) === b.dataset.level)));
+      btns.forEach((b) => b.addEventListener('click', async () => {
+        const was = level(ev);
+        const next = was === b.dataset.level ? '' : b.dataset.level;  // the same again: not answered
+        (ans[me.id] ||= {})[ev.id] = next;
+        paint();
+        saving = saving.then(async () => {
+          if (!(await write(() => api('PUT', `${pbase}/people/${me.id}/availability`, { levels: { [ev.id]: next } })))) { ans[me.id][ev.id] = was; paint(); }
+        });
+      }));
+      let saved = (notes[me.id] || {})[ev.id] || '';
+      const note = h('input', { type: 'text', class: 'me-note', maxlength: '300', value: saved, placeholder: t('note.placeholder'), 'aria-label': t('note.aria', { name: me.name, label: label(ev) }) });
+      note.addEventListener('change', async () => {
+        const value = note.value.trim();
+        if (value === saved) return;
+        saving = saving.then(async () => {
+          if (await write(() => api('PUT', `${pbase}/events/${ev.id}/notes/${me.id}`, { note: value }))) { saved = value; (notes[me.id] ||= {})[ev.id] = value; say(t('me.note_saved')); }
+        });
+      });
+      const tasksHere = mine.filter(([e]) => e.id === ev.id).map(([, tk]) => tk.name);
+      const details = fields.fields.map((f) => fieldValue[ev.id + '/' + f.id]).filter(Boolean).join(' · ');
+      return h('li', { class: 'me-ev' + (tasksHere.length ? ' busy' : ''), 'data-event': String(ev.id) },
+        h('div', { class: 'me-when' }, h('span', { class: 'd' }, fmtDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : '',
+          tasksHere.length ? h('span', { class: 'me-task' }, t('me.you_have', { tasks: tasksHere.join(', ') })) : '',
+          details ? h('span', { class: 'small muted' }, details) : ''),
+        h('div', { class: 'me-btns', role: 'group', 'aria-label': label(ev) }, btns), note);
+    };
+    return h('div', { class: 'plan-page me-page' }, title,
+      h('div', { class: 'me-head' }, h('h2', {}, me.name), linkBtn(t('me.switch'), () => { store.set(meKey, ''); render(); })),
+      h('section', { class: 'me-mine' }, h('h3', {}, t('me.mine')),
+        mine.length ? h('ul', { class: 'plain' }, mine.map(([ev, tk]) => h('li', {}, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? ' ' + clock(ev) : '', ' · ', tk.name)))
+          : h('p', { class: 'muted small' }, done ? t('me.no_tasks') : t('me.no_plan'))),
+      h('h3', {}, t('me.when')),
+      events.length ? h('ul', { class: 'plain me-list' }, events.map(answerRow)) : h('p', { class: 'muted small' }, t('show.no_events')));
+  }
+
   function showPage() {
     // only tasks some event needs or has a name in, and details some event has
     const showTasks = tasks.filter((tk) => events.some((ev) => placesAt[at(ev, tk)] || cellsAt[at(ev, tk)]));
@@ -1029,7 +1096,7 @@ async function pagePlan(r, org, people) {
       events.length ? h('div', { class: 'show-tools' }, sel, found, h('span', { class: 'small muted source' }, source),
         h('button', { type: 'button', class: 'ghost print', onclick: () => window.print() }, t('show.print'))) : h('p', { class: 'muted small' }, t('show.no_events')),
       events.length ? [tbl, cards] : '');
-    const was = Number(store.get(findKey));
+    const was = Number(store.get(findKey) || (org.level === 'answer' ? store.get('me:' + key) : ''));  // an answer link: the name chosen
     if (people.some((p) => p.id === was)) { sel.value = String(was); find(was); }
     return root;
   }
