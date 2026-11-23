@@ -433,7 +433,16 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Kari Test, ' + ev[0], 'one click gives ✓');
     await answer('Kari Test', ev[0]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'poor', 'Kari Test, ' + ev[0], 'a second click gives ?');
-    ok((await page.locator('td.count >> nth=0').getAttribute('aria-label')) === '0 yes, 1 maybe, 0 no', 'the count follows the answers');
+    {
+      // the count is a bar: a part per answer, those not answered too, and the numbers on hover (2026-11-23)
+      const label = await page.locator('td.count >> nth=0').getAttribute('aria-label');
+      ok(/^0 yes · 1 maybe · 0 no · \d+ not answered$/.test(label), 'the count follows the answers: ' + label);
+      const parts = await page.locator('td.count >> nth=0').evaluate((td) => [...td.querySelectorAll('.tally .seg')].map((x) => x.className));
+      ok(parts.join() === 'seg poor,seg none', 'the bar has a part for maybe and one for not answered: ' + parts);
+      await page.locator('td.count >> nth=0').hover();
+      await until(page, (x) => { const tip = document.querySelector('.tally-tip'); return !!tip && !tip.hidden && tip.textContent === x; }, label, 'hovering the bar shows the numbers');
+      await page.mouse.move(0, 0);
+    }
     await answer('Jon Demo', ev[1]).click();
     await answer('Jon Demo', ev[1]).click();
     await answer('Jon Demo', ev[1]).click();
@@ -654,6 +663,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     await page.getByRole('button', { name: 'Show the newest' }).click();
     await runIs(2, 'back to the newest');
     // the distribution, closed with its own Close button (as every dialog is)
+    await page.locator('.draft-bar .more > summary').click();  // behind More ⋯
     await page.getByRole('button', { name: 'Distribution', exact: true }).click();
     ok((await dialog.innerText()).includes('fair share'), 'the distribution lists the load against the fair share');
     await dialog.locator('.modal-foot').getByRole('button', { name: 'Close', exact: true }).click();
@@ -716,7 +726,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       // one unlocked again; Remove unlocked takes only that one, asked in the page's own dialog
       await draft('Sound', ev[1]).locator(`button.lockbtn.on[aria-label="Unlock ${who}"]`).click();
       await inCell(`button.lockbtn:not(.on)[aria-label="Lock ${who}"]`, 'the lock by a name unlocks it');
-      await page.getByRole('button', { name: 'Remove unlocked' }).click();
+      await page.locator('.draft-bar .more > summary').click(); await page.getByRole('button', { name: 'Remove unlocked' }).click();
       await page.locator('dialog.ask[open]').getByRole('button', { name: 'Remove', exact: true }).click();
       await barHas('Unlocked names removed', 'Remove unlocked leaves no draft on show');
       ok(!(await draft('Sound', ev[1]).innerText()).includes(who), 'the unlocked name went');
@@ -747,7 +757,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await page.keyboard.press('Control+z');
       await until(page, (n) => document.querySelectorAll('tr.draft-row td button.lockbtn:not(.on)').length === n, before, 'Ctrl+Z unlocks the row again');
       // Remove unlocked, undone: the pinned draft is back
-      await page.getByRole('button', { name: 'Remove unlocked' }).click();
+      await page.locator('.draft-bar .more > summary').click(); await page.getByRole('button', { name: 'Remove unlocked' }).click();
       await page.locator('dialog.ask[open]').getByRole('button', { name: 'Remove', exact: true }).click();
       await barHas('Unlocked names removed', 'removed');
       await undoBtn().click();
@@ -979,7 +989,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       const a = await page.evaluate(() => {
         const hs = (sel) => [...document.querySelectorAll(sel)].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().height));  // (what is shown: the add lines are behind a +)
         return { title: hs('.title-bar > button:not(.info), .title-bar .sideways button'),
-          table: hs('.dp-table th.addcol button, .draft-bar .row-inline > button, .draft-bar select, .dp-table thead button.edit'),
+          table: hs('.dp-table th.addcol button, .draft-bar .grp > button, .draft-bar .split > *, .draft-bar .more > summary, .dp-table thead button.edit'),
           slim: hs('.dp-table tr.adds form.addrow button, .dp-table tr.field-row button.freeze') };  // the add lines and the details rows are slimmer
       });
       ok(a.slim.length >= 2 && a.slim.every((x) => x === a.slim[0]) && a.slim[0] < a.table[0], 'the add lines and details rows have one smaller height: ' + a.slim);

@@ -223,8 +223,9 @@ plan, main; `gen/` is the Connect client made from the .proto, committed), `solv
 - Each person chooses which tasks they take part in; one list per person with answers per event (*does not suit / poor / good*), an optional own list per task (not built).
 - «Even distribution» = **equal total load** (the user's answer 2026-11-09): someone who only takes Video should not end up with half of someone who takes Sound and Video.
   Distribution per task is off by default (`w_task_fair`/`w_task_range` 0). Do not make the per-task term the main term again without asking.
-- **What matters most** (2026-11-23, the user: "simple settings for what is important. Setting the numbers manually could be hidden
-  as a advanced setting … a link … on the plan page directly"): a dialog (`prioritiesDialog`, from the draft's bar and a line in ⚙) with
+- **Adjust the planner** (was «What matters most»; 2026-11-23, the user: "simple settings for what is important. Setting the numbers manually could be hidden
+  as a advanced setting … a link … on the plan page directly", then "a bit hard to understand. Maybe this should be a button with a logo and
+  some better name?": a button with a sliders icon and a dot when not on the defaults): a dialog (`prioritiesDialog`, from the draft's bar and a line in ⚙) with
   three priorities, Less / Normal / More (`PRIORITIES` in `web/src/plan.ts`: each level is fixed values for a group of weights, Normal = the
   defaults; numbers set by hand show as Custom), the rules that always hold, and the numbers under «Advanced». Page only: the same PUT
   weights. A dialog, not a page, following «dialogs for the rest» below. If a default weight changes, change Normal with it.

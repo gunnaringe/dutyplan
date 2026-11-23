@@ -187,7 +187,6 @@ button.cellbtn.inline { display: inline; }
 .draft-bar .row-inline { margin: 0; }
 .dp-table .draft-bar select { width: auto; padding: .1rem .3rem; }
 .draft-bar button { padding: .15rem .7rem; }
-.draft-bar .pin { width: var(--ctl-sm); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .draft-bar p, .draft-bar ul { margin: .25rem 0; }
 .draft-bar .pinned { border: 1px solid var(--accent); color: var(--accent); border-radius: .4rem; padding: 0 .5rem; font-weight: 700; white-space: nowrap; }
 /* a place of the draft: the names on the left, ⋯ (and the selection mark) on the right; the cell itself does not click */
@@ -229,7 +228,16 @@ button.done { font-weight: 700; display: inline-flex; align-items: center; gap: 
 .ic-maybe { color: var(--maybe); }
 .ic-down { color: var(--no); }
 .count { white-space: nowrap; vertical-align: middle; }
-.count b { display: inline-flex; align-items: center; gap: .1rem; margin-right: .45rem; font-weight: 600; color: var(--fg); }
+/* the count: one bar, in proportion; the numbers in .tally-tip */
+.tally { display: flex; gap: 1px; height: .6rem; min-width: 3rem; border-radius: .3rem; overflow: hidden; }
+.tally .seg { min-width: 4px; }
+.tally .good { background: var(--yes); }
+.tally .poor { background: var(--maybe); }
+.tally .never { background: var(--no); }
+.tally .none { background: color-mix(in srgb, var(--muted) 25%, var(--bg)); }
+.tally-tip { position: fixed; z-index: 60; pointer-events: none; padding: .25rem .5rem; border-radius: .3rem; font-size: .8rem; white-space: nowrap;
+  background: var(--fg); color: var(--bg); }
+.tally-tip[hidden] { display: none; }
 td.answer { text-align: center; padding: .1rem .2rem; vertical-align: middle; position: relative; }
 /* An answer and a cycle() level: an icon on a light wash of its colour; empty = not answered */
 button.ans, button.cyc { display: inline-flex; justify-content: center; align-items: center; background: transparent; color: var(--fg); border-color: var(--line); padding: 0 .4rem; font-size: 1rem; }
@@ -461,9 +469,28 @@ button.fold[aria-expanded=false] .ic svg { transform: rotate(-90deg); }
 .dp-table thead th:hover button.edit, .dp-table thead th:focus-within button.edit { opacity: 1; }
 @media (hover: none) { .dp-table thead th button.edit { opacity: 1; } }
 button.cellbtn.no-tasks { color: var(--muted); }
-.draft-bar button.icon.pin { padding: .15rem .35rem; color: var(--muted); }
-.draft-bar button.icon.pin.on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.draft-bar button.pin.on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 .draft-bar .run-id { font-weight: 600; cursor: help; }
+/* the bar's three groups (2026-11-23): which draft | what to do | the rest; a thin line between them */
+.draft-bar .row-inline { gap: .5rem 1rem; align-items: center; }
+.draft-bar .grp { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+.draft-bar .grp + .grp { padding-left: 1rem; border-left: 1px solid var(--line); }
+.draft-bar .grp.extra:empty { display: none; }
+.draft-bar .steps { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: .4rem; background: var(--bg); }
+.draft-bar .steps button.step { border: none; background: none; }
+.draft-bar .steps .run-id { padding: 0 .2rem; }
+.draft-bar button.pin { display: inline-flex; align-items: center; gap: .2rem; width: auto; color: var(--muted); }
+/* Try again and its time as one control */
+.draft-bar .split { display: inline-flex; }
+.draft-bar .split > button { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.dp-table .draft-bar .split > select { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; color: var(--muted); }
+.draft-bar button.retry:not(.first) { background: var(--bg); color: var(--accent); border-color: var(--accent); }
+.draft-bar .chip.warn-chip { border: 1px solid var(--maybe); background: color-mix(in srgb, var(--maybe) 14%, var(--bg)); color: var(--fg); border-radius: 1rem; padding: 0 .7rem; }
+.draft-bar button.prio-link { display: inline-flex; align-items: center; gap: .25rem; position: relative; }
+.draft-bar button.prio-link.tuned::after { content: ''; position: absolute; top: .2rem; right: .2rem; width: .4rem; height: .4rem; border-radius: 50%; background: var(--accent); }
+.draft-bar .dropdown.more > summary { height: var(--ctl-sm); padding: 0 .6rem; border: 1px solid var(--line); border-radius: .4rem; display: inline-flex; align-items: center; gap: .2rem; cursor: pointer; }
+.draft-bar .dropdown.more .drop-panel { right: 0; left: auto; min-width: 12rem; }
+@media (max-width: 40rem) { .draft-bar .grp + .grp { padding-left: 0; border-left: none; } .draft-bar .grp { width: 100%; } }
 header .brand { display: inline-flex; align-items: center; gap: .5rem; }
 header .brand img { display: block; }
 @media (max-width: 40rem) { header .brand span { display: none; } header .icon-btn, .dropdown > summary { min-width: 2.25rem; } }
@@ -472,7 +499,7 @@ header .brand img { display: block; }
 body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
 .dp-table td.sel { background: color-mix(in srgb, #2b6cd6 16%, transparent) !important; box-shadow: inset 0 0 0 2px #2b6cd6; }
 .dp-table td.count { cursor: pointer; }
-.dp-table td.count:hover { text-decoration: underline; }
+.dp-table td.count:hover .tally { outline: 2px solid var(--accent); outline-offset: 2px; }
 .selbar { position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: .5rem;
   padding: .45rem .6rem; background: var(--bg); border: 1px solid var(--line); border-radius: .75rem; box-shadow: 0 8px 28px rgb(0 0 0 / .18); }
 .selbar[hidden] { display: none; }
