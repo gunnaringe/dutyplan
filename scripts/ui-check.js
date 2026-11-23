@@ -664,9 +664,36 @@ const { spawn } = require('child_process');
         return !tr.querySelector('button.lockbtn:not(.on)') && !!tr.querySelector('button.lockbtn.on'); }, null, 'Lock in the bar locks every name in the row');
       ok((await soundRow()).off === 0, 'the whole row is locked');
       await page.keyboard.press('Escape');
-      await page.getByRole('button', { name: 'Lock all' }).click();
-      await until(page, () => !document.querySelector('tr.draft-row button.lockbtn:not(.on)'), null, 'Lock all locks every name of the draft');
-      ok(await page.getByRole('button', { name: 'Lock all' }).isDisabled(), 'nothing is left to lock');
+      // a whole row and a whole date by their own locks
+      const rowLock = (task) => page.locator(`tr.draft-row button.lockbtn.group[aria-label$="every name for ${task}"]`);
+      ok((await rowLock('Sound').getAttribute('aria-pressed')) === 'true', 'the row lock shows the row is locked');
+      await rowLock('Sound').click();
+      await until(page, () => !document.querySelector('tr.draft-row:has(button[aria-label="Unlock every name for Sound"])') &&
+        ![...document.querySelectorAll('tr.draft-row')].find((x) => x.querySelector('th .nm')?.textContent === 'Sound').querySelector('td button.lockbtn.on'), null, 'the row lock unlocks the row');
+      await rowLock('Sound').click();
+      await until(page, () => !![...document.querySelectorAll('tr.draft-row')].find((x) => x.querySelector('th .nm')?.textContent === 'Sound').querySelector('td button.lockbtn.on'), null, 'and locks it again');
+      ok((await soundRow()).off === 0, 'every name in the row');
+      const colLock = page.locator(`tr.draft-locks button[aria-label^="Lock every name on ${ev[0]}"]`);
+      await colLock.click();
+      await until(page, (c) => !document.querySelector(c), `tr.draft-locks button[aria-label^="Lock every name on ${ev[0]}"]`, 'the date lock locks a date');
+      ok((await draft('Video', ev[0]).locator('button.lockbtn:not(.on)').count()) === 0, 'every name on that date is locked');
+      // pinned (above) and every name locked: done. «Reopen» unpins and keeps the locks; «We’re done» locks every name, pins the
+      // draft and shows it in View
+      ok(!(await page.getByRole('button', { name: 'Lock all' }).count()), 'no Lock all any more');
+      await barHas('Done', 'a pinned draft with every name locked is done');
+      await page.getByRole('button', { name: 'Reopen' }).click();
+      await until(page, () => document.querySelector('.draft-bar button.pin[aria-pressed="false"]'), null, 'Reopen unpins it');
+      ok(!(await page.locator('tr.draft-row button.lockbtn:not(.on)').count()), 'the names stay locked');
+      await rowLock('Video').click();
+      await until(page, () => document.querySelector('tr.draft-row button.lockbtn:not(.on)'), null, 'a row unlocked');
+      await page.getByRole('button', { name: 'We’re done' }).click();
+      await until(page, () => document.querySelector('.mode button[data-mode="show"][aria-pressed="true"]'), null, 'Done shows the plan in View');
+      await page.locator('.mode button[data-mode="edit"]').click();
+      await barHas('Reopen', 'the bar says done');
+      ok(!(await page.locator('tr.draft-row button.lockbtn:not(.on)').count()), 'Done locked every name');
+      ok((await page.locator('.draft-bar button.pin').getAttribute('aria-pressed')) === 'true', 'and pinned the draft');
+      await page.getByRole('button', { name: 'Reopen' }).click();
+      await until(page, () => document.querySelector('.draft-bar button.pin[aria-pressed="false"]'), null, 'reopened again');
       // one unlocked again; Remove unlocked takes only that one, asked in the page's own dialog
       await draft('Sound', ev[1]).locator(`button.lockbtn.on[aria-label="Unlock ${who}"]`).click();
       await inCell(`button.lockbtn:not(.on)[aria-label="Lock ${who}"]`, 'the lock by a name unlocks it');

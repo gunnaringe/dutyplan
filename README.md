@@ -59,8 +59,10 @@ every plan).
 **The draft allocation.** Between the tasks and the answers is the draft: who has each place. What you set yourself has a
 violet background and a ✎ square: a person, or a text such as *Stewards ×2* that fills places without being anyone. A name from the
 planner has a lock by it: one click **locks** it, and *Try again* keeps it. Drag over places (or ⇥ at a row's end) to lock or unlock
-many at once, **Lock all** locks every name of the draft, and **Remove unlocked** takes away the planner's names that are not locked
-(the draft stays under the earlier drafts). A place given against a *?* is marked *maybe*, and a place
+many at once; the lock by a task's name locks its whole row, and the lock under each date its column. **Remove unlocked**
+takes away the planner's names that are not locked (the draft stays under the earlier drafts). When the plan is settled,
+**We're done** locks every name, makes the draft the current plan and shows it in View; **Reopen** takes that back and keeps
+the locks. A place given against a *?* is marked *maybe*, and a place
 that cannot be filled says *Not filled · Why?*. The planner is checked afterwards by a second, independent program, and the
 page says if a rule was broken (it should never be).
 
