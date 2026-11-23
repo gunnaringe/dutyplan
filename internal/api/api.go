@@ -92,6 +92,12 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 		path, h := mount()
 		mux.Handle("POST "+path, requireFormat(s.gate, h))
 	}
+	// gRPC reflection, so that tools (buf curl, grpcurl, an agent) can list the services and read the schema with its
+	// comments. It shows the schema only, which the repository publishes anyway; it is open to everyone and outside the
+	// gate (a stream: it must not be read whole first). It is a bidirectional stream, so it needs HTTP/2 to the app.
+	for _, h := range reflection() {
+		mux.Handle(h())
+	}
 
 	// the stream of changes is Server-Sent Events, not Connect (stream.go)
 	mux.HandleFunc("GET /api/orgs/{org}/stream", s.stream)

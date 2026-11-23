@@ -64,15 +64,16 @@ if ! git diff --quiet -- web/app.js; then git diff --stat -- web/app.js; echo "w
 """
 
 [tasks.gen]
-description = "The API's code from proto/ with buf (Go in gen/, the page's client in web/src/gen/; needs npm ci), after a change to the .proto (lint first). Commit both"
-run = "buf lint && buf generate"
+description = "The API's code from proto/ with buf (Go in gen/, the page's client in web/src/gen/, the schema with comments for reflection in internal/api/schema.binpb; needs npm ci), after a change to the .proto (lint first). Commit them all"
+run = "buf lint && buf generate && buf build -o internal/api/schema.binpb"
 
 [tasks."gen:check"]
 description = "Are gen/ and web/src/gen/ what proto/ makes? buf lint, buf generate, then fail if gen/ differs from what git has (staged counts; CI and the commit hook)"
 run = '''
 buf lint
 buf generate
-if ! git diff --quiet -- gen web/src/gen || [ -n "$(git ls-files --others --exclude-standard -- gen web/src/gen)" ]; then git status --short -- gen web/src/gen; echo "gen/ or web/src/gen/ is out of date: run mise run gen and commit it"; exit 1; fi
+buf build -o internal/api/schema.binpb
+if ! git diff --quiet -- gen web/src/gen internal/api/schema.binpb || [ -n "$(git ls-files --others --exclude-standard -- gen web/src/gen internal/api/schema.binpb)" ]; then git status --short -- gen web/src/gen internal/api/schema.binpb; echo "gen/ or web/src/gen/ is out of date: run mise run gen and commit it"; exit 1; fi
 '''
 
 [tasks."test:app"]

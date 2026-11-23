@@ -143,7 +143,8 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
   "current organisation", so switching is just going to another address. The list of organisations can be read by anyone who reaches the address.
 - **Renaming changes the name only**; the address stays, so links keep working.
 - **The API covers only what the page uses** (2026-11-20: "start simple and expand"). An endpoint or a field the page does not call is not kept "for later";
-  it is added with the page change that needs it.
+  it is added with the page change that needs it. One exception: gRPC reflection (2026-11-23, the user: "Add comments and reflection"),
+  which serves the schema with its comments to tools and agents.
 - **Foreign keys** are off by default in SQLite on every connection and are switched on in the DSN; a test checks that they are enforced.
 - **The solver is a Python program with `ortools`** that Go starts as a subprocess: JSON in on stdin, JSON out on stdout, with a time
   limit. The same container image. The contract is small and can be tested without the rest of the app. **Python is kept** (the user's answer
@@ -237,6 +238,7 @@ The first version has no login, no personal links and no roles. The consequences
   search engines (`noindex`), and SQLite is backed up. Put it on a trusted network or behind a proxy that authenticates (see the README).
   There is no change log and no declared name (both removed 2026-11-19: "Keep it simple for now").
 - Writes must be `application/json` or `application/proto` (binary protobuf, the page's), and `http.CrossOriginProtection` refuses writes from other sites (`Sec-Fetch-Site: cross-site`, 403; no CORS).
+  gRPC reflection is open to everyone, but it gives the schema only, which the public repository has anyway.
   All writes go through one helper, one transaction each (the one exception is deleting an organisation, above).
 - Adding links or a login later is an addition and needs no new data model.
 
