@@ -628,6 +628,7 @@ const { spawn } = require('child_process');
       const before = {};
       for (const p of who) for (const e of ev) before[p + '|' + e] = await levelOf(p, e);
       const centre = async (loc) => { const b = await loc.boundingBox(); return [b.x + b.width / 2, b.y + b.height / 2]; };
+      await answer(who[0], ev[0]).evaluate((b) => b.scrollIntoView({ block: 'center' }));  // in the middle: near the edge a drag scrolls the window
       const [x0, y0] = await centre(answer(who[0], ev[0]));
       const [x1, y1] = await centre(answer(who[1], ev[1]));
       await page.mouse.move(x0, y0);
@@ -732,6 +733,21 @@ const { spawn } = require('child_process');
       await dialog.locator('.who-head button', { hasText: 'All' }).click();
       ok(await rowOf('Ola Sample').isVisible(), 'All shows everyone again');
       await closeDialog();
+    }
+
+    // --- «Show tasks»: the tasks a person is willing to take, as tags under the name; off by default, kept after a reload ---
+    {
+      const tagsOf = (name) => page.locator('tr.person-row', { has: answer(name, ev[0]) }).locator('.tags .tag');
+      ok((await page.getAttribute('button.tags-btn', 'aria-pressed')) === 'false' && !(await tagsOf('Kari Test').first().isVisible()), 'the tags are hidden at first');
+      await page.click('button.tags-btn');
+      const kari = await tagsOf('Kari Test').evaluateAll((xs) => xs.map((x) => x.className + ':' + x.textContent).join(','));
+      ok(kari === 'tag good:Sound,tag poor:Video', 'Kari Test: Sound green, Video yellow: ' + kari);
+      ok(await tagsOf('Kari Test').first().isVisible() && (await tagsOf('Ola Sample').count()) > 0, 'Show tasks shows them for everyone');
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok((await page.getAttribute('button.tags-btn', 'aria-pressed')) === 'true' && await tagsOf('Kari Test').first().isVisible(), 'and keeps them after a reload');
+      await page.click('button.tags-btn');
+      ok(!(await tagsOf('Kari Test').first().isVisible()), 'a second click hides them');
     }
 
     // --- a phone: no page is wider than the screen; the table scrolls in its own box with the first column in place ---

@@ -452,7 +452,7 @@ body.selecting, body.selecting * { user-select: none; cursor: cell !important; }
 .dp-table input.filter { width: 100%; margin-top: .3rem; padding: .2rem .4rem; font-size: .85rem; min-height: 0; text-transform: none; letter-spacing: 0; font-weight: 400; }
 
 /* who is shown in the table: a ✓ per person, in a dialog */
-.dp-table button.who { display: flex; align-items: center; gap: .35rem; width: 100%; margin-top: .3rem; padding: .2rem .4rem; min-height: 0; font-size: .85rem;
+.dp-table button.who, .dp-table button.tags-btn { display: flex; align-items: center; gap: .35rem; width: 100%; margin-top: .3rem; padding: .2rem .4rem; min-height: 0; font-size: .85rem;
   text-transform: none; letter-spacing: 0; font-weight: 400; background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
 .dp-table button.who.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
 .who-head { display: flex; gap: .3rem; align-items: center; margin-bottom: .4rem; }
@@ -529,3 +529,14 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
   .show .show-ev.miss { opacity: 1; }
   .show .nm.hit { background: none; color: #000; text-decoration: underline; }
 }
+
+/* «Show tasks»: the tasks a person is willing to take, as tags under the name (green = good, yellow = if needed); hidden until shown */
+.dp-table .tags { display: none; flex-wrap: wrap; gap: .2rem; margin: .15rem 0 .1rem 1.1rem; }
+.dp-table.show-tags .tags { display: flex; }
+.dp-table .tag { font-size: .7rem; line-height: 1.3; padding: 0 .35rem; border-radius: .6rem; border: 1px solid; font-weight: 600; white-space: nowrap; }
+.dp-table .tag.good { color: var(--yes); border-color: var(--yes); background: color-mix(in srgb, var(--yes) 12%, var(--bg)); }
+.dp-table .tag.poor { color: var(--maybe); border-color: var(--maybe); background: color-mix(in srgb, var(--maybe) 14%, var(--bg)); }
+.dp-table button.tags-btn svg { visibility: hidden; }
+.dp-table button.tags-btn[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.dp-table button.tags-btn[aria-pressed=true] svg { visibility: visible; }
+.dp-table button.tags-btn { white-space: normal; text-align: left; }
