@@ -382,6 +382,7 @@ const { spawn } = require('child_process');
       await sectName().fill('Away');
       await sectName().press('Enter');
       await until(page, () => document.querySelector('tr.person-sect input.fname').value === 'Away', null, 'the section is renamed in place');
+      await page.waitForTimeout(300);  // the rename's redraw, so the field emptied next is the new one
       await sectName().fill('');
       await sectName().press('Enter');
       await page.locator('dialog.ask[open]').getByRole('button', { name: 'Delete', exact: true }).click();  // asked in the page's own dialog

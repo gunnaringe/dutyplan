@@ -1,7 +1,13 @@
 # Git hooks and CI checks, run by prek (`mise install` provides it):
-#   prek install              run them on every commit (once per clone)
+#   prek install              the checks on every commit and the tests before every push (once per clone)
 #   mise run lint             check the whole tree (CI does this; `mise run verify` too)
 # The built-in hooks need no network and no Python; the local ones use the tools from mise.toml.
+# The tests run before a push (2026-11-23, the user: "Ensure prek runs the tests before pushing"): `mise run test`, about 15 s,
+# not on every commit. CI runs on pull requests only what they change of the mutations, so a push should not need CI to find a
+# failing test. Skip once with `git push --no-verify`.
+
+default_install_hook_types = ["pre-commit", "pre-push"]
+default_stages = ["pre-commit"]
 
 [[repos]]
 repo = "builtin"
@@ -23,4 +29,6 @@ hooks = [
     entry = "sh -c 'out=$(gofmt -l cmd internal web); [ -z \"$out\" ] || { echo \"$out\"; exit 1; }'" },
   { id = "node-check", name = "node --check (page and scripts)", language = "system", files = '^(web|scripts)/[^/]+\.js$',
     entry = "node --check" },
+  { id = "tests", name = "tests (Go and Python)", language = "system", pass_filenames = false, always_run = true,
+    stages = ["pre-push"], entry = "mise run test" },
 ]
