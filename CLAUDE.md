@@ -203,8 +203,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Little help text on the page** (2026-11-20): explanations are behind ⓘ buttons (`infoBtn`, or `{ info: [...] }` as modal()'s first argument).
   Every choice with three levels is an icon: red thumb down (can't / no), yellow ? (if needed / maybe), green thumb up (good / yes).
   The main table scrolls inside the window (dates and names stay put); ‹ › / the calendar button (next event from today) / wheel over the dates / arrow keys / dragging move sideways.
-- **Every other date is shaded** (2026-11-23, the user: "alternativt background colors to aid navigation"): `--alt` as a background-image on
-  even columns (thead th, tbody td without colspan), so the cells' own colours stay.
+- **Every other date is shaded** (2026-11-23, the user: "alternativt background colors to aid navigation"): `--alt` (a light blue since 2026-11-23,
+  the user: "more colorful. Maybe light green? Or light blue?"; green is taken by the draft) as a background-image on even columns (thead th,
+  tbody td without colspan), so the cells' own colours stay. A details value fills its cell with rounded corners and lets the shade through.
+- **Redraws must stay cheap** (2026-11-23, the user: lag when setting a person's tasks): a change redraws the whole table, so anything done
+  per cell counts. Dates go through cached `Intl.DateTimeFormat`s (`formatted`): `toLocaleDateString` per cell was over half of a redraw
+  with 50 people. Level buttons (`cycle`) never drop a quick click; one save at a time, the last level shown is what is saved.
 - **Moving rows and the add lines** (2026-11-23, the user: "Let the drag and drop of people easier. Hide the add people icon under a small
   plus symbol at the end of the last cells, where clicking it makes it a minus and collapse it"): rows move by pointer events, not HTML
   drag (`onRowDown` on the table; `handleFor` marks ⋮⋮, `dropOn(row, accept, act(item, after, kind), into)`): with a mouse the whole name

@@ -238,9 +238,21 @@ async function write(action) {
 }
 
 const enc = encodeURIComponent;
-const fmtTime = (iso) => new Date(iso).toLocaleString(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const fmtDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
-const fmtShortDate = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+// Dates are formatted with one Intl.DateTimeFormat per language and shape, and each date once: toLocaleDateString builds
+// a new formatter every call, and the table names a date in every cell (it was over half of a redraw with 50 people).
+const formats = new Map();
+const formatted = (shape, opts, value, date) => {
+  const k = locale() + ' ' + shape;
+  let f = formats.get(k);
+  if (!f) { f = { fmt: new Intl.DateTimeFormat(locale(), opts), memo: new Map() }; formats.set(k, f); }
+  let out = f.memo.get(value);
+  if (out === undefined) { out = f.fmt.format(date(value)); f.memo.set(value, out); }
+  return out;
+};
+const utcDay = (iso) => new Date(iso + 'T00:00:00Z');
+const fmtTime = (iso) => formatted('time', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, iso, (x) => new Date(x));
+const fmtDate = (iso) => formatted('date', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }, iso, utcDay);
+const fmtShortDate = (iso) => formatted('short', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }, iso, utcDay);
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 // The dates «every N weeks until» (the server makes the same, store.repeatEvery): from each start date, every 7·every
 // days up to and including until, without repeats. every 0 is no repeat.
@@ -792,13 +804,18 @@ function cycle(kind, level, aria, onNext) {
     b.setAttribute('aria-label', `${aria}: ${text(l)}`);
     b.replaceChildren(icon(LEVEL_ICON[l]));
   };
-  let busy = false;
+  // Quick clicks are not dropped: each moves the shown level on at once; one save runs at a time, and when it is done the
+  // level shown last is saved (the steps in between never are). A refused save goes back to what was saved.
+  let shown = level, busy = false;
   b.addEventListener('click', async () => {
+    shown = kind === 'task' ? TASK_NEXT[shown] : COMBO_NEXT[shown];
+    paint(shown);
     if (busy) return;
     busy = true;
-    const next = kind === 'task' ? TASK_NEXT[level] : COMBO_NEXT[level];
-    paint(next);
-    if (await onNext(next)) level = next; else paint(level);
+    while (shown !== level) {
+      const want = shown;
+      if (await onNext(want)) level = want; else { shown = level; paint(level); }
+    }
     busy = false;
   });
   paint(level);

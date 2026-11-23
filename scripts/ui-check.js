@@ -399,6 +399,23 @@ const { spawn } = require('child_process');
       }
       await closeDialog();
     };
+    // quick clicks are not dropped (the save of the first is still under way): two at once go to good, and that is what is saved
+    {
+      const pia = () => dialog.locator('button.cyc[aria-label^="Sound for Pia Demo:"]');
+      const level = async () => { await page.click('button[aria-label="Open Pia Demo"]'); const l = await pia().getAttribute('data-level'); await closeDialog(); return l; };
+      await page.click('button[aria-label="Open Pia Demo"]');
+      await pia().evaluate((b) => { b.click(); b.click(); });
+      ok((await pia().getAttribute('data-level')) === 'good', 'two quick clicks show good at once');
+      await closeDialog();
+      await page.waitForTimeout(600);
+      await page.reload();
+      await page.waitForSelector('.dp-table');
+      ok((await level()) === 'good', 'and good is saved');
+      await page.click('button[aria-label="Open Pia Demo"]');
+      await reopens(() => pia().click(), 'the person dialog opens again');
+      await closeDialog();
+      ok((await level()) === 'none', 'one more click: can’t again');
+    }
     await takes('Kari Test', [['Sound', 'good'], ['Video', 'poor']]);
     await takes('Ola Sample', [['Sound', 'good']]);
     await takes('Jon Demo', [['Sound', 'poor'], ['Video', 'good']]);
