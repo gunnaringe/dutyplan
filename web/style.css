@@ -687,3 +687,10 @@ td.draft.editing { background: var(--bg); box-shadow: inset 0 0 0 2px var(--acce
 .cell-edit .elist li .why { color: var(--muted); }
 .cell-edit .elist li.no { opacity: .6; }
 .cell-edit .elist li.custom { color: var(--accent); font-weight: 600; border-top: 1px solid var(--line); margin-top: .15rem; }
+
+/* the drafts one by one: ‹ #12 ›, and «Show changes» marks what is new since the draft before */
+.draft-bar .steps { display: inline-flex; align-items: center; gap: .15rem; }
+.draft-bar button.step { width: 1.7rem; height: 1.7rem; min-height: 0; padding: 0; }
+.draft-bar button.changes.on, .draft-bar button.undo { border-color: currentColor; }
+.dp-table td.draft.changed { box-shadow: inset 3px 0 0 var(--warn); }
+.dp-table td.draft .slot.new .nm, .dp-table td.draft .slot.new:not(:has(.nm)) { background: color-mix(in srgb, var(--warn) 20%, transparent); border-radius: .3rem; padding: 0 .15rem; }

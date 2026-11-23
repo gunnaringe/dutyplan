@@ -27,6 +27,9 @@ func (s *server) cellsRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/draft", func(w http.ResponseWriter, r *http.Request) {
 		noContent(w, s.st.SetDraftAside(r.Context(), r.PathValue("org"), r.PathValue("plan")), s)
 	})
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/draft", func(w http.ResponseWriter, r *http.Request) {
+		noContent(w, s.st.ClearDraftAside(r.Context(), r.PathValue("org"), r.PathValue("plan")), s)
+	})
 }
 
 func (s *server) listCells(w http.ResponseWriter, r *http.Request) {

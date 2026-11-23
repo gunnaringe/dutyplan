@@ -143,4 +143,26 @@ func TestSettingTheDraftAsideHidesItUntilANewRunOrAPin(t *testing.T) {
 	if err := s.SetDraftAside(ctx, "nope", plan); !errors.Is(err, ErrNotFound) {
 		t.Errorf("an unknown organisation: %v", err)
 	}
+	// undone (the page's Undo of «Remove unlocked»): shown again, only in this plan; once
+	if err := s.ClearDraftAside(ctx, org, plan); !codeIs(err, "nothing_to_change") {
+		t.Errorf("clearing when nothing is aside: %v", err)
+	}
+	if err := s.SetDraftAside(ctx, org, plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetDraftAside(ctx, org, a.other.Slug); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClearDraftAside(ctx, org, plan); err != nil {
+		t.Fatal(err)
+	}
+	if aside() {
+		t.Error("the drafts are still aside after clearing")
+	}
+	if other, _ := s.GetPlan(ctx, org, a.other.Slug); !other.DraftAside {
+		t.Error("clearing reached the other plan")
+	}
+	if err := s.ClearDraftAside(ctx, "nope", plan); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an unknown organisation: %v", err)
+	}
 }

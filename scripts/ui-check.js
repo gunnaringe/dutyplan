@@ -711,6 +711,44 @@ const { spawn } = require('child_process');
       await closeDialog();
     }
 
+    // --- undo in the draft (button and Ctrl+Z), and the drafts one by one (‹ ›, Show changes) ---
+    {
+      const unlocked = () => page.locator('tr.draft-row td button.lockbtn:not(.on)').count();
+      const undoBtn = () => page.locator('.draft-bar button.undo');
+      const before = await unlocked();
+      const one = page.locator('tr.draft-row td button.lockbtn:not(.on)').first();
+      await one.click();
+      await until(page, (n) => document.querySelectorAll('tr.draft-row td button.lockbtn:not(.on)').length === n - 1, before, 'a name locked');
+      ok((await undoBtn().getAttribute('title')).startsWith('Undo: locking 1 name'), 'Undo says what it undoes: ' + await undoBtn().getAttribute('title'));
+      await undoBtn().click();
+      await until(page, (n) => document.querySelectorAll('tr.draft-row td button.lockbtn:not(.on)').length === n, before, 'Undo unlocks it again');
+      await page.locator('tr.draft-row button.lockbtn.group[aria-pressed="false"]').first().click();
+      await until(page, (n) => document.querySelectorAll('tr.draft-row td button.lockbtn:not(.on)').length < n, before, 'a row locked');
+      await page.locator('h1').click();
+      await page.keyboard.press('Control+z');
+      await until(page, (n) => document.querySelectorAll('tr.draft-row td button.lockbtn:not(.on)').length === n, before, 'Ctrl+Z unlocks the row again');
+      // Remove unlocked, undone: the pinned draft is back
+      await page.getByRole('button', { name: 'Remove unlocked' }).click();
+      await page.locator('dialog.ask[open]').getByRole('button', { name: 'Remove', exact: true }).click();
+      await barHas('Unlocked names removed', 'removed');
+      await undoBtn().click();
+      await runIs(2, 'Undo brings the draft back');
+      ok((await page.locator('.draft-bar button.pin').getAttribute('aria-pressed')) === 'true', 'pinned again');
+      // ‹ › and Show changes
+      await page.getByRole('button', { name: 'Older draft' }).click();
+      await runIs(1, '‹ steps to the older draft');
+      ok(await page.getByRole('button', { name: 'Older draft' }).isDisabled(), 'the oldest has no older');
+      ok(!(await page.getByRole('button', { name: 'Show changes' }).count()), 'nothing to compare the first draft with');
+      await page.getByRole('button', { name: 'Newer draft' }).click();
+      await runIs(2, '› steps back');
+      await page.getByRole('button', { name: 'Show changes' }).click();
+      await until(page, () => document.querySelector('.draft-bar button.changes[aria-pressed="true"]'), null, 'Show changes is on');
+      const changed = await page.locator('td.draft.changed').count();
+      if (changed) ok((await page.locator('td.draft.changed').first().getAttribute('title')).startsWith('In draft #1:'), 'a changed place says what draft #1 had');
+      await page.getByRole('button', { name: 'Show changes' }).click();
+      await until(page, () => document.querySelector('.draft-bar button.changes[aria-pressed="false"]') && !document.querySelector('td.draft.changed'), null, 'and off');
+    }
+
     // --- a name in a cell of the draft: a click opens a field with suggestions; Enter adds; a name of its own; × removes ---
     {
       const td = () => draft('Sound', ev[1]);

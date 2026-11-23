@@ -62,7 +62,10 @@ planner has a lock by it: one click **locks** it, and *Try again* keeps it. Drag
 many at once; the lock by a task's name locks its whole row, and the lock under each date its column. **Remove unlocked**
 takes away the planner's names that are not locked (the draft stays under the earlier drafts). When the plan is settled,
 **We're done** locks every name, makes the draft the current plan and shows it in View; **Reopen** takes that back and keeps
-the locks. A place given against a *?* is marked *maybe*, and a place
+the locks. **Undo** in the draft's bar (or Ctrl+Z) takes back the last change you made to the draft in this tab: a lock,
+a name added or removed, Remove unlocked, We're done, Reopen or the current plan. ‹ › next to the draft's number step to
+an older or newer draft, and **Show changes** marks the names that are new since the draft before (the old names are in
+the place's tooltip). A place given against a *?* is marked *maybe*, and a place
 that cannot be filled says *Not filled · Why?*. The planner is checked afterwards by a second, independent program, and the
 page says if a rule was broken (it should never be).
 
