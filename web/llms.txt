@@ -12,7 +12,7 @@
 - **Task**: a job, e.g. «Sound», «Coffee». The organisation's own, the same in every plan, in an order.
 - **Person**: someone who can be given tasks (a name only; no contact details are stored). Per task: `good` (gladly),
   `poor` (if needed) or not at all. `proposable: false` = the planner never picks them.
-- **Plan**: e.g. «Spring 2027». Has **events** (a date, optional start/end time `HH:MM`; what is said about it goes in a details row), **places** (how
+- **Plan**: e.g. «Spring 2027», addressed by its slug (`plan`). Has **events** (a date, optional start/end time `HH:MM`; what is said about it goes in a details row), **places** (how
   many people a task needs on an event; 0 = not needed), **details rows** (`fields`: one text per event, e.g. «Theme»),
   **answers** (per person and event: `good`, `poor`, `never`, or none) with an optional **note**, and **hand-set cells**.
 - **Draft**: a run of the planner (`runs`); one can be pinned as the current plan.
@@ -25,12 +25,12 @@ server's owner.
 
 - **A share link (simplest).** Someone with a login opens the plan, *Share* → *Edit* (or *View*), and gives the link
   `https://<server>/s/<token>` to the agent. Open it once without following the redirect and keep the cookie
-  `dutyplan-links` it sets; send that cookie with every API call. An edit link reaches its own plan and the
+  `__Host-dutyplan-links` it sets; send that cookie with every API call. An edit link reaches its own plan and the
   organisation's tasks and people; it cannot make plans, links or members. Delete the link when the agent is done.
 - **A login.** Signing in goes through the server's OpenID Connect provider in a browser; the session cookie works for the
   API too. A member can do everything in the organisation; an admin also members and invitations.
 
-There are no API keys. Writes from a script are fine (send `Content-Type: application/json`; no `Origin` header needed).
+There are no API keys. Writes from a script are fine (no `Origin` header needed).
 Too many changes too fast gives 429 with `Retry-After`: wait and go on. A proxy in front of a server may refuse some HTTP
 libraries' default `User-Agent` (for example Python's `urllib`, as 403 «error code: 1010»); send a plain one of your own,
 such as `my-agent/1.0`.
@@ -38,97 +38,107 @@ such as `my-agent/1.0`.
 ## Putting a whole plan in (a semester from a spreadsheet)
 
 1. A member makes the plan on the page and shares an edit link to it (making plans needs a login).
-2. `GET /api/orgs/{org}/tasks`; `POST /api/orgs/{org}/tasks` `{"name"}` for each role that is missing (one per row of
+2. `SetupService/ListTasks` `{"org"}`; `SetupService/CreateTask` `{"org", "name"}` for each role that is missing (one per row of
    the spreadsheet). Keep the order: new tasks go last.
-3. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}` for each details row (for example «Theme», «Note»,
+3. `PlanService/AddField` `{"org", "plan", "name"}` for each details row (for example «Theme», «Note»,
    «Description»: an event has no description of its own).
-4. For each date column: `POST /api/orgs/{org}/plans/{plan}/events` `{"date": "2027-01-10", "start_time": "11:00"}`
-   (it answers with a list holding the new event), then `PUT .../events/{id}/fields/{field}` `{"value"}` where there
-   is text.
-5. Places in one call: `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}`.
+4. For each date column: `PlanService/AddEvents` `{"org", "plan", "date": "2027-01-10", "start_time": "11:00"}`
+   (it answers `{"events": [...]}` holding the new event), then `PlanService/SetFieldValue` `{"org", "plan", "event", "field", "value"}`
+   where there is text.
+5. Places in one call: `PlanService/SetPlacesMany` `{"org", "plan", "places": [{"event", "task", "slots"}]}`.
 6. Leave names out unless the people agreed: people are added by the group and answer for themselves.
-7. Check with `GET .../events` and `GET .../places`, then delete the link.
+7. Check with `PlanService/ListEvents` and `PlanService/ListPlaces`, then delete the link.
 
 Dates: a spreadsheet may store dates from a copied year; check the weekdays against the events' real days.
 
 ## Making and finishing a draft
 
-1. `GET .../plans/{plan}/weights` and, if asked («fairness matters more»), `PUT` them (see *The planner*; send every value you keep).
-2. `POST .../plans/{plan}/runs` `{"time_limit": 20}` starts the planner (seconds; 0 = the server's default) and answers 202 `{"id"}`.
-3. Poll `GET .../plans/{plan}/runs/{id}` every few seconds until `run.status` is `done` (or `failed`, with `run.error`).
+1. `DraftService/GetWeights` and, if asked («fairness matters more»), `DraftService/SetWeights` (see *The planner*; send every value you keep).
+2. `DraftService/StartRun` `{"org", "plan", "time_limit": 20}` starts the planner (seconds; 0 = the server's default) and answers `{"id"}`.
+3. Poll `DraftService/GetRun` `{"org", "plan", "id"}` every few seconds until `run.status` is `done` (or `failed`, with `run.error`).
 4. Read it: `events[].cells[]` (by `task_id`, in the order of `tasks`) hold `people` (`locked`: kept from before, `weak`: given
    against a «poor»), `texts` (names set by hand that are not people) and `missing` (places not filled). `weak` lists the
-   compromises in plain words (`?lang=nb` for Norwegian), `load` each person's count against their fair `target`. `run.stale`
+   compromises in plain words (`"lang": "nb"` for Norwegian), `load` each person's count against their fair `target`. `run.stale`
    says the plan has changed since.
-5. Fix by hand where needed: `POST .../cells` puts a person (or a text) in a place; `DELETE .../cells/{id}` takes one away.
-6. Finish («We're done» on the page): `PUT .../plans/{plan}/locks` `{"locked": true, "locks": [{"event", "task", "person"}]}` with every
-   name the planner put in the run (so a new draft keeps them), then `PUT .../runs/{id}/pin`. Pinned = the current plan,
-   what everyone sees. To reopen: `DELETE .../runs/{id}/pin` (the locks stay).
+5. Fix by hand where needed: `DraftService/AddCell` puts a person (or a text) in a place; `DraftService/DeleteCell` takes one away.
+6. Finish («We're done» on the page): `DraftService/SetLocks` `{"org", "plan", "locked": true, "locks": [{"event", "task", "person"}]}` with every
+   name the planner put in the run (so a new draft keeps them), then `DraftService/PinRun` `{"org", "plan", "id"}`. Pinned = the current plan,
+   what everyone sees. To reopen: `DraftService/UnpinRun` (the locks stay).
 
 ## The API
 
-JSON over HTTP under `/api`. Writes send `Content-Type: application/json`. Access is by a login or a share link (see above). A `view` link may
-only read; an `answer` link may read and set answers and notes (`PUT .../people/{id}/availability`, `PUT .../events/{id}/notes/{person}`) only; an `edit` link reaches its own plan only. Errors are `{"error": "...", "code": "...", "params": {...}, "message": "..."}` with a status:
-400 invalid (`code` says why, e.g. `name_invalid`, `nothing_to_change`), 401 signed out, 403 not allowed (`read_only`,
-`admin_only`), 404 not found (also for what belongs to another organisation), 409 conflict, 429 too many changes.
-Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{plan}` are slugs.
+[Connect](https://connectrpc.com) with JSON: every call is `POST /dutyplan.v1.<Service>/<Method>` with
+`Content-Type: application/json` and a JSON object as the body; the answer is a JSON object (`{}` for a write that has
+nothing to say). The schema is `proto/dutyplan/v1/dutyplan.proto` in the source. Field names are snake_case; ids are
+numbers; `org` and `plan` are slugs and go in the body of every call that needs them. A field left out is empty (0, "",
+false); an unknown field is refused. Example:
 
-### Server and you
-- `GET /api/health` — `{"ok": true, "planner": bool}`.
-- `GET /api/me` — who is signed in, and the share links in this browser.
-- `GET /api/orgs` — the organisations you reach. `POST /api/orgs` `{"name"}` — make one (you become its admin).
-- `GET /api/orgs/{org}` — the organisation, with your `role`, or a link's `level` and `plan`.
-- `PATCH /api/orgs/{org}` `{"name"}` — rename (admin). `DELETE /api/orgs/{org}?confirm={org}` — delete it and everything (admin).
-- `GET /api/orgs/{org}/stream` — server-sent events: a line per change, so a page can fetch again.
+    curl -X POST https://<server>/dutyplan.v1.SetupService/CreateTask \
+      -H 'Content-Type: application/json' -b '__Host-dutyplan-links=…' \
+      -d '{"org": "maple-hall", "name": "Sound"}'
+    → {"task": {"id": 7, "name": "Sound", "planned": true, "section": 0}}
 
-### Members and links
-- `GET /api/orgs/{org}/members` — members with a login. `PATCH /api/orgs/{org}/members/{id}` `{"role"}` (admin).
-  `DELETE /api/orgs/{org}/members/{id}` — remove (admin), or leave (yourself).
-- `GET /api/orgs/{org}/links` — the share links. `POST /api/orgs/{org}/links` `{"plan", "level": "view"|"answer"|"edit"|"join", "label", "expires_days", "single_use"}`
-  (`join` is for admins and has no plan; `single_use: true`, for an invitation only, ends it when someone joins with it). `DELETE /api/orgs/{org}/links/{id}`.
+Access is by a login or a share link (see above). A `view` link may only read; an `answer` link may read and set answers and notes
+(`PlanService/SetAvailability`, `PlanService/SetNote`) only; an `edit` link reaches its own plan only.
+Errors are Connect errors with an HTTP status: `{"code", "message", "details": [{"type": "dutyplan.v1.Problem", "debug": {"error", "code", "params"}}]}`.
+`debug.code` says why (e.g. `name_invalid`, `nothing_to_change`, `too_many_tasks` with `params.max`). The statuses:
+400 `invalid_argument`, 401 `unauthenticated` (signed out), 403 `permission_denied` (`read_only`, `admin_only`),
+404 `not_found` (also for what belongs to another organisation or plan), 409 `aborted` (a conflict, or the planner is busy),
+429 `resource_exhausted` (too many changes), 503 `unavailable` (no planner on this server).
 
-### Tasks, people, sections (the organisation's own)
-- `GET /api/orgs/{org}/tasks`, `POST /api/orgs/{org}/tasks` `{"name", "section"}`, `PATCH /api/orgs/{org}/tasks/{id}` `{"name", "planned"}`,
-  `DELETE /api/orgs/{org}/tasks/{id}`, `PUT /api/orgs/{org}/tasks/{id}/position` `{"position", "section"}` (section left out: the one it is in).
-- `GET /api/orgs/{org}/combinations` — which tasks one person can do on the same event.
-  `PUT /api/orgs/{org}/combinations` `{"a", "b", "level": "cannot"|"practical"|"standard"}`;
-  `PUT /api/orgs/{org}/tasks/{id}/combinations` `{"level"}` — one task against all others.
-- `GET /api/orgs/{org}/people`, `POST /api/orgs/{org}/people` `{"name", "section"}`, `PATCH /api/orgs/{org}/people/{id}` `{"name", "proposable"}`,
-  `PUT /api/orgs/{org}/people/{id}/position` `{"section", "position"}`.
-- `PUT /api/orgs/{org}/people/{id}/tasks/{task}` `{"level": "good"|"poor"}`, `DELETE /api/orgs/{org}/people/{id}/tasks/{task}`.
-- `GET /api/orgs/{org}/sections`, `POST /api/orgs/{org}/sections` `{"name"}`, `PATCH /api/orgs/{org}/sections/{id}` `{"name"}`,
-  `PUT /api/orgs/{org}/sections/{id}/position` `{"position"}`, `DELETE /api/orgs/{org}/sections/{id}` — headings for people; placement only.
-- `GET /api/orgs/{org}/task-sections`, `POST /api/orgs/{org}/task-sections` `{"name"}`, `PATCH /api/orgs/{org}/task-sections/{id}` `{"name"}`,
-  `PUT /api/orgs/{org}/task-sections/{id}/position` `{"position"}`, `DELETE /api/orgs/{org}/task-sections/{id}` — headings for tasks; placement only
-  (a task's `section`; tasks without one come first).
+### AccountService: the server and you
+- `AccountService/Health` `{}` — `{"ok": true, "planner": bool}`.
+- `AccountService/Me` `{}` — who is signed in (`login`), the share links in this browser (`links`), and where to make an account (`signup`), if the server says.
+- `AccountService/ListOrgs` `{}` — the organisations you reach. `AccountService/CreateOrg` `{"name"}` — make one (you become its admin).
 
-### Plans and events
-- `GET /api/orgs/{org}/plans`, `POST /api/orgs/{org}/plans` `{"name"}`, `GET /api/orgs/{org}/plans/{plan}`,
-  `PATCH /api/orgs/{org}/plans/{plan}` `{"name"}` (the slug stays), `DELETE /api/orgs/{org}/plans/{plan}`.
-- `GET /api/orgs/{org}/plans/{plan}/events`, `POST /api/orgs/{org}/plans/{plan}/events` `{"date", "until", "every", "start_time", "end_time"}`
-  (`every` N weeks until `until` makes a series, at most every 8 weeks), `PATCH /api/orgs/{org}/plans/{plan}/events/{id}` `{"start_time", "end_time"}`,
-  `DELETE /api/orgs/{org}/plans/{plan}/events/{id}`.
-- `POST /api/orgs/{org}/plans/{plan}/events/{id}/copy` `{"dates" | "until"+"every", "times", "start_time", "end_time", "details", "places", "hand"}` — copies of an event.
+### OrgService: the organisation, members and links
+- `OrgService/GetOrg` `{"org"}` — the organisation, with your `role`, or a link's `level` and `plan`.
+- `OrgService/RenameOrg` `{"org", "name"}` (admin). `OrgService/DeleteOrg` `{"org", "confirm": "<the slug again>"}` — delete it when it has no plans (admin).
+- `OrgService/ListMembers` `{"org"}` — members with a login. `OrgService/SetMemberRole` `{"org", "id", "role": "admin"|"member"}` (admin).
+  `OrgService/RemoveMember` `{"org", "id"}` — remove (admin), or leave (yourself).
+- `OrgService/ListLinks` `{"org"}` — the share links. `OrgService/CreateLink` `{"org", "plan", "level": "view"|"answer"|"edit"|"join", "label", "expires_days", "single_use"}`
+  (`join` is for admins and has no plan; `single_use: true`, for an invitation only, ends it when someone joins with it). `OrgService/DeleteLink` `{"org", "id"}`.
+- `GET /api/orgs/{org}/stream` (not Connect) — server-sent events: a line per change (`{"origin", "proc", "plan"}`), so a page can fetch again.
 
-### The table
-- `GET /api/orgs/{org}/plans/{plan}/places` — places per event and task.
-  `PUT /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` `{"slots"}`,
-  `DELETE /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` — back to none.
-  `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}` — many at once (at most 5000).
-- `GET /api/orgs/{org}/plans/{plan}/fields` — details rows and their values. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}`,
-  `PATCH /api/orgs/{org}/plans/{plan}/fields/{id}` `{"name"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position` `{"position"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/frozen` `{"frozen"}` (a frozen row stays in sight under the dates),
-  `DELETE /api/orgs/{org}/plans/{plan}/fields/{id}`, `PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}` `{"value"}` ("" removes).
-- `GET /api/orgs/{org}/plans/{plan}/answers` — `{"events": [{"person_id", "event_id", "level"}], "tasks": [...], "notes": [{"person_id", "event_id", "note"}]}`.
-  `PUT /api/orgs/{org}/plans/{plan}/people/{id}/availability` `{"levels": {"<event id>": "good"|"poor"|"never"|""}}` — one person.
-  `PUT /api/orgs/{org}/plans/{plan}/answers` `{"answers": [{"person", "event", "level"}]}` — many at once (at most 5000).
-  `PUT /api/orgs/{org}/plans/{plan}/events/{id}/notes/{person}` `{"note"}` — a note on an answer, at most 300 characters ("" removes).
-- `GET /api/orgs/{org}/plans/{plan}/cells`, `POST /api/orgs/{org}/plans/{plan}/cells` `{"event", "task", "person" | "label", "fills", "locked"}`,
-  `DELETE /api/orgs/{org}/plans/{plan}/cells/{id}` — places set by hand.
-- `GET /api/orgs/{org}/plans/{plan}/pools`, `PUT /api/orgs/{org}/plans/{plan}/pools` `{"event", "task", "people"}` — choose only among these.
+### SetupService: tasks, people, sections (the organisation's own)
+- `SetupService/ListTasks` `{"org"}`, `SetupService/CreateTask` `{"org", "name", "section"}`, `SetupService/UpdateTask` `{"org", "id", "name", "planned"}`
+  (send only what changes), `SetupService/DeleteTask` `{"org", "id"}`, `SetupService/MoveTask` `{"org", "id", "position", "section"}` (section left out: the one it is in).
+- `SetupService/ListCombinations` `{"org"}` — which tasks one person can do on the same event.
+  `SetupService/SetCombination` `{"org", "a", "b", "level": "cannot"|"practical"|"standard"}`;
+  `SetupService/SetTaskCombinations` `{"org", "task", "level"}` — one task against all others.
+- `SetupService/ListPeople` `{"org"}`, `SetupService/CreatePerson` `{"org", "name", "section"}`, `SetupService/UpdatePerson` `{"org", "id", "name", "proposable"}`
+  (send only what changes), `SetupService/MovePerson` `{"org", "id", "section", "position"}`.
+- `SetupService/SetPersonTask` `{"org", "person", "task", "level": "good"|"poor"}`, `SetupService/RemovePersonTask` `{"org", "person", "task"}`.
+- `SetupService/ListSections`, `SetupService/CreateSection` `{"org", "name"}`, `SetupService/RenameSection` `{"org", "id", "name"}`,
+  `SetupService/MoveSection` `{"org", "id", "position"}`, `SetupService/DeleteSection` `{"org", "id"}` — headings for people; placement only.
+- `SetupService/ListTaskSections`, `SetupService/CreateTaskSection`, `SetupService/RenameTaskSection`, `SetupService/MoveTaskSection`,
+  `SetupService/DeleteTaskSection` — the same for tasks; placement only (a task's `section`; tasks without one come first).
 
-### The planner
-- `GET /api/orgs/{org}/plans/{plan}/weights` — what the planner weighs: `{"specs": [{"key", "default", "min", "max"}], "values": {...}}`
-  (`values` holds only what differs from the default). `PUT /api/orgs/{org}/plans/{plan}/weights` `{"values": {"<key>": n}}` **replaces**
+### PlanService: plans, events and the table
+- `PlanService/ListPlans` `{"org"}`, `PlanService/CreatePlan` `{"org", "name"}`, `PlanService/GetPlan` `{"org", "plan"}`,
+  `PlanService/RenamePlan` `{"org", "plan", "name"}` (the slug stays), `PlanService/DeletePlan` `{"org", "plan"}`.
+- `PlanService/ListEvents` `{"org", "plan"}`, `PlanService/AddEvents` `{"org", "plan", "date", "until", "every", "start_time", "end_time"}`
+  (`every` N weeks until `until` makes a series, at most every 8 weeks), `PlanService/UpdateEvent` `{"org", "plan", "id", "start_time", "end_time"}`,
+  `PlanService/DeleteEvent` `{"org", "plan", "id"}`.
+- `PlanService/CopyEvent` `{"org", "plan", "id", "dates" | "until"+"every", "times", "start_time", "end_time", "details", "places", "hand"}` — copies of an event.
+- `PlanService/ListPlaces` `{"org", "plan"}` — places per event and task.
+  `PlanService/SetPlaces` `{"org", "plan", "event", "task", "slots"}`, `PlanService/ResetPlaces` `{"org", "plan", "event", "task"}` — back to none.
+  `PlanService/SetPlacesMany` `{"org", "plan", "places": [{"event", "task", "slots"}]}` — many at once (at most 5000).
+- `PlanService/ListFields` `{"org", "plan"}` — details rows (`fields`) and their `values`. `PlanService/AddField` `{"org", "plan", "name"}`,
+  `PlanService/RenameField` `{"org", "plan", "id", "name"}`, `PlanService/MoveField` `{"org", "plan", "id", "position"}`,
+  `PlanService/FreezeField` `{"org", "plan", "id", "frozen"}` (a frozen row stays in sight under the dates),
+  `PlanService/DeleteField` `{"org", "plan", "id"}`, `PlanService/SetFieldValue` `{"org", "plan", "event", "field", "value"}` ("" removes).
+- `PlanService/ListAnswers` `{"org", "plan"}` — `{"events": [{"person_id", "event_id", "level"}], "tasks": [...], "notes": [{"person_id", "event_id", "note"}]}`.
+  `PlanService/SetAvailability` `{"org", "plan", "person", "levels": {"<event id>": "good"|"poor"|"never"|""}}` — one person.
+  `PlanService/SetAnswers` `{"org", "plan", "answers": [{"person", "event", "level"}]}` — many at once (at most 5000).
+  `PlanService/SetNote` `{"org", "plan", "event", "person", "note"}` — a note on an answer, at most 300 characters ("" removes).
+
+### DraftService: set by hand, selections and the planner
+- `DraftService/ListCells` `{"org", "plan"}`, `DraftService/AddCell` `{"org", "plan", "event", "task", "person" | "label", "fills", "locked"}`,
+  `DraftService/DeleteCell` `{"org", "plan", "id"}` — places set by hand.
+- `DraftService/ListPools` `{"org", "plan"}`, `DraftService/SetPool` `{"org", "plan", "event", "task", "people"}` — choose only among these.
+- `DraftService/GetWeights` `{"org", "plan"}` — what the planner weighs: `{"specs": [{"key", "default", "min", "max"}], "values": {...}}`
+  (`values` holds only what differs from the default). `DraftService/SetWeights` `{"org", "plan", "values": {"<key>": n}}` **replaces**
   them: a key left out goes back to its default, `{}` resets all. The keys: `w_fair`, `w_fair_range` (an even total load per person),
   `w_task_fair`, `w_task_range` (even per task; 0 by default), `w_task.good`, `w_task.poor`, `w_date.good`, `w_date.poor` (people's
   wishes for tasks and dates; the `.poor` ones are negative), `w_combo.practical`, `w_combo.impractical` (two tasks on one event).
@@ -139,11 +149,11 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
   | Fair shares  | `w_fair` 4, `w_fair_range` 4 | 10, 10                        | 25, 25                          |
   | Wishes       | `w_task.good` 1, `w_task.poor` -2, `w_date.good` 1, `w_date.poor` -3 | 2, -4, 3, -6 | 5, -10, 8, -15 |
   | Combinations | `w_combo.practical` 1, `w_combo.impractical` -2 | 2, -5             | 5, -12                          |
-- `POST /api/orgs/{org}/plans/{plan}/runs` `{"time_limit"}` — make a draft. `GET /api/orgs/{org}/plans/{plan}/runs` — the drafts;
-  `GET /api/orgs/{org}/plans/{plan}/runs/{id}` (`latest` works as an id; `?lang=nb` for Norwegian explanations).
-  `PUT /api/orgs/{org}/plans/{plan}/runs/{id}/pin`, `DELETE /api/orgs/{org}/plans/{plan}/runs/{id}/pin` — the current plan.
-- `PUT /api/orgs/{org}/plans/{plan}/locks` `{"locks": [{"event", "task", "person"}], "locked": true|false}` — lock the planner's
+- `DraftService/StartRun` `{"org", "plan", "time_limit"}` — make a draft. `DraftService/ListRuns` `{"org", "plan"}` — the drafts;
+  `DraftService/GetRun` `{"org", "plan", "id", "lang"}` (`id` 0 = the newest; `"lang": "nb"` for Norwegian explanations).
+  `DraftService/PinRun`, `DraftService/UnpinRun` `{"org", "plan", "id"}` — the current plan.
+- `DraftService/SetLocks` `{"org", "plan", "locks": [{"event", "task", "person"}], "locked": true|false}` — lock the planner's
   names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays as it is).
-- `DELETE /api/orgs/{org}/plans/{plan}/draft` — set the drafts aside: the plan shows only what is set by hand and locked
-  (`"draft_aside": true` in `GET /api/orgs/{org}/plans/{plan}`) until a new draft or a pin.
-- `PUT /api/orgs/{org}/plans/{plan}/draft` — bring the drafts back after that (pinning a draft does it too).
+- `DraftService/SetDraftAside` `{"org", "plan"}` — set the drafts aside: the plan shows only what is set by hand and locked
+  (`"draft_aside": true` in `PlanService/GetPlan`) until a new draft or a pin.
+- `DraftService/ClearDraftAside` `{"org", "plan"}` — bring the drafts back after that (pinning a draft does it too).

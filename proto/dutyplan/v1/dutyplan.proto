@@ -1,0 +1,1094 @@
+// The API of Tjenesteplan (dutyplan): everything the page does, and nothing more.
+//
+// Connect over HTTP: POST /dutyplan.v1.<Service>/<Method> with a JSON body (Content-Type: application/json). Field
+// names on the wire are the ones written here (snake_case), every field is sent (also empty ones), and ids are numbers.
+// A request about an organisation names it in `org`, one about a plan also in `plan` (slugs); the server decides
+// access from those alone (internal/api/procs.go).
+//
+// Levels are strings, as everywhere on the wire: an answer per event never|poor|good ("" = not answered), a person's
+// task poor|good, a combination cannot|practical|standard, a role admin|member, a link view|answer|edit|join.
+//
+// A refused call is a Connect error; its first detail is a Problem with the kind and the code that the page turns
+// into text.
+syntax = "proto3";
+
+package dutyplan.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/gunnaringe/dutyplan/gen/dutyplan/v1;dutyplanv1";
+
+// ---- errors -----------------------------------------------------------------------------------------------------
+
+// Problem is the detail of every refused call. error is the kind (not_found, invalid, conflict, busy, unavailable,
+// forbidden, signed_out, rate_limited, ...); code and params say precisely what was wrong (err.<code> on the page).
+message Problem {
+  string error = 1;
+  string code = 2;
+  google.protobuf.Struct params = 3;
+}
+
+// ---- the data -----------------------------------------------------------------------------------------------------
+
+message Org {
+  string slug = 1;
+  string name = 2;
+  string created_at = 3;
+}
+
+message Plan {
+  string slug = 1;
+  string name = 2;
+  string created_at = 3;
+  // «Remove unlocked» set the drafts aside: no draft is shown until a new run or a pin.
+  bool draft_aside = 4;
+}
+
+message User {
+  string name = 1;
+  string email = 2;
+}
+
+message Member {
+  int32 id = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+  // the one asking
+  bool you = 5;
+}
+
+// A share link: to one plan (view, answer, edit) or an invitation (join, no plan).
+message Link {
+  int32 id = 1;
+  string org = 2;
+  string org_name = 3;
+  string plan = 4;
+  string plan_name = 5;
+  string level = 6;
+  string label = 7;
+  string token = 8;
+  string created_by = 9;
+  string created_at = 10;
+  string expires_at = 11;
+  // an invitation for one person: it ends when someone joins with it
+  bool single_use = 12;
+}
+
+message Task {
+  int32 id = 1;
+  string name = 2;
+  // the planner fills it (else only what is set by hand)
+  bool planned = 3;
+  // a task section, 0 = none
+  int32 section = 4;
+}
+
+// Two tasks one person may do on the same event; a is the smaller id. No row = impractical («bad»).
+message Combination {
+  int32 a = 1;
+  int32 b = 2;
+  string level = 3;
+}
+
+message Person {
+  int32 id = 1;
+  string name = 2;
+  // false: the planner never picks them
+  bool proposable = 3;
+  // a section, 0 = none
+  int32 section = 4;
+}
+
+// A heading for people or tasks: placement only.
+message Section {
+  int32 id = 1;
+  string name = 2;
+}
+
+message Event {
+  int32 id = 1;
+  // YYYY-MM-DD
+  string date = 2;
+  // HH:MM or ""
+  string start_time = 3;
+  string end_time = 4;
+}
+
+message EventPlaces {
+  int32 event_id = 1;
+  int32 task_id = 2;
+  int32 slots = 3;
+}
+
+// A details row of the plan («Theme», «Note»): one text per event, for people only.
+message PlanField {
+  int32 id = 1;
+  string name = 2;
+  int32 position = 3;
+  // stays in sight under the dates
+  bool frozen = 4;
+}
+
+message FieldValue {
+  int32 event_id = 1;
+  int32 field_id = 2;
+  string value = 3;
+}
+
+message EventAnswer {
+  int32 person_id = 1;
+  int32 event_id = 2;
+  string level = 3;
+}
+
+message TaskAnswer {
+  int32 person_id = 1;
+  int32 task_id = 2;
+  string level = 3;
+}
+
+message AnswerNote {
+  int32 person_id = 1;
+  int32 event_id = 2;
+  string note = 3;
+}
+
+// A place set by hand: a person, or a text that fills some places.
+message ManualCell {
+  int32 id = 1;
+  int32 event_id = 2;
+  int32 task_id = 3;
+  optional int32 person_id = 4;
+  string label = 5;
+  int32 fills = 6;
+  // a planner's name that was locked (not set by hand)
+  bool locked = 7;
+}
+
+// Only these people can be picked for a task on an event.
+message Pool {
+  int32 event_id = 1;
+  int32 task_id = 2;
+  repeated int32 people = 3;
+}
+
+// One answer in a bulk write.
+message Answer {
+  int32 person = 1;
+  int32 event = 2;
+  string level = 3;
+}
+
+// The places of one task on one event in a bulk write.
+message Places {
+  int32 event = 1;
+  int32 task = 2;
+  int32 slots = 3;
+}
+
+// A planner's name in the draft, to lock or unlock.
+message Lock {
+  int32 event = 1;
+  int32 task = 2;
+  int32 person = 3;
+}
+
+message WeightSpec {
+  string key = 1;
+  double default = 2;
+  double min = 3;
+  double max = 4;
+}
+
+// A run of the planner: a draft.
+message Run {
+  int32 id = 1;
+  // running | done | failed
+  string status = 2;
+  int32 seed = 3;
+  int32 time_limit = 4;
+  string error = 5;
+  string started_at = 6;
+  string finished_at = 7;
+  // the plan's current plan (at most one per plan)
+  bool pinned = 8;
+}
+
+// A run with what the view adds.
+message RunInfo {
+  int32 id = 1;
+  string status = 2;
+  int32 seed = 3;
+  int32 time_limit = 4;
+  string error = 5;
+  string started_at = 6;
+  string finished_at = 7;
+  bool pinned = 8;
+  // the plan's data has changed since this run
+  bool stale = 9;
+  // OPTIMAL | FEASIBLE
+  string solver_status = 10;
+  double wall_time = 11;
+  // the independent checker has looked at the plan
+  bool checked = 12;
+  repeated string violations = 13;
+}
+
+message SnapTask {
+  int32 id = 1;
+  string name = 2;
+  bool planned = 3;
+}
+
+message CellPerson {
+  int32 id = 1;
+  string name = 2;
+  // given against a «poor»
+  bool weak = 3;
+  // set by hand or locked when the run was made
+  bool locked = 4;
+  // of those, one of the planner's names that was locked
+  bool kept = 5;
+}
+
+message CellText {
+  string text = 1;
+  int32 fills = 2;
+}
+
+message Cell {
+  int32 task_id = 1;
+  int32 slots = 2;
+  repeated CellPerson people = 3;
+  repeated CellText texts = 4;
+  int32 missing = 5;
+  string explanation = 6;
+}
+
+message EventRow {
+  int32 id = 1;
+  string date = 2;
+  string start_time = 3;
+  string end_time = 4;
+  repeated Cell cells = 5;
+}
+
+message LoadRow {
+  int32 person_id = 1;
+  string name = 2;
+  int32 count = 3;
+  double target = 4;
+}
+
+// ---- the server and you -------------------------------------------------------------------------------------------
+
+// What needs no organisation: the server, who you are, the organisations you reach.
+service AccountService {
+  // Can this server plan at all? Open to everyone.
+  rpc Health(HealthRequest) returns (HealthResponse);
+  // Whether there is a login, who is signed in, and the share links open in this browser. Open to everyone.
+  rpc Me(MeRequest) returns (MeResponse);
+  // The organisations you reach (as a member, or through a link).
+  rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse);
+  // Make an organisation; you become its admin. A taken address gets -2, -3.
+  rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse);
+}
+
+message HealthRequest {}
+message HealthResponse {
+  bool ok = 1;
+  bool planner = 2;
+}
+
+message MeRequest {}
+message MeResponse {
+  bool login = 1;
+  // null when nobody is signed in
+  User user = 2;
+  repeated Link links = 3;
+  // where to make an account, if the server says
+  string signup = 4;
+}
+
+message ListOrgsRequest {}
+message ListOrgsResponse {
+  repeated Org orgs = 1;
+}
+
+message CreateOrgRequest {
+  string name = 1;
+}
+message CreateOrgResponse {
+  Org org = 1;
+}
+
+// ---- the organisation, members and links --------------------------------------------------------------------------
+
+service OrgService {
+  // The organisation, with what you may do: role admin|member, or a link's level and plan.
+  rpc GetOrg(GetOrgRequest) returns (GetOrgResponse);
+  // Rename (admin). The slug stays.
+  rpc RenameOrg(RenameOrgRequest) returns (RenameOrgResponse);
+  // Delete an organisation without plans (admin); confirm is its slug.
+  rpc DeleteOrg(DeleteOrgRequest) returns (DeleteOrgResponse);
+  // Members with a login.
+  rpc ListMembers(ListMembersRequest) returns (ListMembersResponse);
+  // Change a member's role (admin).
+  rpc SetMemberRole(SetMemberRoleRequest) returns (SetMemberRoleResponse);
+  // Remove a member (admin), or leave (yourself).
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse);
+  // The share links.
+  rpc ListLinks(ListLinksRequest) returns (ListLinksResponse);
+  // Make a link to a plan (view|answer|edit), or an invitation (join, admin, no plan).
+  rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse);
+  // Delete a link (an invitation: admin).
+  rpc DeleteLink(DeleteLinkRequest) returns (DeleteLinkResponse);
+}
+
+message GetOrgRequest {
+  string org = 1;
+}
+message GetOrgResponse {
+  string slug = 1;
+  string name = 2;
+  string created_at = 3;
+  string role = 4;
+  string level = 5;
+  string plan = 6;
+}
+
+message RenameOrgRequest {
+  string org = 1;
+  string name = 2;
+}
+message RenameOrgResponse {
+  Org org = 1;
+}
+
+message DeleteOrgRequest {
+  string org = 1;
+  string confirm = 2;
+}
+message DeleteOrgResponse {}
+
+message ListMembersRequest {
+  string org = 1;
+}
+message ListMembersResponse {
+  repeated Member members = 1;
+}
+
+message SetMemberRoleRequest {
+  string org = 1;
+  int32 id = 2;
+  string role = 3;
+}
+message SetMemberRoleResponse {}
+
+message RemoveMemberRequest {
+  string org = 1;
+  int32 id = 2;
+}
+message RemoveMemberResponse {}
+
+message ListLinksRequest {
+  string org = 1;
+}
+message ListLinksResponse {
+  repeated Link links = 1;
+}
+
+message CreateLinkRequest {
+  string org = 1;
+  // the plan the link is to ("" for an invitation)
+  string plan = 2;
+  string level = 3;
+  string label = 4;
+  int32 expires_days = 5;
+  bool single_use = 6;
+}
+message CreateLinkResponse {
+  Link link = 1;
+}
+
+message DeleteLinkRequest {
+  string org = 1;
+  int32 id = 2;
+}
+message DeleteLinkResponse {}
+
+// ---- tasks, people and sections (the organisation's own) ----------------------------------------------------------
+
+service SetupService {
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse);
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse);
+  // Rename, or turn the planner on or off for it; a field left out stays.
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse);
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse);
+  // Move a task; section left out = the one it is in.
+  rpc MoveTask(MoveTaskRequest) returns (MoveTaskResponse);
+  rpc ListCombinations(ListCombinationsRequest) returns (ListCombinationsResponse);
+  rpc SetCombination(SetCombinationRequest) returns (SetCombinationResponse);
+  // One task against all others.
+  rpc SetTaskCombinations(SetTaskCombinationsRequest) returns (SetTaskCombinationsResponse);
+
+  rpc ListPeople(ListPeopleRequest) returns (ListPeopleResponse);
+  rpc CreatePerson(CreatePersonRequest) returns (CreatePersonResponse);
+  // Rename, or whether the planner may propose them; a field left out stays.
+  rpc UpdatePerson(UpdatePersonRequest) returns (UpdatePersonResponse);
+  rpc MovePerson(MovePersonRequest) returns (MovePersonResponse);
+  // A person takes a task: good | poor.
+  rpc SetPersonTask(SetPersonTaskRequest) returns (SetPersonTaskResponse);
+  rpc RemovePersonTask(RemovePersonTaskRequest) returns (RemovePersonTaskResponse);
+
+  // Sections of people.
+  rpc ListSections(ListSectionsRequest) returns (ListSectionsResponse);
+  rpc CreateSection(CreateSectionRequest) returns (CreateSectionResponse);
+  rpc RenameSection(RenameSectionRequest) returns (RenameSectionResponse);
+  rpc MoveSection(MoveSectionRequest) returns (MoveSectionResponse);
+  rpc DeleteSection(DeleteSectionRequest) returns (DeleteSectionResponse);
+
+  // Sections of tasks.
+  rpc ListTaskSections(ListTaskSectionsRequest) returns (ListTaskSectionsResponse);
+  rpc CreateTaskSection(CreateTaskSectionRequest) returns (CreateTaskSectionResponse);
+  rpc RenameTaskSection(RenameTaskSectionRequest) returns (RenameTaskSectionResponse);
+  rpc MoveTaskSection(MoveTaskSectionRequest) returns (MoveTaskSectionResponse);
+  rpc DeleteTaskSection(DeleteTaskSectionRequest) returns (DeleteTaskSectionResponse);
+}
+
+message ListTasksRequest {
+  string org = 1;
+}
+message ListTasksResponse {
+  repeated Task tasks = 1;
+}
+
+message CreateTaskRequest {
+  string org = 1;
+  string name = 2;
+  // a task section to add it to (0 = none)
+  int32 section = 3;
+}
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+message UpdateTaskRequest {
+  string org = 1;
+  int32 id = 2;
+  optional string name = 3;
+  optional bool planned = 4;
+}
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+message DeleteTaskRequest {
+  string org = 1;
+  int32 id = 2;
+}
+message DeleteTaskResponse {}
+
+message MoveTaskRequest {
+  string org = 1;
+  int32 id = 2;
+  // required
+  optional int32 position = 3;
+  // 0 = none; left out = the section it is in
+  optional int32 section = 4;
+}
+message MoveTaskResponse {}
+
+message ListCombinationsRequest {
+  string org = 1;
+}
+message ListCombinationsResponse {
+  repeated Combination combinations = 1;
+}
+
+message SetCombinationRequest {
+  string org = 1;
+  int32 a = 2;
+  int32 b = 3;
+  string level = 4;
+}
+message SetCombinationResponse {}
+
+message SetTaskCombinationsRequest {
+  string org = 1;
+  int32 task = 2;
+  string level = 3;
+}
+message SetTaskCombinationsResponse {}
+
+message ListPeopleRequest {
+  string org = 1;
+}
+message ListPeopleResponse {
+  repeated Person people = 1;
+}
+
+message CreatePersonRequest {
+  string org = 1;
+  string name = 2;
+  // 0 = none
+  int32 section = 3;
+}
+message CreatePersonResponse {
+  Person person = 1;
+}
+
+message UpdatePersonRequest {
+  string org = 1;
+  int32 id = 2;
+  optional string name = 3;
+  optional bool proposable = 4;
+}
+message UpdatePersonResponse {
+  Person person = 1;
+}
+
+message MovePersonRequest {
+  string org = 1;
+  int32 id = 2;
+  // required
+  optional int32 position = 3;
+  // 0 = none
+  int32 section = 4;
+}
+message MovePersonResponse {}
+
+message SetPersonTaskRequest {
+  string org = 1;
+  int32 person = 2;
+  int32 task = 3;
+  string level = 4;
+}
+message SetPersonTaskResponse {}
+
+message RemovePersonTaskRequest {
+  string org = 1;
+  int32 person = 2;
+  int32 task = 3;
+}
+message RemovePersonTaskResponse {}
+
+message ListSectionsRequest {
+  string org = 1;
+}
+message ListSectionsResponse {
+  repeated Section sections = 1;
+}
+
+message CreateSectionRequest {
+  string org = 1;
+  string name = 2;
+}
+message CreateSectionResponse {
+  Section section = 1;
+}
+
+message RenameSectionRequest {
+  string org = 1;
+  int32 id = 2;
+  string name = 3;
+}
+message RenameSectionResponse {
+  Section section = 1;
+}
+
+message MoveSectionRequest {
+  string org = 1;
+  int32 id = 2;
+  // required
+  optional int32 position = 3;
+}
+message MoveSectionResponse {}
+
+message DeleteSectionRequest {
+  string org = 1;
+  int32 id = 2;
+}
+message DeleteSectionResponse {}
+
+message ListTaskSectionsRequest {
+  string org = 1;
+}
+message ListTaskSectionsResponse {
+  repeated Section sections = 1;
+}
+
+message CreateTaskSectionRequest {
+  string org = 1;
+  string name = 2;
+}
+message CreateTaskSectionResponse {
+  Section section = 1;
+}
+
+message RenameTaskSectionRequest {
+  string org = 1;
+  int32 id = 2;
+  string name = 3;
+}
+message RenameTaskSectionResponse {
+  Section section = 1;
+}
+
+message MoveTaskSectionRequest {
+  string org = 1;
+  int32 id = 2;
+  // required
+  optional int32 position = 3;
+}
+message MoveTaskSectionResponse {}
+
+message DeleteTaskSectionRequest {
+  string org = 1;
+  int32 id = 2;
+}
+message DeleteTaskSectionResponse {}
+
+// ---- plans and their table ----------------------------------------------------------------------------------------
+
+service PlanService {
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse);
+  rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse);
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse);
+  // The slug stays.
+  rpc RenamePlan(RenamePlanRequest) returns (RenamePlanResponse);
+  // Refused while a run is in progress.
+  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse);
+
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
+  // One event, or a series: every N weeks (at most 8) until a date.
+  rpc AddEvents(AddEventsRequest) returns (AddEventsResponse);
+  // Copies of an event on dates, or every N weeks until a date; times, details, places and names set by hand as chosen.
+  rpc CopyEvent(CopyEventRequest) returns (CopyEventResponse);
+  // Change the times; a field left out stays.
+  rpc UpdateEvent(UpdateEventRequest) returns (UpdateEventResponse);
+  rpc DeleteEvent(DeleteEventRequest) returns (DeleteEventResponse);
+
+  // How many people each task needs on each event.
+  rpc ListPlaces(ListPlacesRequest) returns (ListPlacesResponse);
+  rpc SetPlaces(SetPlacesRequest) returns (SetPlacesResponse);
+  // Back to none.
+  rpc ResetPlaces(ResetPlacesRequest) returns (ResetPlacesResponse);
+  // Many at once (at most 5000), all or nothing.
+  rpc SetPlacesMany(SetPlacesManyRequest) returns (SetPlacesManyResponse);
+
+  // The details rows and their values.
+  rpc ListFields(ListFieldsRequest) returns (ListFieldsResponse);
+  rpc AddField(AddFieldRequest) returns (AddFieldResponse);
+  rpc RenameField(RenameFieldRequest) returns (RenameFieldResponse);
+  rpc MoveField(MoveFieldRequest) returns (MoveFieldResponse);
+  rpc FreezeField(FreezeFieldRequest) returns (FreezeFieldResponse);
+  rpc DeleteField(DeleteFieldRequest) returns (DeleteFieldResponse);
+  // "" removes the value.
+  rpc SetFieldValue(SetFieldValueRequest) returns (SetFieldValueResponse);
+
+  // Everyone's answers per event, their tasks, and the notes.
+  rpc ListAnswers(ListAnswersRequest) returns (ListAnswersResponse);
+  // One person's answers (an answer link may do this).
+  rpc SetAvailability(SetAvailabilityRequest) returns (SetAvailabilityResponse);
+  // A note on an answer, at most 300 characters; "" removes (an answer link may do this).
+  rpc SetNote(SetNoteRequest) returns (SetNoteResponse);
+  // Many answers at once (at most 5000), all or nothing.
+  rpc SetAnswers(SetAnswersRequest) returns (SetAnswersResponse);
+}
+
+message ListPlansRequest {
+  string org = 1;
+}
+message ListPlansResponse {
+  repeated Plan plans = 1;
+}
+
+message CreatePlanRequest {
+  string org = 1;
+  string name = 2;
+}
+message CreatePlanResponse {
+  Plan plan = 1;
+}
+
+message GetPlanRequest {
+  string org = 1;
+  string plan = 2;
+}
+message GetPlanResponse {
+  Plan plan = 1;
+}
+
+message RenamePlanRequest {
+  string org = 1;
+  string plan = 2;
+  string name = 3;
+}
+message RenamePlanResponse {
+  Plan plan = 1;
+}
+
+message DeletePlanRequest {
+  string org = 1;
+  string plan = 2;
+}
+message DeletePlanResponse {}
+
+message ListEventsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListEventsResponse {
+  repeated Event events = 1;
+}
+
+message AddEventsRequest {
+  string org = 1;
+  string plan = 2;
+  string date = 3;
+  string until = 4;
+  int32 every = 5;
+  string start_time = 6;
+  string end_time = 7;
+}
+message AddEventsResponse {
+  repeated Event events = 1;
+}
+
+message CopyEventRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+  repeated string dates = 4;
+  string until = 5;
+  int32 every = 6;
+  bool times = 7;
+  string start_time = 8;
+  string end_time = 9;
+  bool details = 10;
+  bool places = 11;
+  bool hand = 12;
+}
+message CopyEventResponse {
+  repeated Event events = 1;
+}
+
+message UpdateEventRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+  optional string start_time = 4;
+  optional string end_time = 5;
+}
+message UpdateEventResponse {
+  Event event = 1;
+}
+
+message DeleteEventRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+}
+message DeleteEventResponse {}
+
+message ListPlacesRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListPlacesResponse {
+  repeated EventPlaces places = 1;
+}
+
+message SetPlacesRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 task = 4;
+  // required
+  optional int32 slots = 5;
+}
+message SetPlacesResponse {}
+
+message ResetPlacesRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 task = 4;
+}
+message ResetPlacesResponse {}
+
+message SetPlacesManyRequest {
+  string org = 1;
+  string plan = 2;
+  repeated Places places = 3;
+}
+message SetPlacesManyResponse {}
+
+message ListFieldsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListFieldsResponse {
+  repeated PlanField fields = 1;
+  repeated FieldValue values = 2;
+}
+
+message AddFieldRequest {
+  string org = 1;
+  string plan = 2;
+  string name = 3;
+}
+message AddFieldResponse {
+  PlanField field = 1;
+}
+
+message RenameFieldRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+  string name = 4;
+}
+message RenameFieldResponse {
+  PlanField field = 1;
+}
+
+message MoveFieldRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+  // required
+  optional int32 position = 4;
+}
+message MoveFieldResponse {}
+
+message FreezeFieldRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+  // required
+  optional bool frozen = 4;
+}
+message FreezeFieldResponse {}
+
+message DeleteFieldRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+}
+message DeleteFieldResponse {}
+
+message SetFieldValueRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 field = 4;
+  string value = 5;
+}
+message SetFieldValueResponse {}
+
+message ListAnswersRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListAnswersResponse {
+  repeated EventAnswer events = 1;
+  repeated TaskAnswer tasks = 2;
+  repeated AnswerNote notes = 3;
+}
+
+message SetAvailabilityRequest {
+  string org = 1;
+  string plan = 2;
+  int32 person = 3;
+  // event id -> never | poor | good | "" (not answered)
+  map<int32, string> levels = 4;
+}
+message SetAvailabilityResponse {}
+
+message SetNoteRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 person = 4;
+  string note = 5;
+}
+message SetNoteResponse {}
+
+message SetAnswersRequest {
+  string org = 1;
+  string plan = 2;
+  repeated Answer answers = 3;
+}
+message SetAnswersResponse {}
+
+// ---- the planner and the draft ------------------------------------------------------------------------------------
+
+service DraftService {
+  // Places set by hand.
+  rpc ListCells(ListCellsRequest) returns (ListCellsResponse);
+  // A person (or a text) in a place; locked = a planner's name kept.
+  rpc AddCell(AddCellRequest) returns (AddCellResponse);
+  rpc DeleteCell(DeleteCellRequest) returns (DeleteCellResponse);
+  // Selections: only these can be picked.
+  rpc ListPools(ListPoolsRequest) returns (ListPoolsResponse);
+  rpc SetPool(SetPoolRequest) returns (SetPoolResponse);
+  // Lock the planner's names so a new draft keeps them, or unlock them (at most 5000; a name set by hand stays).
+  rpc SetLocks(SetLocksRequest) returns (SetLocksResponse);
+  // Set the drafts aside: only what is set by hand and locked shows, until a new draft or a pin.
+  rpc SetDraftAside(SetDraftAsideRequest) returns (SetDraftAsideResponse);
+  // Bring the drafts back after that.
+  rpc ClearDraftAside(ClearDraftAsideRequest) returns (ClearDraftAsideResponse);
+
+  // What the planner weighs: the specs and what differs from the default.
+  rpc GetWeights(GetWeightsRequest) returns (GetWeightsResponse);
+  // Replaces them: a key left out goes back to its default, {} resets all.
+  rpc SetWeights(SetWeightsRequest) returns (SetWeightsResponse);
+  // Make a draft; poll GetRun until its status is done or failed.
+  rpc StartRun(StartRunRequest) returns (StartRunResponse);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+  // A draft with its places, compromises and load; id 0 = the newest.
+  rpc GetRun(GetRunRequest) returns (GetRunResponse);
+  // The current plan, what everyone sees.
+  rpc PinRun(PinRunRequest) returns (PinRunResponse);
+  rpc UnpinRun(UnpinRunRequest) returns (UnpinRunResponse);
+}
+
+message ListCellsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListCellsResponse {
+  repeated ManualCell cells = 1;
+}
+
+message AddCellRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 task = 4;
+  // a person, or 0 with a label
+  int32 person = 5;
+  string label = 6;
+  // places a text fills (default 1)
+  int32 fills = 7;
+  bool locked = 8;
+}
+message AddCellResponse {
+  ManualCell cell = 1;
+}
+
+message DeleteCellRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+}
+message DeleteCellResponse {}
+
+message ListPoolsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListPoolsResponse {
+  repeated Pool pools = 1;
+}
+
+message SetPoolRequest {
+  string org = 1;
+  string plan = 2;
+  int32 event = 3;
+  int32 task = 4;
+  repeated int32 people = 5;
+}
+message SetPoolResponse {}
+
+message SetLocksRequest {
+  string org = 1;
+  string plan = 2;
+  repeated Lock locks = 3;
+  bool locked = 4;
+}
+message SetLocksResponse {}
+
+message SetDraftAsideRequest {
+  string org = 1;
+  string plan = 2;
+}
+message SetDraftAsideResponse {}
+
+message ClearDraftAsideRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ClearDraftAsideResponse {}
+
+message GetWeightsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message GetWeightsResponse {
+  repeated WeightSpec specs = 1;
+  google.protobuf.Struct values = 2;
+}
+
+message SetWeightsRequest {
+  string org = 1;
+  string plan = 2;
+  google.protobuf.Struct values = 3;
+}
+message SetWeightsResponse {
+  repeated WeightSpec specs = 1;
+  google.protobuf.Struct values = 2;
+}
+
+message StartRunRequest {
+  string org = 1;
+  string plan = 2;
+  // seconds; 0 = the server's default
+  int32 time_limit = 3;
+}
+message StartRunResponse {
+  int32 id = 1;
+}
+
+message ListRunsRequest {
+  string org = 1;
+  string plan = 2;
+}
+message ListRunsResponse {
+  repeated Run runs = 1;
+}
+
+message GetRunRequest {
+  string org = 1;
+  string plan = 2;
+  // 0 = the newest
+  int32 id = 3;
+  // en | nb: the language of the explanations
+  string lang = 4;
+}
+message GetRunResponse {
+  RunInfo run = 1;
+  // the columns: every task that has a place in some event
+  repeated SnapTask tasks = 2;
+  repeated EventRow events = 3;
+  // the compromises, in plain words
+  repeated string weak = 4;
+  repeated LoadRow load = 5;
+  repeated string warnings = 6;
+}
+
+message PinRunRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+}
+message PinRunResponse {}
+
+message UnpinRunRequest {
+  string org = 1;
+  string plan = 2;
+  int32 id = 3;
+}
+message UnpinRunResponse {}

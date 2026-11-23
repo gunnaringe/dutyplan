@@ -70,3 +70,9 @@ func TestPlanWeightsOverHTTP(t *testing.T) {
 		t.Errorf("reset: %v", got.Values)
 	}
 }
+
+// weightsReply is GetWeights' and SetWeights' answer, read as plain JSON.
+type weightsReply struct {
+	Specs  []store.WeightSpec `json:"specs"`
+	Values map[string]any     `json:"values"`
+}

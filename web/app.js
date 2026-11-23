@@ -81,33 +81,110 @@ function say(text, kind) {
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const locale = () => (currentLang === 'nb' ? 'nb-NO' : 'en-GB');
 
+// ---- the API: Connect (proto/dutyplan/v1/dutyplan.proto) ---------------------------------------------------------------
+// Every call is POST /dutyplan.v1.<Service>/<Method> with a JSON body. The page still names what it wants by method and
+// path (and keeps what it fetched by path, see get()); ROUTES turns that into the call: each {name} of the path is a
+// field of the request (ids are numbers; org and plan text), the body's fields are added, and `unwrap` is the field of
+// the answer that holds what the page uses. Kept until the page has a generated client (TypeScript).
+const ROUTES = [
+  ['GET', '/health', 'AccountService/Health'], ['GET', '/me', 'AccountService/Me'],
+  ['GET', '/orgs', 'AccountService/ListOrgs', 'orgs'], ['POST', '/orgs', 'AccountService/CreateOrg', 'org'],
+  ['GET', '/orgs/{org}', 'OrgService/GetOrg'], ['PATCH', '/orgs/{org}', 'OrgService/RenameOrg', 'org'],
+  ['DELETE', '/orgs/{org}', 'OrgService/DeleteOrg'],
+  ['GET', '/orgs/{org}/members', 'OrgService/ListMembers', 'members'], ['PATCH', '/orgs/{org}/members/{id}', 'OrgService/SetMemberRole'],
+  ['DELETE', '/orgs/{org}/members/{id}', 'OrgService/RemoveMember'],
+  ['GET', '/orgs/{org}/links', 'OrgService/ListLinks', 'links'], ['POST', '/orgs/{org}/links', 'OrgService/CreateLink', 'link'],
+  ['DELETE', '/orgs/{org}/links/{id}', 'OrgService/DeleteLink'],
+  ['GET', '/orgs/{org}/tasks', 'SetupService/ListTasks', 'tasks'], ['POST', '/orgs/{org}/tasks', 'SetupService/CreateTask', 'task'],
+  ['PATCH', '/orgs/{org}/tasks/{id}', 'SetupService/UpdateTask', 'task'], ['DELETE', '/orgs/{org}/tasks/{id}', 'SetupService/DeleteTask'],
+  ['PUT', '/orgs/{org}/tasks/{id}/position', 'SetupService/MoveTask'],
+  ['GET', '/orgs/{org}/combinations', 'SetupService/ListCombinations', 'combinations'], ['PUT', '/orgs/{org}/combinations', 'SetupService/SetCombination'],
+  ['PUT', '/orgs/{org}/tasks/{task}/combinations', 'SetupService/SetTaskCombinations'],
+  ['GET', '/orgs/{org}/people', 'SetupService/ListPeople', 'people'], ['POST', '/orgs/{org}/people', 'SetupService/CreatePerson', 'person'],
+  ['PATCH', '/orgs/{org}/people/{id}', 'SetupService/UpdatePerson', 'person'], ['PUT', '/orgs/{org}/people/{id}/position', 'SetupService/MovePerson'],
+  ['PUT', '/orgs/{org}/people/{person}/tasks/{task}', 'SetupService/SetPersonTask'], ['DELETE', '/orgs/{org}/people/{person}/tasks/{task}', 'SetupService/RemovePersonTask'],
+  ['GET', '/orgs/{org}/sections', 'SetupService/ListSections', 'sections'], ['POST', '/orgs/{org}/sections', 'SetupService/CreateSection', 'section'],
+  ['PATCH', '/orgs/{org}/sections/{id}', 'SetupService/RenameSection', 'section'], ['PUT', '/orgs/{org}/sections/{id}/position', 'SetupService/MoveSection'],
+  ['DELETE', '/orgs/{org}/sections/{id}', 'SetupService/DeleteSection'],
+  ['GET', '/orgs/{org}/task-sections', 'SetupService/ListTaskSections', 'sections'], ['POST', '/orgs/{org}/task-sections', 'SetupService/CreateTaskSection', 'section'],
+  ['PATCH', '/orgs/{org}/task-sections/{id}', 'SetupService/RenameTaskSection', 'section'], ['PUT', '/orgs/{org}/task-sections/{id}/position', 'SetupService/MoveTaskSection'],
+  ['DELETE', '/orgs/{org}/task-sections/{id}', 'SetupService/DeleteTaskSection'],
+  ['GET', '/orgs/{org}/plans', 'PlanService/ListPlans', 'plans'], ['POST', '/orgs/{org}/plans', 'PlanService/CreatePlan', 'plan'],
+  ['GET', '/orgs/{org}/plans/{plan}', 'PlanService/GetPlan', 'plan'], ['PATCH', '/orgs/{org}/plans/{plan}', 'PlanService/RenamePlan', 'plan'],
+  ['DELETE', '/orgs/{org}/plans/{plan}', 'PlanService/DeletePlan'],
+  ['GET', '/orgs/{org}/plans/{plan}/events', 'PlanService/ListEvents', 'events'], ['POST', '/orgs/{org}/plans/{plan}/events', 'PlanService/AddEvents', 'events'],
+  ['POST', '/orgs/{org}/plans/{plan}/events/{id}/copy', 'PlanService/CopyEvent', 'events'], ['PATCH', '/orgs/{org}/plans/{plan}/events/{id}', 'PlanService/UpdateEvent', 'event'],
+  ['DELETE', '/orgs/{org}/plans/{plan}/events/{id}', 'PlanService/DeleteEvent'],
+  ['GET', '/orgs/{org}/plans/{plan}/places', 'PlanService/ListPlaces', 'places'], ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/places/{task}', 'PlanService/SetPlaces'],
+  ['DELETE', '/orgs/{org}/plans/{plan}/events/{event}/places/{task}', 'PlanService/ResetPlaces'], ['PUT', '/orgs/{org}/plans/{plan}/places', 'PlanService/SetPlacesMany'],
+  ['GET', '/orgs/{org}/plans/{plan}/fields', 'PlanService/ListFields'], ['POST', '/orgs/{org}/plans/{plan}/fields', 'PlanService/AddField', 'field'],
+  ['PATCH', '/orgs/{org}/plans/{plan}/fields/{id}', 'PlanService/RenameField', 'field'], ['PUT', '/orgs/{org}/plans/{plan}/fields/{id}/position', 'PlanService/MoveField'],
+  ['PUT', '/orgs/{org}/plans/{plan}/fields/{id}/frozen', 'PlanService/FreezeField'], ['DELETE', '/orgs/{org}/plans/{plan}/fields/{id}', 'PlanService/DeleteField'],
+  ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/fields/{field}', 'PlanService/SetFieldValue'],
+  ['GET', '/orgs/{org}/plans/{plan}/answers', 'PlanService/ListAnswers'], ['PUT', '/orgs/{org}/plans/{plan}/people/{person}/availability', 'PlanService/SetAvailability'],
+  ['PUT', '/orgs/{org}/plans/{plan}/events/{event}/notes/{person}', 'PlanService/SetNote'], ['PUT', '/orgs/{org}/plans/{plan}/answers', 'PlanService/SetAnswers'],
+  ['GET', '/orgs/{org}/plans/{plan}/cells', 'DraftService/ListCells', 'cells'], ['POST', '/orgs/{org}/plans/{plan}/cells', 'DraftService/AddCell', 'cell'],
+  ['DELETE', '/orgs/{org}/plans/{plan}/cells/{id}', 'DraftService/DeleteCell'],
+  ['GET', '/orgs/{org}/plans/{plan}/pools', 'DraftService/ListPools', 'pools'], ['PUT', '/orgs/{org}/plans/{plan}/pools', 'DraftService/SetPool'],
+  ['PUT', '/orgs/{org}/plans/{plan}/locks', 'DraftService/SetLocks'],
+  ['DELETE', '/orgs/{org}/plans/{plan}/draft', 'DraftService/SetDraftAside'], ['PUT', '/orgs/{org}/plans/{plan}/draft', 'DraftService/ClearDraftAside'],
+  ['GET', '/orgs/{org}/plans/{plan}/weights', 'DraftService/GetWeights'], ['PUT', '/orgs/{org}/plans/{plan}/weights', 'DraftService/SetWeights'],
+  ['POST', '/orgs/{org}/plans/{plan}/runs', 'DraftService/StartRun'], ['GET', '/orgs/{org}/plans/{plan}/runs', 'DraftService/ListRuns', 'runs'],
+  ['GET', '/orgs/{org}/plans/{plan}/runs/{id}', 'DraftService/GetRun'],
+  ['PUT', '/orgs/{org}/plans/{plan}/runs/{id}/pin', 'DraftService/PinRun'], ['DELETE', '/orgs/{org}/plans/{plan}/runs/{id}/pin', 'DraftService/UnpinRun'],
+].map(([method, path, proc, unwrap]) => ({ method, parts: path.split('/').filter(Boolean), proc, unwrap }));
+
+// call: the route of a method and path, and the request it makes (a query's confirm and lang are fields too).
+function call(method, path, body) {
+  const [p, query] = path.split('?');
+  const segs = p.split('/').filter(Boolean).map(decodeURIComponent);
+  for (const r of ROUTES) {
+    if (r.method !== method || r.parts.length !== segs.length) continue;
+    const req = {};
+    if (!r.parts.every((part, i) => {
+      if (part[0] !== '{') return part === segs[i];
+      const name = part.slice(1, -1);
+      req[name] = name === 'org' || name === 'plan' ? segs[i] : segs[i] === 'latest' ? 0 : Number(segs[i]);
+      return true;
+    })) continue;
+    for (const [k, v] of new URLSearchParams(query || '')) req[k] = v;
+    return { route: r, req: { ...body, ...req }, org: req.org || '' };
+  }
+  throw new Error('no route for ' + method + ' ' + path);
+}
+
 async function api(method, path, body) {
-  // The server writes explanations and warnings in the language of the page.
-  if (method === 'GET' && /\/runs/.test(path)) path += (path.includes('?') ? '&' : '?') + 'lang=' + currentLang;
-  const headers = {};
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const { route: r, req, org } = call(method, path, body);
+  if (r.proc === 'DraftService/GetRun') req.lang = currentLang;  // the server writes explanations and warnings in the page's language
+  const headers = { 'Content-Type': 'application/json' };
   if (method !== 'GET') headers['X-Dutyplan-Client'] = CLIENT;  // the stream tells this tab's own changes apart
   let res;
   try {
     // A sign-in in front of the app (forward auth) answers an expired session with a redirect to its own site, which a fetch
     // cannot follow (another origin): «manual» turns that into an answer the page can recognise.
-    res = await fetch('/api' + path, { method, headers, redirect: 'manual', body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch('/dutyplan.v1.' + r.proc, { method: 'POST', headers, redirect: 'manual', body: JSON.stringify(req) });
   } catch (e) {
     connection('offline');
     throw Object.assign(new Error(t('net.offline')), { connection: 'offline' });
   }
   // Signed out: a redirect, a refusal from the sign-in, or a page that is not ours (the API always answers JSON).
   const json = (res.headers.get('Content-Type') || '').startsWith('application/json');
-  if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !json && res.status !== 204)) {
+  if (res.type === 'opaqueredirect' || res.status === 401 || (res.ok && !json)) {
     connection('signed_out');
     throw Object.assign(new Error(t('net.signed_out')), { connection: 'signed_out' });
   }
   connection('');
   const data = await res.json().catch(() => ({}));
-  if (method !== 'GET') forget(method, path.split('?')[0]);  // also when refused: what is shown may be out of date
-  if (!res.ok) throw Object.assign(new Error(data.message || res.statusText), { kind: data.error, apiCode: data.code, params: data.params, status: res.status });
-  return data;
+  if (method !== 'GET') forget(changedBy(procOf(r.proc)), org);  // also when refused: what is shown may be out of date
+  if (!res.ok) {
+    // A Connect error: its first detail is the Problem (kind, code, params) the texts are made from.
+    const p = (data.details && data.details[0] && data.details[0].debug) || {};
+    const kind = p.error || (data.code === 'invalid_argument' ? 'invalid' : data.error || data.code);
+    throw Object.assign(new Error(data.message || res.statusText), { kind, apiCode: p.code || (data.error ? data.code : undefined), params: p.params || data.params, status: res.status });
+  }
+  return r.unwrap ? data[r.unwrap] : data;
 }
+const procOf = (proc) => proc.slice(proc.indexOf('/') + 1);
 
 // ---- the connection: signed out, or the server out of reach ----------------------------------------------------------
 // A bar at the top that says so and offers the way back: sign in again (a reload goes through the sign-in and comes back to
@@ -158,43 +235,33 @@ function kindOf(path) {
   if (p[2] === 'plans' && p.length >= 4) return p.length === 4 ? 'plan' : p[4];
   return p[2];
 }
-// What a write can have changed, as kinds of fetched paths. null = anything (when unsure, everything is fetched again).
-// Every change to the data can make a draft out of date, so the runs are always fetched again (they say «stale»).
-function changedBy(method, path) {
-  const p = path.split('/').filter(Boolean);
-  if (p[0] !== 'orgs' || p.length < 2) return p[0] === 'orgs' ? ['orgs'] : null;
-  const rest = p.slice(2);
-  const with_ = (...kinds) => ['runs', ...kinds];
-  if (!rest.length) return null;  // the organisation renamed or deleted
-  if (rest[0] === 'plans') {
-    if (rest.length === 1) return ['plans'];
-    if (rest.length === 2) return method === 'DELETE' ? null : ['plan', 'plans'];  // a new plan may get the address again
-    const x = rest[2];
-    if (x === 'events') {
-      if (rest.includes('notes')) return ['answers'];  // a note on an answer: never in the planner's input
-      if (rest.includes('places')) return with_('places');
-      if (rest.includes('fields')) return ['fields'];
-      return with_('events', 'places', 'fields', 'cells', 'pools', 'answers');
-    }
-    if (x === 'people') return with_('answers');  // availability
-    if (x === 'answers') return with_('answers');  // a selection of answers
-    if (x === 'places') return with_('places');  // a selection of places
-    if (x === 'locks') return with_('cells');  // names of the draft locked or unlocked
-    if (x === 'draft') return ['plan', 'runs'];  // «Remove unlocked»: no draft on show
-    if (x === 'runs') return ['runs', 'plan'];  // a new draft or a pin ends «Remove unlocked» (the plan's draft_aside)
-    if (['fields', 'cells', 'pools', 'weights', 'runs'].includes(x)) return x === 'fields' ? ['fields'] : with_(x);
-    return null;
-  }
-  if (rest[0] === 'people') return rest[2] === 'tasks' ? with_('answers') : with_('people');
-  if (rest[0] === 'combinations') return with_('combinations');
-  if (rest[0] === 'sections') return ['sections', 'people'];
-  if (rest[0] === 'task-sections') return ['task-sections', 'tasks'];
-  return null;  // tasks and anything else: everything
-}
-// forget drops what a write can have changed; with no path, everything.
-function forget(method, path) {
-  const kinds = path ? changedBy(method, path) : null;
-  const org = path && path.startsWith('/orgs/') ? '/orgs/' + path.split('/')[2] : '';
+// What a write can have changed, as kinds of fetched paths, by the procedure's name («SetPlaces»; the stream also says
+// «RunFinished» and «Joined»). null = anything (when unsure, everything is fetched again). Every change to the data can
+// make a draft out of date, so the runs are always fetched again (they say «stale»).
+const RUNS_TOO = (...kinds) => ['runs', ...kinds];
+const CHANGES = {
+  CreateOrg: ['orgs'], CreatePlan: ['plans'], RenamePlan: ['plan', 'plans'],  // a new plan may get the address again
+  SetNote: ['answers'],  // a note on an answer: never in the planner's input
+  SetPlaces: RUNS_TOO('places'), ResetPlaces: RUNS_TOO('places'), SetPlacesMany: RUNS_TOO('places'),
+  SetFieldValue: ['fields'], AddField: ['fields'], RenameField: ['fields'], MoveField: ['fields'], FreezeField: ['fields'], DeleteField: ['fields'],
+  AddEvents: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'), CopyEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'),
+  UpdateEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'), DeleteEvent: RUNS_TOO('events', 'places', 'fields', 'cells', 'pools', 'answers'),
+  SetAvailability: RUNS_TOO('answers'), SetAnswers: RUNS_TOO('answers'),
+  SetLocks: RUNS_TOO('cells'),  // names of the draft locked or unlocked
+  SetDraftAside: ['plan', 'runs'], ClearDraftAside: ['plan', 'runs'],  // «Remove unlocked»: no draft on show
+  StartRun: ['runs', 'plan'], PinRun: ['runs', 'plan'], UnpinRun: ['runs', 'plan'], RunFinished: ['runs', 'plan'],  // a new draft or a pin ends «Remove unlocked»
+  AddCell: RUNS_TOO('cells'), DeleteCell: RUNS_TOO('cells'), SetPool: RUNS_TOO('pools'), SetWeights: RUNS_TOO('weights'),
+  SetPersonTask: RUNS_TOO('answers'), RemovePersonTask: RUNS_TOO('answers'),
+  CreatePerson: RUNS_TOO('people'), UpdatePerson: RUNS_TOO('people'), MovePerson: RUNS_TOO('people'),
+  SetCombination: RUNS_TOO('combinations'), SetTaskCombinations: RUNS_TOO('combinations'),
+  CreateSection: ['sections', 'people'], RenameSection: ['sections', 'people'], MoveSection: ['sections', 'people'], DeleteSection: ['sections', 'people'],
+  CreateTaskSection: ['task-sections', 'tasks'], RenameTaskSection: ['task-sections', 'tasks'], MoveTaskSection: ['task-sections', 'tasks'],
+  DeleteTaskSection: ['task-sections', 'tasks'],
+};  // tasks, the organisation, members, links, deleting a plan and anything else: everything
+const changedBy = (proc) => CHANGES[proc] || null;
+// forget drops what a write in an organisation can have changed (kinds; null = everything of the organisation).
+function forget(kinds, orgSlug) {
+  const org = orgSlug ? '/orgs/' + enc(orgSlug) : '';
   for (const key of [...fetched.keys()]) {
     if (!kinds) { if (!org || key.startsWith(org + '/') || key === org || key === '/orgs') fetched.delete(key); continue; }
     if (kinds.includes(kindOf(key)) && (key === '/orgs' || !org || key === org || key.startsWith(org + '/'))) fetched.delete(key);
@@ -280,7 +347,7 @@ function link(path, text, props) {
 const linkBtn = (text, onclick, aria) => h('button', { type: 'button', class: 'link-button', 'aria-label': aria, onclick }, text);
 
 // ---- signing in ------------------------------------------------------------------------------------------------------
-// /api/me: {login: false} when the server has no login (everyone may do everything), else {login: true, user: {name, email} or null}.
+// AccountService/Me: {login: false} when the server has no login (everyone may do everything), else {login: true, user: {name, email} or null}.
 let ME = null;
 async function me() {
   if (!ME) ME = await api('GET', '/me');
@@ -1362,7 +1429,7 @@ async function pagePlan(r, org, people) {
     try {
       const latest = await api('GET', runsPath + '/latest');
       if (latest.run.status === 'running') setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000);  // the stream says when it ends
-      else { planState.runId = latest.run.id; forget('RUN', runsPath); render(); }
+      else { planState.runId = latest.run.id; forget(changedBy('RunFinished'), call('GET', runsPath).org); render(); }
     } catch (e) { say(errorText(e), 'err'); }
   };
   {
@@ -2743,7 +2810,7 @@ function follow(org) {
     let c = {};
     try { c = JSON.parse(e.data); } catch (err) { /* a change all the same */ }
     if (c.origin === CLIENT) return;  // this tab's own write: it has forgotten and redrawn already
-    forget(c.method || '', c.path || '');
+    forget(c.proc ? changedBy(c.proc) : null, org);
     liveRefresh();
   });
   es.addEventListener('error', () => {

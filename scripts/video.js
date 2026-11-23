@@ -85,26 +85,27 @@ function overlay() {
 
 async function film(lang, out, base, srv) {
   const L = sandbox.M[lang], D = DATA[lang], say = SAY[lang];
-  const api = async (method, p, body) => {
-    const r = await fetch(base + '/api' + p, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  // a Connect call: POST /dutyplan.v1.<Service>/<Method>
+  const api = async (proc, body = {}) => {
+    const r = await fetch(`${base}/dutyplan.v1.${proc}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const text = await r.text();
-    if (!r.ok) throw new Error(`${method} ${p}: ${r.status} ${text}`);
-    return text ? JSON.parse(text) : null;
+    if (!r.ok) throw new Error(`${proc}: ${r.status} ${text}`);
+    return JSON.parse(text);
   };
   // ---- the data before the film: an organisation with tasks and people, and an empty plan ----
-  const org = await api('POST', '/orgs', { name: D.org });
-  const o = `/orgs/${org.slug}`;
-  for (const name of D.tasks) await api('POST', `${o}/tasks`, { name });
-  const task = (await api('GET', `${o}/tasks`)).map((t) => t.id);
-  await api('PUT', `${o}/combinations`, { a: task[0], b: task[2], level: 'cannot' });
-  await api('PUT', `${o}/combinations`, { a: task[1], b: task[2], level: 'cannot' });
-  for (const name of PEOPLE) await api('POST', `${o}/people`, { name });
-  const person = Object.fromEntries((await api('GET', `${o}/people`)).map((x) => [x.name, x.id]));
+  const { org } = await api('AccountService/CreateOrg', { name: D.org });
+  const o = { org: org.slug };
+  for (const name of D.tasks) await api('SetupService/CreateTask', { ...o, name });
+  const task = (await api('SetupService/ListTasks', o)).tasks.map((t) => t.id);
+  await api('SetupService/SetCombination', { ...o, a: task[0], b: task[2], level: 'cannot' });
+  await api('SetupService/SetCombination', { ...o, a: task[1], b: task[2], level: 'cannot' });
+  for (const name of PEOPLE) await api('SetupService/CreatePerson', { ...o, name });
+  const person = Object.fromEntries((await api('SetupService/ListPeople', o)).people.map((x) => [x.name, x.id]));
   for (const [i, tasks] of CHOICES.entries()) {
-    for (const [k, t] of tasks.entries()) await api('PUT', `${o}/people/${person[PEOPLE[i]]}/tasks/${task[t]}`, { level: k === 0 ? 'good' : 'poor' });
+    for (const [k, t] of tasks.entries()) await api('SetupService/SetPersonTask', { ...o, person: person[PEOPLE[i]], task: task[t], level: k === 0 ? 'good' : 'poor' });
   }
-  const plan = await api('POST', `${o}/plans`, { name: D.plan });
-  const p = `${o}/plans/${plan.slug}`;
+  const { plan } = await api('PlanService/CreatePlan', { ...o, name: D.plan });
+  const p = { ...o, plan: plan.slug };
 
   // ---- the film ----
   const browser = await chromium.launch({ executablePath: process.env.CHROME || chromeDir(), args: ['--no-sandbox', lang === 'nb' ? '--lang=nb' : '--lang=en-GB'] });
@@ -213,14 +214,14 @@ async function film(lang, out, base, srv) {
   await wait(300);
 
   // answers: the others answer from their phones (through the API, as their page would), and show up at once
-  const events = await api('GET', `${p}/events`);
+  const { events } = await api('PlanService/ListEvents', p);
   await page.locator('tr.person-row').first().evaluate((e) => e.scrollIntoView({ block: 'center', behavior: 'smooth' }));
   await wait(600);
   await caption(say.answers, 300);
   const LEVELS = ['good', 'good', 'poor', 'never', 'good', '', 'good', 'never', 'good', 'poor', 'good', 'good'];
   for (const [i, name] of PEOPLE.slice(1).entries()) {
     const levels = Object.fromEntries(events.map((ev, j) => [ev.id, LEVELS[(i * 5 + j * 3) % LEVELS.length]]));
-    await api('PUT', `${p}/people/${person[name]}/availability`, { levels });
+    await api('PlanService/SetAvailability', { ...p, person: person[name], levels });
     await wait(260);
   }
   await wait(500);

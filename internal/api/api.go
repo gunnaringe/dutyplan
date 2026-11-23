@@ -1,26 +1,25 @@
-// Package api is the JSON HTTP API plus the embedded single-page frontend.
+// Package api is the Connect API (proto/dutyplan/v1, JSON only) plus the embedded single-page frontend.
 //
 // People sign in with OpenID Connect (auth.go), and see and change only the organisations they are members of; without a
-// login (New, or --no-login) everyone may do everything. The organisation is part of every path (/api/orgs/{org}/...), so
-// the server keeps no "current organisation" and switching is just navigating. Writes with a body must be
-// application/json, and cross-site writes are refused (http.CrossOriginProtection: Sec-Fetch-Site and Origin; no CORS is
-// offered).
+// login (New, or --no-login) everyone may do everything. Every request about an organisation names it (and its plan) in
+// the message, so the server keeps no "current organisation"; procs.go decides access from those fields alone. Calls
+// must be application/json, and cross-site writes are refused (http.CrossOriginProtection: Sec-Fetch-Site and Origin;
+// no CORS is offered).
 package api
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
+
+	"github.com/gunnaringe/dutyplan/gen/dutyplan/v1/dutyplanv1connect"
 	"github.com/gunnaringe/dutyplan/internal/planner"
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
@@ -34,7 +33,9 @@ type server struct {
 	// for a removed API and showed «Page not found»).
 	version map[string]string
 	log     *slog.Logger
-	hub     *hub  // the open streams (stream.go)
+	hub     *hub     // the open streams (stream.go)
+	writes  *limiter // the rate limits (ratelimit.go, with a login only)
+	dear    *limiter
 	auth    *auth // nil: no login
 }
 
@@ -57,9 +58,10 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 	if pl == nil {
 		pl = planner.New(st, nil, 1, log)
 	}
-	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub(), auth: au}
+	s := &server{st: st, planner: pl, static: static, log: log, version: map[string]string{}, hub: newHub(), auth: au,
+		writes: newLimiter(writeBurst, writeEvery), dear: newLimiter(costlyBurst, costlyEvery)}
 	pl.OnFinish(func(org, plan string) {
-		s.hub.publish(org, change{Method: "RUN", Path: "/orgs/" + org + "/plans/" + plan + "/runs"})
+		s.hub.publish(org, change{Proc: "RunFinished", Plan: plan})
 	})
 	for _, name := range assets {
 		if static == nil {
@@ -72,45 +74,35 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 	}
 	mux := http.NewServeMux()
 
-	// planner: can this server plan at all? The page hides «Plan» when not.
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]bool{"ok": true, "planner": s.planner.Available()})
-	})
+	// The API: Connect, JSON only (rpc.go), every call through the interceptor (procs.go).
+	opts := []connect.HandlerOption{
+		connect.WithCodec(jsonCodec{"json"}), connect.WithCodec(jsonCodec{"json; charset=utf-8"}),
+		connect.WithInterceptors(s.interceptor()),
+	}
+	for _, mount := range []func() (string, http.Handler){
+		func() (string, http.Handler) {
+			return dutyplanv1connect.NewAccountServiceHandler(accountSvc{s}, opts...)
+		},
+		func() (string, http.Handler) { return dutyplanv1connect.NewOrgServiceHandler(orgSvc{s}, opts...) },
+		func() (string, http.Handler) { return dutyplanv1connect.NewSetupServiceHandler(setupSvc{s}, opts...) },
+		func() (string, http.Handler) { return dutyplanv1connect.NewPlanServiceHandler(planSvc{s}, opts...) },
+		func() (string, http.Handler) { return dutyplanv1connect.NewDraftServiceHandler(draftSvc{s}, opts...) },
+	} {
+		path, h := mount()
+		mux.Handle("POST "+path, requireJSON(s.gate, h))
+	}
 
-	mux.HandleFunc("GET /api/me", s.me)
+	// the stream of changes is Server-Sent Events, not Connect (stream.go)
+	mux.HandleFunc("GET /api/orgs/{org}/stream", s.stream)
 	if au != nil {
 		mux.HandleFunc("GET /auth/login", au.login)
 		mux.HandleFunc("GET /auth/callback", au.callback)
 		mux.HandleFunc("POST /auth/logout", au.logout)
 		mux.HandleFunc("GET /s/{token}", s.openLink)
 	}
-
-	mux.HandleFunc("GET /api/orgs", s.listOrgs)
-	mux.HandleFunc("POST /api/orgs", s.createOrg)
-	mux.HandleFunc("GET /api/orgs/{org}", s.getOrg)
-	mux.HandleFunc("PATCH /api/orgs/{org}", s.renameOrg)
-	mux.HandleFunc("GET /api/orgs/{org}/stream", s.stream)
-	mux.HandleFunc("DELETE /api/orgs/{org}", s.deleteOrg)
-
-	mux.HandleFunc("GET /api/orgs/{org}/plans", s.listPlans)
-	mux.HandleFunc("POST /api/orgs/{org}/plans", s.createPlan)
-	mux.HandleFunc("GET /api/orgs/{org}/plans/{plan}", s.getPlan)
-	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}", s.renamePlan)
-	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}", s.deletePlan)
-
-	mux.HandleFunc("GET /api/orgs/{org}/people", s.listPeople)
-	mux.HandleFunc("POST /api/orgs/{org}/people", s.createPerson)
-	mux.HandleFunc("PATCH /api/orgs/{org}/people/{id}", s.updatePerson)
-
-	s.setupRoutes(mux)
-	s.cellsRoutes(mux)
-	s.weightsRoutes(mux)
-	s.runsRoutes(mux)
-	s.tableRoutes(mux)
-	s.sectionsRoutes(mux)
-	s.linkRoutes(mux)
-
-	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, s.log, store.ErrNotFound) })
+	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 404, apiError{Error: "not_found", Message: "not found"})
+	})
 
 	index := func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, "index.html") }
 	mux.HandleFunc("GET /{$}", index)
@@ -120,7 +112,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) { s.serveFile(w, r, name) })
 	}
 
-	return &Handler{Handler: secure(s.indexable, http.NewCrossOriginProtection().Handler(recoverer(s.access(s.limit(s.notifying(mux))), log))), hub: s.hub}
+	return &Handler{Handler: secure(s.indexable, http.NewCrossOriginProtection().Handler(recoverer(s.who(mux), log))), hub: s.hub}
 }
 
 // assets are the files the page links; each gets ?v=<hash of its content> where index.html links it.
@@ -134,7 +126,7 @@ var assets = []string{"i18n.js", "app.js", "style.css", "landing.png", "demo-en.
 func (s *server) serveFile(w http.ResponseWriter, r *http.Request, name string) {
 	b, err := fs.ReadFile(s.static, name)
 	if err != nil {
-		writeErr(w, s.log, store.ErrNotFound)
+		writeJSON(w, 404, apiError{Error: "not_found", Message: "not found"})
 		return
 	}
 	if name == "index.html" {
@@ -205,259 +197,4 @@ func recoverer(next http.Handler, log *slog.Logger) http.Handler {
 		}()
 		next.ServeHTTP(w, r)
 	})
-}
-
-// ---- helpers -------------------------------------------------------------------------------------------------
-
-// apiError is the body of every refused request. Error is the kind (not_found, invalid, conflict, ...), Code and
-// Params say precisely what was wrong so the page can write it in the user's language, and Message is the English text.
-type apiError struct {
-	Error   string         `json:"error"`
-	Code    string         `json:"code,omitempty"`
-	Params  map[string]any `json:"params,omitempty"`
-	Message string         `json:"message"`
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
-}
-
-// coded builds the error body, with the code and parameters when the error carries them.
-func coded(kind string, err error) apiError {
-	e := apiError{Error: kind, Message: err.Error()}
-	var c *store.Coded
-	if errors.As(err, &c) {
-		e.Code, e.Params = c.Code, c.Params
-	}
-	return e
-}
-
-func writeErr(w http.ResponseWriter, log *slog.Logger, err error) {
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		writeJSON(w, 404, apiError{Error: "not_found", Message: "not found"})
-	case errors.Is(err, store.ErrConflict):
-		writeJSON(w, 409, coded("conflict", err))
-	case errors.Is(err, store.ErrInvalid):
-		writeJSON(w, 400, coded("invalid", err))
-	default:
-		log.Error("request failed", "err", err)
-		writeJSON(w, 500, apiError{Error: "internal", Message: "internal error"})
-	}
-}
-
-// decode reads a small JSON body; unknown fields are an error so typos do not pass silently.
-func decode(w http.ResponseWriter, r *http.Request, v any) bool { return decodeMax(w, r, v, 64<<10) }
-
-// decodeMax is decode with another limit on the body (the bulk writes of a selection are bigger).
-func decodeMax(w http.ResponseWriter, r *http.Request, v any, max int64) bool {
-	if ct := r.Header.Get("Content-Type"); len(ct) < 16 || ct[:16] != "application/json" {
-		writeJSON(w, 415, apiError{Error: "unsupported_media_type", Message: "send Content-Type: application/json"})
-		return false
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, max)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		writeJSON(w, 400, apiError{Error: "invalid", Message: "bad JSON body: " + err.Error()})
-		return false
-	}
-	return true
-}
-
-// ---- handlers ------------------------------------------------------------------------------------------------
-
-// listOrgs: with a login, the organisations the person is a member of, and those of the links opened in this browser.
-func (s *server) listOrgs(w http.ResponseWriter, r *http.Request) {
-	if s.auth == nil {
-		orgs, err := s.st.ListOrgs(r.Context())
-		if err != nil {
-			writeErr(w, s.log, err)
-			return
-		}
-		writeJSON(w, 200, orgs)
-		return
-	}
-	orgs := []store.Org{}
-	var err error
-	if u, ok := userFrom(r); ok {
-		orgs, err = s.st.ListOrgsOf(r.Context(), u.ID)
-	}
-	for _, l := range s.links(r) {
-		if !slices.ContainsFunc(orgs, func(o store.Org) bool { return o.Slug == l.Org }) {
-			orgs = append(orgs, store.Org{Slug: l.Org, Name: l.OrgName})
-		}
-	}
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, orgs)
-}
-
-type nameBody struct {
-	Name string `json:"name"`
-}
-
-func (s *server) createOrg(w http.ResponseWriter, r *http.Request) {
-	var b nameBody
-	if !decode(w, r, &b) {
-		return
-	}
-	var o store.Org
-	var err error
-	if u, ok := userFrom(r); ok {
-		o, err = s.st.CreateOrgOwnedBy(r.Context(), b.Name, u.ID) // the one who makes it owns it
-	} else {
-		o, err = s.st.CreateOrg(r.Context(), b.Name)
-	}
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 201, o)
-}
-
-// getOrg also says what the asker may do there: role admin or member (without a login everyone is admin), or else
-// the level of their link (view or edit) and, for a link to one plan, that plan.
-func (s *server) getOrg(w http.ResponseWriter, r *http.Request) {
-	o, err := s.st.GetOrg(r.Context(), r.PathValue("org"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	g := grantFrom(r)
-	if s.auth == nil {
-		g.role = store.RoleAdmin
-	}
-	writeJSON(w, 200, struct {
-		store.Org
-		Role  string `json:"role,omitempty"`
-		Level string `json:"level,omitempty"`
-		Plan  string `json:"plan,omitempty"`
-	}{o, g.role, g.level, g.plan})
-}
-
-func (s *server) listPlans(w http.ResponseWriter, r *http.Request) {
-	v, err := s.st.ListPlans(r.Context(), r.PathValue("org"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, v)
-}
-
-func (s *server) createPlan(w http.ResponseWriter, r *http.Request) {
-	var b nameBody
-	if !decode(w, r, &b) {
-		return
-	}
-	p, err := s.st.CreatePlan(r.Context(), r.PathValue("org"), b.Name)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 201, p)
-}
-
-func (s *server) getPlan(w http.ResponseWriter, r *http.Request) {
-	p, err := s.st.GetPlan(r.Context(), r.PathValue("org"), r.PathValue("plan"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, p)
-}
-
-func (s *server) listPeople(w http.ResponseWriter, r *http.Request) {
-	v, err := s.st.ListPeople(r.Context(), r.PathValue("org"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, v)
-}
-
-func (s *server) createPerson(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Name    string `json:"name"`
-		Section int64  `json:"section"` // 0: none
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	p, err := s.st.CreatePersonIn(r.Context(), r.PathValue("org"), b.Name, b.Section)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 201, p)
-}
-
-func (s *server) updatePerson(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeErr(w, s.log, store.ErrNotFound)
-		return
-	}
-	var patch store.PersonPatch
-	if !decode(w, r, &patch) {
-		return
-	}
-	p, err := s.st.UpdatePerson(r.Context(), r.PathValue("org"), id, patch)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, p)
-}
-
-// renameOrg changes the name only; the address stays.
-func (s *server) renameOrg(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	o, err := s.st.RenameOrg(r.Context(), r.PathValue("org"), b.Name)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, o)
-}
-
-// deleteOrg removes an organisation without plans. The caller confirms with the organisation's address name in
-// ?confirm=, so a stray DELETE cannot do it. The deletion is written to the server log.
-func (s *server) deleteOrg(w http.ResponseWriter, r *http.Request) {
-	o, err := s.st.DeleteOrg(r.Context(), r.PathValue("org"), r.URL.Query().Get("confirm"))
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	s.log.Warn("organisation deleted", "org", o.Slug, "name", o.Name)
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *server) renamePlan(w http.ResponseWriter, r *http.Request) {
-	var b struct {
-		Name string `json:"name"`
-	}
-	if !decode(w, r, &b) {
-		return
-	}
-	p, err := s.st.RenamePlan(r.Context(), r.PathValue("org"), r.PathValue("plan"), b.Name)
-	if err != nil {
-		writeErr(w, s.log, err)
-		return
-	}
-	writeJSON(w, 200, p)
-}
-
-func (s *server) deletePlan(w http.ResponseWriter, r *http.Request) {
-	noContent(w, s.st.DeletePlan(r.Context(), r.PathValue("org"), r.PathValue("plan")), s)
 }

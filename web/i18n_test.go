@@ -230,7 +230,7 @@ func TestKindsAndWeightsHaveTexts(t *testing.T) {
 	need(`\b(?:exists|inUse)\("([a-z ]+)"`, "kind.", us)
 	need(`cleanName\([^,]+, "(\w+)"\)`, "what.", us)
 	need(`apiError\{Error: "(\w+)"`, "err.kind.", us)
-	need(`coded\("(\w+)"`, "err.kind.", us)
+	need(`problem\(connect\.\w+, "(\w+)"`, "err.kind.", us)
 	// Weights: label and hint in both languages, and a group in app.js.
 	app, err := os.ReadFile("app.js")
 	if err != nil {

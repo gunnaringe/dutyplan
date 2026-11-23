@@ -12,6 +12,9 @@ uv = "0.13.9"
 go = "1.27.4"
 node = "26.13.1"  # the browser check and the README pictures (scripts/*.js)
 prek = "0.5.11"  # git hooks and the same checks in CI (prek.toml)
+buf = "1.73.0"  # the API in proto/ (mise run gen)
+"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.12"
+"go:connectrpc.com/connect/cmd/protoc-gen-connect-go" = "1.21.1"
 
 [env]
 # uv must use mise's Python and the lock file, never download a Python of its own or change the lock on its own.
@@ -44,6 +47,18 @@ run = "echo 'test:fast: ok'"
 description = "The prek checks on the whole tree (YAML, JSON, TOML, gofmt, JS syntax, no keys or big files), quiet unless one fails"
 quiet = true
 run = "prek run --all-files --quiet"
+
+[tasks.gen]
+description = "The Go code of the API (gen/) from proto/ with buf, after a change to the .proto (lint first). Commit gen/ with it"
+run = "buf lint && buf generate"
+
+[tasks."gen:check"]
+description = "Is gen/ what proto/ makes? buf lint, buf generate, then fail if gen/ differs from what git has (staged counts; CI and the commit hook)"
+run = '''
+buf lint
+buf generate
+if ! git diff --quiet -- gen || [ -n "$(git ls-files --others --exclude-standard -- gen)" ]; then git status --short -- gen; echo "gen/ is out of date: run mise run gen and commit it"; exit 1; fi
+'''
 
 [tasks."test:app"]
 description = "go vet + go test for the app, quiet (about 3 s). Args: -- -run Name"

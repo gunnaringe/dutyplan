@@ -22,7 +22,8 @@ A first test runs on kate since 2026-11-20 (asked by the user), behind Pocket ID
 kate runs the published image through Flux image automation (`clusters/kate/flux-system/dutyplan-image.yaml`), with a nightly SQLite backup to NFS.
 
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the input from the database,
-starts the Python planner, turns the answer into a view with explanations), `internal/api` (JSON API + serves the frontend), `internal/i18n` (server texts),
+starts the Python planner, turns the answer into a view with explanations), `internal/api` (the Connect API + serves the frontend), `internal/i18n` (server texts),
+`proto/` (the API's schema), `gen/` (Go code made from it by buf, committed),
 `web/` (index.html, i18n.js, app.js, style.css, embedded in the binary), `solver/` (Python/CP-SAT), `scripts/` (smoke test, browser check).
 
 ## Run cheaply (read this first)
@@ -52,13 +53,13 @@ starts the Python planner, turns the answer into a view with explanations), `int
   applied migration, add the next number.
 
 - **Organisation → plans.** Everything belongs to an organisation; an organisation has several plans (for example «Autumn 2026»). The organisation is in the address
-  (`/o/<org>/p/<plan>`, `/api/orgs/{org}/...`), the server has no «current organisation». Every lookup is scoped by the organisation, and
+  (`/o/<org>/p/<plan>`) and in every API call (`org`, `plan`), the server has no «current organisation». Every lookup is scoped by the organisation, and
   a plan/person from another organisation gives 404 (the isolation tests and the `tenant:` mutations guard this).
 - **Signing in** (2026-11-22, the user: "Make it use proper oidc ... let people sign up with new organization themselves"): `internal/api/auth.go`,
   OpenID Connect (code + PKCE, go-oidc) against one provider; in production the Pocket ID at id.sermon-studio.app, shared with sermon-studio
   ("User management and login will be the same"). Session = random token in a host-only `__Host-dutyplan` cookie, its SHA-256 in `session`.
-  `access` (middleware) is the one place that decides: pages, `/api/health` and `/api/me` open; the rest needs a session (401 `signed_out`); an
-  organisation's routes need a member (`membership`: admin or member), 404 for anyone else. **Roles** (2026-11-22, the user: "the roles are org
+  the `procs` table and `gate` in `internal/api/procs.go` are the one place that decides: pages, `Health` and `Me` open; the rest needs a session (401 `signed_out`); an
+  organisation's procedures need a member (`membership`: admin or member), 404 for anyone else. **Roles** (2026-11-22, the user: "the roles are org
   admin and org members + edit and view shared link"; migration 004): an admin renames and deletes the organisation, changes members and makes or
   deletes invitations (403 `admin_only` for others); a member does everything else, plans and links to plans included. Whoever
   creates an organisation is its admin; a taken address gets `-2`, `-3` (never a 409 that tells the name exists). `--no-login` (or listening on
@@ -66,20 +67,20 @@ starts the Python planner, turns the answer into a view with explanations), `int
   `access:` mutations guard it.
 - **Sharing** (2026-11-22, the user: "possible to create shared links that allow access to the plan or org"): `share_link` (003), `internal/api/access.go`.
   A view or edit link is to **one plan** (no links to a whole organisation since 004); `join` is an invitation (opened signed in = member). Opening `/s/<token>` keeps the
-  token in the `__Host-dutyplan-links` cookie (up to 20), signed in or not; `access` lets a request through on a link when no membership does. A
+  token in the `__Host-dutyplan-links` cookie (up to 20), signed in or not; the gate lets a request through on a link when no membership does. A
   plan link reaches its plan and the organisation's shared parts (people, tasks, sections; the plan page needs them), never the plan list,
   other plans, members or links, and its stream hears nothing of other plans (`grant.sees`). A link never renames or deletes the organisation.
-  Members make and delete plan links; a link never makes links (it does not reach `/links`); only an admin invites and changes members; anyone may
-  leave; the last admin stays. Tokens are stored as they are, so a link can be copied again. `GET /orgs/{org}` says `role` / `level` / `plan`, which the page uses to show or hide. The `share:` mutations guard it.
+  Members make and delete plan links; a link never makes links (it does not reach `ListLinks`/`CreateLink`); only an admin invites and changes members; anyone may
+  leave; the last admin stays. Tokens are stored as they are, so a link can be copied again. `GetOrg` says `role` / `level` / `plan`, which the page uses to show or hide. The `share:` mutations guard it.
 - **Answer links, «My answers»** (2026-11-22, the user: "Vi trenger også en visning for én person. Full planlegging av alt blir litt mye for en frivillig å
   forholde seg til, så gjerne en visning der de kan fylle ut når de selv kan. Foreløpig uten noen bruker-management, så samme lenke."): level `answer`
-  (migration 009 makes `share_link` again for the CHECK) reads like a view link and writes only `PUT plans/{plan}/people/{id}/availability` and
-  `PUT plans/{plan}/events/{id}/notes/{person}` (`answering` in access.go; several links in one browser: the widest wins, `linkRank`). The page gives it the
+  (migration 009 makes `share_link` again for the CHECK) reads like a view link and writes only `SetAvailability` and
+  `SetNote` (`answer` in the procs table; several links in one browser: the widest wins, `linkRank`). The page gives it the
   modes «My answers» (`mePage`) and View: «Who are you?» picks a name (localStorage `me:`, «Not you? Switch»), then their tasks and every date with
   yes / maybe / no (the same again = not answered) and a note. One link for everyone, anyone may answer for anyone: no user management. The `answer:` mutations guard it.
 - **Limits** (2026-11-22, for the public signup): caps in `internal/store/limits.go` (`atMost`, code `too_many_<what>` with `max`; checked
   in the transaction that creates), and a rate limit on changes per person or address in `internal/api/ratelimit.go` (only with a login;
-  `--client-ip-header` names the proxy's header; `costly()` lists the dearer creations). Only `/` with a login may be indexed. The
+  `--client-ip-header` names the proxy's header; `costly` in the procs table marks the dearer creations). Only `/` with a login may be indexed. The
   `limits:` and `index:` mutations guard them.
 - **The header** (2026-11-22, the user, "align the design to be similar to sermon studio"): brand, organisation, then round icon links
   to the organisation's **Members** page (`/o/<org>/members`, members with a login) and **Settings** page (`/o/<org>/settings`: rename and
@@ -96,12 +97,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Selecting cells** (2026-11-22, the user: "drag and drop, and unselect selected cells + mark a whole Row. Kinda like you would in a
   spreedsheet… Make sure the ux fits having a big number of volunteers"): on the plan page (not on phones, not with a view link) drag,
   Shift/Ctrl+click, ⇥ at a row's end (a row; ⋮⋮ only drags) and a count (a day) select answers or places; the `.selbar` at the bottom sets them, with keys 1/2/3/Delete/Escape.
-  One request per change: `PUT .../plans/{plan}/answers` and `PUT .../plans/{plan}/places` (`internal/store/bulk.go`, at most
+  One request per change: `SetAnswers` and `SetPlacesMany` (`internal/store/bulk.go`, at most
   `MaxCellsPerCall`, all or nothing, every person/task of the organisation and every event of the plan, else 404). The `bulk:` mutations
   guard them; `app:ui` checks the selection. A name filter shows with more than 8 people.
 - **Notes on answers** (2026-11-22, the user: "notat/kommentar i hver celle for om dagen passer for en person … vises som en flik i hjørnet når du
   klikker eller på hover"): table `answer_note` (migration 005, same keys as `person_event`, so it stays when the answer is cleared), at most
-  `MaxNoteRunes`; `PUT .../events/{id}/notes/{person}` (empty removes), listed in `GET .../answers` as `notes`. Never in the planner's input.
+  `MaxNoteRunes`; `SetNote` (empty removes), listed in `ListAnswers` as `notes`. Never in the planner's input.
   The page: `.note-tab` in the cell's corner (amber with a note), hover shows it, a click opens the one `.note-pop`. The `notes:` mutations guard it.
 - **Show tasks** (2026-11-22, the user: "tags på personer som viser gul/grønn tag for oppgaver de er villige til å ta? Kanskje gjøre det mulig å
   ekspande for å vise for alle?"): every person row has its tags (`tagsOf`: planned tasks chosen good = green, poor = yellow) under the name, hidden
@@ -116,8 +117,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
   them to one smaller height). Think about height and width when adding anything to the table.
 - **The agent guide** (2026-11-22, the user: "I want a llm page to show how to use it. But don't make something others can not make"):
   `web/llms.txt`, served at `/llms.txt`, for agents that *use* a server. Only what any user can do: access by a share link or a login, putting
-  a semester in with the existing API, every route. No server-only tools (an import command was made and dropped: "I just want it in"), no
-  API keys. `TestTheAgentGuideNamesEveryRouteAndNoOther` fails when a route is added or removed without the guide; the edit-link test checks
+  a semester in with the existing API, every procedure. No server-only tools (an import command was made and dropped: "I just want it in"), no
+  API keys. `TestTheAgentGuideNamesEveryProcedureAndNoOther` fails when a procedure is added or removed without the guide; the edit-link test checks
   the recipe's steps.
 - **All writes go through `store.write`** (one transaction). Do not write to the database any other way. There is no change log and no actor: do not add them back without asking.
 - **Renaming changes the name only.** The slug is the address (made from the name when the organisation or plan is created; the API takes no slug); links must keep working. Never make a rename change a slug.
@@ -125,6 +126,20 @@ starts the Python planner, turns the answer into a view with explanations), `int
   field the page does not call; add it together with the page change that needs it. **A person in a plan is a row, not an account**: no personal links, no per-person pages or endpoints for
   the people who are planned (name, task choices, can be proposed). Accounts are only for those who plan (see *Signing in*); links that share a
   whole organisation or plan are built (see *Sharing*).
+- **The API is Connect** (2026-11-23, the user, after the TypeScript analysis: "Would Buf Connect then be a good choice as well?" … "Go ahead"):
+  `proto/dutyplan/v1/dutyplan.proto` (five services: Account, Org, Setup, Plan, Draft; one procedure per call the page makes, 1:1 with the old routes,
+  none added or merged), `buf.yaml` (lint STANDARD), `buf.gen.yaml`; the Go code in `gen/` is committed (`mise run gen` after changing the
+  .proto; `mise run gen:check`, the `gen` hook and CI fail when it is out of date). JSON only, `POST /dutyplan.v1.<Service>/<Method>`:
+  protojson with the proto's snake_case names, every field sent, unknown fields refused (`rpc.go`). Ids are `int32` (numbers in JSON;
+  int64 would be strings), levels are strings, `org` is field 1 and `plan` field 2 of every request that has them; a field whose absence
+  means something is `optional`. The messages mirror the store's JSON, and `out()` turns a store value into one (a field the message lacks
+  is an error, so they cannot drift). **Access is one table** (`procs` in `procs.go`: scope, write, admin, self, link, answer, costly, big;
+  `TestEveryProcedureHasALine`), applied by `gate`, an HTTP layer **before** Connect decodes the body (it peeks `org`/`plan`/`id`), so a
+  stranger gets 404/401, never 400; `requireJSON` caps the body first (64 KB, 512 KB for `big`) and wants `application/json` after the gate.
+  The interceptor only announces writes on the stream. The stream stays Server-Sent Events (`GET /api/orgs/{org}/stream`, not Connect: an
+  EventSource cannot read Connect). The Go tests still speak the old REST shapes through `legacy()` (`internal/api/legacy_test.go`,
+  translated to Connect calls); the page maps its old (method, path) calls through `ROUTES` in `web/app.js`. Both go when the page moves to
+  TypeScript with a generated client (the next step of the same plan).
 - **Deleting a plan** is refused while a run is in progress. An organisation is deleted only when it has no plans, and the caller confirms with its slug (the API handler
   writes the deletion to the server log). `TestEveryTableWithOrgOrPlanDataIsKnownToTheDeletions` fails when a table is added that the deletions do not know about: update `DeletePlan`/`DeleteOrg` and the test.
 - **The event is the unit, not the date.** Events are self-contained: two can fall on the same day. An event can have a start time (and an end time); the planner does not use them, so they must not change the input or hash of a run. It has **no description** (removed 2026-11-22, the user: "let description just be a field. Remove that from header."; migration 006 moved existing ones into a details row «Description» at the top): what is said about an event is a details row. Availability («can I»), combinations, places
@@ -135,7 +150,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   *Event details* (the plan's rows, `plan_field`/`event_field`: ⋮⋮ drags a row, its name is a field (empty deletes, asked), the pin freezes it (`frozen`, migration 010, shared: sticky under the dates via `--stick` measured by a ResizeObserver), values suggest the row's texts (`suggest`/`rowValues`; another case is saved in the spelling used); no ✎ dialog since 2026-11-23, the user: "Remove the edit meny of about. Renaming can be done directly"; text for people, never sent to the planner, not in the hash),
   *Tasks* (the places per event, typed into the cells; empty = not needed; ⋮⋮ drags a task, in the organisation's order `task.position`, not in the planner's input; organisation-wide task sections (`task_section`, migration 011, 2026-11-23, the user: "Make it possible to have some sections for the tasks as well. As for people, sections is just a UI concept for now"; `store.Tasks`/`store.People` share the section code) are headings like the people's, also in the draft;
   ⇥ selects the row for the bar at the bottom: no «Fill row» since 2026-11-22; ⚡ by the name = `task.planned`, as by a person), the green *Draft allocation* (the run on show merged with what is set by hand), and
-  *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; «Add a person» lines after those without a section and at the end of each section, `POST /people {name, section}`; organisation-wide *sections* (`person_section`)
+  *Availability* (a count per event and one row per person; ⋮⋮ drags a person, `person.position`; «Add a person» lines after those without a section and at the end of each section, `CreatePerson {name, section}`; organisation-wide *sections* (`person_section`)
   are headings with their people below, those without a section first; only placement, never in the planner's input; on a phone too). Clicking a date, task, person or draft place ⋯ opens its dialog; ⚙ *Plan settings* has the name, the
   weighting, the earlier drafts (Show/Pin) and Delete. Do not add separate pages for these again.
   - **The whole width** (2026-11-23, the user: "Vi har stort behov for horisontal plass. Så for planen bør vi ikke ha en container for dette midt på"):
@@ -150,7 +165,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   - **On a phone** the same table as on a wide screen, narrower (2026-11-22, the user: "La vertikal visning på mobil vises som vanlig. Den
     løsningen som er i dag er litt forvirrende." — the turned availability of 2026-11-20 is gone; do not bring it back). Names stay put, the days
     scroll sideways; a tap answers. Dragging a selection needs a mouse (a touch scrolls), but ⇥ and a count still select.
-  - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`POST .../events/{id}/copy`:
+  - **No day types.** Each event has its own places (`event_task`); in the planner's input every event is its own type. Events are copied instead (`CopyEvent`:
     dates, or repeated every week or every 2–8 weeks until a date (`every`; only the dates are made, nothing stores the rhythm), with times, details, places and
     names set by hand as chosen; answers and drafts are never copied).
   - **The draft:** a place set by hand (a manual cell that is not locked) has a violet background and a ✎ square (`mark('hand')`); a planner name that was locked is
@@ -165,12 +180,12 @@ starts the Python planner, turns the answer into a view with explanations), `int
     **Undo** (2026-11-23, the user: "a easier way to regret options"): `planState.undo` (per tab and plan, at most 30, not a change log):
     each draft action (`setLocks`, names added/removed in a cell, pin, Remove unlocked, Done, Reopen) pushes its opposite request(s);
     the bar's Undo and Ctrl+Z outside a text field run the newest. Undoing Remove unlocked pins the run that was pinned, else
-    `PUT .../plans/{plan}/draft` (`ClearDraftAside`). **The drafts one by one** ("show the different drafts"): ‹ #n › in the bar, and
+    `ClearDraftAside`. **The drafts one by one** ("show the different drafts"): ‹ #n › in the bar, and
     **Show changes** (`changes:` in localStorage) marks the planner's names that are new since the finished draft before (`td.changed`,
-    `.slot.new`, the old names in the title). One request: `PUT .../plans/{plan}/locks`
+    `.slot.new`, the old names in the title). One request: `SetLocks`
     (`internal/store/locks.go`; unlocking never removes a name set by hand). The run's snapshot keeps which names were locked (`Kept`, not in the input or hash),
     so an unlocked name stays in the draft as the planner's, and one set by hand that was removed does not.
-    **Remove unlocked** ("Kanskje en fjern alle ulåste også?"): asked in `ask()`, then `DELETE .../plans/{plan}/draft` sets `plan.draft_aside` (migration 008) and unpins:
+    **Remove unlocked** ("Kanskje en fjern alle ulåste også?"): asked in `ask()`, then `SetDraftAside` sets `plan.draft_aside` (migration 008) and unpins:
     the page shows no draft, only what is set by hand and locked, until a new run starts or a draft is pinned (both clear it); the runs stay under the earlier drafts.
     The selection («only these can be picked») stays ("Behold mulighet til å sette utvalg") but is one line in the place dialog, «The planner can pick: … · Change»,
     and a limited place has a small funnel (`mark pool`) in the draft. The `locks:` and `draft:` mutations guard it.
@@ -203,8 +218,8 @@ starts the Python planner, turns the answer into a view with explanations), `int
 - **Live and without flicker** (2026-11-20, the user's choice: "no loading or flickering", "webhooks for all state", where they meant WebSockets;
   Server-Sent Events kept at their choice ("Behold, men lag mer effektivt"), since the page only needs the push). Every write that went
   through, and the end of a planning run, is announced on the organisation's stream (`GET /api/orgs/{org}/stream`, Server-Sent Events,
-  `internal/api/stream.go`; the method and path of the write and the origin tab from `X-Dutyplan-Client`, no data). The page (`follow()` in `web/app.js`)
-  keeps what it has fetched (`get()`), forgets only what the write can have changed (`changedBy()`: a new write route needs a line there,
+  `internal/api/stream.go`; the procedure of the write (`SetPlaces`; `RunFinished`, `Joined`), its plan and the origin tab from `X-Dutyplan-Client`, no data). The page (`follow()` in `web/app.js`)
+  keeps what it has fetched (`get()`), forgets only what the write can have changed (`changedBy()`: a new write procedure needs a line in `CHANGES` there,
   else everything is fetched again) and redraws in place: scroll (also sideways), focus and open dialogs are kept, a dialog's contents are swapped
   (`keyed()`/`reopened()`, never closed and opened again), and a redraw waits while a text field is being typed in. Clicks on answers,
   levels and ⚡ show at once and go back if the server refuses. Hosting will be behind Cloudflare: the stream pings every 25 s (its idle
@@ -257,7 +272,7 @@ starts the Python planner, turns the answer into a view with explanations), `int
   `web/i18n_test.go` checks that both languages have the same keys and placeholders, that every key `app.js` names exists, and that every error code the server can send has `err.<code>` (and that the text only uses parameters the server sends).
 - **The server** (`internal/i18n`): explanations, warnings, compromises and notes are stored as codes with arguments and written at view time in the language of `?lang=`. A new text = a key in both `en.go` and `nb.go`
   (a test checks parity).
-- **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the body is `{error, code, params, message}`. A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
+- **Errors** are `store.Invalid(code, params, englishMessage)` / `store.Conflict(...)`; the answer is a Connect error with a `dutyplan.v1.Problem` detail `{error, code, params}` (`fail()` in `internal/api/rpc.go`; the page reads `details[0].debug`). A new code needs `err.<code>` in both catalogues of `web/i18n.js`.
 - Page addresses are English: `/o/<org>` and `/o/<org>/p/<plan>`; anything else is «Page not found».
 
 ## Testing and data

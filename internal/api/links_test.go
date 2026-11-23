@@ -148,7 +148,7 @@ func TestAnAnswerLinkSetsAnswersAndNotesOnly(t *testing.T) {
 	for _, req := range [][2]string{{"PUT", "/api/orgs/choir/plans/autumn/answers"}, {"PUT", "/api/orgs/choir/plans/autumn/places"},
 		{"POST", "/api/orgs/choir/people"}, {"PATCH", "/api/orgs/choir/people/" + p}, {"PUT", "/api/orgs/choir/people/" + p + "/tasks/1"},
 		{"PATCH", "/api/orgs/choir/plans/autumn"}, {"POST", "/api/orgs/choir/plans/autumn/runs"}, {"PUT", "/api/orgs/choir/plans/autumn/events/" + ev + "/fields/1"},
-		{"POST", "/api/orgs/choir/plans/autumn/people/" + p + "/availability"}, {"DELETE", "/api/orgs/choir/plans/autumn/events/" + ev}} {
+		{"DELETE", "/api/orgs/choir/plans/autumn/events/" + ev}} {
 		if r := e.as(c, req[0], req[1], map[string]string{"name": "X"}); r.code != 403 {
 			t.Errorf("%s %s with an answer link: %d, want 403", req[0], req[1], r.code)
 		}
@@ -221,8 +221,8 @@ func TestAnEditLinkToAPlanReachesThatPlanOnly(t *testing.T) {
 	}
 	// the stream hears nothing of the other plan
 	g := grant{level: "edit", plan: "autumn"}
-	if g.sees("choir", change{Path: "/orgs/choir/plans/spring/events"}) || !g.sees("choir", change{Path: "/orgs/choir/plans/autumn/events"}) ||
-		!g.sees("choir", change{Path: "/orgs/choir/people"}) || !g.sees("choir", change{}) {
+	if g.sees(change{Proc: "AddEvents", Plan: "spring"}) || !g.sees(change{Proc: "AddEvents", Plan: "autumn"}) ||
+		!g.sees(change{Proc: "CreatePerson"}) || !g.sees(change{}) {
 		t.Fatal("a plan link's stream hears the wrong changes")
 	}
 }

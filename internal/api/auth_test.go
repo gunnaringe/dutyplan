@@ -98,7 +98,7 @@ func newLoginEnv(t *testing.T) *loginEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &loginEnv{env: &env{t: t, h: h, st: st, pl: pl}, prov: p}
+	return &loginEnv{env: &env{t: t, h: legacy(h), app: h, st: st, pl: pl}, prov: p}
 }
 
 func cookiesOf(h http.Header) []*http.Cookie { return (&http.Response{Header: h}).Cookies() }

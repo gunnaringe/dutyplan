@@ -29,6 +29,8 @@ hooks = [
     entry = "sh -c 'out=$(gofmt -l cmd internal web); [ -z \"$out\" ] || { echo \"$out\"; exit 1; }'" },
   { id = "node-check", name = "node --check (page and scripts)", language = "system", files = '^(web|scripts)/[^/]+\.js$',
     entry = "node --check" },
+  { id = "gen", name = "buf lint, gen/ up to date with proto/", language = "system", files = '^(proto/|gen/|buf\.)', pass_filenames = false,
+    entry = "mise run gen:check" },
   { id = "tests", name = "tests (Go and Python)", language = "system", pass_filenames = false, always_run = true,
     stages = ["pre-push"], entry = "mise run test" },
 ]

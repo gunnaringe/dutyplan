@@ -5,123 +5,22 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
 
-// Who may do what (2026-11-22, the user: "the roles are org admin and org members + edit and view shared link"). A request
-// about an organisation (/api/orgs/{org}/...) is let through for:
-//   - a member, admin or member. Only an admin renames or deletes the organisation, changes its members and makes or
-//     deletes invitations; members do everything else, links to plans included.
-//   - someone with a link to one plan (a cookie holds the tokens of the links opened in this browser, signed in or not):
-//     view = read only, answer = read and set the answers and notes of anyone on the list, edit = change. It reaches that plan and what its page needs from the organisation (people, tasks,
-//     sections), but not the other plans, the plan list, the members or the links: a link never makes links.
-// Anyone else gets 404, so nobody learns which organisations exist (401 «signed_out» when not signed in, so the page can
-// offer to sign in). Without a login (--no-login) everything goes through.
-
-type ctxKey int
-
-const (
-	userKey ctxKey = iota
-	grantKey
-)
-
-// userFrom is the person signed in; ok is false without a login (--no-login) or when nobody is.
-func userFrom(r *http.Request) (store.User, bool) {
-	u, ok := r.Context().Value(userKey).(store.User)
-	return u, ok
-}
-
-// grant is what a request may do in its organisation: through membership (role), or else through a link (level, and
-// plan when the link is to one plan).
-type grant struct {
-	role  string
-	level string
-	plan  string
-}
-
-func grantFrom(r *http.Request) grant {
-	g, _ := r.Context().Value(grantKey).(grant)
-	return g
-}
-
-// orgPath splits an /api/orgs/{org}/... path, as sent, into the organisation and the segments after it (each unescaped,
-// so they are the same values the router gives the handlers; an encoded «/» stays inside its segment).
-func orgPath(r *http.Request) (org string, rest []string, ok bool) {
-	tail, found := strings.CutPrefix(r.URL.EscapedPath(), "/api/orgs/")
-	if !found {
-		return "", nil, false
-	}
-	parts := strings.Split(strings.TrimSuffix(tail, "/"), "/")
-	for i, p := range parts {
-		u, err := url.PathUnescape(p)
-		if err != nil {
-			return "", nil, false
-		}
-		parts[i] = u
-	}
-	if parts[0] == "" {
-		return "", nil, false
-	}
-	return parts[0], parts[1:], true
-}
-
-func reading(r *http.Request) bool { return r.Method == http.MethodGet || r.Method == http.MethodHead }
-
-// linkReaches: may a link to one plan reach this path at all, reading or not.
-func linkReaches(l store.Link, rest []string) bool {
-	if l.Plan == "" || len(rest) > 0 && (rest[0] == "links" || rest[0] == "members") {
-		return false
-	}
-	if len(rest) > 0 && rest[0] == "plans" {
-		return len(rest) >= 2 && rest[1] == l.Plan
-	}
-	return true
-}
-
-// linkAllows: may the link make this request. The organisation itself (renaming, deleting) is never changed by a link.
-func linkAllows(l store.Link, r *http.Request, rest []string) bool {
-	if !linkReaches(l, rest) {
-		return false
-	}
-	if reading(r) {
-		return true
-	}
-	if l.Level == store.LevelAnswer {
-		return answering(r, rest)
-	}
-	return l.Level == store.LevelEdit && len(rest) > 0
-}
-
-// answering: the writes of an answer link, one person's availability or a note on an answer, in the link's plan
-// (plans/{plan}/people/{id}/availability, plans/{plan}/events/{id}/notes/{person}).
-func answering(r *http.Request, rest []string) bool {
-	if r.Method != http.MethodPut || len(rest) < 5 || rest[0] != "plans" {
-		return false
-	}
-	return len(rest) == 5 && rest[2] == "people" && rest[4] == "availability" ||
-		len(rest) == 6 && rest[2] == "events" && rest[4] == "notes"
-}
-
-// adminOnly: requests only an admin may make (invitations are checked where links are made and deleted). Leaving
-// (removing yourself) is for everyone.
-func adminOnly(r *http.Request, rest []string, me int64) bool {
-	switch {
-	case len(rest) == 0:
-		return !reading(r)
-	case rest[0] == "members" && len(rest) == 2 && !reading(r):
-		return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))
-	}
-	return false
-}
+// Who may do what is in procs.go (one line per procedure). This file has the share links: the cookie that remembers
+// them in a browser, opening one (/s/<token>), and the members and links of an organisation.
 
 const linksCookie = "dutyplan-links"
 
 // linkTokens are the tokens of the links opened in this browser (newest first).
 func (s *server) linkTokens(r *http.Request) []string {
+	if s.auth == nil {
+		return nil
+	}
 	c, err := r.Cookie(s.auth.cookieName(linksCookie))
 	if err != nil || c.Value == "" {
 		return nil
@@ -137,9 +36,13 @@ func (s *server) linkTokens(r *http.Request) []string {
 
 const maxLinks = 20
 
-// links are the links opened in this browser that still work.
-func (s *server) links(r *http.Request) []store.Link {
-	ls, err := s.st.LinksByTokens(r.Context(), s.linkTokens(r))
+// links are the links opened in this browser that still work (the tokens come with the request, see who()).
+func (s *server) links(ctx context.Context) []store.Link {
+	tokens, _ := ctx.Value(tokensKey).([]string)
+	if len(tokens) == 0 {
+		return nil
+	}
+	ls, err := s.st.LinksByTokens(ctx, tokens)
 	if err != nil {
 		s.log.Error("links", "err", err)
 		return nil
@@ -147,127 +50,31 @@ func (s *server) links(r *http.Request) []store.Link {
 	return slices.DeleteFunc(ls, func(l store.Link) bool { return l.Level == store.LevelJoin })
 }
 
-func (s *server) access(next http.Handler) http.Handler {
+// who puts the person signed in and the tokens of the browser's links into the request's context, for the API's
+// interceptor (procs.go) and the stream.
+func (s *server) who(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.auth == nil {
 			next.ServeHTTP(w, r)
 			return
 		}
-		u, signedIn := s.auth.user(r)
-		if signedIn {
-			r = r.WithContext(context.WithValue(r.Context(), userKey, u))
+		ctx := r.Context()
+		if u, ok := s.auth.user(r); ok {
+			ctx = context.WithValue(ctx, userKey, u)
 		}
-		p := r.URL.Path
-		if !strings.HasPrefix(p, "/api/") || p == "/api/health" || p == "/api/me" {
-			next.ServeHTTP(w, r)
-			return
+		if t := s.linkTokens(r); len(t) > 0 {
+			ctx = context.WithValue(ctx, tokensKey, t)
 		}
-		signedOut := func() { writeJSON(w, 401, apiError{Error: "signed_out", Message: "sign in first"}) }
-		org, rest, ok := orgPath(r)
-		if !ok {
-			// the organisation list is for anyone signed in or with a link; making one needs an account
-			if !signedIn && (r.Method != http.MethodGet || len(s.links(r)) == 0) {
-				signedOut()
-				return
-			}
-			next.ServeHTTP(w, r)
-			return
-		}
-		g := grant{}
-		if signedIn {
-			role, err := s.st.Role(r.Context(), org, u.ID)
-			if err != nil {
-				writeErr(w, s.log, err)
-				return
-			}
-			g.role = role
-		}
-		if g.role != store.RoleNone {
-			if g.role != store.RoleAdmin && adminOnly(r, rest, u.ID) {
-				adminOnlyErr(w)
-				return
-			}
-		} else {
-			var reach *store.Link
-			var allow *store.Link
-			for _, l := range s.links(r) {
-				if l.Org != org {
-					continue
-				}
-				if linkAllows(l, r, rest) && (allow == nil || wider(l, *allow)) {
-					allow = &l
-				}
-				if linkReaches(l, rest) {
-					reach = &l
-				}
-			}
-			switch {
-			case allow != nil:
-				g.level, g.plan = allow.Level, allow.Plan
-			case reach != nil:
-				writeJSON(w, 403, apiError{Error: "forbidden", Code: "read_only", Message: "this link only lets you look"})
-				return
-			case !signedIn:
-				signedOut()
-				return
-			default:
-				writeErr(w, s.log, store.ErrNotFound)
-				return
-			}
-		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), grantKey, g)))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// wider: edit before answer before view.
-func wider(a, b store.Link) bool { return linkRank[a.Level] > linkRank[b.Level] }
-
-var linkRank = map[string]int{store.LevelView: 1, store.LevelAnswer: 2, store.LevelEdit: 3}
-
-func adminOnlyErr(w http.ResponseWriter) {
-	writeJSON(w, 403, apiError{Error: "forbidden", Code: "admin_only", Message: "only an admin of the organisation may do this"})
-}
-
-// admin: is the asker an admin of the organisation (everyone is, without a login).
-func (s *server) admin(r *http.Request) bool {
-	return s.auth == nil || grantFrom(r).role == store.RoleAdmin
-}
-
 // sees: may a stream with this grant hear of a change (a link to one plan hears nothing of the other plans).
-func (g grant) sees(org string, c change) bool {
-	if g.plan == "" || c.Path == "" {
+func (g grant) sees(c change) bool {
+	if g.plan == "" || c.Plan == "" {
 		return true
 	}
-	rest, ok := strings.CutPrefix(c.Path, "/orgs/"+org+"/plans/")
-	if !ok {
-		return true
-	}
-	plan, _, _ := strings.Cut(rest, "/")
-	return plan == g.plan
-}
-
-// ---- what the page asks ----------------------------------------------------------------------------------------
-
-// me says whether there is a login, who is signed in, and which links are open in this browser: {"login": false}
-// without a login, else {"login": true, "user": {"name", "email"} or null, "links": [...], "signup": address if set}.
-func (s *server) me(w http.ResponseWriter, r *http.Request) {
-	if s.auth == nil {
-		writeJSON(w, 200, map[string]any{"login": false})
-		return
-	}
-	var user *store.User
-	if u, ok := userFrom(r); ok {
-		user = &u
-	}
-	links := s.links(r)
-	for i := range links {
-		links[i].Token, links[i].CreatedBy, links[i].ID = "", "", 0
-	}
-	out := map[string]any{"login": true, "user": user, "links": links}
-	if s.auth.opt.SignupURL != "" {
-		out["signup"] = s.auth.opt.SignupURL
-	}
-	writeJSON(w, 200, out)
+	return c.Plan == g.plan
 }
 
 // openLink is the address of a link: GET /s/<token>. A view or edit link is remembered in this browser (a cookie) and
@@ -291,7 +98,7 @@ func (s *server) openLink(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/?link=invalid", http.StatusSeeOther)
 			return
 		}
-		s.hub.publish(o.Slug, change{Method: "POST", Path: "/orgs/" + o.Slug + "/members"})
+		s.hub.publish(o.Slug, change{Proc: "Joined"})
 		http.Redirect(w, r, "/o/"+url.PathEscape(o.Slug)+"?joined", http.StatusSeeOther) // the page says welcome
 		return
 	}
@@ -307,104 +114,4 @@ func (s *server) openLink(w http.ResponseWriter, r *http.Request) {
 		to += "/p/" + url.PathEscape(l.Plan)
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
-}
-
-// ---- links and members (links.go in the store) -------------------------------------------------------------------
-
-func (s *server) linkRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/orgs/{org}/links", func(w http.ResponseWriter, r *http.Request) {
-		v, err := s.st.ListLinks(r.Context(), r.PathValue("org"))
-		if err != nil {
-			writeErr(w, s.log, err)
-			return
-		}
-		writeJSON(w, 200, v)
-	})
-	mux.HandleFunc("POST /api/orgs/{org}/links", func(w http.ResponseWriter, r *http.Request) {
-		var b struct {
-			Plan        string `json:"plan"`
-			Level       string `json:"level"`
-			Label       string `json:"label"`
-			ExpiresDays int    `json:"expires_days"`
-			SingleUse   bool   `json:"single_use"`
-		}
-		if !decode(w, r, &b) {
-			return
-		}
-		if b.Level == store.LevelJoin && !s.admin(r) {
-			adminOnlyErr(w)
-			return
-		}
-		var by int64
-		if u, ok := userFrom(r); ok {
-			by = u.ID
-		}
-		l, err := s.st.CreateLink(r.Context(), r.PathValue("org"), b.Plan, b.Level, b.Label, b.ExpiresDays, b.SingleUse, by)
-		if err != nil {
-			writeErr(w, s.log, err)
-			return
-		}
-		writeJSON(w, 201, l)
-	})
-	mux.HandleFunc("DELETE /api/orgs/{org}/links/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			writeErr(w, s.log, store.ErrNotFound)
-			return
-		}
-		if !s.admin(r) {
-			ls, err := s.st.ListLinks(r.Context(), r.PathValue("org"))
-			if err != nil {
-				writeErr(w, s.log, err)
-				return
-			}
-			for _, l := range ls {
-				if l.ID == id && l.Level == store.LevelJoin {
-					adminOnlyErr(w)
-					return
-				}
-			}
-		}
-		noContent(w, s.st.DeleteLink(r.Context(), r.PathValue("org"), id), s)
-	})
-
-	mux.HandleFunc("GET /api/orgs/{org}/members", func(w http.ResponseWriter, r *http.Request) {
-		v, err := s.st.Members(r.Context(), r.PathValue("org"))
-		if err != nil {
-			writeErr(w, s.log, err)
-			return
-		}
-		type member struct {
-			store.Member
-			You bool `json:"you,omitempty"`
-		}
-		u, _ := userFrom(r)
-		out := make([]member, len(v))
-		for i, m := range v {
-			out[i] = member{m, m.ID == u.ID}
-		}
-		writeJSON(w, 200, out)
-	})
-	mux.HandleFunc("PATCH /api/orgs/{org}/members/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			writeErr(w, s.log, store.ErrNotFound)
-			return
-		}
-		var b struct {
-			Role string `json:"role"`
-		}
-		if !decode(w, r, &b) {
-			return
-		}
-		noContent(w, s.st.SetRole(r.Context(), r.PathValue("org"), id, b.Role), s)
-	})
-	mux.HandleFunc("DELETE /api/orgs/{org}/members/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-		if err != nil {
-			writeErr(w, s.log, store.ErrNotFound)
-			return
-		}
-		noContent(w, s.st.RemoveMember(r.Context(), r.PathValue("org"), id), s)
-	})
 }
