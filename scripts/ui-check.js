@@ -712,6 +712,8 @@ const { spawn } = require('child_process');
     const next0 = { none: 'good', good: 'poor', poor: 'never', never: 'none' }[before0];
     await until(page, ([x, l]) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === l, ['Jon Demo, ' + ev[0], next0], 'a tap moves the answer on');
     ok((await countOf(ev[0])) !== count0, 'the count of the event follows: ' + count0 + ' -> ' + (await countOf(ev[0])));
+    // the cell into view first: scrolled sideways, it can be under the names, which stay put
+    await page.locator('td.answer', { has: answer('Jon Demo', ev[1]) }).evaluate((td) => td.scrollIntoView({ inline: 'center', block: 'center' }));
     await page.locator('td.answer', { has: answer('Jon Demo', ev[1]) }).locator('.note-tab').click({ force: true });
     await until(page, () => { const x = document.querySelector('.note-pop textarea'); return !!x && x.offsetParent !== null; }, null, 'on a phone the corner tab opens the note too');
     const pop = await page.locator('.note-pop').boundingBox();

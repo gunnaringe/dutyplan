@@ -241,7 +241,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("API: planning without a planner does not give 503", "internal/api/runs.go", "case errors.Is(err, planner.ErrUnavailable):", "case false:"),
     ("API: busy does not give 409", "internal/api/runs.go", "case errors.Is(err, planner.ErrBusy):", "case false:"),
     ("places for tasks that are not distributed", "internal/planner/input.go", "if planned[task] {\n\t\t\t\tsnap.Places", "if true {\n\t\t\t\tsnap.Places"),
-    ("a locked person is not shown as locked", "internal/planner/view.go", "Locked: a.Locked})", "Locked: false})"),
+    ("a locked person is not shown as locked", "internal/planner/view.go", "Weak: weak, Locked: a.Locked,", "Weak: weak, Locked: false,"),
     ("a manual text is not shown", "internal/planner/view.go", "c.texts = append(c.texts, CellText{Text: m.Label, Fills: fills})", "c.texts = c.texts[:0]"),
     ("places do not count texts", "internal/planner/view.go", "c.Slots += x.Fills", "c.Slots += x.Fills * 0"),
     ("a place without an answer from the planner is dropped", "internal/planner/view.go", "if n > 0 && cells[key{eid(e.ID), tid(task)}] == nil {", "if false {"),
