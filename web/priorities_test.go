@@ -1,7 +1,6 @@
 package web
 
 import (
-	"os"
 	"regexp"
 	"strconv"
 	"testing"
@@ -12,13 +11,10 @@ import (
 // «What matters most» sets groups of weights to fixed values; Normal must be the defaults, or a plan that never changed
 // anything would show «Custom», and every level must be within the weight's limits.
 func TestPrioritiesNormalIsTheDefaults(t *testing.T) {
-	src, err := os.ReadFile("app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+	src := pageSource(t)
 	block := regexp.MustCompile(`(?s)const PRIORITIES = \[(.*?)\n\];`).FindSubmatch(src)
 	if block == nil {
-		t.Fatal("PRIORITIES not found in app.js")
+		t.Fatal("PRIORITIES not found in web/src")
 	}
 	specs := map[string]store.WeightSpec{}
 	for _, s := range store.WeightSpecs {

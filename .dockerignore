@@ -10,3 +10,4 @@ solver/.venv
 solver/.mutation-backup
 solver/fixtures
 solver/tests
+node_modules

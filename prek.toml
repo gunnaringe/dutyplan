@@ -31,6 +31,8 @@ hooks = [
     entry = "node --check" },
   { id = "gen", name = "buf lint, gen/ up to date with proto/", language = "system", files = '^(proto/|gen/|buf\.)', pass_filenames = false,
     entry = "mise run gen:check" },
+  { id = "web", name = "tsc, web/app.js up to date with web/src", language = "system", files = '^(web/src/|web/app\.js|tsconfig\.json|package)', pass_filenames = false,
+    entry = "mise run web:check" },
   { id = "tests", name = "tests (Go and Python)", language = "system", pass_filenames = false, always_run = true,
     stages = ["pre-push"], entry = "mise run test" },
 ]

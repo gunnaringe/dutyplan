@@ -100,7 +100,7 @@ func TestLanguagesHaveTheSameKeysAndPlaceholders(t *testing.T) {
 	}
 }
 
-// Every key the page names in app.js exists. Keys built from several parts ('combo.' + level) are written out in the
+// Every key the page names in its code (web/src) exists. Keys built from several parts ('combo.' + level) are written out in the
 // page as whole strings somewhere, or listed here.
 func TestKeysUsedByThePageExist(t *testing.T) {
 	c := catalogs(t)
@@ -108,10 +108,7 @@ func TestKeysUsedByThePageExist(t *testing.T) {
 	for key := range c["en"] {
 		prefixes[strings.SplitN(key, ".", 2)[0]] = true
 	}
-	b, err := os.ReadFile("app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+	b := pageSource(t)
 	lit := regexp.MustCompile(`'([a-z_0-9]+(?:\.[a-z_0-9]+)+)'`)
 	seen := 0
 	for _, m := range lit.FindAllStringSubmatch(string(b), -1) {
@@ -123,11 +120,11 @@ func TestKeysUsedByThePageExist(t *testing.T) {
 		_, plain := c["en"][key]
 		_, counted := c["en"][key+".one"]
 		if !plain && !counted {
-			t.Errorf("app.js uses %q, which i18n.js does not have", key)
+			t.Errorf("the page (web/src) uses %q, which i18n.js does not have", key)
 		}
 	}
 	if seen < 100 {
-		t.Errorf("only %d keys found in app.js: the pattern no longer matches the code", seen)
+		t.Errorf("only %d keys found in web/src: the pattern no longer matches the code", seen)
 	}
 	// Parts that app.js puts together at run time.
 	for _, k := range []string{"combo.cannot", "combo.bad", "combo.good", "pick.not", "pick.poor", "pick.good"} { // cycle() in app.js
@@ -231,11 +228,8 @@ func TestKindsAndWeightsHaveTexts(t *testing.T) {
 	need(`cleanName\([^,]+, "(\w+)"\)`, "what.", us)
 	need(`apiError\{Error: "(\w+)"`, "err.kind.", us)
 	need(`problem\(connect\.\w+, "(\w+)"`, "err.kind.", us)
-	// Weights: label and hint in both languages, and a group in app.js.
-	app, err := os.ReadFile("app.js")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Weights: label and hint in both languages, and a group in the page's WEIGHT_GROUP.
+	app := pageSource(t)
 	for _, m := range regexp.MustCompile(`(?:num\(|\{Key: )"([\w.]+)"`).FindAllStringSubmatch(all.String(), -1) {
 		for _, l := range []string{"en", "nb"} {
 			for _, part := range []string{".label", ".hint"} {
@@ -245,7 +239,7 @@ func TestKindsAndWeightsHaveTexts(t *testing.T) {
 			}
 		}
 		if !strings.Contains(string(app), "'"+m[1]+"':") && !strings.Contains(string(app), " "+m[1]+": '") {
-			t.Errorf("app.js WEIGHT_GROUP has no group for %s", m[1])
+			t.Errorf("WEIGHT_GROUP (web/src) has no group for %s", m[1])
 		}
 	}
 }

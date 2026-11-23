@@ -28,8 +28,12 @@ jobs:
       - uses: jdx/mise-action@v5
       - name: prek checks (YAML, JSON, TOML, gofmt, JS syntax, keys, big files)
         run: mise run lint
+      - name: The page's build tools (package-lock.json)
+        run: mise exec -- npm ci --no-audit --no-fund
       - name: The API's generated code matches proto/ (buf lint, buf generate)
         run: mise run gen:check
+      - name: The page type-checks and web/app.js matches web/src (tsc, esbuild)
+        run: mise run web:check
       - name: Python packages
         run: mise run setup
       - name: Tests (Go and Python)

@@ -1,0 +1,9 @@
+{
+  "name": "dutyplan-web",
+  "private": true,
+  "description": "The page (web/src, TypeScript) bundled into web/app.js by esbuild. Exact versions; mise run web:build.",
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
