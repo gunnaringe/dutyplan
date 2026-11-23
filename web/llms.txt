@@ -99,7 +99,7 @@ Writes answer 204 (or 200/201 with the thing). Ids are numbers; `{org}` and `{pl
   `DELETE /api/orgs/{org}/plans/{plan}/events/{id}/places/{task}` — back to none.
   `PUT /api/orgs/{org}/plans/{plan}/places` `{"places": [{"event", "task", "slots"}]}` — many at once (at most 5000).
 - `GET /api/orgs/{org}/plans/{plan}/fields` — details rows and their values. `POST /api/orgs/{org}/plans/{plan}/fields` `{"name"}`,
-  `PATCH /api/orgs/{org}/plans/{plan}/fields/{id}` `{"name"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position` `{"position"}`,
+  `PATCH /api/orgs/{org}/plans/{plan}/fields/{id}` `{"name"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position` `{"position"}`, `PUT /api/orgs/{org}/plans/{plan}/fields/{id}/frozen` `{"frozen"}` (a frozen row stays in sight under the dates),
   `DELETE /api/orgs/{org}/plans/{plan}/fields/{id}`, `PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}` `{"value"}` ("" removes).
 - `GET /api/orgs/{org}/plans/{plan}/answers` — `{"events": [{"person_id", "event_id", "level"}], "tasks": [...], "notes": [{"person_id", "event_id", "note"}]}`.
   `PUT /api/orgs/{org}/plans/{plan}/people/{id}/availability` `{"levels": {"<event id>": "good"|"poor"|"never"|""}}` — one person.

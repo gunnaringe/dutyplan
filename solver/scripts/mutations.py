@@ -89,6 +89,11 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("answer: an answer link writes answers only", "internal/api/access.go", "||\n\t\tlen(rest) == 6 && rest[2] == \"events\" && rest[4] == \"notes\"", "|| false"),
     ("answer: the narrower link wins", "internal/api/access.go", "return linkRank[a.Level] > linkRank[b.Level]", "return linkRank[a.Level] < linkRank[b.Level]"),
     ("answer: no answer links can be made", "internal/store/links.go", "level != LevelView && level != LevelAnswer &&", "level != LevelView &&"),
+    # frozen details rows (2026-11-23): kept, per row, through a rename; an unknown row is 404
+    ("frozen: freezing is not kept", "internal/store/table.go", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, frozen,", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, false,"),
+    ("frozen: freezing one row freezes them all", "internal/store/table.go", "`UPDATE plan_field SET frozen = ? WHERE id = ? AND org_id = ? AND plan_id = ?`, frozen, id, oid, pid)", "`UPDATE plan_field SET frozen = ? WHERE id != ? OR (org_id = ? AND plan_id = ?)`, frozen, id, oid, pid)"),
+    ("frozen: a rename unfreezes", "internal/store/table.go", "Position: old.Position, Frozen: old.Frozen}", "Position: old.Position}"),
+    ("frozen: an unknown row is frozen", "internal/store/table.go", "\t\tif _, err := getField(ctx, tx, oid, pid, id); err != nil {\n\t\t\treturn err\n\t\t}\n\t\t_, err = tx.ExecContext(ctx, `UPDATE plan_field SET frozen", "\t\t_, err = tx.ExecContext(ctx, `UPDATE plan_field SET frozen"),
     ("share: a view or edit link to the whole organisation", "internal/store/links.go", "if level != LevelJoin && planSlug == \"\" {", "if false {"),
     ("share: an editor changes members", "internal/api/access.go", "return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))", "return false"),
     ("share: nobody may leave", "internal/api/access.go", "return !(r.Method == http.MethodDelete && rest[1] == strconv.FormatInt(me, 10))", "return true"),

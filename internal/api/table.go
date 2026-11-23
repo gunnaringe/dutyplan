@@ -18,6 +18,7 @@ func (s *server) tableRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/orgs/{org}/plans/{plan}/fields", s.addField)
 	mux.HandleFunc("PATCH /api/orgs/{org}/plans/{plan}/fields/{id}", s.renameField)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/fields/{id}/position", s.moveField)
+	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/fields/{id}/frozen", s.freezeField)
 	mux.HandleFunc("PUT /api/orgs/{org}/tasks/{id}/position", s.moveTask)
 	mux.HandleFunc("DELETE /api/orgs/{org}/plans/{plan}/fields/{id}", s.deleteField)
 	mux.HandleFunc("PUT /api/orgs/{org}/plans/{plan}/events/{id}/fields/{field}", s.setFieldValue)
@@ -156,6 +157,24 @@ func (s *server) moveField(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	noContent(w, s.st.MoveField(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, *b.Position), s)
+}
+
+func (s *server) freezeField(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.idParam(w, r)
+	if !ok {
+		return
+	}
+	var b struct {
+		Frozen *bool `json:"frozen"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	if b.Frozen == nil {
+		writeErr(w, s.log, store.Invalid("frozen_missing", nil, "send frozen: true or false"))
+		return
+	}
+	noContent(w, s.st.FreezeField(r.Context(), r.PathValue("org"), r.PathValue("plan"), id, *b.Frozen), s)
 }
 
 func (s *server) deleteField(w http.ResponseWriter, r *http.Request) {

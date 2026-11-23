@@ -144,7 +144,6 @@ table.dp-table { width: auto; border-collapse: separate; border-spacing: 0; }
 .dp-table thead .rl .edit { margin-left: auto; }
 button.edit { background: transparent; color: var(--fg); border: 1px solid var(--line); border-radius: .3rem; padding: 0; width: var(--ctl-sm); height: var(--ctl-sm); font-size: .8rem; line-height: 1; flex: none; }
 .grip { color: var(--muted); cursor: grab; letter-spacing: -2px; user-select: none; }
-.field-row .nm { font-weight: 700; flex: 1; }
 .dp-table tr.drop th, .dp-table tr.drop td { box-shadow: inset 0 2px 0 var(--accent); }
 .person-sect .nm { font-weight: 700; flex: 1; }
 .dp-table tr.person-sect th, .dp-table tr.person-sect td { border-top: 2px solid var(--line); background: color-mix(in srgb, var(--line) 20%, var(--bg)); }
@@ -589,7 +588,32 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
    space efficiently"): the details rows and the add lines are slim, a field or button a little lower than elsewhere in the table */
 .dp-table tr.field-row th, .dp-table tr.field-row td, .dp-table tr.task-row th, .dp-table tr.task-row td, .dp-table tr.adds th, .dp-table tr.adds td { padding-top: .1rem; padding-bottom: .1rem; }
 .dp-table tr.field-row td input, .dp-table tr.task-row td input { height: 1.5rem; padding-top: 0; padding-bottom: 0; }
-.dp-table tr.field-row button.edit { width: 1.4rem; height: 1.4rem; }
+/* the name of a details row is a field of its own (no dialog); the pin freezes the row */
+.dp-table tr.field-row input.fname { flex: 1; min-width: 0; height: 1.5rem; padding: 0 .3rem; font-weight: 700; font-size: .875rem; border-color: transparent; background: transparent; }
+.dp-table tr.field-row input.fname:hover, .dp-table tr.field-row input.fname:focus { border-color: var(--line); background: var(--bg); }
+.dp-table tr.field-row button.freeze { flex: none; width: 1.4rem; height: 1.4rem; min-height: 0; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: none; color: var(--muted); border: 1px solid transparent; opacity: .45; }
+.dp-table tr.field-row button.freeze svg { width: .85rem; height: .85rem; }
+.dp-table tr.field-row:hover button.freeze, .dp-table tr.field-row button.freeze:focus-visible { opacity: 1; border-color: var(--line); }
+.dp-table tr.field-row button.freeze.on { opacity: 1; color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+@media (hover: none) { .dp-table tr.field-row button.freeze { opacity: 1; } }
+/* frozen (2026-11-23, the user: "similar to having a frozen Row in excel"): the row stays under the dates while the table scrolls */
+.grid-scroll.main tr.field-row.frozen > td { position: sticky; top: var(--stick, 0); z-index: 2; background-color: var(--bg); }
+.grid-scroll.main tr.field-row.frozen > th[scope=row] { top: var(--stick, 0); z-index: 3; }
+.grid-scroll.main tr.field-row.frozen:has(+ tr:not(.frozen)) > * { box-shadow: 0 2px 0 var(--accent); }
+.grid-scroll.main tr.field-row.frozen > td.suggesting { z-index: 5; }
+/* every other date a little darker, down the whole table, to follow a column (2026-11-23, the user: "alternativt background colors to
+   aid navigation"); an image over the cell's own colour, so the colours of answers, the draft and a selection stay */
+.dp-table { --alt: color-mix(in srgb, var(--fg) 5.5%, transparent); }
+.dp-table thead th:nth-child(even):not(.corner), .dp-table tbody tr > td:nth-child(even):not([colspan]):not(.addcol) { background-image: linear-gradient(var(--alt), var(--alt)); }
+/* suggestions under a field of a details row: the list of the draft's name field */
+.dp-table td.text { position: relative; }
+.dp-table td.text.suggesting { z-index: 4; }
+.dp-table td.text .elist { position: absolute; z-index: 6; top: 100%; left: 0; min-width: 100%; margin: 2px 0 0; padding: .2rem; list-style: none; max-height: 14rem; overflow: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: .4rem; box-shadow: 0 6px 20px rgba(0, 0, 0, .14); font-size: .85rem; }
+.dp-table td.text .elist[hidden] { display: none; }
+.dp-table td.text .elist li { padding: .3rem .4rem; border-radius: .3rem; cursor: pointer; white-space: nowrap; }
+.dp-table td.text .elist li[aria-selected=true], .dp-table td.text .elist li:hover { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
 .dp-table tr.adds form.addrow { padding: 0 .3rem; }
 .dp-table tr.adds form.addrow input { padding-top: 0; padding-bottom: 0; }
 .dp-table tr.adds form.addrow button { height: 1.4rem; }
