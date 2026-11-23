@@ -103,7 +103,7 @@ a.org-card > .ic { color: var(--muted); }
   background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); font-weight: 700; font-size: .9rem; }
 
 /* ---- the plan page: one table, events across, the first column stays put ---- */
-main:has(.plan-page) { max-width: 100rem; }
+main:has(.plan-page) { max-width: none; padding-left: .5rem; padding-right: .5rem; }  /* the plan uses the whole width: it needs room sideways */
 .title-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .6rem; }
 .title-bar h1 { margin: 0; font-size: 1.25rem; }
 .title-bar .back { color: var(--muted); text-decoration: none; }
