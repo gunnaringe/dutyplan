@@ -11,7 +11,7 @@ import (
 // bekreftelser være pent rendret."
 func TestThePageUsesNoDialogsOfTheBrowser(t *testing.T) {
 	native := regexp.MustCompile(`(^|[^\w.])(window\.)?(confirm|prompt|alert)\(`)
-	for _, f := range []string{"app.js", "i18n.js"} {
+	for _, f := range append(pageFiles(t), "i18n.js") {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

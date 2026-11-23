@@ -7,7 +7,7 @@ and tells you why a place stays empty.
 [![CI](https://github.com/gunnaringe/dutyplan/actions/workflows/ci.yml/badge.svg)](https://github.com/gunnaringe/dutyplan/actions/workflows/ci.yml)
 [![Image](https://github.com/gunnaringe/dutyplan/actions/workflows/image.yml/badge.svg)](https://github.com/gunnaringe/dutyplan/pkgs/container/dutyplan)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-![Go, SQLite and plain JavaScript](https://img.shields.io/badge/go-SQLite%20%2B%20vanilla%20JS-00ADD8)
+![Go, SQLite and TypeScript](https://img.shields.io/badge/go-SQLite%20%2B%20TypeScript-00ADD8)
 ![English and Norwegian bokmål](https://img.shields.io/badge/UI-English%20%C2%B7%20bokm%C3%A5l-lightgrey)
 
 ![The plan page: one table with the events across, what each needs, everyone's answers, and who does what](docs/img/hero.png)
@@ -354,7 +354,7 @@ the smoke test, the browser check and the mutations. `.github/workflows/image.ym
 Layout: `cmd/dutyplan` (main), `internal/store` (SQLite, the schema, all data access), `internal/planner` (builds the planner's
 input from the database, runs it, turns the answer into a view), `internal/api` (the API: [Connect](https://connectrpc.com) with JSON, its schema in `proto/` and the Go code made from it in `gen/`),
 `internal/i18n` (server texts),
-`web/` (the page: plain JavaScript, no build step), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
+`web/` (the page: TypeScript in `web/src/`, bundled by esbuild into `web/app.js`, which is committed, so building the server needs no Node), `solver/` (the Python planner and its tests). `CLAUDE.md` holds the design
 rules and conventions for anyone (or any assistant) working on the code; `PLAN.md` has the design notes.
 
 Security problems: see [SECURITY.md](SECURITY.md).

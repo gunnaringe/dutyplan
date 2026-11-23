@@ -37,3 +37,6 @@ bin/
 *.db
 *.db-wal
 *.db-shm
+
+# the page's build tools (package.json)
+node_modules/

@@ -134,7 +134,7 @@ the texts in the page's language (`?lang=`) from codes and arguments kept in the
 ## Architecture: a proper backend
 
 - **A Go binary with embedded SQLite** (`modernc.org/sqlite`, pure Go, no cgo), numbered migrations embedded and run in a
-  transaction at startup, and a vanilla JS frontend embedded. Runs on kate as a first test (2026-11-20; see phase 6).
+  transaction at startup, and a TypeScript frontend (bundled into one committed file) embedded. Runs on kate as a first test (2026-11-20; see phase 6).
   A backend is needed for shared storage between all users, for the planner and for the history, even without a login.
 - **API: plain JSON over `net/http`, not Connect** (chosen 2026-11-07, differs from `scoreboard/`). There are well under ten kinds of endpoint, and
   Connect would have needed `buf`, two code generators and generated code. Switching later is cheap because the interface is narrow.

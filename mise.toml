@@ -48,16 +48,31 @@ description = "The prek checks on the whole tree (YAML, JSON, TOML, gofmt, JS sy
 quiet = true
 run = "prek run --all-files --quiet"
 
+[tasks."web:build"]
+description = "The page: type-check web/src (tsc, strict) and bundle it into web/app.js (esbuild). Commit app.js with the sources. Needs npm ci once"
+run = """
+npx --no-install tsc -p .
+npx --no-install esbuild web/src/main.ts --bundle --format=iife --target=es2022 --charset=utf8 --minify-whitespace --minify-syntax --log-level=warning \
+  --banner:js='// Generated from web/src (TypeScript) by esbuild: mise run web:build. Do not edit.' --outfile=web/app.js
+"""
+
+[tasks."web:check"]
+description = "Is web/app.js what web/src makes? web:build, then fail if app.js differs from what git has (staged counts; CI and the commit hook)"
+run = """
+mise run web:build
+if ! git diff --quiet -- web/app.js; then git diff --stat -- web/app.js; echo "web/app.js is out of date: run mise run web:build and commit it"; exit 1; fi
+"""
+
 [tasks.gen]
-description = "The Go code of the API (gen/) from proto/ with buf, after a change to the .proto (lint first). Commit gen/ with it"
+description = "The API's code from proto/ with buf (Go in gen/, the page's client in web/src/gen/; needs npm ci), after a change to the .proto (lint first). Commit both"
 run = "buf lint && buf generate"
 
 [tasks."gen:check"]
-description = "Is gen/ what proto/ makes? buf lint, buf generate, then fail if gen/ differs from what git has (staged counts; CI and the commit hook)"
+description = "Are gen/ and web/src/gen/ what proto/ makes? buf lint, buf generate, then fail if gen/ differs from what git has (staged counts; CI and the commit hook)"
 run = '''
 buf lint
 buf generate
-if ! git diff --quiet -- gen || [ -n "$(git ls-files --others --exclude-standard -- gen)" ]; then git status --short -- gen; echo "gen/ is out of date: run mise run gen and commit it"; exit 1; fi
+if ! git diff --quiet -- gen web/src/gen || [ -n "$(git ls-files --others --exclude-standard -- gen web/src/gen)" ]; then git status --short -- gen web/src/gen; echo "gen/ or web/src/gen/ is out of date: run mise run gen and commit it"; exit 1; fi
 '''
 
 [tasks."test:app"]

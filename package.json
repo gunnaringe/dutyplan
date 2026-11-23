@@ -1,0 +1,15 @@
+{
+  "name": "dutyplan-web",
+  "private": true,
+  "description": "The page (web/src, TypeScript) bundled into web/app.js by esbuild. Exact versions; mise run web:build.",
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "2.17.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.17.0",
+    "@connectrpc/connect": "2.3.0",
+    "@connectrpc/connect-web": "2.3.0"
+  }
+}
