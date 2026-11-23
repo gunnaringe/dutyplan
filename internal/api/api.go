@@ -74,7 +74,8 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 	}
 	mux := http.NewServeMux()
 
-	// The API: Connect, JSON only (rpc.go), every call through the interceptor (procs.go).
+	// The API: Connect, JSON (rpc.go) or binary protobuf (Connect's own codec, which the page uses), every call through
+	// the gate and the interceptor (procs.go).
 	opts := []connect.HandlerOption{
 		connect.WithCodec(jsonCodec{"json"}), connect.WithCodec(jsonCodec{"json; charset=utf-8"}),
 		connect.WithInterceptors(s.interceptor()),
@@ -89,7 +90,7 @@ func build(st *store.Store, pl *planner.Service, static fs.FS, log *slog.Logger,
 		func() (string, http.Handler) { return dutyplanv1connect.NewDraftServiceHandler(draftSvc{s}, opts...) },
 	} {
 		path, h := mount()
-		mux.Handle("POST "+path, requireJSON(s.gate, h))
+		mux.Handle("POST "+path, requireFormat(s.gate, h))
 	}
 
 	// the stream of changes is Server-Sent Events, not Connect (stream.go)

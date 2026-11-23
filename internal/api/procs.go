@@ -12,6 +12,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/gunnaringe/dutyplan/internal/store"
 )
@@ -276,8 +280,8 @@ func (s *server) admin(ctx context.Context) bool {
 
 // gate decides access and the rate limit for a call of the API before Connect decodes it, so someone who may not
 // call learns nothing from how a request is refused (a stranger gets 404 or 401, never «invalid»). It reads only
-// `org`, `plan` and `id` from the JSON body (the body is already capped by requireJSON); the grant goes into the
-// context for the handlers.
+// `org`, `plan` and `id` from the body, JSON or binary (the body is already capped by requireFormat); the grant goes into
+// the context for the handlers.
 func (s *server) gate(next http.Handler) http.Handler {
 	writes, dear := s.writes, s.dear
 	refuse := connect.NewErrorWriter()
@@ -291,14 +295,18 @@ func (s *server) gate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		raw, _ := io.ReadAll(r.Body) // read already by requireJSON
+		raw, _ := io.ReadAll(r.Body) // read already by requireFormat
 		r.Body = io.NopCloser(bytes.NewReader(raw))
 		var peek struct {
 			Org  any `json:"org"`
 			Plan any `json:"plan"`
 			ID   any `json:"id"`
 		}
-		_ = json.Unmarshal(raw, &peek) // a body that is not JSON names nothing; Connect refuses it if the gate lets it by
+		if r.Header.Get("Content-Type") == binaryType {
+			peek.Org, peek.Plan, peek.ID = peekBinary(r.URL.Path, raw)
+		} else {
+			_ = json.Unmarshal(raw, &peek) // a body that is not JSON names nothing; Connect refuses it if the gate lets it by
+		}
 		var orgSlug, planSlug string
 		if p.scope != scopeNone {
 			orgSlug, _ = peek.Org.(string)
@@ -325,6 +333,39 @@ func (s *server) gate(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// peekBinary reads `org`, `plan` and `id` from a binary request by their names in the procedure's request message, as
+// the JSON peek does (nil for a field the message lacks or a body that does not decode: it then names nothing).
+func peekBinary(path string, raw []byte) (org, plan, id any) {
+	svc, method, _ := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	d, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(svc))
+	sd, ok := d.(protoreflect.ServiceDescriptor)
+	if err != nil || !ok || sd.Methods().ByName(protoreflect.Name(method)) == nil {
+		return nil, nil, nil
+	}
+	in := sd.Methods().ByName(protoreflect.Name(method)).Input()
+	m := dynamicpb.NewMessage(in)
+	if proto.Unmarshal(raw, m) != nil {
+		return nil, nil, nil
+	}
+	field := func(name string, kind protoreflect.Kind) (protoreflect.Value, bool) {
+		f := in.Fields().ByName(protoreflect.Name(name))
+		if f == nil || f.Kind() != kind || f.Cardinality() == protoreflect.Repeated {
+			return protoreflect.Value{}, false
+		}
+		return m.Get(f), true
+	}
+	if v, ok := field("org", protoreflect.StringKind); ok {
+		org = v.String()
+	}
+	if v, ok := field("plan", protoreflect.StringKind); ok {
+		plan = v.String()
+	}
+	if v, ok := field("id", protoreflect.Int32Kind); ok {
+		id = float64(v.Int()) // as JSON numbers are
+	}
+	return org, plan, id
 }
 
 // interceptor announces every write that went through on the organisation's stream (stream.go).

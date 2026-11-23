@@ -68,18 +68,22 @@ func (c jsonCodec) Unmarshal(b []byte, v any) error {
 
 func (c jsonCodec) IsBinary() bool { return false }
 
-// requireJSON caps the body at what the procedure needs (procs.go: the bulk writes of a selection are bigger), lets
-// the gate decide access, and then takes JSON only (Connect would also take binary protobuf, which the page and the
-// guide never send). The order is the old API's: who may call first, then what they sent.
-func requireJSON(gate func(http.Handler) http.Handler, next http.Handler) http.Handler {
-	json := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if ct := r.Header.Get("Content-Type"); len(ct) < 16 || ct[:16] != "application/json" {
+// binaryType is Connect's binary protobuf, which the page sends (smaller, and faster to read in the browser than JSON);
+// scripts and the agent guide send JSON.
+const binaryType = "application/proto"
+
+// requireFormat caps the body at what the procedure needs (procs.go: the bulk writes of a selection are bigger), lets
+// the gate decide access, and then takes JSON or binary protobuf only (never a form, which a page of another site can
+// send without asking; neither of these can). The order is the old API's: who may call first, then what they sent.
+func requireFormat(gate func(http.Handler) http.Handler, next http.Handler) http.Handler {
+	format := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ct := r.Header.Get("Content-Type"); ct != binaryType && (len(ct) < 16 || ct[:16] != "application/json") {
 			writeJSON(w, 415, apiError{Error: "unsupported_media_type", Message: "send Content-Type: application/json"})
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
-	gated := gate(json)
+	gated := gate(format)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		max := int64(64 << 10)
 		if p, ok := procs[r.URL.Path]; ok && p.big {

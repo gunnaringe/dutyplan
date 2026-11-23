@@ -9,6 +9,7 @@ const chromeDir = () => {
   return path.join(root, d, 'chrome-linux64', 'chrome');
 };
 const { spawn } = require('child_process');
+const pb = require('./pb');  // fakes and changed answers, in binary as the page reads them
 // A read of the API (Connect: every call is a POST to /dutyplan.v1.<Service>/<Method>): its method, else null.
 const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith('/dutyplan.v1.') && /\/(List|Get)[A-Z]/.test(p) ? p.split('/').pop() : null; };
 
@@ -497,14 +498,18 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     }
     // A tab opened before a deploy: an answer with a field this page does not know is still read
     {
+      let type = '';
       const newer = async (route) => {
         const res = await route.fetch();
-        route.fulfill({ response: res, body: JSON.stringify({ ...(await res.json()), zz_added_later: 1 }) });
+        type = res.headers()['content-type'];
+        // field 999, a varint 1: a field a later server may add
+        route.fulfill({ response: res, body: Buffer.concat([await res.body(), Buffer.from([0xb8, 0x3e, 0x01])]) });
       };
       await page.route('**/dutyplan.v1.OrgService/GetOrg', newer);
       await page.reload();
       await page.waitForSelector('button.ans');
       ok(!(await page.locator('#conn').count()), 'an unknown field in an answer is ignored');
+      ok(type === 'application/proto', 'the page talks binary protobuf: ' + type);
       await page.unroute('**/dutyplan.v1.OrgService/GetOrg', newer);
     }
     // Signed out (the sign-in in front answers with a redirect to its own site): a bar with «Sign in again», never «Failed to fetch»
@@ -1215,7 +1220,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       const pg = await c.newPage();
       watch(pg);
       let who = null;
-      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => route.fulfill({ json: { login: true, user: who, signup: 'https://id.example.invalid/signup' } }));
+      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => pb.answer(route, { login: true, user: who, signup: 'https://id.example.invalid/signup' }));
       let signInAt = '';
       await pg.route('**/auth/login**', (route) => { signInAt = route.request().url(); return route.fulfill({ body: 'sign-in', contentType: 'text/plain' }); });
       await pg.goto(base + '/o/sample-club?x=1');
@@ -1275,7 +1280,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       const pg = await c.newPage();
       watch(pg);
       const dlg = pg.locator('dialog.modal:not(.ask)');
-      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => route.fulfill({ json: { login: true, user: { name: 'Kari Test' }, links: [] } }));
+      await pg.route('**/dutyplan.v1.AccountService/Me', (route) => pb.answer(route, { login: true, user: { name: 'Kari Test' }, links: [] }));
       await pg.goto(base + '/o/sports-club');
       ok(!(await pg.locator('button:has-text("Share the organisation")').count()), 'no link to the whole organisation');
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
@@ -1326,7 +1331,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       }
       await pg.setViewportSize({ width: 1280, height: 720 });
       // someone with a view link to the plan: a note, and nothing to share
-      const asLink = (extra) => async (route) => { const res = await route.fetch(); const o = await res.json(); route.fulfill({ json: { ...o, role: '', ...extra } }); };
+      const asLink = (extra) => (route) => pb.edit(route, (o) => ({ ...o, role: '', ...extra }));
       await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'view', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.show-tools');  // one who may only view starts in View; «Table» is the table, with a note

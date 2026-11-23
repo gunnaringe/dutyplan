@@ -236,7 +236,7 @@ The first version has no login, no personal links and no roles. The consequences
 - What makes it defensible: the app goes on an address that is not linked anywhere and is asked to stay out of
   search engines (`noindex`), and SQLite is backed up. Put it on a trusted network or behind a proxy that authenticates (see the README).
   There is no change log and no declared name (both removed 2026-11-19: "Keep it simple for now").
-- Writes must be `application/json`, and `http.CrossOriginProtection` refuses writes from other sites (`Sec-Fetch-Site: cross-site`, 403; no CORS).
+- Writes must be `application/json` or `application/proto` (binary protobuf, the page's), and `http.CrossOriginProtection` refuses writes from other sites (`Sec-Fetch-Site: cross-site`, 403; no CORS).
   All writes go through one helper, one transaction each (the one exception is deleting an organisation, above).
 - Adding links or a login later is an addition and needs no new data model.
 

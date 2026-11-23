@@ -112,7 +112,7 @@ func TestFlowAndSwitchingOrganisation(t *testing.T) {
 	}
 }
 
-func TestWritesNeedJSONAndKnownFields(t *testing.T) {
+func TestWritesNeedJSONOrBinaryAndKnownFields(t *testing.T) {
 	e := newEnv(t)
 	req := httptest.NewRequest("POST", "/api/orgs", strings.NewReader(`name=X`))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -121,13 +121,17 @@ func TestWritesNeedJSONAndKnownFields(t *testing.T) {
 	if w.Code != 415 {
 		t.Errorf("form post must be refused (cross-site writes), got %d", w.Code)
 	}
-	// Connect would also take binary protobuf; the API is JSON only (an empty body is a valid empty message).
-	req = httptest.NewRequest("POST", "/dutyplan.v1.AccountService/CreateOrg", strings.NewReader(""))
-	req.Header.Set("Content-Type", "application/proto")
-	w = httptest.NewRecorder()
-	e.app.ServeHTTP(w, req)
-	if w.Code != 415 {
-		t.Errorf("binary protobuf must be refused, got %d %s", w.Code, w.Body)
+	// text/plain is another type a page of another site may send without asking; gRPC-Web is a protocol Connect would
+	// also serve, whose framed body the gate cannot read; binary protobuf (the page's) is taken (an empty body is a valid
+	// empty message: CreateOrg then refuses the missing name, past the format check)
+	for ct, want := range map[string]int{"text/plain": 415, "application/grpc-web+proto": 415, "application/proto": 400} {
+		req = httptest.NewRequest("POST", "/dutyplan.v1.AccountService/CreateOrg", strings.NewReader(""))
+		req.Header.Set("Content-Type", ct)
+		w = httptest.NewRecorder()
+		e.app.ServeHTTP(w, req)
+		if w.Code != want {
+			t.Errorf("%s: got %d %s, want %d", ct, w.Code, w.Body, want)
+		}
 	}
 	if r := e.do("POST", "/api/orgs", map[string]string{"name": "X Org", "title": "oops"}); r.code != 400 || r.errCode() != "invalid" {
 		t.Errorf("unknown field next to a valid one must be refused: %d %s", r.code, r.body)

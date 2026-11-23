@@ -72,6 +72,11 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("live: the server's write timeout cuts the stream", "internal/api/stream.go", "_ = rc.SetWriteDeadline(time.Time{})", "_ = rc"),
     ("live: the stream is never pinged", "internal/api/stream.go", "if !send(\": ping\\n\\n\") {", "if false {"),
     # signing in (OpenID Connect) and who may do what (2026-11-22)
+    # the gate reads org, plan and id from a binary body (the page's) as from JSON
+    ("access: the gate reads nothing from a binary body", "internal/api/procs.go", "peek.Org, peek.Plan, peek.ID = peekBinary(r.URL.Path, raw)", "_ = peekBinary"),
+    ("access: the gate reads no org from a binary body", "internal/api/procs.go", "org = v.String()", "_ = v"),
+    ("access: the gate reads no plan from a binary body", "internal/api/procs.go", "plan = v.String()", "_ = v"),
+    ("access: the gate reads no id from a binary body", "internal/api/procs.go", "id = float64(v.Int()) // as JSON numbers are", "_ = v"),
     ("access: the organisation list is everyone's", "internal/api/org.go", "orgs, err = s.st.ListOrgsOf(ctx, u.ID)", "_ = u\n\t\torgs, err = s.st.ListOrgs(ctx)"),
     ("access: the API is open without a session", "internal/api/procs.go", "case !signedIn:\n\t\treturn g, errSignedOut", "case !signedIn:\n\t\treturn g, nil"),
     ("access: anyone signed in reaches every organisation", "internal/api/procs.go", "default:\n\t\treturn g, errNotFound", "default:\n\t\treturn g, nil"),
@@ -329,7 +334,7 @@ GO_MUTATIONS: list[tuple[str, str, str, str]] = [
     ("pref: neutral does not remove the answer", "internal/store/preferences.go", 'if want == "" {', "if false {"),
     ("pref: an unchanged answer is accepted", "internal/store/preferences.go", "if changed == 0 {", "if false {"),
     ("pref: an unchanged task choice is accepted", "internal/store/preferences.go", "if before == level {", "if false {"),
-    ("API does not require JSON", "internal/api/rpc.go", "len(ct) < 16 || ct[:16] != \"application/json\"", "len(ct) < 0"),
+    ("API takes any content type, not only JSON or binary", "internal/api/rpc.go", "len(ct) < 16 || ct[:16] != \"application/json\"", "len(ct) < 0"),
     ("API accepts unknown fields", "internal/api/rpc.go", "protojson.UnmarshalOptions{DiscardUnknown: false}", "protojson.UnmarshalOptions{DiscardUnknown: true}"),
     ("API has no size limit", "internal/api/rpc.go", "io.ReadAll(http.MaxBytesReader(w, r.Body, max))", "io.ReadAll(http.MaxBytesReader(w, r.Body, max<<20))"),
     ("API lacks security headers", "internal/api/api.go", 'h.Set("Content-Security-Policy"', 'h.Set("X-Csp-Av"'),
