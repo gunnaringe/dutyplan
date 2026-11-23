@@ -190,16 +190,16 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
 	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	var person store.Person
-	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Kari Test"}).json(&person)
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": "Kari Test"}).json(&person)
 
 	for _, c := range []struct{ method, path string }{
 		{"GET", "/api/orgs/org-b/plans/autumn-2026"},
-		{"PATCH", "/api/orgs/org-b/people/" + itoa(person.ID)},
+		{"PATCH", "/api/orgs/org-b/plans/" + term + "/people/" + itoa(person.ID)},
 		{"GET", "/api/orgs/nope/plans"},
-		{"POST", "/api/orgs/nope/people"},
-		{"GET", "/api/orgs/nope/people"},
-		{"PATCH", "/api/orgs/org-a/people/abc"},
-		{"PATCH", "/api/orgs/org-a/people/99999"},
+		{"POST", "/api/orgs/nope/plans/" + term + "/people"},
+		{"GET", "/api/orgs/nope/plans/" + term + "/people"},
+		{"PATCH", "/api/orgs/org-a/plans/" + term + "/people/abc"},
+		{"PATCH", "/api/orgs/org-a/plans/" + term + "/people/99999"},
 		{"GET", "/api/nope/nothing"},
 	} {
 		var body any
@@ -214,7 +214,7 @@ func TestCrossOrganisationRequestsAre404(t *testing.T) {
 		}
 	}
 	var people []store.Person
-	e.mustDo(200, "GET", "/api/orgs/org-a/people", nil).json(&people)
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/"+term+"/people", nil).json(&people)
 	if len(people) != 1 || !people[0].Proposable {
 		t.Errorf("A's person must be untouched: %v", people)
 	}
@@ -225,13 +225,14 @@ func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
 func TestPersonPatch(t *testing.T) {
 	e := newEnv(t)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	var p store.Person
-	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Kari Test"}).json(&p)
-	e.mustDo(200, "PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), map[string]any{"proposable": false}).json(&p)
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": "Kari Test"}).json(&p)
+	e.mustDo(200, "PATCH", "/api/orgs/org-a/plans/"+term+"/people/"+itoa(p.ID), map[string]any{"proposable": false}).json(&p)
 	if p.Proposable {
 		t.Errorf("patch = %+v", p)
 	}
-	if r := e.do("PATCH", "/api/orgs/org-a/people/"+itoa(p.ID), map[string]any{}); r.code != 400 {
+	if r := e.do("PATCH", "/api/orgs/org-a/plans/"+term+"/people/"+itoa(p.ID), map[string]any{}); r.code != 400 {
 		t.Errorf("empty patch: %d", r.code)
 	}
 }
@@ -324,3 +325,6 @@ func addWithPlaces(st *store.Store, org, plan string, in store.NewEvents, places
 	}
 	return evs, nil
 }
+
+// term is the plan the tests that make one name «Autumn 2026» put their people and tasks in.
+const term = "autumn-2026"

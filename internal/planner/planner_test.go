@@ -53,30 +53,30 @@ func populate(t *testing.T, st *store.Store, orgName string) world {
 	}
 	w.org, err = st.CreateOrg(ctx, orgName)
 	must(err)
-	w.singing, err = st.CreateTask(ctx, w.org.Slug, "Singing")
-	must(err)
-	off := false
-	w.singing, err = st.UpdateTask(ctx, w.org.Slug, w.singing.ID, store.TaskPatch{Planned: &off})
-	must(err)
-	w.sound, err = st.CreateTask(ctx, w.org.Slug, "Sound")
-	must(err)
-	w.camera, err = st.CreateTask(ctx, w.org.Slug, "Camera")
-	must(err)
-	must(st.SetCombination(ctx, w.org.Slug, w.sound.ID, w.camera.ID, "cannot"))
 	w.plan, err = st.CreatePlan(ctx, w.org.Slug, "Autumn 2026")
 	must(err)
+	w.singing, err = st.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Singing")
+	must(err)
+	off := false
+	w.singing, err = st.UpdateTask(ctx, w.org.Slug, w.plan.Slug, w.singing.ID, store.TaskPatch{Planned: &off})
+	must(err)
+	w.sound, err = st.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Sound")
+	must(err)
+	w.camera, err = st.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Camera")
+	must(err)
+	must(st.SetCombination(ctx, w.org.Slug, w.plan.Slug, w.sound.ID, w.camera.ID, "cannot"))
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30"} {
 		evs, err := addWithPlaces(st, w.org.Slug, w.plan.Slug, store.NewEvents{Date: d}, map[int64]int{w.sound.ID: 1, w.camera.ID: 1, w.singing.ID: 1})
 		must(err)
 		w.events = append(w.events, evs[0])
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie", "Dina", "Embla", "Frode"} {
-		p, err := st.CreatePerson(ctx, w.org.Slug, n)
+		p, err := st.CreatePerson(ctx, w.org.Slug, w.plan.Slug, n)
 		must(err)
 		w.people[n] = p
 	}
 	choose := func(person string, task store.Task, level string) {
-		must(st.SetPersonTask(ctx, w.org.Slug, w.people[person].ID, task.ID, level))
+		must(st.SetPersonTask(ctx, w.org.Slug, w.plan.Slug, w.people[person].ID, task.ID, level))
 	}
 	for _, n := range []string{"Aslaug", "Birger", "Cecilie"} {
 		choose(n, w.sound, "good")
@@ -102,7 +102,7 @@ func (w world) data(t *testing.T) store.PlanningData {
 func TestBuildInputMapsTheStoredPlanToTheSolversFormat(t *testing.T) {
 	w := newWorld(t, "Club")
 	off := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
+	w.st.UpdatePerson(ctx, w.org.Slug, w.plan.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})
 	input, hash, snap, err := BuildInput(w.data(t), Params{TimeLimit: 7, Seed: 3, Workers: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -515,8 +515,8 @@ func TestTheRealSolverPlansTheStoredDataWithoutBreakingARule(t *testing.T) {
 	solver := realSolver(t)
 	w := newWorld(t, "Club")
 	off := false
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})  // Embla may not be proposed
-	w.st.UpdatePerson(ctx, w.org.Slug, w.people["Birger"].ID, store.PersonPatch{Proposable: &off}) // nor Birger
+	w.st.UpdatePerson(ctx, w.org.Slug, w.plan.Slug, w.people["Embla"].ID, store.PersonPatch{Proposable: &off})  // Embla may not be proposed
+	w.st.UpdatePerson(ctx, w.org.Slug, w.plan.Slug, w.people["Birger"].ID, store.PersonPatch{Proposable: &off}) // nor Birger
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	run := func() RunView {
@@ -603,7 +603,7 @@ func TestTheRealSolverReportsWhyAPlaceCannotBeFilled(t *testing.T) {
 	w := newWorld(t, "Club")
 	// nobody wants Camera any more: remove the three who chose it
 	for _, n := range []string{"Cecilie", "Dina", "Embla"} {
-		w.st.RemovePersonTask(ctx, w.org.Slug, w.people[n].ID, w.camera.ID)
+		w.st.RemovePersonTask(ctx, w.org.Slug, w.plan.Slug, w.people[n].ID, w.camera.ID)
 	}
 	s := New(w.st, solver, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	id, _ := s.Start(ctx, w.org.Slug, w.plan.Slug, Params{TimeLimit: 5})

@@ -65,22 +65,23 @@ func TestAWriteIsAnnouncedOnTheStreamOfItsOrganisationOnly(t *testing.T) {
 	t.Cleanup(srv.Close)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org B"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	a, b := listen(t, srv, "org-a"), listen(t, srv, "org-b")
 
-	if r := e.doAs("tab-1", "POST", "/api/orgs/org-a/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
+	if r := e.doAs("tab-1", "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
 		t.Fatalf("create person: %d %s", r.code, r.body)
 	}
 	var c change
 	m := next(a, 2*time.Second)
-	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Origin: "tab-1", Proc: "CreatePerson"}) {
+	if json.Unmarshal([]byte(m), &c) != nil || c != (change{Origin: "tab-1", Proc: "CreatePerson", Plan: term}) {
 		t.Fatalf("org A's stream got %q, want the change with its origin, method and path", m)
 	}
 	if m := next(b, 200*time.Millisecond); m != "" {
 		t.Fatalf("org B's stream got %q for a change in org A", m)
 	}
 	// reading and a refused write change nothing, so they are not announced
-	e.mustDo(200, "GET", "/api/orgs/org-a/people", nil)
-	if r := e.doAs("tab-1", "POST", "/api/orgs/org-a/people", map[string]string{"name": ""}); r.code < 400 {
+	e.mustDo(200, "GET", "/api/orgs/org-a/plans/"+term+"/people", nil)
+	if r := e.doAs("tab-1", "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": ""}); r.code < 400 {
 		t.Fatalf("an empty name was accepted: %d", r.code)
 	}
 	if m := next(a, 200*time.Millisecond); m != "" {
@@ -206,9 +207,10 @@ func TestTheStreamOutlivesTheServerTimeouts(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans", map[string]string{"name": "Autumn 2026"})
 	s := listen(t, srv, "org-a")
 	time.Sleep(time.Second)
-	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Aslaug"})
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": "Aslaug"})
 	if m := next(s, 2*time.Second); m == "" {
 		t.Fatal("the stream was cut by the server's timeouts")
 	}

@@ -169,7 +169,7 @@ func TestWithoutASessionOnlyThePagesAndHealthAreOpen(t *testing.T) {
 	if me["login"] != true || me["user"] != nil || me["signup"] != "https://id.example/signup" {
 		t.Errorf("me without a session: %v", me)
 	}
-	for _, req := range [][2]string{{"GET", "/api/orgs"}, {"POST", "/api/orgs"}, {"GET", "/api/orgs/x/people"}, {"GET", "/api/orgs/x/stream"}} {
+	for _, req := range [][2]string{{"GET", "/api/orgs"}, {"POST", "/api/orgs"}, {"GET", "/api/orgs/x/plans/" + term + "/people"}, {"GET", "/api/orgs/x/stream"}} {
 		if r := e.as(nil, req[0], req[1], map[string]string{"name": "X"}); r.code != 401 || r.errCode() != "signed_out" {
 			t.Errorf("%s %s: %d %s, want 401 signed_out", req[0], req[1], r.code, r.body)
 		}
@@ -286,16 +286,19 @@ func TestMembersSeeAndChangeOnlyTheirOwnOrganisations(t *testing.T) {
 	if len(list) != 1 || list[0].Slug != "choir" {
 		t.Fatalf("kari's organisations: %+v", list)
 	}
-	if r := e.as(kari, "POST", "/api/orgs/choir/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
+	if r := e.as(kari, "POST", "/api/orgs/choir/plans", map[string]string{"name": "Autumn 2026"}); r.code != 201 {
+		t.Fatalf("a member makes a plan: %d", r.code)
+	}
+	if r := e.as(kari, "POST", "/api/orgs/choir/plans/"+term+"/people", map[string]string{"name": "Aslaug"}); r.code != 201 {
 		t.Fatalf("a member's write: %d", r.code)
 	}
 	// someone else's organisation does not exist for her, nor does one that does not exist at all
-	for _, path := range []string{"/api/orgs/choir-2", "/api/orgs/choir-2/people", "/api/orgs/choir-2/stream", "/api/orgs/nope/people", "/api/orgs/choir%2F..%2Fchoir-2/people"} {
+	for _, path := range []string{"/api/orgs/choir-2", "/api/orgs/choir-2/plans/" + term + "/people", "/api/orgs/choir-2/stream", "/api/orgs/nope/plans/" + term + "/people", "/api/orgs/choir%2F..%2Fchoir-2/people"} {
 		if r := e.as(kari, "GET", path, nil); r.code != 404 {
 			t.Errorf("GET %s by another: %d, want 404", path, r.code)
 		}
 	}
-	for _, req := range [][2]string{{"POST", "/api/orgs/choir-2/people"}, {"PATCH", "/api/orgs/choir-2"}, {"DELETE", "/api/orgs/choir-2?confirm=choir-2"}} {
+	for _, req := range [][2]string{{"POST", "/api/orgs/choir-2/plans/" + term + "/people"}, {"PATCH", "/api/orgs/choir-2"}, {"DELETE", "/api/orgs/choir-2?confirm=choir-2"}} {
 		if r := e.as(kari, req[0], req[1], map[string]string{"name": "X"}); r.code != 404 {
 			t.Errorf("%s %s by another: %d, want 404", req[0], req[1], r.code)
 		}

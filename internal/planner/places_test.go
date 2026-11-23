@@ -77,7 +77,7 @@ func TestEveryEventIsATypeOfItsOwnWithItsPlacesInTheInput(t *testing.T) {
 
 func TestATaskOnlyOneEventHasIsSentForThatEvent(t *testing.T) {
 	w := newWorld(t, "Club")
-	extra, err := w.st.CreateTask(ctx, w.org.Slug, "Coffee")
+	extra, err := w.st.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Coffee")
 	if err != nil {
 		t.Fatal(err)
 	}

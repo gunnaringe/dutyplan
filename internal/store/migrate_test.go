@@ -16,7 +16,7 @@ func TestADatabaseWithUnknownMigrationsIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-		INSERT INTO schema_migrations VALUES (1, 'then'), (12, 'then')`); err != nil {
+		INSERT INTO schema_migrations VALUES (1, 'then'), (999, 'then')`); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
@@ -137,5 +137,51 @@ func TestTheLinksSurviveTheAnswerLevel(t *testing.T) {
 	}
 	if _, err := s.DB().Exec(`INSERT INTO share_link (org_id, plan_id, token, level, created_at) SELECT org_id, plan_id, 'x', 'other', 'now' FROM share_link LIMIT 1`); err == nil {
 		t.Error("the table takes any level")
+	}
+}
+
+// 012: everything a plan is made of became per plan (the planner's migration test has a database with plans and runs). An
+// organisation that had people and tasks but no plan keeps them, and its first plan takes them, the tasks they take too.
+func TestAnOrganisationWithoutPlansKeepsItsPeopleForItsFirstPlan(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	s, err := OpenUpTo(path, 11)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		`INSERT INTO organization (id, slug, name, created_at) VALUES (1, 'club', 'Club', '2026-11-23T10:00:00Z')`,
+		`INSERT INTO person (id, org_id, name, position, created_at) VALUES (1, 1, 'Kari Test', 0, '2026-11-23T10:00:00Z')`,
+		`INSERT INTO task (id, org_id, name, position, created_at) VALUES (1, 1, 'Sound', 0, '2026-11-23T10:00:00Z')`,
+		`INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (1, 1, 1, 'good')`,
+		// another organisation without plans: its people wait for its own first plan
+		`INSERT INTO organization (id, slug, name, created_at) VALUES (2, 'band', 'Band', '2026-11-23T10:00:00Z')`,
+		`INSERT INTO person (id, org_id, name, position, created_at) VALUES (2, 2, 'Ola Sample', 0, '2026-11-23T10:00:00Z')`,
+	} {
+		if _, err := s.DB().Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.Close()
+	if s, err = Open(path); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	first, err := s.CreatePlan(ctx, "club", "Autumn 2026")
+	if err != nil {
+		t.Fatal(err)
+	}
+	people, _ := s.ListPeople(ctx, "club", first.Slug)
+	tasks, _ := s.ListTasks(ctx, "club", first.Slug)
+	answers, _ := s.ListAnswers(ctx, "club", first.Slug)
+	if len(people) != 1 || people[0].ID != 1 || len(tasks) != 1 || len(answers.Tasks) != 1 || answers.Tasks[0].Level != "good" {
+		t.Errorf("the first plan has them: %+v %+v %+v", people, tasks, answers.Tasks)
+	}
+	second, _ := s.CreatePlan(ctx, "club", "Spring 2027")
+	if people, _ := s.ListPeople(ctx, "club", second.Slug); len(people) != 0 {
+		t.Errorf("an empty plan after that is empty: %+v", people)
+	}
+	band, _ := s.CreatePlan(ctx, "band", "Autumn 2026")
+	if people, _ := s.ListPeople(ctx, "band", band.Slug); len(people) != 1 || people[0].Name != "Ola Sample" {
+		t.Errorf("the other organisation's first plan: %+v", people)
 	}
 }

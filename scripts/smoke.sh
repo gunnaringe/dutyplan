@@ -41,34 +41,35 @@ code() {
   [ "$got" = "$1" ] || fail "GET $2 gave $got, expected $1"
 }
 A='"org":"org-a"'; B='"org":"org-b"'; T='"org":"test"'
+PA="$A,\"plan\":\"autumn-2026\""; PB="$B,\"plan\":\"autumn-2026\""; PT="$T,\"plan\":\"autumn-2026\""   # people and tasks are a plan's
 
 start
 call 200 AccountService/CreateOrg '{"name":"Org A"}'
 call 200 AccountService/CreateOrg '{"name":"Org B"}'
 call 200 PlanService/CreatePlan "{$A,\"name\":\"Autumn 2026\"}"
 call 200 PlanService/CreatePlan "{$B,\"name\":\"Autumn 2026\"}"
-call 200 SetupService/CreatePerson "{$A,\"name\":\"Kari Test\"}"
+call 200 SetupService/CreatePerson "{$PA,\"name\":\"Kari Test\"}"
 id=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 [ -n "$id" ] || fail "did not find the person id"
 
 call 200 PlanService/CreatePlan "{$A,\"name\":\"Spring 2027\"}"          # exists only in A
 
 call 403 AccountService/CreateOrg '{"name":"Cross site"}' 'Sec-Fetch-Site: cross-site'   # a call from another site
-call 404 SetupService/UpdatePerson "{$B,\"id\":$id,\"proposable\":false}"    # A's person through B
+call 404 SetupService/UpdatePerson "{$PB,\"id\":$id,\"proposable\":false}"    # A's person through B
 call 404 PlanService/GetPlan "{$B,\"plan\":\"spring-2027\"}"                  # A's plan through B
 call 200 PlanService/GetPlan "{$A,\"plan\":\"spring-2027\"}"
 call 200 PlanService/ListPlans "{$B}"
 [ "$(grep -o '"slug"' "$tmp/body" | wc -l)" -eq 1 ] || fail "B sees plans other than its own: $(cat "$tmp/body")"
-call 200 SetupService/ListPeople "{$A}"
+call 200 SetupService/ListPeople "{$PA}"
 grep -q '"proposable":true' "$tmp/body" || fail "A's person was changed through B"
 code 200 / && grep -q Dutyplan "$tmp/body" || fail "the front page is missing"
 code 200 /i18n.js && grep -q MESSAGES "$tmp/body" || fail "the texts of the page are missing"
 code 200 /o/org-a/p/autumn-2026
 
-call 200 SetupService/CreateTask "{$A,\"name\":\"Doors\"}"
+call 200 SetupService/CreateTask "{$PA,\"name\":\"Doors\"}"
 task=$(sed -n 's/.*"id":\([0-9]*\).*/\1/p' "$tmp/body")
 [ -n "$task" ] || fail "did not find the task id"
-call 200 SetupService/UpdateTask "{$A,\"id\":$task,\"planned\":false}"   # filled by hand only, so org-a has nothing to plan
+call 200 SetupService/UpdateTask "{$PA,\"id\":$task,\"planned\":false}"   # filled by hand only, so org-a has nothing to plan
 call 200 PlanService/AddEvents "{$B,\"plan\":\"autumn-2026\",\"date\":\"2026-08-09\"}"
 evb=$(sed -n 's/^{"events":\[{"id":\([0-9]*\),.*/\1/p' "$tmp/body")
 call 404 PlanService/SetPlaces "{$B,\"plan\":\"autumn-2026\",\"event\":$evb,\"task\":$task,\"slots\":1}"   # A's task on B's event
@@ -90,11 +91,11 @@ call 200 PlanService/ListEvents "{$B,\"plan\":\"autumn-2026\"}"
 
 sh scripts/seed-demo.sh "$url" >/dev/null || fail "the seed script failed"
 sh scripts/seed-demo.sh "$url" >/dev/null || fail "the seed script failed on the second run"   # idempotent: nothing is doubled
-call 200 SetupService/ListPeople "{$T}"
+call 200 SetupService/ListPeople "{$PT}"
 [ "$(grep -o '"name"' "$tmp/body" | wc -l)" -eq 8 ] || fail "the seed should give 8 people: $(cat "$tmp/body")"
 call 200 PlanService/ListEvents "{$T,\"plan\":\"autumn-2026\"}"
 [ "$(grep -o '"date"' "$tmp/body" | wc -l)" -eq 21 ] || fail "the seed should give 21 events (Sundays 2 Aug - 20 Dec)"
-call 200 SetupService/ListCombinations "{$T}"
+call 200 SetupService/ListCombinations "{$PT}"
 [ "$(grep -o '"level":"cannot"' "$tmp/body" | wc -l)" -eq 2 ] && [ "$(grep -o '"level"' "$tmp/body" | wc -l)" -eq 2 ] || fail "the seed's combinations are wrong: $(cat "$tmp/body")"
 
 # planning with the real planner: the run is done, checked without violations, and invisible to another organisation

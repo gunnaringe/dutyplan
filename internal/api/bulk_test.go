@@ -28,7 +28,7 @@ func TestASelectionSetsManyAnswersAtOnce(t *testing.T) {
 	e.mustDo(201, "POST", "/api/orgs", map[string]string{"name": "Org A"})
 	ids := prefSetup(t, e, "org-a")
 	var ola store.Person
-	e.mustDo(201, "POST", "/api/orgs/org-a/people", map[string]string{"name": "Ola Sample"}).json(&ola)
+	e.mustDo(201, "POST", "/api/orgs/org-a/plans/"+term+"/people", map[string]string{"name": "Ola Sample"}).json(&ola)
 	path := "/api/orgs/org-a/plans/autumn-2026/answers"
 	var all []store.Answer
 	for _, p := range []int64{ids.person, ola.ID} {

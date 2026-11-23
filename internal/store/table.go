@@ -65,7 +65,7 @@ func (s *Store) SetEventPlaces(ctx context.Context, orgSlug, planSlug string, ev
 		if _, err := getEvent(ctx, tx, oid, pid, eventID); err != nil {
 			return err
 		}
-		if err := inOrg(ctx, tx, "task", oid, taskID); err != nil {
+		if err := inPlan(ctx, tx, "task", pid, taskID); err != nil {
 			return err
 		}
 		var before int
@@ -391,7 +391,7 @@ func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answ
 		}); err != nil {
 		return out, err
 	}
-	err = scanAll(ctx, s.db, `SELECT person_id, task_id, level FROM person_task WHERE org_id = ? ORDER BY person_id, task_id`, []any{oid},
+	err = scanAll(ctx, s.db, `SELECT person_id, task_id, level FROM person_task WHERE org_id = ? AND plan_id = ? ORDER BY person_id, task_id`, []any{oid, pid},
 		func(r *sql.Rows) error {
 			var a TaskAnswer
 			err := r.Scan(&a.PersonID, &a.TaskID, &a.Level)
@@ -401,25 +401,25 @@ func (s *Store) ListAnswers(ctx context.Context, orgSlug, planSlug string) (Answ
 	return out, err
 }
 
-// SetTaskCombinations sets how one task combines with every other task of the organisation at once, for example «cannot be
+// SetTaskCombinations sets how one task combines with every other task of the plan at once, for example «cannot be
 // combined with anything». "standard" removes the settings, so the pairs are «bad» (impractical) again.
-func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug string, taskID int64, level string) error {
+func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug, planSlug string, taskID int64, level string) error {
 	if level != "standard" && !combinationLevels[level] {
 		return Invalid("level_invalid", nil, "level must be cannot, practical or standard")
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		oid, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
 		var name string
-		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND org_id = ?`, taskID, oid).Scan(&name); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.QueryRowContext(ctx, `SELECT name FROM task WHERE id = ? AND plan_id = ?`, taskID, pid).Scan(&name); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
 		}
 		var others []int64
-		if err := scanAll(ctx, tx, `SELECT id FROM task WHERE org_id = ? AND id <> ? ORDER BY id`, []any{oid, taskID}, func(r *sql.Rows) error {
+		if err := scanAll(ctx, tx, `SELECT id FROM task WHERE plan_id = ? AND id <> ? ORDER BY id`, []any{pid, taskID}, func(r *sql.Rows) error {
 			var id int64
 			err := r.Scan(&id)
 			others = append(others, id)
@@ -431,17 +431,17 @@ func (s *Store) SetTaskCombinations(ctx context.Context, orgSlug string, taskID 
 		for _, other := range others {
 			a, b := min(taskID, other), max(taskID, other)
 			before := "standard"
-			if err := tx.QueryRowContext(ctx, `SELECT level FROM task_combination WHERE org_id = ? AND task_a = ? AND task_b = ?`, oid, a, b).Scan(&before); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			if err := tx.QueryRowContext(ctx, `SELECT level FROM task_combination WHERE plan_id = ? AND task_a = ? AND task_b = ?`, pid, a, b).Scan(&before); err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
 			if before == level {
 				continue
 			}
 			if level == "standard" {
-				_, err = tx.ExecContext(ctx, `DELETE FROM task_combination WHERE org_id = ? AND task_a = ? AND task_b = ?`, oid, a, b)
+				_, err = tx.ExecContext(ctx, `DELETE FROM task_combination WHERE plan_id = ? AND task_a = ? AND task_b = ?`, pid, a, b)
 			} else {
-				_, err = tx.ExecContext(ctx, `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, ?)
-					ON CONFLICT (task_a, task_b) DO UPDATE SET level = excluded.level`, oid, a, b, level)
+				_, err = tx.ExecContext(ctx, `INSERT INTO task_combination (org_id, plan_id, task_a, task_b, level) VALUES (?, ?, ?, ?, ?)
+					ON CONFLICT (task_a, task_b) DO UPDATE SET level = excluded.level`, oid, pid, a, b, level)
 			}
 			if err != nil {
 				return err

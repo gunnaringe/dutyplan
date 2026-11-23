@@ -15,8 +15,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  # a new push to a pull request replaces its run; on main every merge gets its full run of the mutations
+  # a new push to a pull request replaces its run; on main every merge gets its full run of the mutations (a group per commit:
+  # one shared group would still drop a queued run when the next merge comes)
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

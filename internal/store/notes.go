@@ -36,7 +36,7 @@ func (s *Store) SetAnswerNote(ctx context.Context, orgSlug, planSlug string, eve
 		if err != nil {
 			return err
 		}
-		if _, err := getPerson(ctx, tx, oid, personID); err != nil {
+		if _, err := getPerson(ctx, tx, pid, personID); err != nil {
 			return err
 		}
 		if err := eventInPlan(ctx, tx, oid, pid, eventID); err != nil {

@@ -11,7 +11,7 @@ import (
 func TestTheCapsOnWhatOneSignUpCanMake(t *testing.T) {
 	ctx := context.Background()
 	s := open(t)
-	for _, v := range []*int{&MaxOwnedOrgs, &MaxPlansPerOrg, &MaxPeoplePerOrg, &MaxTasksPerOrg, &MaxEventsPerPlan, &MaxLinksPerOrg} {
+	for _, v := range []*int{&MaxOwnedOrgs, &MaxPlansPerOrg, &MaxPeoplePerPlan, &MaxTasksPerPlan, &MaxEventsPerPlan, &MaxLinksPerOrg} {
 		old := *v
 		*v = 2
 		t.Cleanup(func() { *v = old })
@@ -33,8 +33,14 @@ func TestTheCapsOnWhatOneSignUpCanMake(t *testing.T) {
 	}
 	try("orgs", func(i int) error { _, err := s.CreateOrgOwnedBy(ctx, fmt.Sprintf("Org %d", i), u.ID); return err })
 	try("plans", func(i int) error { _, err := s.CreatePlan(ctx, "org-1", fmt.Sprintf("Plan %d", i)); return err })
-	try("people", func(i int) error { _, err := s.CreatePerson(ctx, "org-1", fmt.Sprintf("Person %d", i)); return err })
-	try("tasks", func(i int) error { _, err := s.CreateTask(ctx, "org-1", fmt.Sprintf("Task %d", i)); return err })
+	try("people", func(i int) error {
+		_, err := s.CreatePerson(ctx, "org-1", "plan-1", fmt.Sprintf("Person %d", i))
+		return err
+	})
+	try("tasks", func(i int) error {
+		_, err := s.CreateTask(ctx, "org-1", "plan-1", fmt.Sprintf("Task %d", i))
+		return err
+	})
 	try("events", func(i int) error {
 		_, err := s.AddEvent(ctx, "org-1", "plan-1", fmt.Sprintf("2026-12-0%d", i))
 		return err
@@ -44,8 +50,8 @@ func TestTheCapsOnWhatOneSignUpCanMake(t *testing.T) {
 		return err
 	})
 	// the caps are per organisation and plan: another one starts from nothing
-	if _, err := s.CreatePerson(ctx, "org-2", "Person 1"); err != nil {
-		t.Fatalf("a person in another organisation: %v", err)
+	if _, err := s.CreatePerson(ctx, "org-1", "plan-2", "Person 1"); err != nil {
+		t.Fatalf("a person in another plan: %v", err)
 	}
 	if _, err := s.AddEvent(ctx, "org-1", "plan-2", "2026-12-01"); err != nil {
 		t.Fatalf("an event in another plan: %v", err)

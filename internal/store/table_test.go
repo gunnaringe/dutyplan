@@ -14,6 +14,7 @@ type tableWorld struct {
 	org, otherOrg     Org
 	plan, other, away Plan
 	sound, camera     Task
+	otherSound        Task // the other plan's own Sound
 	foreignTask       Task
 	ev, ev2, otherEv  Event
 	awayEv            Event
@@ -30,11 +31,11 @@ func newTableWorld(t *testing.T) tableWorld {
 	s := open(t)
 	w := tableWorld{s: s, org: mustOrg(t, s, "Club"), otherOrg: mustOrg(t, s, "Elsewhere")}
 	var err error
-	w.sound, err = s.CreateTask(ctx, w.org.Slug, "Sound")
-	must(err)
-	w.camera, err = s.CreateTask(ctx, w.org.Slug, "Camera")
-	must(err)
 	w.plan, err = s.CreatePlan(ctx, w.org.Slug, "Spring")
+	must(err)
+	w.sound, err = s.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Sound")
+	must(err)
+	w.camera, err = s.CreateTask(ctx, w.org.Slug, w.plan.Slug, "Camera")
 	must(err)
 	w.other, err = s.CreatePlan(ctx, w.org.Slug, "Summer")
 	must(err)
@@ -44,10 +45,12 @@ func newTableWorld(t *testing.T) tableWorld {
 	must(err)
 	w.otherEv, err = s.AddEvent(ctx, w.org.Slug, w.other.Slug, "2026-08-23")
 	must(err)
-
-	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, "Doors")
+	w.otherSound, err = s.CreateTask(ctx, w.org.Slug, w.other.Slug, "Sound")
 	must(err)
+
 	w.away, err = s.CreatePlan(ctx, w.otherOrg.Slug, "Spring")
+	must(err)
+	w.foreignTask, err = s.CreateTask(ctx, w.otherOrg.Slug, w.away.Slug, "Doors")
 	must(err)
 	w.awayEv, err = s.AddEvent(ctx, w.otherOrg.Slug, w.away.Slug, "2026-08-09")
 	must(err)
@@ -120,6 +123,7 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 		event, task int64
 	}{
 		"event of another plan":            {org, w.plan.Slug, w.otherEv.ID, w.sound.ID},
+		"task of another plan":             {org, w.other.Slug, w.otherEv.ID, w.sound.ID},
 		"event of another organisation":    {org, w.plan.Slug, w.awayEv.ID, w.sound.ID},
 		"task of another organisation":     {org, w.plan.Slug, w.ev.ID, w.foreignTask.ID},
 		"own event through another org":    {w.otherOrg.Slug, w.away.Slug, w.ev.ID, w.sound.ID},
@@ -130,7 +134,7 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 			t.Errorf("%s: want not found, got %v", name, err)
 		}
 	}
-	if err := s.SetEventPlaces(ctx, org, w.other.Slug, w.otherEv.ID, w.sound.ID, 2); err != nil {
+	if err := s.SetEventPlaces(ctx, org, w.other.Slug, w.otherEv.ID, w.otherSound.ID, 2); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetEventPlaces(ctx, w.otherOrg.Slug, w.away.Slug, w.awayEv.ID, w.foreignTask.ID, 3); err != nil {
@@ -139,7 +143,7 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 	if got := w.places(t, org, w.plan.Slug); got != "" {
 		t.Errorf("the other plans' places show in this one: %q", got)
 	}
-	if got := w.places(t, org, w.other.Slug); got != fmt.Sprintf("%d/%d=2", w.otherEv.ID, w.sound.ID) {
+	if got := w.places(t, org, w.other.Slug); got != fmt.Sprintf("%d/%d=2", w.otherEv.ID, w.otherSound.ID) {
 		t.Errorf("other plan: %q", got)
 	}
 	if got := w.places(t, w.otherOrg.Slug, w.away.Slug); got != fmt.Sprintf("%d/%d=3", w.awayEv.ID, w.foreignTask.ID) {
@@ -153,7 +157,7 @@ func TestPlacesPerEventStayInTheirPlanAndOrganisation(t *testing.T) {
 func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
 	w := newTableWorld(t)
 	s, org, plan := w.s, w.org.Slug, w.plan.Slug
-	extra, err := s.CreateTask(ctx, org, "Coffee")
+	extra, err := s.CreateTask(ctx, org, w.plan.Slug, "Coffee")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +169,7 @@ func TestPlacesGoWithTheirEventAndTask(t *testing.T) {
 	if err := s.DeleteEvent(ctx, org, plan, w.ev.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteTask(ctx, org, extra.ID); err != nil {
+	if err := s.DeleteTask(ctx, org, w.plan.Slug, extra.ID); err != nil {
 		t.Fatalf("a task with only places on an event can be deleted: %v", err)
 	}
 	if got := w.places(t, org, plan); got != fmt.Sprintf("%d/%d=2", w.ev2.ID, w.sound.ID) {
@@ -393,15 +397,15 @@ func TestDetailsRowsStayInTheirPlanAndOrganisation(t *testing.T) {
 func TestAnswersForTheTable(t *testing.T) {
 	w := newTableWorld(t)
 	s, org := w.s, w.org.Slug
-	kari, err := s.CreatePerson(ctx, org, "Kari Test")
+	kari, err := s.CreatePerson(ctx, org, w.plan.Slug, "Kari Test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	ola, err := s.CreatePerson(ctx, org, "Ola Test")
+	ola, err := s.CreatePerson(ctx, org, w.plan.Slug, "Ola Test")
 	if err != nil {
 		t.Fatal(err)
 	}
-	eva, err := s.CreatePerson(ctx, w.otherOrg.Slug, "Eva Test")
+	eva, err := s.CreatePerson(ctx, w.otherOrg.Slug, w.away.Slug, "Eva Test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,19 +415,26 @@ func TestAnswersForTheTable(t *testing.T) {
 	if err := s.SetAvailability(ctx, org, w.plan.Slug, ola.ID, map[int64]string{w.ev2.ID: "poor"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetAvailability(ctx, org, w.other.Slug, kari.ID, map[int64]string{w.otherEv.ID: "poor"}); err != nil {
+	if err := s.SetAvailability(ctx, org, w.other.Slug, kari.ID, map[int64]string{w.otherEv.ID: "poor"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a person of another plan: %v", err)
+	}
+	otherKari, err := s.CreatePerson(ctx, org, w.other.Slug, "Kari Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAvailability(ctx, org, w.other.Slug, otherKari.ID, map[int64]string{w.otherEv.ID: "poor"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetAvailability(ctx, w.otherOrg.Slug, w.away.Slug, eva.ID, map[int64]string{w.awayEv.ID: "good"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPersonTask(ctx, org, kari.ID, w.sound.ID, "good"); err != nil {
+	if err := s.SetPersonTask(ctx, org, w.plan.Slug, kari.ID, w.sound.ID, "good"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPersonTask(ctx, org, ola.ID, w.camera.ID, "poor"); err != nil {
+	if err := s.SetPersonTask(ctx, org, w.plan.Slug, ola.ID, w.camera.ID, "poor"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPersonTask(ctx, w.otherOrg.Slug, eva.ID, w.foreignTask.ID, "good"); err != nil {
+	if err := s.SetPersonTask(ctx, w.otherOrg.Slug, w.away.Slug, eva.ID, w.foreignTask.ID, "good"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ListAnswers(ctx, org, w.plan.Slug)
@@ -446,54 +457,54 @@ func TestAnswersForTheTable(t *testing.T) {
 func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 	w := newTableWorld(t)
 	s, org := w.s, w.org.Slug
-	coffee, err := s.CreateTask(ctx, org, "Coffee")
+	coffee, err := s.CreateTask(ctx, org, w.plan.Slug, "Coffee")
 	if err != nil {
 		t.Fatal(err)
 	}
-	foreignToo, err := s.CreateTask(ctx, w.otherOrg.Slug, "Ticket")
+	foreignToo, err := s.CreateTask(ctx, w.otherOrg.Slug, w.away.Slug, "Ticket")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCombination(ctx, w.otherOrg.Slug, w.foreignTask.ID, foreignToo.ID, "practical"); err != nil {
+	if err := s.SetCombination(ctx, w.otherOrg.Slug, w.away.Slug, w.foreignTask.ID, foreignToo.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCombination(ctx, org, w.sound.ID, w.camera.ID, "practical"); err != nil {
+	if err := s.SetCombination(ctx, org, w.plan.Slug, w.sound.ID, w.camera.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetCombination(ctx, org, w.camera.ID, coffee.ID, "practical"); err != nil {
+	if err := s.SetCombination(ctx, org, w.plan.Slug, w.camera.ID, coffee.ID, "practical"); err != nil {
 		t.Fatal(err)
 	}
 	pairs := func(org string) string {
 		t.Helper()
-		list, err := s.ListCombinations(ctx, org)
+		list, err := s.ListCombinations(ctx, org, w.plan.Slug)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return fmt.Sprint(list)
 	}
-	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "cannot"); err != nil {
+	if err := s.SetTaskCombinations(ctx, org, w.plan.Slug, w.sound.ID, "cannot"); err != nil {
 		t.Fatal(err)
 	}
 	want := fmt.Sprintf("[{%d %d cannot} {%d %d cannot} {%d %d practical}]", w.sound.ID, w.camera.ID, w.sound.ID, coffee.ID, w.camera.ID, coffee.ID)
 	if got := pairs(org); got != want {
 		t.Errorf("cannot with anything:\n got %s\nwant %s", got, want)
 	}
-	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "cannot"); !errors.Is(err, ErrInvalid) {
+	if err := s.SetTaskCombinations(ctx, org, w.plan.Slug, w.sound.ID, "cannot"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("again: want nothing to change, got %v", err)
 	}
-	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "standard"); err != nil {
+	if err := s.SetTaskCombinations(ctx, org, w.plan.Slug, w.sound.ID, "standard"); err != nil {
 		t.Fatal(err)
 	}
 	if got := pairs(org); got != fmt.Sprintf("[{%d %d practical}]", w.camera.ID, coffee.ID) {
 		t.Errorf("back to standard: %s", got)
 	}
-	if err := s.SetTaskCombinations(ctx, org, w.sound.ID, "sometimes"); !errors.Is(err, ErrInvalid) {
+	if err := s.SetTaskCombinations(ctx, org, w.plan.Slug, w.sound.ID, "sometimes"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("unknown level: %v", err)
 	}
-	if err := s.SetTaskCombinations(ctx, org, w.foreignTask.ID, "cannot"); !errors.Is(err, ErrNotFound) {
+	if err := s.SetTaskCombinations(ctx, org, w.plan.Slug, w.foreignTask.ID, "cannot"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a task of another organisation: want not found, got %v", err)
 	}
-	if err := s.SetTaskCombinations(ctx, w.otherOrg.Slug, w.foreignTask.ID, "cannot"); err != nil {
+	if err := s.SetTaskCombinations(ctx, w.otherOrg.Slug, w.away.Slug, w.foreignTask.ID, "cannot"); err != nil {
 		t.Fatal(err)
 	}
 	if got := pairs(w.otherOrg.Slug); got != fmt.Sprintf("[{%d %d cannot}]", w.foreignTask.ID, foreignToo.ID) {
@@ -507,13 +518,14 @@ func TestOneTaskWithEveryOtherAtOnce(t *testing.T) {
 func TestMovingATask(t *testing.T) {
 	w := newTableWorld(t)
 	s, org := w.s, w.org.Slug
-	video, err := s.CreateTask(ctx, org, "Video")
+	video, err := s.CreateTask(ctx, org, w.plan.Slug, "Video")
 	if err != nil {
 		t.Fatal(err)
 	}
+	planOf := map[string]string{w.org.Slug: w.plan.Slug, w.otherOrg.Slug: w.away.Slug}
 	order := func(slug string) string {
 		t.Helper()
-		got, err := s.ListTasks(ctx, slug)
+		got, err := s.ListTasks(ctx, slug, planOf[slug])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -526,45 +538,45 @@ func TestMovingATask(t *testing.T) {
 	if got := order(org); got != "Sound Camera Video" {
 		t.Fatalf("new tasks go to the bottom, not by name: %s", got)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, nil, 0); err != nil || order(org) != "Video Sound Camera" {
+	if err := s.MoveTask(ctx, org, w.plan.Slug, video.ID, nil, 0); err != nil || order(org) != "Video Sound Camera" {
 		t.Errorf("to the top: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, nil, 99); err != nil || order(org) != "Sound Camera Video" {
+	if err := s.MoveTask(ctx, org, w.plan.Slug, video.ID, nil, 99); err != nil || order(org) != "Sound Camera Video" {
 		t.Errorf("past the end is the bottom: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, w.sound.ID, nil, 1); err != nil || order(org) != "Camera Sound Video" {
+	if err := s.MoveTask(ctx, org, w.plan.Slug, w.sound.ID, nil, 1); err != nil || order(org) != "Camera Sound Video" {
 		t.Errorf("one down: %s %v", order(org), err)
 	}
-	if err := s.DeleteTask(ctx, org, w.sound.ID); err != nil || order(org) != "Camera Video" {
+	if err := s.DeleteTask(ctx, org, w.plan.Slug, w.sound.ID); err != nil || order(org) != "Camera Video" {
 		t.Fatalf("delete: %s %v", order(org), err)
 	}
-	if err := s.DeleteTask(ctx, org, w.camera.ID); err != nil || order(org) != "Video" {
+	if err := s.DeleteTask(ctx, org, w.plan.Slug, w.camera.ID); err != nil || order(org) != "Video" {
 		t.Fatalf("delete: %s %v", order(org), err)
 	}
-	if _, err := s.CreateTask(ctx, org, "Lights"); err != nil || order(org) != "Video Lights" {
+	if _, err := s.CreateTask(ctx, org, w.plan.Slug, "Lights"); err != nil || order(org) != "Video Lights" {
 		t.Errorf("deleted tasks leave no gap, so a new one is last: %s %v", order(org), err)
 	}
-	lights := mustTask(t, s, org, "Lights")
-	if err := s.MoveTask(ctx, org, lights, nil, 0); err != nil {
+	lights := mustTask(t, s, org, w.plan.Slug, "Lights")
+	if err := s.MoveTask(ctx, org, w.plan.Slug, lights, nil, 0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateTask(ctx, org, "Sound"); err != nil || order(org) != "Lights Video Sound" {
+	if _, err := s.CreateTask(ctx, org, w.plan.Slug, "Sound"); err != nil || order(org) != "Lights Video Sound" {
 		t.Errorf("a new task goes below a moved one: %s %v", order(org), err)
 	}
-	if err := s.MoveTask(ctx, org, video.ID, nil, -1); !codeIs(err, "position_invalid") {
+	if err := s.MoveTask(ctx, org, w.plan.Slug, video.ID, nil, -1); !codeIs(err, "position_invalid") {
 		t.Errorf("a negative position: %v", err)
 	}
-	if err := s.MoveTask(ctx, org, w.foreignTask.ID, nil, 0); !errors.Is(err, ErrNotFound) {
+	if err := s.MoveTask(ctx, org, w.plan.Slug, w.foreignTask.ID, nil, 0); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a task of another organisation: %v", err)
 	}
-	if err := s.MoveTask(ctx, w.otherOrg.Slug, w.foreignTask.ID, nil, 0); err != nil || order(org) != "Lights Video Sound" || order(w.otherOrg.Slug) != "Doors" {
+	if err := s.MoveTask(ctx, w.otherOrg.Slug, w.away.Slug, w.foreignTask.ID, nil, 0); err != nil || order(org) != "Lights Video Sound" || order(w.otherOrg.Slug) != "Doors" {
 		t.Errorf("each organisation has its own order: %s / %s %v", order(org), order(w.otherOrg.Slug), err)
 	}
 }
 
-func mustTask(t *testing.T, s *Store, org, name string) int64 {
+func mustTask(t *testing.T, s *Store, org, plan, name string) int64 {
 	t.Helper()
-	list, err := s.ListTasks(ctx, org)
+	list, err := s.ListTasks(ctx, org, plan)
 	if err != nil {
 		t.Fatal(err)
 	}

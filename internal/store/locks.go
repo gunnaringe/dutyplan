@@ -34,10 +34,10 @@ func (s *Store) SetLocks(ctx context.Context, orgSlug, planSlug string, locks []
 		people, tasks, events := known{}, known{}, known{}
 		changed := 0
 		for _, l := range locks {
-			if err := people.check(l.Person, func() error { return inOrg(ctx, tx, "person", oid, l.Person) }); err != nil {
+			if err := people.check(l.Person, func() error { return inPlan(ctx, tx, "person", pid, l.Person) }); err != nil {
 				return err
 			}
-			if err := tasks.check(l.Task, func() error { return inOrg(ctx, tx, "task", oid, l.Task) }); err != nil {
+			if err := tasks.check(l.Task, func() error { return inPlan(ctx, tx, "task", pid, l.Task) }); err != nil {
 				return err
 			}
 			if err := events.check(l.Event, func() error { return eventInPlan(ctx, tx, oid, pid, l.Event) }); err != nil {

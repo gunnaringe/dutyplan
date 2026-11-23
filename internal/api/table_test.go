@@ -105,13 +105,13 @@ func TestTheTablesDataOverHTTP(t *testing.T) {
 	}
 
 	// one task against all the others
-	e.mustDo(204, "PUT", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sound.ID)+"/combinations", map[string]string{"level": "cannot"})
+	e.mustDo(204, "PUT", "/api/orgs/"+a.org+"/plans/"+term+"/tasks/"+itoa(a.sound.ID)+"/combinations", map[string]string{"level": "cannot"})
 	var pairs []store.Combination
-	e.mustDo(200, "GET", "/api/orgs/"+a.org+"/combinations", nil).json(&pairs)
+	e.mustDo(200, "GET", "/api/orgs/"+a.org+"/plans/"+term+"/combinations", nil).json(&pairs)
 	if len(pairs) != 1 || pairs[0].Level != "cannot" {
 		t.Errorf("combinations: %+v", pairs)
 	}
-	if r := e.do("PUT", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sound.ID)+"/combinations", map[string]string{"level": "cannot"}); r.code != 400 {
+	if r := e.do("PUT", "/api/orgs/"+a.org+"/plans/"+term+"/tasks/"+itoa(a.sound.ID)+"/combinations", map[string]string{"level": "cannot"}); r.code != 400 {
 		t.Errorf("nothing to change: %d %s", r.code, r.body)
 	}
 }
@@ -145,7 +145,7 @@ func TestTheTablesDataIs404AcrossPlansAndOrganisations(t *testing.T) {
 		{"GET", "/api/orgs/nope/plans/" + a.plan + "/fields", nil},
 		{"POST", "/api/orgs/" + a.org + "/plans/nope/fields", map[string]string{"name": "Theme"}},
 		{"GET", "/api/orgs/" + a.org + "/plans/nope/answers", nil},
-		{"PUT", "/api/orgs/" + b.org + "/tasks/" + itoa(a.sound.ID) + "/combinations", map[string]string{"level": "cannot"}},
+		{"PUT", "/api/orgs/" + b.org + "/plans/" + term + "/tasks/" + itoa(a.sound.ID) + "/combinations", map[string]string{"level": "cannot"}},
 	} {
 		if r := e.do(c.method, c.path, c.body); r.code != 404 || r.errCode() != "not_found" {
 			t.Errorf("%s %s = %d %s, want 404", c.method, c.path, r.code, r.body)
@@ -170,7 +170,7 @@ func TestTheTablesDataIs404AcrossPlansAndOrganisations(t *testing.T) {
 func TestMovingATaskOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	a := e.cellsWorld("Org A")
-	tasks := "/api/orgs/" + a.org + "/tasks"
+	tasks := "/api/orgs/" + a.org + "/plans/" + term + "/tasks"
 	e.mustDo(204, "PUT", tasks+"/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0})
 	var list []store.Task
 	e.mustDo(200, "GET", tasks, nil).json(&list)
@@ -183,7 +183,7 @@ func TestMovingATaskOverHTTP(t *testing.T) {
 		}
 	}
 	b := e.cellsWorld("Org B")
-	if r := e.do("PUT", "/api/orgs/"+b.org+"/tasks/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0}); r.code != 404 {
+	if r := e.do("PUT", "/api/orgs/"+b.org+"/plans/"+term+"/tasks/"+itoa(a.sang.ID)+"/position", map[string]int{"position": 0}); r.code != 404 {
 		t.Errorf("A's task through B: %d", r.code)
 	}
 	if r := e.do("PUT", "/api/orgs/"+b.org+"/plans/"+b.plan+"/tasks/"+itoa(a.sound.ID)+"/places", map[string]int{"slots": 2}); r.code != 404 {
@@ -194,7 +194,7 @@ func TestMovingATaskOverHTTP(t *testing.T) {
 func TestSectionsAndMovingPeopleOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	a := e.cellsWorld("Org A")
-	o := "/api/orgs/" + a.org
+	o := "/api/orgs/" + a.org + "/plans/" + a.plan
 	var x store.Section
 	e.mustDo(201, "POST", o+"/sections", map[string]string{"name": "Guests"}).json(&x)
 	var y store.Section
@@ -229,9 +229,9 @@ func TestSectionsAndMovingPeopleOverHTTP(t *testing.T) {
 	}
 	b := e.cellsWorld("Org B")
 	for what, r := range map[string]reply{
-		"A's section through B":     e.do("DELETE", "/api/orgs/"+b.org+"/sections/"+itoa(x.ID), nil),
-		"B's person into A's":       e.do("PUT", "/api/orgs/"+b.org+"/people/"+itoa(b.anna.ID)+"/position", map[string]any{"section": x.ID, "position": 0}),
-		"rename A's section from B": e.do("PATCH", "/api/orgs/"+b.org+"/sections/"+itoa(x.ID), map[string]string{"name": "X"}),
+		"A's section through B":     e.do("DELETE", "/api/orgs/"+b.org+"/plans/"+term+"/sections/"+itoa(x.ID), nil),
+		"B's person into A's":       e.do("PUT", "/api/orgs/"+b.org+"/plans/"+term+"/people/"+itoa(b.anna.ID)+"/position", map[string]any{"section": x.ID, "position": 0}),
+		"rename A's section from B": e.do("PATCH", "/api/orgs/"+b.org+"/plans/"+term+"/sections/"+itoa(x.ID), map[string]string{"name": "X"}),
 	} {
 		if r.code != 404 {
 			t.Errorf("%s: %d", what, r.code)
@@ -252,24 +252,24 @@ func TestAddingAPersonInASection(t *testing.T) {
 	a := e.cellsWorld("Org A")
 	b := e.cellsWorld("Org B")
 	var guests, away store.Section
-	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/sections", map[string]string{"name": "Guests"}).json(&guests)
-	e.mustDo(201, "POST", "/api/orgs/"+b.org+"/sections", map[string]string{"name": "Away"}).json(&away)
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/plans/"+term+"/sections", map[string]string{"name": "Guests"}).json(&guests)
+	e.mustDo(201, "POST", "/api/orgs/"+b.org+"/plans/"+term+"/sections", map[string]string{"name": "Away"}).json(&away)
 	var p store.Person
-	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Pia Demo", "section": guests.ID}).json(&p)
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/plans/"+term+"/people", map[string]any{"name": "Pia Demo", "section": guests.ID}).json(&p)
 	if p.Section != guests.ID {
 		t.Fatalf("the new person is not in the section: %+v", p)
 	}
 	var people []store.Person
-	e.mustDo(200, "GET", "/api/orgs/"+a.org+"/people", nil).json(&people)
+	e.mustDo(200, "GET", "/api/orgs/"+a.org+"/plans/"+term+"/people", nil).json(&people)
 	if last := people[len(people)-1]; last.ID != p.ID || last.Section != guests.ID {
 		t.Fatalf("not last, in the section: %+v", people)
 	}
-	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Jon Demo"}).json(&p)
+	e.mustDo(201, "POST", "/api/orgs/"+a.org+"/plans/"+term+"/people", map[string]any{"name": "Jon Demo"}).json(&p)
 	if p.Section != 0 {
 		t.Fatalf("without a section: %+v", p)
 	}
 	for _, sec := range []int64{away.ID, 99999} {
-		if r := e.do("POST", "/api/orgs/"+a.org+"/people", map[string]any{"name": "Ola Sample", "section": sec}); r.code != 404 {
+		if r := e.do("POST", "/api/orgs/"+a.org+"/plans/"+term+"/people", map[string]any{"name": "Ola Sample", "section": sec}); r.code != 404 {
 			t.Errorf("section %d: %d %s, want 404", sec, r.code, r.body)
 		}
 	}
@@ -280,7 +280,7 @@ func TestAddingAPersonInASection(t *testing.T) {
 func TestTaskSectionsOverHTTP(t *testing.T) {
 	e := newEnv(t)
 	a := e.cellsWorld("Org A")
-	o := "/api/orgs/" + a.org
+	o := "/api/orgs/" + a.org + "/plans/" + a.plan
 	var tech store.Section
 	e.mustDo(201, "POST", o+"/task-sections", map[string]string{"name": "Tech"}).json(&tech)
 	e.mustDo(200, "PATCH", o+"/task-sections/"+itoa(tech.ID), map[string]string{"name": "Technique"}).json(&tech)
@@ -312,11 +312,11 @@ func TestTaskSectionsOverHTTP(t *testing.T) {
 	}
 	b := e.cellsWorld("Org B")
 	for what, r := range map[string]reply{
-		"A's task section through B": e.do("DELETE", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID), nil),
-		"B's task into A's section":  e.do("PUT", "/api/orgs/"+b.org+"/tasks/"+itoa(b.sound.ID)+"/position", map[string]any{"section": tech.ID, "position": 0}),
-		"a task made in A's section": e.do("POST", "/api/orgs/"+b.org+"/tasks", map[string]any{"name": "Bar", "section": tech.ID}),
-		"rename it from B":           e.do("PATCH", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID), map[string]string{"name": "X"}),
-		"move it from B":             e.do("PUT", "/api/orgs/"+b.org+"/task-sections/"+itoa(tech.ID)+"/position", map[string]int{"position": 0}),
+		"A's task section through B": e.do("DELETE", "/api/orgs/"+b.org+"/plans/"+term+"/task-sections/"+itoa(tech.ID), nil),
+		"B's task into A's section":  e.do("PUT", "/api/orgs/"+b.org+"/plans/"+term+"/tasks/"+itoa(b.sound.ID)+"/position", map[string]any{"section": tech.ID, "position": 0}),
+		"a task made in A's section": e.do("POST", "/api/orgs/"+b.org+"/plans/"+term+"/tasks", map[string]any{"name": "Bar", "section": tech.ID}),
+		"rename it from B":           e.do("PATCH", "/api/orgs/"+b.org+"/plans/"+term+"/task-sections/"+itoa(tech.ID), map[string]string{"name": "X"}),
+		"move it from B":             e.do("PUT", "/api/orgs/"+b.org+"/plans/"+term+"/task-sections/"+itoa(tech.ID)+"/position", map[string]int{"position": 0}),
 	} {
 		if r.code != 404 {
 			t.Errorf("%s: %d", what, r.code)

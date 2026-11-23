@@ -115,21 +115,21 @@ func TestThePlansWeightsChangeWhatTheRealSolverDoes(t *testing.T) {
 	}
 	org, err := st.CreateOrg(ctx, "Club")
 	must(err)
-	camera, err := st.CreateTask(ctx, org.Slug, "Camera")
-	must(err)
-	sound, err := st.CreateTask(ctx, org.Slug, "Sound")
-	must(err)
 	plan, err := st.CreatePlan(ctx, org.Slug, "Autumn 2026")
+	must(err)
+	camera, err := st.CreateTask(ctx, org.Slug, plan.Slug, "Camera")
+	must(err)
+	sound, err := st.CreateTask(ctx, org.Slug, plan.Slug, "Sound")
 	must(err)
 	for _, d := range []string{"2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"} {
 		_, err = addWithPlaces(st, org.Slug, plan.Slug, store.NewEvents{Date: d}, map[int64]int{camera.ID: 1, sound.ID: 1})
 		must(err)
 	}
 	for name, tasks := range map[string][]store.Task{"a": {camera}, "b": {camera, sound}, "c": {sound}} {
-		p, err := st.CreatePerson(ctx, org.Slug, name)
+		p, err := st.CreatePerson(ctx, org.Slug, plan.Slug, name)
 		must(err)
 		for _, tk := range tasks {
-			must(st.SetPersonTask(ctx, org.Slug, p.ID, tk.ID, "good"))
+			must(st.SetPersonTask(ctx, org.Slug, plan.Slug, p.ID, tk.ID, "good"))
 		}
 	}
 	svc := New(st, solver, 1, nopLogger())
@@ -178,18 +178,18 @@ func TestTheTableOrderIsNotPartOfTheInput(t *testing.T) {
 			t.Errorf("%s changed the planner's input", what)
 		}
 	}
-	if err := w.st.MoveTask(ctx, w.org.Slug, w.camera.ID, nil, 0); err != nil {
+	if err := w.st.MoveTask(ctx, w.org.Slug, w.plan.Slug, w.camera.ID, nil, 0); err != nil {
 		t.Fatal(err)
 	}
 	same("moving a task in the table")
-	x, err := w.st.CreateSection(ctx, w.org.Slug, "Guests")
+	x, err := w.st.CreateSection(ctx, w.org.Slug, w.plan.Slug, "Guests")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := w.st.MovePerson(ctx, w.org.Slug, w.people["Embla"].ID, x.ID, 0); err != nil {
+	if err := w.st.MovePerson(ctx, w.org.Slug, w.plan.Slug, w.people["Embla"].ID, x.ID, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.st.MovePerson(ctx, w.org.Slug, w.people["Dina"].ID, 0, 0); err != nil {
+	if err := w.st.MovePerson(ctx, w.org.Slug, w.plan.Slug, w.people["Dina"].ID, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	same("placing people in sections and moving them")

@@ -7,16 +7,17 @@
 
 ## The ideas
 
-- **Organisation** (`org`, addressed by its slug): has members, tasks, people and plans. Members are `admin` (members,
+- **Organisation** (`org`, addressed by its slug): has members, share links and plans. Members are `admin` (members,
   invitations, renaming and deleting the organisation) or `member` (everything else).
-- **Task**: a job, e.g. «Sound», «Coffee». The organisation's own, the same in every plan, in an order.
-- **Person**: someone who can be given tasks (a name only; no contact details are stored). Per task: `good` (gladly),
-  `poor` (if needed) or not at all. `proposable: false` = the planner never picks them.
+- **Task**: a job, e.g. «Sound», «Coffee». Each plan has its own, in an order.
+- **Person**: someone in a plan who can be given tasks (a name only; no contact details are stored; each plan has its own). Per
+  task: `good` (gladly), `poor` (if needed) or not at all. `proposable: false` = the planner never picks them.
+  A new plan starts empty or with the people and tasks of another plan (`from`); a duplicate can take the filled-in table too.
 - **Plan**: e.g. «Spring 2027», addressed by its slug (`plan`). Has **events** (a date, optional start/end time `HH:MM`; what is said about it goes in a details row), **places** (how
   many people a task needs on an event; 0 = not needed), **details rows** (`fields`: one text per event, e.g. «Theme»),
   **answers** (per person and event: `good`, `poor`, `never`, or none) with an optional **note**, and **hand-set cells**.
 - **Draft**: a run of the planner (`runs`); one can be pinned as the current plan.
-- **Links**: a `view`, `answer` or `edit` link gives access to one plan without an account (`answer`: read, and set anyone's answers and notes); a `join` link invites a member (for one person, or for anyone who has it).
+- **Links**: a `view`, `answer` or `edit` link gives access to one plan without an account (`answer`: read, and set anyone's answers, notes and tasks in that plan); a `join` link invites a member (for one person, or for anyone who has it).
 
 ## Getting access
 
@@ -25,8 +26,8 @@ server's owner.
 
 - **A share link (simplest).** Someone with a login opens the plan, *Share* → *Edit* (or *View*), and gives the link
   `https://<server>/s/<token>` to the agent. Open it once without following the redirect and keep the cookie
-  `__Host-dutyplan-links` it sets; send that cookie with every API call. An edit link reaches its own plan and the
-  organisation's tasks and people; it cannot make plans, links or members. Delete the link when the agent is done.
+  `__Host-dutyplan-links` it sets; send that cookie with every API call. An edit link reaches its own plan, with
+  its tasks and people; it cannot make plans, links or members. Delete the link when the agent is done.
 - **A login.** Signing in goes through the server's OpenID Connect provider in a browser; the session cookie works for the
   API too. A member can do everything in the organisation; an admin also members and invitations.
 
@@ -38,7 +39,7 @@ such as `my-agent/1.0`.
 ## Putting a whole plan in (a semester from a spreadsheet)
 
 1. A member makes the plan on the page and shares an edit link to it (making plans needs a login).
-2. `SetupService/ListTasks` `{"org"}`; `SetupService/CreateTask` `{"org", "name"}` for each role that is missing (one per row of
+2. `SetupService/ListTasks` `{"org", "plan"}`; `SetupService/CreateTask` `{"org", "plan", "name"}` for each role that is missing (one per row of
    the spreadsheet). Keep the order: new tasks go last.
 3. `PlanService/AddField` `{"org", "plan", "name"}` for each details row (for example «Theme», «Note»,
    «Description»: an event has no description of its own).
@@ -78,11 +79,11 @@ false); an unknown field is refused. Example:
 
     curl -X POST https://<server>/dutyplan.v1.SetupService/CreateTask \
       -H 'Content-Type: application/json' -b '__Host-dutyplan-links=…' \
-      -d '{"org": "maple-hall", "name": "Sound"}'
+      -d '{"org": "maple-hall", "plan": "spring-2027", "name": "Sound"}'
     → {"task": {"id": 7, "name": "Sound", "planned": true, "section": 0}}
 
-Access is by a login or a share link (see above). A `view` link may only read; an `answer` link may read and set answers and notes
-(`PlanService/SetAvailability`, `PlanService/SetNote`) only; an `edit` link reaches its own plan only.
+Access is by a login or a share link (see above). A `view` link may only read; an `answer` link may read and set answers, notes and the tasks people take
+(`PlanService/SetAvailability`, `PlanService/SetNote`, `PlanService/SetPersonTask`, `PlanService/RemovePersonTask`) only; an `edit` link reaches its own plan only.
 Errors are Connect errors with an HTTP status: `{"code", "message", "details": [{"type": "dutyplan.v1.Problem", "debug": {"error", "code", "params"}}]}`.
 `debug.code` says why (e.g. `name_invalid`, `nothing_to_change`, `too_many_tasks` with `params.max`). The statuses:
 400 `invalid_argument`, 401 `unauthenticated` (signed out), 403 `permission_denied` (`read_only`, `admin_only`),
@@ -103,22 +104,23 @@ Errors are Connect errors with an HTTP status: `{"code", "message", "details": [
   (`join` is for admins and has no plan; `single_use: true`, for an invitation only, ends it when someone joins with it). `OrgService/DeleteLink` `{"org", "id"}`.
 - `GET /api/orgs/{org}/stream` (not Connect) — server-sent events: a line per change (`{"origin", "proc", "plan"}`), so a page can fetch again.
 
-### SetupService: tasks, people, sections (the organisation's own)
-- `SetupService/ListTasks` `{"org"}`, `SetupService/CreateTask` `{"org", "name", "section"}`, `SetupService/UpdateTask` `{"org", "id", "name", "planned"}`
-  (send only what changes), `SetupService/DeleteTask` `{"org", "id"}`, `SetupService/MoveTask` `{"org", "id", "position", "section"}` (section left out: the one it is in).
-- `SetupService/ListCombinations` `{"org"}` — which tasks one person can do on the same event.
-  `SetupService/SetCombination` `{"org", "a", "b", "level": "cannot"|"practical"|"standard"}`;
-  `SetupService/SetTaskCombinations` `{"org", "task", "level"}` — one task against all others.
-- `SetupService/ListPeople` `{"org"}`, `SetupService/CreatePerson` `{"org", "name", "section"}`, `SetupService/UpdatePerson` `{"org", "id", "name", "proposable"}`
-  (send only what changes), `SetupService/MovePerson` `{"org", "id", "section", "position"}`.
-- `SetupService/SetPersonTask` `{"org", "person", "task", "level": "good"|"poor"}`, `SetupService/RemovePersonTask` `{"org", "person", "task"}`.
-- `SetupService/ListSections`, `SetupService/CreateSection` `{"org", "name"}`, `SetupService/RenameSection` `{"org", "id", "name"}`,
-  `SetupService/MoveSection` `{"org", "id", "position"}`, `SetupService/DeleteSection` `{"org", "id"}` — headings for people; placement only.
+### SetupService: tasks, people, sections (each plan's own)
+- `SetupService/ListTasks` `{"org", "plan"}`, `SetupService/CreateTask` `{"org", "plan", "name", "section"}`, `SetupService/UpdateTask` `{"org", "plan", "id", "name", "planned"}`
+  (send only what changes), `SetupService/DeleteTask` `{"org", "plan", "id"}`, `SetupService/MoveTask` `{"org", "plan", "id", "position", "section"}` (section left out: the one it is in).
+- `SetupService/ListCombinations` `{"org", "plan"}` — which tasks one person can do on the same event.
+  `SetupService/SetCombination` `{"org", "plan", "a", "b", "level": "cannot"|"practical"|"standard"}`;
+  `SetupService/SetTaskCombinations` `{"org", "plan", "task", "level"}` — one task against all others.
+- `SetupService/ListPeople` `{"org", "plan"}`, `SetupService/CreatePerson` `{"org", "plan", "name", "section"}`, `SetupService/UpdatePerson` `{"org", "plan", "id", "name", "proposable"}`
+  (send only what changes), `SetupService/MovePerson` `{"org", "plan", "id", "section", "position"}`.
+- `SetupService/ListSections`, `SetupService/CreateSection` `{"org", "plan", "name"}`, `SetupService/RenameSection` `{"org", "plan", "id", "name"}`,
+  `SetupService/MoveSection` `{"org", "plan", "id", "position"}`, `SetupService/DeleteSection` `{"org", "plan", "id"}` — headings for people; placement only.
 - `SetupService/ListTaskSections`, `SetupService/CreateTaskSection`, `SetupService/RenameTaskSection`, `SetupService/MoveTaskSection`,
   `SetupService/DeleteTaskSection` — the same for tasks; placement only (a task's `section`; tasks without one come first).
 
 ### PlanService: plans, events and the table
-- `PlanService/ListPlans` `{"org"}`, `PlanService/CreatePlan` `{"org", "name"}`, `PlanService/GetPlan` `{"org", "plan"}`,
+- `PlanService/ListPlans` `{"org"}`, `PlanService/CreatePlan` `{"org", "name", "from"}` (`from`: a plan's slug to start with its
+  people and tasks; "" = empty), `PlanService/DuplicatePlan` `{"org", "plan", "name", "table"}` (a copy; `table: true` also copies the
+  events, details, places, names set by hand, selections, answers, notes and weights; never drafts or links), `PlanService/GetPlan` `{"org", "plan"}`,
   `PlanService/RenamePlan` `{"org", "plan", "name"}` (the slug stays), `PlanService/DeletePlan` `{"org", "plan"}`.
 - `PlanService/ListEvents` `{"org", "plan"}`, `PlanService/AddEvents` `{"org", "plan", "date", "until", "every", "start_time", "end_time"}`
   (`every` N weeks until `until` makes a series, at most every 8 weeks), `PlanService/UpdateEvent` `{"org", "plan", "id", "start_time", "end_time"}`,
@@ -135,6 +137,8 @@ Errors are Connect errors with an HTTP status: `{"code", "message", "details": [
   `PlanService/SetAvailability` `{"org", "plan", "person", "levels": {"<event id>": "good"|"poor"|"never"|""}}` — one person.
   `PlanService/SetAnswers` `{"org", "plan", "answers": [{"person", "event", "level"}]}` — many at once (at most 5000).
   `PlanService/SetNote` `{"org", "plan", "event", "person", "note"}` — a note on an answer, at most 300 characters ("" removes).
+- `PlanService/SetPersonTask` `{"org", "plan", "person", "task", "level": "good"|"poor"}`, `PlanService/RemovePersonTask` `{"org", "plan", "person", "task"}` —
+  the tasks a person takes, in this plan (each plan has its own; a new plan starts with a copy of the newest plan's). An answer link may set them.
 
 ### DraftService: set by hand, selections and the planner
 - `DraftService/ListCells` `{"org", "plan"}`, `DraftService/AddCell` `{"org", "plan", "event", "task", "person" | "label", "fills", "locked"}`,

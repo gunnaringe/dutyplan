@@ -20,16 +20,16 @@ func isForeignKey(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }
 
-// inOrg reports whether a row with this id exists in the organisation. Every reference in a request body is checked
-// with it (a reference into another organisation is "not found"); the composite foreign keys are the backstop.
-func inOrg(ctx context.Context, q dbq, table string, oid, id int64) error {
+// inPlan reports whether a person or task with this id is in the plan. Every reference in a request body is checked
+// with it (a reference into another plan or organisation is "not found"); the composite foreign keys are the backstop.
+func inPlan(ctx context.Context, q dbq, table string, pid, id int64) error {
 	switch table {
 	case "task", "person":
 	default:
-		panic("inOrg: unknown table " + table)
+		panic("inPlan: unknown table " + table)
 	}
 	var one int
-	err := q.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE id = ? AND org_id = ?`, id, oid).Scan(&one)
+	err := q.QueryRowContext(ctx, `SELECT 1 FROM `+table+` WHERE id = ? AND plan_id = ?`, id, pid).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -45,6 +45,15 @@ func planID(ctx context.Context, q dbq, oid int64, slug string) (int64, error) {
 	return id, err
 }
 
+// scope finds the organisation and the plan, for everything that is per plan.
+func scope(ctx context.Context, q dbq, orgSlug, planSlug string) (oid, pid int64, err error) {
+	if oid, err = orgID(ctx, q, orgSlug); err != nil {
+		return
+	}
+	pid, err = planID(ctx, q, oid, planSlug)
+	return
+}
+
 // ---- tasks ---------------------------------------------------------------------------------------------------
 
 type Task struct {
@@ -55,38 +64,38 @@ type Task struct {
 }
 
 // CreateTask adds a task the planner distributes (switch that off with UpdateTask), last of those without a section.
-func (s *Store) CreateTask(ctx context.Context, orgSlug, name string) (Task, error) {
-	return s.CreateTaskIn(ctx, orgSlug, name, 0)
+func (s *Store) CreateTask(ctx context.Context, orgSlug, planSlug, name string) (Task, error) {
+	return s.CreateTaskIn(ctx, orgSlug, planSlug, name, 0)
 }
 
 // CreateTaskIn adds a task last in a section (0: without a section).
-func (s *Store) CreateTaskIn(ctx context.Context, orgSlug, name string, section int64) (Task, error) {
+func (s *Store) CreateTaskIn(ctx context.Context, orgSlug, planSlug, name string, section int64) (Task, error) {
 	name, err := cleanName(name, "name")
 	if err != nil {
 		return Task{}, err
 	}
 	t := Task{Name: name, Planned: true, Section: section}
 	err = s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		oid, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
 		var n int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE org_id = ?`, oid).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE plan_id = ?`, pid).Scan(&n); err != nil {
 			return err
 		}
-		if n >= MaxTasksPerOrg {
-			return Invalid("too_many_tasks", map[string]any{"max": MaxTasksPerOrg}, "at most %d tasks", MaxTasksPerOrg)
+		if n >= MaxTasksPerPlan {
+			return Invalid("too_many_tasks", map[string]any{"max": MaxTasksPerPlan}, "at most %d tasks", MaxTasksPerPlan)
 		}
 		if section != 0 {
-			if _, err := sectionName(ctx, tx, Tasks, oid, section); err != nil {
+			if _, err := sectionName(ctx, tx, Tasks, pid, section); err != nil {
 				return err
 			}
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE org_id = ? AND section_id IS ?`, oid, sectionScope(section)[0]).Scan(&n); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM task WHERE plan_id = ? AND section_id IS ?`, pid, sectionScope(section)[0]).Scan(&n); err != nil {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, name, planned, position, section_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`, oid, t.Name, t.Planned, n, sectionScope(section)[0], s.stamp())
+		res, err := tx.ExecContext(ctx, `INSERT INTO task (org_id, plan_id, name, planned, position, section_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, oid, pid, t.Name, t.Planned, n, sectionScope(section)[0], s.stamp())
 		if isUnique(err) {
 			return exists("task", t.Name)
 		}
@@ -99,16 +108,16 @@ func (s *Store) CreateTaskIn(ctx context.Context, orgSlug, name string, section 
 	return t, err
 }
 
-// ListTasks gives the organisation's tasks in their order (MoveTask), the same in every plan's table: those without a
-// section first, then each section's in the order of the sections.
-func (s *Store) ListTasks(ctx context.Context, orgSlug string) ([]Task, error) {
-	oid, err := orgID(ctx, s.db, orgSlug)
+// ListTasks gives the plan's tasks in their order (MoveTask): those without a section first, then each section's in the
+// order of the sections.
+func (s *Store) ListTasks(ctx context.Context, orgSlug, planSlug string) ([]Task, error) {
+	_, pid, err := scope(ctx, s.db, orgSlug, planSlug)
 	if err != nil {
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT t.id, t.name, t.planned, COALESCE(t.section_id, 0) FROM task t
-		LEFT JOIN task_section x ON x.id = t.section_id AND x.org_id = t.org_id
-		WHERE t.org_id = ? ORDER BY COALESCE(x.position, -1), t.position, t.id`, oid)
+		LEFT JOIN task_section x ON x.id = t.section_id AND x.plan_id = t.plan_id
+		WHERE t.plan_id = ? ORDER BY COALESCE(x.position, -1), t.position, t.id`, pid)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +138,7 @@ type TaskPatch struct {
 	Planned *bool   `json:"planned"`
 }
 
-func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch TaskPatch) (Task, error) {
+func (s *Store) UpdateTask(ctx context.Context, orgSlug, planSlug string, id int64, patch TaskPatch) (Task, error) {
 	var t Task
 	if patch.Name != nil {
 		n, err := cleanName(*patch.Name, "name")
@@ -139,11 +148,11 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 		patch.Name = &n
 	}
 	err := s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		_, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
-		err = tx.QueryRowContext(ctx, `SELECT id, name, planned, COALESCE(section_id, 0) FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&t.ID, &t.Name, &t.Planned, &t.Section)
+		err = tx.QueryRowContext(ctx, `SELECT id, name, planned, COALESCE(section_id, 0) FROM task WHERE id = ? AND plan_id = ?`, id, pid).Scan(&t.ID, &t.Name, &t.Planned, &t.Section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -162,7 +171,7 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 		if len(changes) == 0 {
 			return errNothingToChange()
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE task SET name = ?, planned = ? WHERE id = ? AND org_id = ?`, t.Name, t.Planned, id, oid)
+		_, err = tx.ExecContext(ctx, `UPDATE task SET name = ?, planned = ? WHERE id = ? AND plan_id = ?`, t.Name, t.Planned, id, pid)
 		if isUnique(err) {
 			return exists("task", t.Name)
 		}
@@ -176,27 +185,27 @@ func (s *Store) UpdateTask(ctx context.Context, orgSlug string, id int64, patch 
 
 // DeleteTask refuses (ErrConflict) while a manual cell or a selection uses the task. Its places on events, the
 // people's answers about it and its combination settings go with it.
-func (s *Store) DeleteTask(ctx context.Context, orgSlug string, id int64) error {
+func (s *Store) DeleteTask(ctx context.Context, orgSlug, planSlug string, id int64) error {
 	return s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		_, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
 		var name string
 		var section sql.NullInt64
-		err = tx.QueryRowContext(ctx, `SELECT name, section_id FROM task WHERE id = ? AND org_id = ?`, id, oid).Scan(&name, &section)
+		err = tx.QueryRowContext(ctx, `SELECT name, section_id FROM task WHERE id = ? AND plan_id = ?`, id, pid).Scan(&name, &section)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND org_id = ?`, id, oid); isForeignKey(err) {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM task WHERE id = ? AND plan_id = ?`, id, pid); isForeignKey(err) {
 			return inUse("task", name, "a manual cell or a selection")
 		} else if err != nil {
 			return err
 		}
-		return renumber(ctx, tx, "task", oid, sectionScope(section.Int64), 0, 0)
+		return renumber(ctx, tx, "task", pid, sectionScope(section.Int64), 0, 0)
 	})
 }
 
@@ -218,12 +227,12 @@ type Combination struct {
 	Level string `json:"level"`
 }
 
-func (s *Store) ListCombinations(ctx context.Context, orgSlug string) ([]Combination, error) {
-	oid, err := orgID(ctx, s.db, orgSlug)
+func (s *Store) ListCombinations(ctx context.Context, orgSlug, planSlug string) ([]Combination, error) {
+	_, pid, err := scope(ctx, s.db, orgSlug, planSlug)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT task_a, task_b, level FROM task_combination WHERE org_id = ? ORDER BY task_a, task_b`, oid)
+	rows, err := s.db.QueryContext(ctx, `SELECT task_a, task_b, level FROM task_combination WHERE plan_id = ? ORDER BY task_a, task_b`, pid)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +249,7 @@ func (s *Store) ListCombinations(ctx context.Context, orgSlug string) ([]Combina
 }
 
 // SetCombination stores the level for a pair of tasks (either order). Level "standard" removes the setting.
-func (s *Store) SetCombination(ctx context.Context, orgSlug string, a, b int64, level string) error {
+func (s *Store) SetCombination(ctx context.Context, orgSlug, planSlug string, a, b int64, level string) error {
 	if a == b {
 		return Invalid("combination_self", nil, "a task cannot be combined with itself")
 	}
@@ -251,20 +260,20 @@ func (s *Store) SetCombination(ctx context.Context, orgSlug string, a, b int64, 
 		a, b = b, a
 	}
 	return s.write(ctx, func(tx *sql.Tx) error {
-		oid, err := orgID(ctx, tx, orgSlug)
+		oid, pid, err := scope(ctx, tx, orgSlug, planSlug)
 		if err != nil {
 			return err
 		}
 		for _, id := range []int64{a, b} {
-			if err := inOrg(ctx, tx, "task", oid, id); err != nil {
+			if err := inPlan(ctx, tx, "task", pid, id); err != nil {
 				return err
 			}
 		}
 		if level == "standard" {
-			_, err = tx.ExecContext(ctx, `DELETE FROM task_combination WHERE org_id = ? AND task_a = ? AND task_b = ?`, oid, a, b)
+			_, err = tx.ExecContext(ctx, `DELETE FROM task_combination WHERE plan_id = ? AND task_a = ? AND task_b = ?`, pid, a, b)
 		} else {
-			_, err = tx.ExecContext(ctx, `INSERT INTO task_combination (org_id, task_a, task_b, level) VALUES (?, ?, ?, ?)
-				ON CONFLICT (task_a, task_b) DO UPDATE SET level = excluded.level`, oid, a, b, level)
+			_, err = tx.ExecContext(ctx, `INSERT INTO task_combination (org_id, plan_id, task_a, task_b, level) VALUES (?, ?, ?, ?, ?)
+				ON CONFLICT (task_a, task_b) DO UPDATE SET level = excluded.level`, oid, pid, a, b, level)
 		}
 		if err != nil {
 			return err

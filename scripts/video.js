@@ -94,18 +94,18 @@ async function film(lang, out, base, srv) {
   };
   // ---- the data before the film: an organisation with tasks and people, and an empty plan ----
   const { org } = await api('AccountService/CreateOrg', { name: D.org });
-  const o = { org: org.slug };
+  const { plan } = await api('PlanService/CreatePlan', { org: org.slug, name: D.plan });
+  const o = { org: org.slug, plan: plan.slug };
+  const p = o;
   for (const name of D.tasks) await api('SetupService/CreateTask', { ...o, name });
   const task = (await api('SetupService/ListTasks', o)).tasks.map((t) => t.id);
   await api('SetupService/SetCombination', { ...o, a: task[0], b: task[2], level: 'cannot' });
   await api('SetupService/SetCombination', { ...o, a: task[1], b: task[2], level: 'cannot' });
   for (const name of PEOPLE) await api('SetupService/CreatePerson', { ...o, name });
   const person = Object.fromEntries((await api('SetupService/ListPeople', o)).people.map((x) => [x.name, x.id]));
-  for (const [i, tasks] of CHOICES.entries()) {
-    for (const [k, t] of tasks.entries()) await api('SetupService/SetPersonTask', { ...o, person: person[PEOPLE[i]], task: task[t], level: k === 0 ? 'good' : 'poor' });
+  for (const [i, tasks] of CHOICES.entries()) {  // the tasks each person takes, in this plan
+    for (const [k, t] of tasks.entries()) await api('PlanService/SetPersonTask', { ...p, person: person[PEOPLE[i]], task: task[t], level: k === 0 ? 'good' : 'poor' });
   }
-  const { plan } = await api('PlanService/CreatePlan', { ...o, name: D.plan });
-  const p = { ...o, plan: plan.slug };
 
   // ---- the film ----
   const browser = await chromium.launch({ executablePath: process.env.CHROME || chromeDir(), args: ['--no-sandbox', lang === 'nb' ? '--lang=nb' : '--lang=en-GB'] });

@@ -206,9 +206,9 @@ export async function pagePlan(r, org, people) {
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [] });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await Promise.all([
-    get(Plan.getPlan, { org: r.org, plan: r.plan }, 'plan'), get(Plan.listEvents, { org: r.org, plan: r.plan }, 'events'), get(Setup.listTasks, { org: r.org }, 'tasks'), get(Setup.listCombinations, { org: r.org }, 'combinations'),
+    get(Plan.getPlan, { org: r.org, plan: r.plan }, 'plan'), get(Plan.listEvents, { org: r.org, plan: r.plan }, 'events'), get(Setup.listTasks, { org: r.org, plan: r.plan }, 'tasks'), get(Setup.listCombinations, { org: r.org, plan: r.plan }, 'combinations'),
     get(Plan.listFields, { org: r.org, plan: r.plan }), get(Plan.listAnswers, { org: r.org, plan: r.plan }), get(Plan.listPlaces, { org: r.org, plan: r.plan }, 'places'), get(Draft.listCells, { org: r.org, plan: r.plan }, 'cells'),
-    get(Draft.listPools, { org: r.org, plan: r.plan }, 'pools'), get(Draft.getWeights, { org: r.org, plan: r.plan }), get(Account.health, {}), get(Draft.listRuns, { org: r.org, plan: r.plan }, 'runs'), get(Setup.listSections, { org: r.org }, 'sections'), get(Setup.listTaskSections, { org: r.org }, 'sections')]);
+    get(Draft.listPools, { org: r.org, plan: r.plan }, 'pools'), get(Draft.getWeights, { org: r.org, plan: r.plan }), get(Account.health, {}), get(Draft.listRuns, { org: r.org, plan: r.plan }, 'runs'), get(Setup.listSections, { org: r.org, plan: r.plan }, 'sections'), get(Setup.listTaskSections, { org: r.org, plan: r.plan }, 'sections')]);
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest; none
   // when «Remove unlocked» set the drafts aside (also when another tab did it).
@@ -863,11 +863,11 @@ export async function pagePlan(r, org, people) {
     aloneBox.addEventListener('change', async () => {
       const on = aloneBox.checked;
       // unticking sets every pair with this task back to standard, also ones set by hand: ask first
-      if (await write(async () => { if (!on) await confirmed(t('task.alone'), t('task.alone_off_confirm', { name: tk.name }), t('task.alone_off_yes')); await call(Setup.setTaskCombinations, { org: r.org, task: tk.id, level: on ? 'cannot' : 'standard' }); })) changed();
+      if (await write(async () => { if (!on) await confirmed(t('task.alone'), t('task.alone_off_confirm', { name: tk.name }), t('task.alone_off_yes')); await call(Setup.setTaskCombinations, { org: r.org, plan: r.plan, task: tk.id, level: on ? 'cannot' : 'standard' }); })) changed();
       else aloneBox.checked = !on;
     });
     const pairRows = others.map((o) => h('tr', {}, h('td', {}, o.name), h('td', {}, cycle('combo', levelWith(o), `${tk.name} + ${o.name}`, async (next) => {
-      const ok = await write(() => call(Setup.setCombination, { org: r.org, a: tk.id, b: o.id, level: next }));
+      const ok = await write(() => call(Setup.setCombination, { org: r.org, plan: r.plan, a: tk.id, b: o.id, level: next }));
       if (ok) changed();
       return ok;
     }))));
@@ -878,17 +878,17 @@ export async function pagePlan(r, org, people) {
     const where = h('select', { 'aria-label': t('task.where') }, h('option', { value: '0', selected: now === 0 }, t('field.at_top')),
       mates.map((x, i) => h('option', { value: String(i + 1), selected: now === i + 1 }, t('field.after', { name: x.name }))));
     where.addEventListener('change', async () => {
-      if (await write(() => call(Setup.moveTask, { org: r.org, id: tk.id, position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
+      if (await write(() => call(Setup.moveTask, { org: r.org, plan: r.plan, id: tk.id, position: parseInt(where.value, 10) }))) changed(); else where.value = String(now);
     });
     const sectionSel = h('select', { 'aria-label': t('task.section') }, h('option', { value: '0', selected: !tk.section }, t('task.no_section')),
       taskSections.map((x) => h('option', { value: String(x.id), selected: tk.section === x.id }, x.name)));
     sectionSel.addEventListener('change', async () => {
-      if (await write(() => call(Setup.moveTask, { org: r.org, id: tk.id, section: parseInt(sectionSel.value, 10), position: tasks.length }))) changed(); else sectionSel.value = String(tk.section);
+      if (await write(() => call(Setup.moveTask, { org: r.org, plan: r.plan, id: tk.id, section: parseInt(sectionSel.value, 10), position: tasks.length }))) changed(); else sectionSel.value = String(tk.section);
     });
     dlg = keyed(modal(tk.name, { info: [t('task.org_wide', { org: org.name }), t('task.auto_hint'), t('task.combine_hint')] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (name.value.trim() !== tk.name && await write(() => call(Setup.updateTask, { org: r.org, id: tk.id, name: name.value }, 'task'))) changed();
+        if (name.value.trim() !== tk.name && await write(() => call(Setup.updateTask, { org: r.org, plan: r.plan, id: tk.id, name: name.value }, 'task'))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       mates.length ? field(t('task.where'), where) : '',
       taskSections.length ? field(t('task.section'), sectionSel) : '',
@@ -896,7 +896,7 @@ export async function pagePlan(r, org, people) {
       h('label', { class: 'check' }, aloneBox, ' ', h('strong', {}, t('task.alone'))),
       pairRows.length ? h('table', { class: 'mini' }, h('tbody', {}, pairRows)) : '',
       foot(h('button', { type: 'button', class: 'danger', onclick: async () => {
-        if (await write(async () => { await confirmed(t('task.delete'), t('task.delete_confirm', { name: tk.name }), t('common.delete')); await call(Setup.deleteTask, { org: r.org, id: tk.id }); })) { dlg.close(); render(); }
+        if (await write(async () => { await confirmed(t('task.delete'), t('task.delete_confirm', { name: tk.name }), t('common.delete')); await call(Setup.deleteTask, { org: r.org, plan: r.plan, id: tk.id }); })) { dlg.close(); render(); }
       } }, t('task.delete')), closeBtn())), 'task', tk.id);
   }
 
@@ -907,13 +907,13 @@ export async function pagePlan(r, org, people) {
     const sectionSel = h('select', { 'aria-label': t('person.section') }, h('option', { value: '0', selected: !p.section }, t('person.no_section')),
       sections.map((x) => h('option', { value: String(x.id), selected: p.section === x.id }, x.name)));
     sectionSel.addEventListener('change', async () => {
-      if (await write(() => call(Setup.movePerson, { org: r.org, id: p.id, section: parseInt(sectionSel.value, 10), position: people.length }))) changed(); else sectionSel.value = String(p.section);
+      if (await write(() => call(Setup.movePerson, { org: r.org, plan: r.plan, id: p.id, section: parseInt(sectionSel.value, 10), position: people.length }))) changed(); else sectionSel.value = String(p.section);
     });
     const levelOf = (tk) => ((chosen[p.id] || []).find((x) => x.taskId === tk.id) || { level: '' }).level;
     const taskRows = tasks.filter((tk) => tk.planned).map((tk) => {
       const cur = levelOf(tk);
       return h('tr', {}, h('td', { class: cur ? '' : 'muted' }, tk.name), h('td', {}, cycle('task', cur, t('person.task_aria', { name: p.name, task: tk.name }), async (next) => {
-        const ok = await write(() => (next ? call(Setup.setPersonTask, { org: r.org, person: p.id, task: tk.id, level: next }) : call(Setup.removePersonTask, { org: r.org, person: p.id, task: tk.id })));
+        const ok = await write(() => (next ? call(Plan.setPersonTask, { org: r.org, plan: r.plan, person: p.id, task: tk.id, level: next }) : call(Plan.removePersonTask, { org: r.org, plan: r.plan, person: p.id, task: tk.id })));
         if (ok) changed();
         return ok;
       })));
@@ -921,7 +921,7 @@ export async function pagePlan(r, org, people) {
     keyed(modal(p.name, { info: [t('person.tasks_hint'), t('person.auto_hint'), t('person.org_wide', { org: org.name })] },
       h('form', { class: 'row', onsubmit: async (e) => {
         e.preventDefault();
-        if (name.value.trim() !== p.name && await write(() => call(Setup.updatePerson, { org: r.org, id: p.id, name: name.value }, 'person'))) changed();
+        if (name.value.trim() !== p.name && await write(() => call(Setup.updatePerson, { org: r.org, plan: r.plan, id: p.id, name: name.value }, 'person'))) changed();
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h3', {}, t('person.tasks')),
       taskRows.length ? h('table', { class: 'mini' }, h('tbody', {}, taskRows)) : h('p', { class: 'muted' }, t('person.no_tasks')),
@@ -1615,7 +1615,7 @@ export async function pagePlan(r, org, people) {
     const g = grip(t('task.drag'));
     // ⚡: whether the planner fills the task (off: only what is set by hand); the draft and the titles change with it
     const zap = zapBtn(tk, 'planned', (on) => t(on ? 'task.auto_on' : 'task.auto_off', { name: tk.name }),
-      t('task.planned_aria', { name: tk.name }), (on) => call(Setup.updateTask, { org: r.org, id: tk.id, planned: on }), () => render());
+      t('task.planned_aria', { name: tk.name }), (on) => call(Setup.updateTask, { org: r.org, plan: r.plan, id: tk.id, planned: on }), () => render());
     const row = h('tr', { class: 'task-row' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g,
       h('button', { type: 'button', class: 'cellbtn', 'aria-label': t('table.task_aria', { name: tk.name }), onclick: () => taskDialog(tk) }, tk.name), zap)),
     events.map((ev) => placesCell(tk, ev)), rowPick('places', tk.id, tk.name));
@@ -1770,10 +1770,10 @@ export async function pagePlan(r, org, people) {
     const n = tasksIn(x.id).length;
     const row = h('tr', { class: 'task-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('ts' + x.id, x.name),
       nameField(x.name, t('section.name_aria', { name: x.name }), t('tsect.name_hint'),
-        (v) => call(Setup.renameTaskSection, { org: r.org, id: x.id, name: v }, 'section'),
-        async () => { await confirmed(t('section.delete'), t('tsect.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteTaskSection, { org: r.org, id: x.id }); }))),
+        (v) => call(Setup.renameTaskSection, { org: r.org, plan: r.plan, id: x.id, name: v }, 'section'),
+        async () => { await confirmed(t('section.delete'), t('tsect.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteTaskSection, { org: r.org, plan: r.plan, id: x.id }); }))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('tsect.tasks', n) : t('tsect.empty'))));
-    dragRow(row, g, 'tsect', x, taskSections, (d, pos) => call(Setup.moveTaskSection, { org: r.org, id: d.id, position: pos }));
+    dragRow(row, g, 'tsect', x, taskSections, (d, pos) => call(Setup.moveTaskSection, { org: r.org, plan: r.plan, id: d.id, position: pos }));
     const asSection = row._drop!;  // dragRow() has just set it
     row._drop = {
       accept: (k, d) => k === 'task' || asSection.accept(k, d),
@@ -1782,8 +1782,8 @@ export async function pagePlan(r, org, people) {
     };
     return row;
   };
-  const movePerson = (d, section, position) => call(Setup.movePerson, { org: r.org, id: d.id, section, position });
-  const moveTask = (d, section, position) => call(Setup.moveTask, { org: r.org, id: d.id, section, position });
+  const movePerson = (d, section, position) => call(Setup.movePerson, { org: r.org, plan: r.plan, id: d.id, section, position });
+  const moveTask = (d, section, position) => call(Setup.moveTask, { org: r.org, plan: r.plan, id: d.id, section, position });
   // ⚡ by a name: whether the planner may pick the person, or fills the task (one click; set by hand works either way).
   const zapBtn = (obj, key, title, aria, save: (on: boolean) => Promise<unknown>, after?) => {
     const b = h('button', { type: 'button', class: 'auto', 'aria-label': aria });
@@ -1802,7 +1802,7 @@ export async function pagePlan(r, org, people) {
     return b;
   };
   const autoBtn = (p) => zapBtn(p, 'proposable', (on) => t(on ? 'person.auto_on' : 'person.auto_off', { name: p.name }),
-    t('person.proposable_aria', { name: p.name }), (on) => call(Setup.updatePerson, { org: r.org, id: p.id, proposable: on }));
+    t('person.proposable_aria', { name: p.name }), (on) => call(Setup.updatePerson, { org: r.org, plan: r.plan, id: p.id, proposable: on }));
   // The tasks a person is willing to take, as tags under the name: green = good, yellow = if needed (2026-11-22, the user: "tags på
   // personer som viser gul/grønn tag for oppgaver de er villige til å ta? Kanskje gjøre det mulig å ekspande for å vise for alle?").
   // Always there, shown for everyone with «Show tasks» in the Availability heading (off by default, kept in this browser).
@@ -1829,11 +1829,11 @@ export async function pagePlan(r, org, people) {
     const n = inSection(x.id).length;
     const row = h('tr', { class: 'person-sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, g, foldBtn('s' + x.id, x.name),
       nameField(x.name, t('section.name_aria', { name: x.name }), t('section.name_hint'),
-        (v) => call(Setup.renameSection, { org: r.org, id: x.id, name: v }, 'section'),
-        async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteSection, { org: r.org, id: x.id }); }))),
+        (v) => call(Setup.renameSection, { org: r.org, plan: r.plan, id: x.id, name: v }, 'section'),
+        async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteSection, { org: r.org, plan: r.plan, id: x.id }); }))),
     h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
     // a section is dragged among the sections (a line above or below); a person dropped on it goes last in it
-    dragRow(row, g, 'section', x, sections, (d, pos) => call(Setup.moveSection, { org: r.org, id: d.id, position: pos }));
+    dragRow(row, g, 'section', x, sections, (d, pos) => call(Setup.moveSection, { org: r.org, plan: r.plan, id: d.id, position: pos }));
     const asSection = row._drop!;  // dragRow() has just set it
     row._drop = {
       accept: (k, d) => k === 'person' || asSection.accept(k, d),
@@ -1865,14 +1865,14 @@ export async function pagePlan(r, org, people) {
 
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x?) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
-    (name) => call(Setup.createPerson, { org: r.org, ...(x ? { name, section: x.id } : { name }) }, 'person'));
-  const addSection = () => addRow(t('table.new_section'), (name) => call(Setup.createSection, { org: r.org, name }, 'section'));
+    (name) => call(Setup.createPerson, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'person'));
+  const addSection = () => addRow(t('table.new_section'), (name) => call(Setup.createSection, { org: r.org, plan: r.plan, name }, 'section'));
   const detailsHead = sect('details', t('table.details'), [t('table.details_hint')]);
   const tasksHead = dropOn(sect('tasks', t('table.tasks'), [t('table.tasks_hint')]), (k) => k === 'task',
     (d) => moveTask(d, 0, tasksIn(0).filter((o) => o.id !== d.id).length), true);
   const addTask = (x?) => addRow(x ? t('table.new_task_in', { section: x.name }) : t('table.new_task'),
-    (name) => call(Setup.createTask, { org: r.org, ...(x ? { name, section: x.id } : { name }) }, 'task'));
-  const addTaskSection = () => addRow(t('tsect.new'), (name) => call(Setup.createTaskSection, { org: r.org, name }, 'section'));
+    (name) => call(Setup.createTask, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'task'));
+  const addTaskSection = () => addRow(t('tsect.new'), (name) => call(Setup.createTaskSection, { org: r.org, plan: r.plan, name }, 'section'));
   let availHead;
   const table = h('div', { class: 'grid-scroll main' }, h('table', { class: 'dp-table' + (store.get('tags') === '1' ? ' show-tags' : '') },
     h('thead', {}, head),

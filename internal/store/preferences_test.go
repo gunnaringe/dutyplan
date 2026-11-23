@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -22,11 +23,11 @@ func newPrefEnv(t *testing.T) prefEnv {
 	t.Helper()
 	s := open(t)
 	e := prefEnv{s: s, org: mustOrg(t, s, "Club")}
-	e.person, _ = s.CreatePerson(ctx, e.org.Slug, "Kari Test")
-	e.sound, _ = s.CreateTask(ctx, e.org.Slug, "Sound")
-	e.camera, _ = s.CreateTask(ctx, e.org.Slug, "Camera")
-	e.singing, _ = unplannedTask(ctx, s, e.org.Slug, "Singing")
 	e.plan, _ = s.CreatePlan(ctx, e.org.Slug, "Autumn 2026")
+	e.person, _ = s.CreatePerson(ctx, e.org.Slug, e.plan.Slug, "Kari Test")
+	e.sound, _ = s.CreateTask(ctx, e.org.Slug, e.plan.Slug, "Sound")
+	e.camera, _ = s.CreateTask(ctx, e.org.Slug, e.plan.Slug, "Camera")
+	e.singing, _ = unplannedTask(ctx, s, e.org.Slug, e.plan.Slug, "Singing")
 	for _, d := range []string{"2026-08-09", "2026-08-16", "2026-08-23"} {
 		ev, err := s.AddEvent(ctx, e.org.Slug, e.plan.Slug, d)
 		if err != nil {
@@ -54,7 +55,7 @@ type viewEvent struct {
 
 func viewOf(t *testing.T, s *Store, org, plan string, personID int64) personView {
 	t.Helper()
-	tasks, err := s.ListTasks(ctx, org)
+	tasks, err := s.ListTasks(ctx, org, plan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,33 +112,33 @@ func TestPersonTasksAreChosenByThePerson(t *testing.T) {
 	if len(me.Tasks) != 2 || me.Tasks[0].Name != "Sound" || me.Tasks[0].Level != "" || me.Tasks[1].Name != "Camera" {
 		t.Fatalf("only the planner's tasks are offered, none chosen yet: %+v", me.Tasks)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good"); err != nil {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "good"); err != nil {
 		t.Fatal(err)
 	}
 	if got := e.me(t).Tasks[0]; got.Level != "good" {
 		t.Errorf("Sound = %+v", got)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good"); !errors.Is(err, ErrInvalid) {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "good"); !errors.Is(err, ErrInvalid) {
 		t.Errorf("no-op: %v", err)
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "poor"); err != nil { // changes the level
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "poor"); err != nil { // changes the level
 		t.Fatal(err)
 	}
 	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 1 {
 		t.Errorf("an update must not add a second row: %d", got)
 	}
 	for _, level := range []string{"kanskje", "neutral", "never", ""} { // not → bad → good: «not» is no row
-		if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, level); !errors.Is(err, ErrInvalid) {
+		if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, level); !errors.Is(err, ErrInvalid) {
 			t.Errorf("level %q: %v", level, err)
 		}
 	}
-	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.singing.ID, "good"); !errors.Is(err, ErrNotFound) {
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.singing.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("a manual-only task cannot be chosen: %v", err)
 	}
-	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID); err != nil {
+	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID); !errors.Is(err, ErrNotFound) {
+	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("removing what is not chosen: %v", err)
 	}
 	if got := e.me(t).Tasks[0].Level; got != "" {
@@ -185,22 +186,22 @@ func TestAvailabilityPerEvent(t *testing.T) {
 func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 	a := newPrefEnv(t)
 	b := mustOrg(t, a.s, "Org B")
-	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B")
 	planB, _ := a.s.CreatePlan(ctx, b.Slug, "Autumn 2026")
+	personB, _ := a.s.CreatePerson(ctx, b.Slug, planB.Slug, "Eva Test")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, planB.Slug, "Sound B")
 	evB, _ := a.s.AddEvent(ctx, b.Slug, planB.Slug, "2026-08-09")
 
 	// A's person, task and event through B's path, and the other way round
-	if err := a.s.SetPersonTask(ctx, b.Slug, a.person.ID, taskB.ID, "good"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, b.Slug, planB.Slug, a.person.ID, taskB.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's person via B: %v", err)
 	}
-	if err := a.s.SetPersonTask(ctx, b.Slug, personB.ID, a.sound.ID, "good"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, b.Slug, planB.Slug, personB.ID, a.sound.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("A's task for B's person: %v", err)
 	}
-	if err := a.s.SetPersonTask(ctx, a.org.Slug, personB.ID, a.sound.ID, "good"); !errors.Is(err, ErrNotFound) {
+	if err := a.s.SetPersonTask(ctx, a.org.Slug, a.plan.Slug, personB.ID, a.sound.ID, "good"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("B's person through A: %v", err)
 	}
-	if err := a.s.RemovePersonTask(ctx, b.Slug, a.person.ID, a.sound.ID); !errors.Is(err, ErrNotFound) {
+	if err := a.s.RemovePersonTask(ctx, b.Slug, planB.Slug, a.person.ID, a.sound.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("remove across: %v", err)
 	}
 	if err := a.s.SetAvailability(ctx, b.Slug, planB.Slug, personB.ID, map[int64]string{a.ev[0].ID: "never"}); !errors.Is(err, ErrNotFound) {
@@ -232,8 +233,9 @@ func TestPreferencesNeverCrossOrganisationsOrPlans(t *testing.T) {
 func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 	a := newPrefEnv(t)
 	b := mustOrg(t, a.s, "Org B")
-	personB, _ := a.s.CreatePerson(ctx, b.Slug, "Eva Test")
-	taskB, _ := a.s.CreateTask(ctx, b.Slug, "Sound B")
+	pl1 := mustPlan(t, a.s, b.Slug)
+	personB, _ := a.s.CreatePerson(ctx, b.Slug, pl1.Slug, "Eva Test")
+	taskB, _ := a.s.CreateTask(ctx, b.Slug, pl1.Slug, "Sound B")
 	other, _ := a.s.CreatePlan(ctx, a.org.Slug, "Spring 2027")
 	var orgA, orgB, planOther int64
 	db := a.s.DB()
@@ -244,8 +246,9 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 		name, stmt string
 		args       []any
 	}{
-		{"person_task with another organisation's task", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'good')`, []any{orgA, a.person.ID, taskB.ID}},
-		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, person_id, task_id, level) VALUES (?, ?, ?, 'good')`, []any{orgA, personB.ID, a.sound.ID}},
+		{"person_task with another organisation's task", `INSERT INTO person_task (org_id, plan_id, person_id, task_id, level) VALUES (?, ?, ?, ?, 'good')`, []any{orgA, planOther, a.person.ID, taskB.ID}},
+		{"person_task for another organisation's person", `INSERT INTO person_task (org_id, plan_id, person_id, task_id, level) VALUES (?, ?, ?, ?, 'good')`, []any{orgA, planOther, personB.ID, a.sound.ID}},
+		{"person_task in another organisation's plan", `INSERT INTO person_task (org_id, plan_id, person_id, task_id, level) VALUES (?, ?, ?, ?, 'good')`, []any{orgB, planOther, personB.ID, taskB.ID}},
 		{"person_event with an event of another plan", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
 		{"person_event for another organisation's person", `INSERT INTO person_event (org_id, plan_id, person_id, event_id, level) VALUES (?, ?, ?, ?, 'never')`, []any{orgA, planOf(db, a.ev[0].ID), personB.ID, a.ev[0].ID}},
 		{"answer_note with an event of another plan", `INSERT INTO answer_note (org_id, plan_id, person_id, event_id, note) VALUES (?, ?, ?, ?, 'x')`, []any{orgA, planOther, a.person.ID, a.ev[0].ID}},
@@ -260,7 +263,7 @@ func TestPreferencesForeignKeysAreTheBackstop(t *testing.T) {
 
 func TestPreferencesGoWhenTheirTaskOrEventGoes(t *testing.T) {
 	e := newPrefEnv(t)
-	e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good")
+	e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "good")
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, e.person.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "good"})
 	if err := e.s.DeleteEvent(ctx, e.org.Slug, e.plan.Slug, e.ev[0].ID); err != nil {
 		t.Fatal(err)
@@ -268,7 +271,7 @@ func TestPreferencesGoWhenTheirTaskOrEventGoes(t *testing.T) {
 	if got := count(t, e.s, `SELECT COUNT(*) FROM person_event`); got != 1 {
 		t.Errorf("an event's answers go with it: %d", got)
 	}
-	if err := e.s.DeleteTask(ctx, e.org.Slug, e.sound.ID); err != nil {
+	if err := e.s.DeleteTask(ctx, e.org.Slug, e.plan.Slug, e.sound.ID); err != nil {
 		t.Fatal(err)
 	}
 	if got := count(t, e.s, `SELECT COUNT(*) FROM person_task`); got != 0 {
@@ -286,9 +289,9 @@ func planOf(db interface {
 
 func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	e := newPrefEnv(t)
-	other, _ := e.s.CreatePerson(ctx, e.org.Slug, "Ola Prøve")
-	e.s.SetPersonTask(ctx, e.org.Slug, e.person.ID, e.sound.ID, "good")
-	e.s.SetPersonTask(ctx, e.org.Slug, other.ID, e.sound.ID, "poor")
+	other, _ := e.s.CreatePerson(ctx, e.org.Slug, e.plan.Slug, "Ola Prøve")
+	e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "good")
+	e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, other.ID, e.sound.ID, "poor")
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, e.person.ID, map[int64]string{e.ev[0].ID: "good"})
 	e.s.SetAvailability(ctx, e.org.Slug, e.plan.Slug, other.ID, map[int64]string{e.ev[0].ID: "never", e.ev[1].ID: "poor"})
 	mine := e.me(t)
@@ -298,5 +301,77 @@ func TestEachPersonSeesOnlyTheirOwnAnswers(t *testing.T) {
 	}
 	if mine.Events[0].Level != "good" || mine.Events[1].Level != "" || theirs.Events[0].Level != "never" || theirs.Events[1].Level != "poor" {
 		t.Errorf("event answers: %+v / %+v", mine.Events, theirs.Events)
+	}
+}
+
+// The tasks a person takes are per plan (2026-11-23, the user: "Task preferences for a name in a plan should be for that plan
+// only."): a plan copied from another starts with its choices (on its own copies of the people and tasks), and a change in
+// one plan leaves the other alone. An empty plan has none.
+func TestTheTasksAPersonTakesArePerPlan(t *testing.T) {
+	e := newPrefEnv(t)
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID, "good"); err != nil {
+		t.Fatal(err)
+	}
+	tasksIn := func(plan string) string {
+		t.Helper()
+		a, err := e.s.ListAnswers(ctx, e.org.Slug, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		people, _ := e.s.ListPeople(ctx, e.org.Slug, plan)
+		tasks, _ := e.s.ListTasks(ctx, e.org.Slug, plan)
+		person, task := map[int64]string{}, map[int64]string{}
+		for _, p := range people {
+			person[p.ID] = p.Name
+		}
+		for _, x := range tasks {
+			task[x.ID] = x.Name
+		}
+		out := ""
+		for _, x := range a.Tasks {
+			out += fmt.Sprintf("%s:%s=%s ", person[x.PersonID], task[x.TaskID], x.Level)
+		}
+		return out
+	}
+	spring, err := e.s.CreatePlanFrom(ctx, e.org.Slug, NewPlan{Name: "Spring 2027", From: e.plan.Slug})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tasksIn(spring.Slug); got != "Kari Test:Sound=good " {
+		t.Errorf("a copied plan starts with the choices: %q", got)
+	}
+	people, _ := e.s.ListPeople(ctx, e.org.Slug, spring.Slug)
+	tasks, _ := e.s.ListTasks(ctx, e.org.Slug, spring.Slug)
+	kari, sound, camera := people[0].ID, tasks[0].ID, tasks[1].ID
+	if kari == e.person.ID || sound == e.sound.ID {
+		t.Fatalf("the copy has ids of its own: %d %d", kari, sound)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, spring.Slug, e.person.ID, e.sound.ID, "poor"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("autumn's person in spring: %v", err)
+	}
+	// changed in spring only
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, spring.Slug, kari, sound, "poor"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.SetPersonTask(ctx, e.org.Slug, spring.Slug, kari, camera, "good"); err != nil {
+		t.Fatal(err)
+	}
+	if got := tasksIn(e.plan.Slug); got != "Kari Test:Sound=good " {
+		t.Errorf("autumn is untouched: %q", got)
+	}
+	if err := e.s.RemovePersonTask(ctx, e.org.Slug, e.plan.Slug, e.person.ID, e.sound.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := tasksIn(spring.Slug); got != "Kari Test:Sound=poor Kari Test:Camera=good " {
+		t.Errorf("spring is untouched: %q", got)
+	}
+	empty, _ := e.s.CreatePlan(ctx, e.org.Slug, "Summer 2027")
+	if got := tasksIn(empty.Slug); got != "" {
+		t.Errorf("an empty plan has no choices: %q", got)
+	}
+	// the planner reads the plan's own
+	d, err := e.s.GetPlanningData(ctx, e.org.Slug, e.plan.Slug)
+	if err != nil || len(d.PersonTasks) != 0 {
+		t.Errorf("the planner's data for autumn: %+v %v", d.PersonTasks, err)
 	}
 }

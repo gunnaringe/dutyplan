@@ -57,23 +57,23 @@ const CHOICES = {
   let browser, browserNb;
   try {
     await api('AccountService/CreateOrg', { org: undefined, name: ORG.name });
-    for (const name of TASKS) await api('SetupService/CreateTask', { name });
-    const task = Object.fromEntries((await api('SetupService/ListTasks')).tasks.map((t) => [t.name, t.id]));
-    for (const [a, b, level] of [['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
-      await api('SetupService/SetCombination', { a: task[a], b: task[b], level });
-    }
-    for (const name of PEOPLE) await api('SetupService/CreatePerson', { name });
-    const person = Object.fromEntries((await api('SetupService/ListPeople')).people.map((x) => [x.name, x.id]));
-    for (const [name, tasks] of Object.entries(CHOICES)) {
-      for (const [t, level] of Object.entries(tasks)) await api('SetupService/SetPersonTask', { person: person[name], task: task[t], level });
-    }
-    // a section: people placed under their own heading in Availability (only placement)
-    const guests = (await api('SetupService/CreateSection', { name: 'Guests' })).section;
-    for (const name of ['Njål Example', 'Sunniva Test']) await api('SetupService/MovePerson', { id: person[name], section: guests.id, position: 99 });
-    await api('PlanService/CreatePlan', { name: 'Spring 2016' });
-
-    // the plan: concerts every Saturday and rehearsals every Wednesday, each event with its own places
+    // the plan, with its own tasks and people: concerts every Saturday and rehearsals every Wednesday, each event with its own places
     await api('PlanService/CreatePlan', { name: PLAN.name });
+    for (const name of TASKS) await api('SetupService/CreateTask', { plan, name });
+    const task = Object.fromEntries((await api('SetupService/ListTasks', { plan })).tasks.map((t) => [t.name, t.id]));
+    for (const [a, b, level] of [['Sound', 'Doors', 'cannot'], ['Video', 'Doors', 'cannot']]) {
+      await api('SetupService/SetCombination', { plan, a: task[a], b: task[b], level });
+    }
+    for (const name of PEOPLE) await api('SetupService/CreatePerson', { plan, name });
+    const person = Object.fromEntries((await api('SetupService/ListPeople', { plan })).people.map((x) => [x.name, x.id]));
+    // a section: people placed under their own heading in Availability (only placement)
+    const guests = (await api('SetupService/CreateSection', { plan, name: 'Guests' })).section;
+    for (const name of ['Njål Example', 'Sunniva Test']) await api('SetupService/MovePerson', { plan, id: person[name], section: guests.id, position: 99 });
+    await api('PlanService/CreatePlan', { name: 'Spring 2016', from: plan });  // a second plan, with copies of this one's people and tasks
+    // the tasks each person takes, in this plan
+    for (const [name, tasks] of Object.entries(CHOICES)) {
+      for (const [t, level] of Object.entries(tasks)) await api('PlanService/SetPersonTask', { plan, person: person[name], task: task[t], level });
+    }
     // (as on the page: one event, its places typed in, then copied every week)
     const weekly = async (date, nextWeek, until, times, places) => {
       const [first] = (await api('PlanService/AddEvents', { plan, date, ...times })).events;
@@ -250,6 +250,14 @@ const CHOICES = {
     await dialog(tall).waitFor();
     await save(tall, '20-what-matters', dialog(tall));
     await closeDialog(tall);
+    // the organisation's page: its plans, a new plan copied from another, and ⋯ Duplicate with or without the filled-in table
+    const orgPage = await open(await context({ viewport: { width: 1100, height: 640 } }));
+    await go(orgPage, '/o/' + ORG.slug);
+    await orgPage.click(`details.plan-menu:has(summary[aria-label="More for ${PLAN.name}"]) > summary`);
+    await orgPage.getByRole('button', { name: 'Duplicate', exact: true }).click();
+    await dialog(orgPage).waitFor();
+    await save(orgPage, '21-duplicate');
+    await closeDialog(orgPage);
 
     // On a phone: the same table, narrower, scrolling sideways under the names.
     const phone = await open(await context({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }));

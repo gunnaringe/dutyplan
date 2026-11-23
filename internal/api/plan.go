@@ -20,8 +20,14 @@ func (s planSvc) ListPlans(ctx context.Context, req *connect.Request[v1.ListPlan
 }
 
 func (s planSvc) CreatePlan(ctx context.Context, req *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error) {
-	p, err := s.st.CreatePlan(ctx, req.Msg.Org, req.Msg.Name)
+	p, err := s.st.CreatePlanFrom(ctx, req.Msg.Org, store.NewPlan{Name: req.Msg.Name, From: req.Msg.From})
 	return conv[v1.CreatePlanResponse](s.server, map[string]any{"plan": p}, err)
+}
+
+// DuplicatePlan copies a plan under a new name, with or without its filled-in table.
+func (s planSvc) DuplicatePlan(ctx context.Context, req *connect.Request[v1.DuplicatePlanRequest]) (*connect.Response[v1.DuplicatePlanResponse], error) {
+	p, err := s.st.CreatePlanFrom(ctx, req.Msg.Org, store.NewPlan{Name: req.Msg.Name, From: req.Msg.Plan, Table: req.Msg.Table})
+	return conv[v1.DuplicatePlanResponse](s.server, map[string]any{"plan": p}, err)
 }
 
 func (s planSvc) GetPlan(ctx context.Context, req *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
@@ -149,6 +155,17 @@ func (s planSvc) SetFieldValue(ctx context.Context, req *connect.Request[v1.SetF
 }
 
 // ---- answers --------------------------------------------------------------------------------------------------------
+
+// SetPersonTask and RemovePersonTask: the tasks a person takes, in this plan (each plan has its own).
+func (s planSvc) SetPersonTask(ctx context.Context, req *connect.Request[v1.SetPersonTaskRequest]) (*connect.Response[v1.SetPersonTaskResponse], error) {
+	m := req.Msg
+	return done[v1.SetPersonTaskResponse](s.server, s.st.SetPersonTask(ctx, m.Org, m.Plan, int64(m.Person), int64(m.Task), m.Level))
+}
+
+func (s planSvc) RemovePersonTask(ctx context.Context, req *connect.Request[v1.RemovePersonTaskRequest]) (*connect.Response[v1.RemovePersonTaskResponse], error) {
+	m := req.Msg
+	return done[v1.RemovePersonTaskResponse](s.server, s.st.RemovePersonTask(ctx, m.Org, m.Plan, int64(m.Person), int64(m.Task)))
+}
 
 func (s planSvc) ListAnswers(ctx context.Context, req *connect.Request[v1.ListAnswersRequest]) (*connect.Response[v1.ListAnswersResponse], error) {
 	v, err := s.st.ListAnswers(ctx, req.Msg.Org, req.Msg.Plan)

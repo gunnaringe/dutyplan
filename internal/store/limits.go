@@ -11,8 +11,8 @@ import (
 var (
 	MaxOwnedOrgs     = 20  // organisations one person owns
 	MaxPlansPerOrg   = 100 //
-	MaxPeoplePerOrg  = 1000
-	MaxTasksPerOrg   = 200
+	MaxPeoplePerPlan = 1000
+	MaxTasksPerPlan  = 200
 	MaxEventsPerPlan = 1000
 	MaxLinksPerOrg   = 200
 )

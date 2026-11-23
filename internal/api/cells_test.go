@@ -28,25 +28,25 @@ func (e *env) cellsWorld(name string) cellsWorld {
 			e.t.Fatal(err)
 		}
 	}
-	tasks, err := e.st.ListTasks(ctx, org)
+	tasks, err := e.st.ListTasks(ctx, org, plan)
 	must(err)
 	w.sound = tasks[0]
-	w.sang, err = e.st.CreateTask(ctx, org, "Singing")
+	w.sang, err = e.st.CreateTask(ctx, org, plan, "Singing")
 	must(err)
 	off := false
-	w.sang, err = e.st.UpdateTask(ctx, org, w.sang.ID, store.TaskPatch{Planned: &off})
+	w.sang, err = e.st.UpdateTask(ctx, org, plan, w.sang.ID, store.TaskPatch{Planned: &off})
 	must(err)
 	places := map[int64]int{w.sound.ID: 1}
 	_, err = addWithPlaces(e.st, org, plan, store.NewEvents{Date: "2026-08-16"}, places)
 	must(err)
 	w.events, err = e.st.ListEvents(ctx, org, plan)
 	must(err)
-	other, err := e.st.CreatePlan(ctx, org, "Spring 2027")
+	other, err := e.st.CreatePlanFrom(ctx, org, store.NewPlan{Name: "Spring 2027", From: plan})
 	must(err)
-	others, err := addWithPlaces(e.st, org, other.Slug, store.NewEvents{Date: "2027-02-07"}, places)
+	others, err := e.st.AddEvents(ctx, org, other.Slug, store.NewEvents{Date: "2027-02-07"})
 	must(err)
 	w.otherPlanEvent = others[0]
-	people, err := e.st.ListPeople(ctx, org)
+	people, err := e.st.ListPeople(ctx, org, plan)
 	must(err)
 	w.anna = people[0]
 	return w
@@ -64,7 +64,7 @@ func TestManualCellsAndSelectionsOverHTTP(t *testing.T) {
 		t.Fatalf("a text in a cell: %+v", made)
 	}
 	// what a manual cell names cannot be deleted from under it
-	if r := e.do("DELETE", "/api/orgs/"+a.org+"/tasks/"+itoa(a.sang.ID), nil); r.code != 409 {
+	if r := e.do("DELETE", "/api/orgs/"+a.org+"/plans/"+term+"/tasks/"+itoa(a.sang.ID), nil); r.code != 409 {
 		t.Errorf("deleting a task a manual cell names: %d %s", r.code, r.body)
 	}
 	e.mustDo(201, "POST", base+"/cells", map[string]any{"event": ev0, "task": a.sound.ID, "person": a.anna.ID})

@@ -89,6 +89,9 @@ form.addrow button { padding: .05rem .7rem; font-size: .8rem; }
 .plans { display: grid; gap: .6rem; }
 .plan-item { display: flex; align-items: center; gap: 1rem; border: 1px solid var(--line); border-radius: .6rem; padding: .6rem .8rem; }
 .plan-item .nm { font-weight: 700; flex: 1; }
+.plan-item.new { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.dropdown.plan-menu > summary { width: var(--ctl); padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.new-plan select { flex: 0 1 auto; }
 .box { border: 1px solid var(--line); border-radius: .6rem; padding: .5rem .8rem; }
 .box form.addrow { margin: .6rem 0 .2rem; }
 .org-foot { margin-top: 2rem; }

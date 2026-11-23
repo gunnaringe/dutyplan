@@ -86,7 +86,7 @@ func TestAddUpdateDeleteEventById(t *testing.T) {
 
 func TestAddingEveryWeekUntilADate(t *testing.T) {
 	s, o, p := setup(t)
-	sound, _ := s.CreateTask(ctx, o.Slug, "Sound")
+	sound, _ := s.CreateTask(ctx, o.Slug, p.Slug, "Sound")
 	evs, err := addWithPlaces(ctx, s, o.Slug, p.Slug, NewEvents{Date: "2026-08-09", Until: "2026-09-06", StartTime: "11:00"}, map[int64]int{sound.ID: 2})
 	if err != nil {
 		t.Fatal(err)
@@ -163,10 +163,10 @@ func TestRepeatingEveryFewWeeks(t *testing.T) {
 
 func TestCopyingAnEventTakesWhatIsAskedFor(t *testing.T) {
 	s, o, p := setup(t)
-	sound, _ := s.CreateTask(ctx, o.Slug, "Sound")
-	doors, _ := s.CreateTask(ctx, o.Slug, "Doors")
-	kari, _ := s.CreatePerson(ctx, o.Slug, "Kari Test")
-	ola, _ := s.CreatePerson(ctx, o.Slug, "Ola Sample")
+	sound, _ := s.CreateTask(ctx, o.Slug, p.Slug, "Sound")
+	doors, _ := s.CreateTask(ctx, o.Slug, p.Slug, "Doors")
+	kari, _ := s.CreatePerson(ctx, o.Slug, p.Slug, "Kari Test")
+	ola, _ := s.CreatePerson(ctx, o.Slug, p.Slug, "Ola Sample")
 	srcs, err := addWithPlaces(ctx, s, o.Slug, p.Slug, NewEvents{Date: "2026-12-19", StartTime: "18:30", EndTime: "22:00"}, map[int64]int{sound.ID: 1, doors.ID: 3})
 	if err != nil {
 		t.Fatal(err)
