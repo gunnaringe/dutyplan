@@ -2,7 +2,7 @@ import { Account, call, changedBy, confirmed, Draft, errorText, forget, get, Pla
 import { LEVEL_ICON, h, icon, locale, mark, say, store, type Kid, type Page } from './core';
 import { live, render } from './main';
 import { ask, shareDialog, viewOnly } from './org';
-import { ME, go, link, linkBtn, me } from './shell';
+import { ME, dropdown, go, link, linkBtn, me } from './shell';
 import { addRow, closeBtn, enterMovesOn, field, foot, infoBtn, keyed, modal, reopened } from './ui';
 import { MAX_EVERY, addDays, clock, enc, fmtDate, fmtShortDate, fmtTime, repeatDates } from './util';
 
@@ -598,6 +598,7 @@ export async function pagePlan(r, org, people) {
     } });
 
   const bar = h('div', { class: 'draft-bar' });
+  let barMore: HTMLElement[] = [];  // what goes behind More ⋯ (filled with the bar)
   const poll = async () => {
     if (!bar.isConnected) return;  // the page has been replaced
     try {
@@ -615,8 +616,12 @@ export async function pagePlan(r, org, people) {
       if (await write(async () => { id = (await call(Draft.startRun, { org: r.org, plan: r.plan, timeLimit: parseInt(limitSel.value, 10) })).id; })) { planState.runId = id; render(); }
     };
     const nothing = !events.length || !people.length || !Object.values(placesAt).some(Boolean);  // no event, person or place: nothing to plan
-    const line: HTMLElement[] = [h('button', { type: 'button', disabled: !health.planner || running || nothing, title: nothing && !running ? t('run.nothing') : null, onclick: start },
-      running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel];
+    // The bar in three groups (2026-11-23, the user: "Make the draft plan top Row with the buttons and such easier and prettier"):
+    // which draft is on show (‹ #n ›, Show changes, the current-plan pill), what to do with it (We’re done, Try again with its
+    // time, Undo), and the rest (the compromises as a chip, Adjust the planner, More ⋯ with what is seldom used).
+    const which: HTMLElement[] = [], line: HTMLElement[] = [], extra: HTMLElement[] = [], more: HTMLElement[] = [];
+    const retry = h('span', { class: 'split' }, h('button', { type: 'button', class: view ? 'retry' : 'retry first', disabled: !health.planner || running || nothing,
+      title: nothing && !running ? t('run.nothing') : null, onclick: start }, running ? t('run.planning') : view ? t('run.retry') : t('run.plan')), limitSel);
     const notes: HTMLElement[] = [];
     if (!health.planner) line.push(h('span', { class: 'small' }, t('run.no_planner')));
     if (running) { line.push(h('span', { role: 'status' }, t('run.running', { n: newest.timeLimit }))); setTimeout(poll, live && live.es.readyState === 1 ? 5000 : 1000); }
@@ -627,15 +632,15 @@ export async function pagePlan(r, org, people) {
       const about = t('run.label', { id: run.id, time: fmtTime(run.finishedAt || run.startedAt) }) + ' · ' + (run.solverStatus === 'OPTIMAL' ? t('run.optimal') : t('run.feasible'));
       const step = (i, aria, ic) => h('button', { type: 'button', class: 'ghost icon step', disabled: !runs[i], 'aria-label': aria, title: aria,
         onclick: () => { planState.runId = runs[i].id; render(); } }, icon(ic));
-      line.push(h('span', { class: 'steps' }, step(shownAt + 1, t('run.older'), 'left'),
+      which.push(h('span', { class: 'steps' }, step(shownAt + 1, t('run.older'), 'left'),
         h('span', { class: 'small run-id', title: about }, '#' + run.id, run.solverStatus === 'OPTIMAL' ? '' : h('span', { class: 'warn' }, ' ⚠')),
         step(shownAt - 1, t('run.newer'), 'right')));
-      if (olderId) line.push(h('button', { type: 'button', class: 'ghost sm changes' + (comparing ? ' on' : ''), 'aria-pressed': String(comparing),
+      if (olderId) which.push(h('button', { type: 'button', class: 'ghost sm changes' + (comparing ? ' on' : ''), 'aria-pressed': String(comparing),
         title: t('run.changes_hint', { id: olderId }), onclick: () => { store.set(changesKey, comparing ? '' : '1'); render(); } }, t('run.changes')));
-      line.push(h('button', { type: 'button', class: 'ghost icon pin' + (run.pinned ? ' on' : ''), 'aria-pressed': String(!!run.pinned),
+      which.push(h('button', { type: 'button', class: 'ghost sm pin' + (run.pinned ? ' on' : ''), 'aria-pressed': String(!!run.pinned),
         title: run.pinned ? t('run.current') + ' · ' + t('run.unpin') : t('run.pin'), 'aria-label': run.pinned ? t('run.unpin') : t('run.pin'),
-        onclick: () => pin(run.id, !run.pinned) }, icon('pin')));
-      if (run.id !== newest.id) line.push(linkBtn(t('run.show_newest'), () => { planState.runId = newest.id; render(); }));
+        onclick: () => pin(run.id, !run.pinned) }, icon('pin'), ' ' + (run.pinned ? t('run.current') : t('run.make_current'))));
+      if (run.id !== newest.id) which.push(linkBtn(t('run.show_newest'), () => { planState.runId = newest.id; render(); }));
       if (org.level !== 'view') {
         // «We’re done» (2026-11-23, the user: "Maybe remove the lock all? … Maybe a more visible "we are done" button?"): locks every
         // name of the draft on show, makes it the current plan and shows it in View. Done = pinned with nothing left to lock;
@@ -664,7 +669,7 @@ export async function pagePlan(r, org, people) {
             say(t('draft.done_said'));
           } }, icon('check'), ' ' + t('draft.done')));
         }
-        line.push(h('button', { type: 'button', class: 'ghost sm', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
+        more.push(h('button', { type: 'button', class: 'drop-item aside', disabled: running, title: t('draft.aside_hint'), onclick: async () => {
           if (!(await ask(t('draft.aside'), t('draft.aside_confirm'), t('draft.aside_yes')))) return;
           const was = (runs.find((x) => x.pinned) || {}).id;
           if (await write(() => call(Draft.setDraftAside, { org: r.org, plan: r.plan }))) {
@@ -679,12 +684,15 @@ export async function pagePlan(r, org, people) {
     }
     if (org.level !== 'view' && planState.undo.length) {
       const last = planState.undo[planState.undo.length - 1];
-      line.push(h('button', { type: 'button', class: 'ghost sm undo', title: t('undo.title', { what: last.label }) + ' (Ctrl+Z)', 'aria-label': t('undo.title', { what: last.label }), onclick: undoLast },
+      extra.push(h('button', { type: 'button', class: 'ghost sm undo', title: t('undo.title', { what: last.label }) + ' (Ctrl+Z)', 'aria-label': t('undo.title', { what: last.label }), onclick: undoLast },
         icon('undo'), ' ' + t('undo.btn')));
     }
     // what the squares mean is in the ⓘ, not on the bar
     const key = (m, text) => h('span', { class: 'key' }, m, h('span', {}, text));
-    bar.replaceChildren(h('div', { class: 'row-inline' }, line), ...notes);
+    line.push(retry);
+    bar.replaceChildren(h('div', { class: 'row-inline' }, which.length ? h('span', { class: 'grp which' }, which) : '', h('span', { class: 'grp acts' }, line),
+      h('span', { class: 'grp extra' }, extra)), ...notes);
+    barMore = more;
     bar.prepend(h('span', { class: 'bar-title' }, foldBtn('draft', t('draft.title')), t('draft.title'),
       infoBtn(t('draft.title'), [t('draft.info'), key(mark('hand'), t('draft.key_hand_info')), key(mark('lock'), t('draft.key_locked_info'))])));
   }
@@ -1619,12 +1627,33 @@ export async function pagePlan(r, org, people) {
   };
 
   // Availability: one click on a cell moves the answer on; the count above each event follows.
+  // The count is a bar (2026-11-23, the user: "make the summed thumbs up, down, question mark be a simple cake diagram or something
+  // similar. Show the real numbers on hover … useful when just having a quick glance"; a bar, with those not answered): green,
+  // yellow, red and grey in proportion, the numbers in a tip on hover (at once, not the browser's slow title) and for screen readers.
   const countCells = {};
+  const tallyTip = h('div', { class: 'tally-tip', hidden: true, role: 'tooltip' });
+  const showTip = (td) => {
+    tallyTip.textContent = td.dataset.tip || '';
+    tallyTip.hidden = false;
+    const b = td.getBoundingClientRect();
+    tallyTip.style.left = Math.max(8, Math.min(b.left + b.width / 2 - tallyTip.offsetWidth / 2, innerWidth - tallyTip.offsetWidth - 8)) + 'px';
+    tallyTip.style.top = (b.top - tallyTip.offsetHeight - 6 > 8 ? b.top - tallyTip.offsetHeight - 6 : b.bottom + 6) + 'px';
+  };
+  const countCell = (ev) => {
+    const td = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) });
+    td.addEventListener('pointerenter', () => showTip(td));
+    td.addEventListener('pointerleave', () => { tallyTip.hidden = true; });
+    return (countCells[ev.id] = td);
+  };
   const recount = (evId) => {
-    const c = { good: 0, poor: 0, never: 0 };
-    people.forEach((p) => { const l = (ans[p.id] || {})[evId]; if (l) c[l]++; });
-    countCells[evId].replaceChildren(h('b', { class: 'good' }, icon('up'), c.good), h('b', { class: 'poor' }, icon('maybe'), c.poor), h('b', { class: 'never' }, icon('down'), c.never));
-    countCells[evId].setAttribute('aria-label', t('table.count', c));
+    const c = { good: 0, poor: 0, never: 0, none: 0 };
+    people.forEach((p) => { const l = (ans[p.id] || {})[evId]; c[l || 'none']++; });
+    const seg = (k) => { if (!c[k]) return ''; const s = h('span', { class: 'seg ' + k }); s.style.flexGrow = String(c[k]); return s; };
+    const td = countCells[evId];
+    td.replaceChildren(h('div', { class: 'tally' }, ['good', 'poor', 'never', 'none'].map(seg)));
+    td.dataset.tip = t('table.count', c);
+    td.setAttribute('aria-label', td.dataset.tip);
+    if (!tallyTip.hidden && td.matches(':hover')) showTip(td);
   };
   // A note on an answer (2026-11-22, the user: "notat/kommentar i hver celle … vises som en flik i hjørnet når du klikker eller
   // på hover"): a tab in the cell's corner. Hovering a cell with a note shows it; a click on the tab opens it, to write in it
@@ -1814,13 +1843,25 @@ export async function pagePlan(r, org, people) {
     return row;
   };
 
-  // The draft's extras, in its bar: compromises, distribution and the earlier drafts.
-  if (done) bar.querySelector('.row-inline')!.append(
-    view.weak.length ? linkBtn(tn('draft.compromises', view.weak.length), () => listDialog(tn('draft.compromises', view.weak.length), view.weak)) : '',
-    view.load.length ? linkBtn(t('draft.distribution'), () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) })))) : '',
-    runs.length > 1 ? linkBtn(t('draft.earlier'), settingsDialog) : '');
-  // «What matters» on the plan page itself, before the first draft too (the user: "add a link … for the rules/weights on the plan page directly")
-  if (org.level !== 'view') bar.querySelector('.row-inline')!.append(h('button', { type: 'button', class: 'link-button prio-link', title: prioritySummary(weights), onclick: prioritiesDialog }, t('weights.title')));
+  // The draft's extras, in its bar: the compromises as a chip; Adjust the planner (it was «What matters most», 2026-11-23, the user:
+  // "a bit hard to understand. Maybe this should be a button with a logo and some better name?"), with a dot when it is not the
+  // defaults; More ⋯ with the distribution, the earlier drafts and Remove unlocked.
+  {
+    const ext = bar.querySelector('.grp.extra')!;
+    if (done && view.weak.length) ext.prepend(h('button', { type: 'button', class: 'chip warn-chip', onclick: () => listDialog(tn('draft.compromises', view.weak.length), view.weak) },
+      tn('draft.compromises', view.weak.length)));
+    if (org.level !== 'view') {
+      const tuned = PRIORITIES.some((p) => priorityLevel(weights, p) !== 'normal');
+      ext.append(h('button', { type: 'button', class: 'ghost sm prio-link' + (tuned ? ' tuned' : ''), title: prioritySummary(weights), onclick: prioritiesDialog },
+        icon('sliders'), ' ' + t('weights.title')));
+    }
+    const items = [
+      done && view.load.length ? h('button', { type: 'button', class: 'drop-item', onclick: () => listDialog(t('draft.distribution'), view.load.map((l) => t('run.load_line', { name: l.name, count: l.count, target: l.target.toLocaleString(locale()) }))) }, t('draft.distribution')) : '',
+      done && runs.length > 1 ? h('button', { type: 'button', class: 'drop-item', onclick: settingsDialog }, t('draft.earlier')) : '',
+      ...barMore].filter(Boolean) as HTMLElement[];
+    items.forEach((b) => b.addEventListener('click', () => { const d = b.closest('details'); if (d) d.open = false; }));
+    if (items.length) ext.append(dropdown('more', [icon('more'), h('span', { class: 'lbl' }, ' ' + t('draft.more'))], t('draft.more'), ...items));
+  }
 
   // «Add a person» where the person lands: after those without a section, and at the end of each section
   const addPerson = (x?) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
@@ -1857,7 +1898,7 @@ export async function pagePlan(r, org, people) {
       [
         availHead = dropOn(h('tr', { class: 'sect' }, h('th', { scope: 'row' }, h('div', { class: 'rl' }, foldBtn('avail', t('table.availability')), t('table.availability'), infoBtn(t('table.availability'), [t('table.availability_info'), t('sel.info')])),
           people.length > 1 ? whoBtn : '', people.length ? tagsBtn : '', people.length > 8 ? filterBox() : ''),
-          events.map((ev) => (countCells[ev.id] = h('td', { class: 'count small', title: t('sel.column_hint'), onclick: (e) => selectLine('answers', e, (c) => c.ev.id === ev.id) }))), filler()),
+          events.map(countCell), filler()),
           (k) => k === 'person', (d) => movePerson(d, 0, inSection(0).filter((o) => o.id !== d.id).length), true),
         folds('avail', [
           adds('person:0', inSection(0).map(personRow), availHead, [addPerson(), ...(sections.length ? [] : [addSection()])]),
@@ -1894,7 +1935,7 @@ export async function pagePlan(r, org, people) {
     events.length ? '' : h('p', { class: 'muted small' }, t('table.no_events')),
     table,
     selbar,
-    notePop);
+    notePop, tallyTip);
   dragScroll(table);
   table.addEventListener('pointerdown', onRowDown);
   // the field in a cell opens again after a change (editCell), for the next name

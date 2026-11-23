@@ -220,6 +220,7 @@ const CHOICES = {
     await closeDialog(page);
     await shoot(page, '10-place', page.getByRole('button', { name: /^Video, Sat 19 Dec .*: open the place$/ }));
     step = '12-distribution';
+    await page.locator('.draft-bar .more > summary').click();  // behind More ⋯
     await page.getByRole('button', { name: 'Distribution', exact: true }).click();
     await dialog(page).waitFor();
     await save(page, '12-distribution', dialog(page));
