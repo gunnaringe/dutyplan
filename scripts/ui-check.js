@@ -883,6 +883,21 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await page.click('.show-tools .across-btn');
       ok((await page.locator('.show-table.across thead th[data-ev]').count()) === hits && (await page.locator('.show-table.across tbody th[scope=row]').allInnerTexts()).includes('Café'), 'the dates across, the tasks down');
       ok((await page.locator('.show-table.across .nm.hit').count()) === hits, 'the name stands out across too');
+      // Export what is on show: the file for a spreadsheet (across, only the name's dates) and the text for a message
+      await page.click('.show-tools .export > summary');
+      const [dl] = await Promise.all([page.waitForEvent('download'), page.click('.drop-item.csv')]);
+      const csv = fs.readFileSync(await dl.path(), 'utf8');
+      const csvRows = csv.slice(1).trimEnd().split('\r\n').map((x) => x.split(','));
+      ok(csv.startsWith('\ufeffDate,') && dl.suggestedFilename().endsWith('.csv'), 'the file has a BOM, the header and a name: ' + dl.suggestedFilename());
+      ok(csvRows[0].length === hits + 1 && csvRows[0].slice(1).every((x) => /^\d{4}-\d\d-\d\d$/.test(x)), 'the file has the dates on show across: ' + csvRows[0].join(','));
+      ok(csvRows.some((x) => x[0] === 'Café') && csvRows.filter((x) => x.some((c) => c.includes('Kari Test'))).length > 0, 'and the tasks down with the names');
+      ok(!(await page.locator('.show-tools .export').getAttribute('open')), 'the menu closes after a choice');
+      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await page.click('.show-tools .export > summary');
+      await page.click('.drop-item.text');
+      await until(page, () => document.getElementById('msg') && document.getElementById('msg').textContent.startsWith('Copied'), null, 'Copy as text says so');
+      const copied = (await page.evaluate(() => navigator.clipboard.readText())).trimEnd().split('\n');
+      ok(copied.length === hits + 2 && copied[1] === '' && copied.slice(2).every((x) => x.includes(' — ') && x.includes('Kari Test')), 'the text is a line per event on show: ' + copied.slice(0, 3).join(' | '));
       await page.reload();
       await page.waitForSelector('.show-tools');
       ok((await page.locator('.show-table.across .nm.hit').count()) === hits && (await page.inputValue('input.find')) === 'Kari Test', 'View, the name, only and across are kept after a reload');

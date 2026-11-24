@@ -549,7 +549,10 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 .title-bar .mode button[aria-pressed=true] { background: var(--accent); color: var(--bg); font-weight: 600; }
 /* View: the plan as it stands, a table on a wide screen (events down, tasks across), a card per event on a phone */
 .show-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin: .6rem 0; }
-.show-tools .print { margin-left: auto; }
+.show-tools .export { margin-left: auto; }
+.show-tools .export > summary { padding: 0 .7rem; }
+.show-tools .export .drop-panel { min-width: 15rem; }
+.export-text { width: 100%; font: inherit; font-size: .9rem; }
 .show-scroll { overflow-x: auto; }
 .show-table { border-collapse: collapse; min-width: 100%; }
 .show-table th, .show-table td { border-bottom: 1px solid var(--line); padding: .45rem .7rem; text-align: left; vertical-align: top; }
@@ -596,7 +599,7 @@ td.answer.has-note .note-tab::after { border-color: transparent #d97706 transpar
 }
 /* printed: the table only, black on white, without the page around it */
 @media print {
-  header, .title-bar .info, .title-bar .mode, .title-bar .share, .title-bar .back, .show-tools .findbox, .show-tools .only, .show-tools .across-btn, .show-tools .found, .show-tools .print, #msg, #conn { display: none !important; }
+  header, .title-bar .info, .title-bar .mode, .title-bar .share, .title-bar .back, .show-tools .findbox, .show-tools .only, .show-tools .across-btn, .show-tools .found, .show-tools .print, .show-tools .export, #msg, #conn { display: none !important; }
   body { background: #fff; color: #000; font-size: 11pt; }
   main, main:has(.plan-page) { max-width: none; padding: 0; }
   .show .show-scroll { display: block !important; overflow: visible; }
