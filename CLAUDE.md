@@ -276,7 +276,11 @@ plan, main; `gen/` is the Connect client made from the .proto, committed), `solv
   **Instant** (2026-11-23, the user: "Make the calls async and ensure everything feels and looks instant"): a click shows before the
   server answers and goes back if it refuses: answers, places, details values, locks (`setLocks` edits `cellsAt` and repaints the cells, the
   group locks, the bar's Done and Undo), a new person or task (`addRow` with `preview`). The full redraw after it waits (`redrawSoon`: no
-  write out, no text being typed). A page's `gone()` removes what it set up outside itself (document listeners, observers), else every redraw
+  write out, no text being typed). After a lock or a new person there is no full redraw at all (2026-11-24, part 2: it blocked about
+  0.5 s): `redrawSoon(ms, patchDraft)` fetches what those writes change (cells, drafts, the draft on show, people) and puts it into the
+  page (the real ids, «out of date» via `paintStale`, the section counts via `paintSectCounts`); any other difference draws the page
+  after all. Something drawn once and changed later needs its own `paint…`: an element made in the drawing (as «Reopen» was) is
+  otherwise only right after a full redraw. ui-check marks the table (`dataset.keep`) to check that nothing redrew it. A page's `gone()` removes what it set up outside itself (document listeners, observers), else every redraw
   kept the old table. Opening a plan fetches its reads at once (`planReads`, also the draft last shown). Measure with `mise run app:perf`
   (50 × 40, 80 ms delay; `BIN=` another build, `PROFILE=<action>` a CPU profile); keep «shown» near 0 for clicks.
 - **Moving rows and the add lines** (2026-11-23, the user: "Let the drag and drop of people easier. Hide the add people icon under a small
