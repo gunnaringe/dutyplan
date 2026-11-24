@@ -746,3 +746,17 @@ ul.rules { margin: .2rem 0 .8rem; padding-left: 1.2rem; }
 /* «Person»: whether the planner may pick them, under the tasks they take; the way back from Members and Settings */
 .me-pickable { display: flex; align-items: center; gap: .4rem; margin-top: .6rem; }
 .org-page > .back { display: inline-block; margin-top: .6rem; color: var(--muted); text-decoration: none; }
+/* the person's page: parts that fold, with what is in them in the heading; dates not answered stand out */
+.me-sec { margin-top: 1rem; }
+.me-sec > summary { display: flex; align-items: baseline; gap: .6rem; cursor: pointer; list-style: none; padding: .2rem 0; }
+.me-sec > summary::-webkit-details-marker { display: none; }
+.me-sec > summary::before { content: '▸'; color: var(--muted); width: .8rem; transition: transform .15s; }
+.me-sec[open] > summary::before { transform: rotate(90deg); }
+.me-sec > summary h3 { margin: 0; }
+.me-sec > summary .sum.warn { color: var(--warn); font-weight: 600; }
+.me-notice { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin: .8rem 0 0; padding: .5rem .8rem; border-radius: .5rem;
+  background: color-mix(in srgb, var(--maybe) 14%, var(--bg)); border-left: 4px solid var(--maybe); font-weight: 600; }
+.me-notice[hidden] { display: none; }
+.me-open-tag { display: none; }
+.me-list .me-ev.unanswered { background: color-mix(in srgb, var(--maybe) 9%, var(--bg)); box-shadow: inset 4px 0 0 var(--maybe); padding-left: .7rem; padding-right: .4rem; }
+.me-list .me-ev.unanswered .me-open-tag { display: inline; align-self: flex-start; font-size: .8rem; font-weight: 600; color: var(--warn); }

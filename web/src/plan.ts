@@ -408,15 +408,15 @@ export async function pagePlan(r, org, people) {
   // forholde seg til, så gjerne en visning der de kan fylle ut når de selv kan. Foreløpig uten noen bruker-management, så samme lenke."):
   // what an answer link opens. «Who are you?» picks a name from the list (kept in this browser, «Not you? Switch»); then the person's
   // own tasks and every date down the page with yes / maybe / no and a note. The same link for everyone: anyone may answer for anyone.
-  // The same page is «Person» for members and edit links: someone else's page, chosen from the list (the texts say «they»), with
-  // whether the planner may pick them. Everyone, an answer link too (the user: "Task preferences are editable"), sets the tasks
+  // The same page is «Person» for members and edit links, with whether the planner may pick them. The texts are neutral, neither
+  // «you» nor «they» (2026-11-24, the user: "most likely used by that person. But keep it neutral, as it may not be guaranteed to
+  // be "you" who is reading"). Everyone, an answer link too (the user: "Task preferences are editable"), sets the tasks
   // the person takes in this plan.
   function mePage() {
     const meKey = 'me:' + key;
     const other = org.level !== 'answer';
-    const tx = (k, v?) => t((other ? 'person.page.' : 'me.') + k, v);
     const me = people.find((p) => String(p.id) === store.get(meKey));
-    const title = h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [tx('info')]), modeSwitch, other ? shareBtn() : '');
+    const title = h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [t('me.info')]), modeSwitch, other ? shareBtn() : '');
     if (!me) {
       const picks = [...people].sort((a, b) => a.name.localeCompare(b.name, locale())).map((p) => h('button', { type: 'button', class: 'ghost me-pick', 'data-name': p.name.toLowerCase(),
         onclick: () => { store.set(meKey, String(p.id)); render(); } }, p.name));
@@ -424,7 +424,7 @@ export async function pagePlan(r, org, people) {
         const q = e.target.value.trim().toLowerCase();
         picks.forEach((b) => { b.hidden = !!q && !b.dataset.name!.includes(q); });
       } }) : '';
-      return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, tx('who')), h('p', { class: 'muted small' }, tx('who_hint')),
+      return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, t('me.who')), h('p', { class: 'muted small' }, t('me.who_hint')),
         people.length ? [find, h('div', { class: 'me-picks' }, picks)] : h('p', { class: 'muted' }, t('me.nobody')));
     }
     const mine = events.flatMap((ev) => showTasksOf(ev).filter((tk) => slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === me.id)).map((tk) => [ev, tk] as const));
@@ -438,9 +438,9 @@ export async function pagePlan(r, org, people) {
         const was = level(ev);
         const next = was === b.dataset.level ? '' : b.dataset.level!;  // the same again: not answered
         (ans[me.id] ||= {})[ev.id] = next;
-        paint();
+        paint(); paintOpen();
         saving = saving.then(async () => {
-          if (!(await write(() => call(Plan.setAvailability, { org: r.org, plan: r.plan, person: me.id, levels: { [ev.id]: next } })))) { ans[me.id][ev.id] = was; paint(); }
+          if (!(await write(() => call(Plan.setAvailability, { org: r.org, plan: r.plan, person: me.id, levels: { [ev.id]: next } })))) { ans[me.id][ev.id] = was; paint(); paintOpen(); }
         });
       }));
       let saved = (notes[me.id] || {})[ev.id] || '';
@@ -456,7 +456,8 @@ export async function pagePlan(r, org, people) {
       const details = fields.fields.map((f) => fieldValue[ev.id + '/' + f.id]).filter(Boolean).join(' · ');
       return h('li', { class: 'me-ev' + (tasksHere.length ? ' busy' : ''), 'data-event': String(ev.id) },
         h('div', { class: 'me-when' }, h('span', { class: 'd' }, fmtDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : '',
-          tasksHere.length ? h('span', { class: 'me-task' }, tx('you_have', { tasks: tasksHere.join(', ') })) : '',
+          h('span', { class: 'me-open-tag' }, t('me.not_answered')),
+          tasksHere.length ? h('span', { class: 'me-task' }, t('me.you_have', { tasks: tasksHere.join(', ') })) : '',
           details ? h('span', { class: 'small muted' }, details) : ''),
         h('div', { class: 'me-btns', role: 'group', 'aria-label': label(ev) }, btns), note);
     };
@@ -471,7 +472,7 @@ export async function pagePlan(r, org, people) {
       btns.forEach((b) => b.addEventListener('click', async () => {
         const was = takesLevel(tk), next = b.dataset.level!;
         if (next === was) return;
-        const set = (l) => { chosen[me.id] = (chosen[me.id] || []).filter((x) => x.taskId !== tk.id).concat(l ? [{ personId: me.id, taskId: tk.id, level: l }] : []); paint(); };
+        const set = (l) => { chosen[me.id] = (chosen[me.id] || []).filter((x) => x.taskId !== tk.id).concat(l ? [{ personId: me.id, taskId: tk.id, level: l }] : []); paint(); paintTakes(); };
         set(next);
         saving = saving.then(async () => {
           const q = { org: r.org, plan: r.plan, person: me.id, task: tk.id };
@@ -486,15 +487,55 @@ export async function pagePlan(r, org, people) {
       const on = e.target.checked;
       if (await write(() => call(Setup.updatePerson, { org: r.org, plan: r.plan, id: me.id, proposable: on }, 'person'))) me.proposable = on; else e.target.checked = !on;
     } }), ' ' + t('person.proposable_aria', { name: me.name })) : '';
+    // The three parts fold (2026-11-24, the user: "Make the sections collapsable"), remembered per plan in this browser, and say in
+    // their heading what is in them. Dates not answered (from today on) are marked, with a notice above them ("make it clear that
+    // there are some days which is not replied to").
+    const foldsKey = 'mefold:' + key;
+    const shut = new Set<string>((store.get(foldsKey) || '').split(',').filter(Boolean));
+    const part = (id, cls, title, sum, ...body) => {
+      const d = h('details', { class: 'me-sec ' + cls, 'data-part': id, open: !shut.has(id) }, h('summary', {}, h('h3', {}, title), sum), ...body);
+      d.addEventListener('toggle', () => { if (d.open) shut.delete(id); else shut.add(id); store.set(foldsKey, [...shut].join(',')); });
+      return d;
+    };
+    const today = new Date().toISOString().slice(0, 10);
+    const open = () => events.filter((ev) => ev.date >= today && !level(ev));
+    const takesSum = h('span', { class: 'sum small muted' });
+    const paintTakes = () => {
+      const n = (l) => planned.filter((tk) => takesLevel(tk) === l).length;
+      takesSum.textContent = [n('good') ? t('me.sum_good', { n: n('good') }) : '', n('poor') ? t('me.sum_poor', { n: n('poor') }) : ''].filter(Boolean).join(', ') || t('me.sum_none');
+    };
+    const datesSum = h('span', { class: 'sum small' });
+    const rows = events.map(answerRow);
+    const first = h('button', { type: 'button', class: 'ghost sm', onclick: () => {
+      const ev = open()[0];
+      if (!ev) return;
+      dates.open = true;
+      const li = rows[events.indexOf(ev)];
+      li.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      (li.querySelector('button.me-ans') as HTMLElement).focus({ preventScroll: true });
+    } }, t('me.show_first'));
+    const notice = h('div', { class: 'me-notice', role: 'status' }, h('span', {}), first);
+    const paintOpen = () => {
+      const left = open();
+      const ids = new Set(left.map((ev) => ev.id));
+      rows.forEach((li, i) => li.classList.toggle('unanswered', ids.has(events[i].id)));
+      notice.hidden = !left.length;
+      notice.firstElementChild!.textContent = tn('me.unanswered', left.length);
+      datesSum.textContent = left.length ? tn('me.unanswered', left.length) : events.length ? t('me.all_answered') : '';
+      datesSum.classList.toggle('warn', !!left.length);
+    };
+    const dates = part('dates', 'me-dates', t('me.when'), datesSum,
+      events.length ? h('ul', { class: 'plain me-list' }, rows) : h('p', { class: 'muted small' }, t('show.no_events')));
+    paintOpen(); paintTakes();
     return h('div', { class: 'plan-page me-page' }, title,
-      h('div', { class: 'me-head' }, h('h2', {}, me.name), linkBtn(tx('switch'), () => { store.set(meKey, ''); render(); })),
-      h('section', { class: 'me-mine' }, h('h3', {}, tx('mine')),
+      h('div', { class: 'me-head' }, h('h2', {}, me.name), linkBtn(t('me.switch'), () => { store.set(meKey, ''); render(); })),
+      notice,
+      part('mine', 'me-mine', t('me.mine'), h('span', { class: 'sum small muted' }, mine.length ? String(mine.length) : ''),
         mine.length ? h('ul', { class: 'plain' }, mine.map(([ev, tk]) => h('li', {}, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? ' ' + clock(ev) : '', ' · ', tk.name)))
-          : h('p', { class: 'muted small' }, done ? tx('no_tasks') : t('me.no_plan'))),
-      h('section', { class: 'me-takes' }, h('h3', {}, tx('takes')),
+          : h('p', { class: 'muted small' }, done ? t('me.no_tasks') : t('me.no_plan'))),
+      part('takes', 'me-takes', t('me.takes'), takesSum,
         planned.length ? h('ul', { class: 'plain me-list' }, planned.map(takeRow)) : h('p', { class: 'muted small' }, t('person.no_tasks')), pickable),
-      h('h3', {}, tx('when')),
-      events.length ? h('ul', { class: 'plain me-list' }, events.map(answerRow)) : h('p', { class: 'muted small' }, t('show.no_events')));
+      dates);
   }
 
   function showPage() {
