@@ -372,9 +372,15 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok(await page.evaluate(() => document.activeElement.placeholder) === 'Add a person to Not this term', 'ready to type');
       await plusOf(sectKey).click();
       ok(await page.locator('input[placeholder="Add a person to Not this term"]').isHidden() && (await plusOf(sectKey).innerText()) === '+', '− hides it again');
+      await page.evaluate(() => { document.querySelector('.dp-table').dataset.keep = '1'; });
       await addNamed('Add a person to Not this term', 'Pia Demo');
       await until(page, () => document.querySelectorAll('tr.person-row').length === 4, null, 'the new person is added');
       ok((await peopleOrder()) === 'Kari Test,| Not this term,Ola Sample,Jon Demo,Pia Demo', 'added in the section, last: ' + await peopleOrder());
+      // the page takes the server's answer without drawing the table again: the row gets the person's id, the section its count
+      await until(page, () => { const tr = document.querySelector('tr.person-row[data-name="pia demo"]');
+        return tr && Number(tr.dataset.person) > 0 && !tr.classList.contains('pending'); }, null, 'a new person gets its id from the server');
+      await until(page, () => [...document.querySelectorAll('tr.person-sect td')].some((x) => x.textContent === '3 people'), null, 'and the section its count');
+      ok(await page.evaluate(() => document.querySelector('.dp-table').dataset.keep === '1'), 'without drawing the table again');
       ok(await page.locator('input[placeholder="Add a person to Not this term"]').isVisible(), 'the line stays open for the next');
       await page.locator('input[placeholder="Add a person to Not this term"]').press('Escape');
       ok(await page.locator('input[placeholder="Add a person to Not this term"]').isHidden(), 'Escape closes it');
@@ -649,6 +655,18 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     await page.getByRole('button', { name: 'Make it the current plan' }).click();
     await msgHas(page, 'Draft #2 is now the current plan.');
     await until(page, () => !!document.querySelector('.draft-bar button.pin[aria-pressed=true]'), null, 'the pinned draft is the current plan');
+    // a lock shows at once, and the page takes the server's answer without drawing the table again: «out of date», and back
+    {
+      ok(!(await page.locator('.draft-bar p.stale').isVisible()), 'a new draft is not out of date');
+      await page.evaluate(() => { document.querySelector('.dp-table').dataset.keep = '1'; });
+      const free = draft('Sound', ev[1]).locator('button.lockbtn:not(.on)').first();
+      const who = (await free.getAttribute('aria-label')).replace(/^Lock /, '');
+      await free.click();
+      await barHas('have changed since this draft was made', 'a lock makes the draft out of date');
+      await draft('Sound', ev[1]).locator(`button.lockbtn.on[aria-label="Unlock ${who}"]`).click();
+      await until(page, () => !document.querySelector('.draft-bar p.stale') || document.querySelector('.draft-bar p.stale').hidden, null, 'unlocked again: not out of date', 20000);
+      ok(await page.evaluate(() => document.querySelector('.dp-table').dataset.keep === '1'), 'the table was not drawn again for the locks');
+    }
     // an answer changes: the draft is out of date
     await answer('Ola Sample', ev[2]).click();
     await until(page, (x) => document.querySelector(`button.ans[aria-label^="${x}:"]`).dataset.level === 'good', 'Ola Sample, ' + ev[2], 'the answer is saved');
@@ -781,12 +799,15 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     // --- «What matters most»: from the draft's bar, Less / Normal / More per priority; the numbers under Advanced; a line in ⚙ ---
     {
       const seg = (n) => dialog.locator('.prio').nth(n).locator('.seg button[aria-pressed="true"]');
+      // the dialog's contents are swapped after a save: wait for the level instead of reading the old contents
+      const segIs = (n, text, what) => until(page, ([i, x]) => { const b = document.querySelectorAll('dialog[open] .prio')[i]?.querySelector('.seg button[aria-pressed="true"]');
+        return !!b && b.textContent.trim() === x; }, [n, text], what);
       await page.locator('.draft-bar .prio-link').click();
       ok((await seg(0).innerText()) === 'Normal' && (await seg(1).innerText()) === 'Normal' && (await seg(2).innerText()) === 'Normal', 'the defaults are Normal');
       ok((await dialog.locator('ul.rules li').count()) === 5, 'the rules that always hold are listed');
       ok(!(await dialog.locator('input[type=number]').first().isVisible()), 'the numbers are folded away');
       await reopens(() => dialog.locator('.prio').nth(0).getByRole('button', { name: 'More' }).click(), 'the dialog opens again');
-      ok((await seg(0).innerText()) === 'More', 'Even distribution: More');
+      await segIs(0, 'More', 'Even distribution: More');
       await dialog.locator('summary').click();
       ok((await dialog.locator('input[aria-label="' + await page.evaluate(() => MESSAGES.en['weight.w_fair.label']) + '"]').inputValue()) === '25', 'the number behind it');
       await closeDialog();
@@ -794,7 +815,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok((await dialog.innerText()).includes('Even: More · Wishes: Normal · Combinations: Normal'), 'Plan settings says what matters: ' + await dialog.innerText());
       await dialog.getByRole('button', { name: 'Change' }).click();
       await reopens(() => dialog.locator('.prio').nth(0).getByRole('button', { name: 'Normal' }).click(), 'the dialog opens again');
-      ok((await seg(0).innerText()) === 'Normal', 'and back to Normal');
+      await segIs(0, 'Normal', 'and back to Normal');
       await closeDialog();
     }
 
@@ -893,7 +914,9 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok(csvRows.some((x) => x[0] === 'Café') && csvRows.filter((x) => x.some((c) => c.includes('Kari Test'))).length > 0, 'and the tasks down with the names');
       ok(!(await page.locator('.show-tools .export').getAttribute('open')), 'the menu closes after a choice');
       await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      await until(page, () => !document.querySelector('.show-tools .export').open, null, 'the menu is closed');
       await page.click('.show-tools .export > summary');
+      await page.locator('.drop-item.text').waitFor({ state: 'visible', timeout: 5000 });
       await page.click('.drop-item.text');
       await until(page, () => document.getElementById('msg') && document.getElementById('msg').textContent.startsWith('Copied'), null, 'Copy as text says so');
       const copied = (await page.evaluate(() => navigator.clipboard.readText())).trimEnd().split('\n');

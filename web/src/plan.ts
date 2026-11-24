@@ -129,14 +129,28 @@ declare global {
   interface HTMLElement { _drop?: Drop; _drag?: { kind: string; item: any } }
 }
 // The whole page drawn again a little after the last change shown at once, when no request is out any more (module level:
-// the timer keeps no drawing alive). A redraw for another reason before then does the same.
+// the timer keeps no drawing of the page alive for long). A redraw for another reason before then does the same.
+// With patch, the page is not drawn again if it can take what the server says without it: patch fetches what the writes
+// changed and puts it into the page, or says false (something else changed), and the page is drawn again after all.
+// One redrawSoon() without a patch in the same quiet spell means the whole page.
+// the same data, apart from the field skip (answers of the API compared as JSON)
+const same = (a, b, skip?: string) => JSON.stringify(a, (k, v) => (k === skip ? undefined : typeof v === 'bigint' ? String(v) : v)) === JSON.stringify(b, (k, v) => (k === skip ? undefined : typeof v === 'bigint' ? String(v) : v));
 let soonTimer = 0;
-export function redrawSoon(ms = 700) {
+let soonPatches: Set<() => Promise<boolean>> | null = new Set();  // null: the whole page
+export function redrawSoon(ms = 700, patch?: () => Promise<boolean>) {
+  if (!patch) soonPatches = null;
+  else if (soonPatches) soonPatches.add(patch);
+  armSoon(ms);
+}
+function armSoon(ms) {
   clearTimeout(soonTimer);
-  soonTimer = window.setTimeout(() => {
+  soonTimer = window.setTimeout(async () => {
     const typing = document.activeElement as HTMLInputElement | null;
-    if (writesOut || (typing && typing.matches('input[type=text], textarea') && typing.value)) redrawSoon(ms);  // not in the middle of typing
-    else render();
+    if (writesOut || (typing && typing.matches('input[type=text], textarea') && typing.value)) { armSoon(ms); return; }  // not in the middle of typing
+    const patches = soonPatches;
+    soonPatches = new Set();
+    if (!patches || !patches.size) { render(); return; }
+    for (const p of patches) if (!(await p().catch(() => false))) { render(); return; }
   }, ms);
 }
 
@@ -314,7 +328,7 @@ export async function pagePlan(r, org, people) {
     .filter((x) => x.kind === 'person' && (on ? !x.cell : x.locked)).map((x) => ({ event: ev.id, task: tk.id, person: x.id })));
   // Shown at once: the cells change here and are drawn again one by one (a locked name is a locked cell set by hand, as on the
   // server); the request goes after, and a refusal puts them back. The whole page is drawn again once the clicks stop
-  // (redrawSoon), for what depends on them (the row and column locks, «out of date»).
+  // (redrawSoon with patchDraft: only what the server says differently is drawn again, such as «out of date»).
   const setLocks = async (list, on) => {
     if (!list.length) { say(t(on ? 'sel.nothing_to_lock' : 'sel.nothing_to_unlock')); return; }
     const keys = new Set<string>(list.map((l) => l.event + '/' + l.task));
@@ -342,9 +356,10 @@ export async function pagePlan(r, org, people) {
       planState.undo = planState.undo.filter((u) => u !== entry);
       paintUndo(); repaint(); return;
     }
-    redrawSoon();
+    redrawSoon(700, patchDraft);
   };
   let paintDone = () => {};  // the bar's «We’re done» / «Done · Reopen», set when the bar is drawn
+  let paintStale = () => {};  // the bar's «out of date», set when the bar is drawn
   const everyPlace = () => events.flatMap((ev) => tasks.map((tk) => [ev, tk]));
   // Undo (2026-11-23, the user: "Add a easier way to regret options"): what this tab changed in the draft, newest last (at most
   // 30, forgotten with another plan or a reload). Each entry undoes itself with the opposite request(s); not a change log.
@@ -751,7 +766,7 @@ export async function pagePlan(r, org, people) {
         const parts: HTMLElement[] = [];
         if (run.pinned && !toLock.length) {
           parts.push(h('span', { class: 'done-mark', role: 'status' }, icon('check'), ' ' + t('draft.is_done')));
-          line.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
+          parts.push(h('button', { type: 'button', class: 'ghost sm', title: t('draft.reopen_hint'), onclick: async () => {
             if (await write(() => call(Draft.unpinRun, { org: r.org, plan: r.plan, id: run.id }))) {
               undoable(t('undo.reopen'), [Draft.pinRun, { org: r.org, plan: r.plan, id: run.id }]);
               planState.runId = run.id; await render(); say(t('draft.reopened'));
@@ -785,7 +800,9 @@ export async function pagePlan(r, org, people) {
           }
         } }, t('draft.aside')));
       }
-      if (run.stale) notes.push(h('p', { class: 'warn small', role: 'status' }, t('run.stale')));
+      const staleNote = h('p', { class: 'warn small stale', role: 'status', hidden: !run.stale }, t('run.stale'));
+      paintStale = () => { staleNote.hidden = !run.stale; };
+      notes.push(staleNote);
       if (run.checked && run.violations.length) notes.push(h('div', { class: 'err', role: 'alert' }, h('p', {}, t('run.violations')), h('ul', {}, run.violations.map((v) => h('li', {}, v)))));
       if (view.warnings.length) notes.push(h('ul', { class: 'warn small' }, view.warnings.map((w) => h('li', {}, w))));
     }
@@ -1935,6 +1952,11 @@ export async function pagePlan(r, org, people) {
       return movePerson(d, p.section, others.findIndex((x) => x.id === p.id) + (after ? 1 : 0));
     });
   };
+  // the number of people under a section's name, drawn again by paintSectCounts when a person is added without a redraw
+  const sectCounts: [number, HTMLElement][] = [];
+  const sectText = (n) => (n ? tn('section.people', n) : t('section.empty'));
+  const sectCount = (id, n) => { const el = h('span', { class: 'small' }, sectText(n)); sectCounts.push([id, el]); return el; };
+  const paintSectCounts = () => sectCounts.forEach(([id, el]) => { el.textContent = sectText(inSection(id).length); });
   const sectionRow = (x, i) => {
     const g = grip(t('section.drag'));
     const n = inSection(x.id).length;
@@ -1942,7 +1964,7 @@ export async function pagePlan(r, org, people) {
       nameField(x.name, t('section.name_aria', { name: x.name }), t('section.name_hint'),
         (v) => call(Setup.renameSection, { org: r.org, plan: r.plan, id: x.id, name: v }, 'section'),
         async () => { await confirmed(t('section.delete'), t('section.delete_confirm', { name: x.name }), t('common.delete')); return call(Setup.deleteSection, { org: r.org, plan: r.plan, id: x.id }); }))),
-    h('td', { colspan: String(cols + 1) }, h('span', { class: 'small' }, n ? tn('section.people', n) : t('section.empty'))));
+    h('td', { colspan: String(cols + 1) }, sectCount(x.id, n)));
     // a section is dragged among the sections (a line above or below); a person dropped on it goes last in it
     dragRow(row, g, 'section', x, sections, (d, pos) => call(Setup.moveSection, { org: r.org, plan: r.plan, id: d.id, position: pos }));
     const asSection = row._drop!;  // dragRow() has just set it
@@ -1978,7 +2000,7 @@ export async function pagePlan(r, org, people) {
   let fakeId = 0;  // a row shown before the server has answered has an id no row has
   const addPerson = (x?) => addRow(x ? t('table.new_person_in', { section: x.name }) : t('table.new_person'),
     (name) => call(Setup.createPerson, { org: r.org, plan: r.plan, ...(x ? { name, section: x.id } : { name }) }, 'person'),
-    { preview: (name) => personRow({ id: --fakeId, name, section: x ? x.id : 0, proposable: true }), redraw: () => redrawSoon() });
+    { preview: (name) => personRow({ id: --fakeId, name, section: x ? x.id : 0, proposable: true }), redraw: () => redrawSoon(700, patchDraft) });
   const addSection = () => addRow(t('table.new_section'), (name) => call(Setup.createSection, { org: r.org, plan: r.plan, name }, 'section'));
   const detailsHead = sect('details', t('table.details'), [t('table.details_hint')]);
   const tasksHead = dropOn(sect('tasks', t('table.tasks'), [t('table.tasks_hint')]), (k) => k === 'task',
@@ -2056,6 +2078,39 @@ export async function pagePlan(r, org, people) {
   // the field in a cell opens again after a change (editCell), for the next name
   const editing: [any, any] | undefined = planState.edit ? events.flatMap((ev) => tasks.map((tk) => [ev, tk] as [any, any])).find(([ev, tk]) => at(ev, tk) === planState.edit) : undefined;
   planState.edit = null;
+  // After a lock or a new person (redrawSoon): what those writes can have changed (the cells, the drafts, the people) is fetched
+  // again and put into the page as it is, instead of drawing the whole table again (about half a second with 50 people). Any
+  // other difference (another draft, a person changed or gone, a new person without its row) and the page is drawn again.
+  const patchDraft = async () => {
+    const q = { org: r.org, plan: r.plan };
+    const [freshCells, freshRuns, freshView, freshPeople] = await Promise.all([get(Draft.listCells, q, 'cells'), get(Draft.listRuns, q, 'runs'),
+      viewId ? get(Draft.getRun, { ...q, id: viewId }) : null, get(Setup.listPeople, q, 'people')]);
+    if (!root.isConnected) return false;
+    if (freshRuns.length !== runs.length || freshRuns.some((x, i) => !same(x, runs[i]))) return false;
+    if (view && (!freshView || !same({ ...freshView, run: null }, { ...view, run: null }) || !same(freshView.run, view.run, 'stale'))) return false;
+    const known = new Map(people.map((p) => [p.id, p]));
+    if (people.some((p) => !freshPeople.some((f) => f.id === p.id && same(f, p)))) return false;
+    const added = freshPeople.filter((f) => !known.has(f.id));
+    const previews = added.map((f) => [...table.querySelectorAll<HTMLElement>('tr.person-row.pending')]
+      .find((tr) => Number(tr.dataset.person) < 0 && tr.dataset.name === f.name.toLowerCase()));
+    if (previews.some((x) => !x)) return false;
+    // nothing else changed: from here on the page takes the server's answer
+    added.forEach((f, i) => { people.push(f); previews[i]!.replaceWith(personRow(f)); });
+    const next = {};
+    freshCells.forEach((c) => { (next[c.eventId + '/' + c.taskId] ||= []).push(c); });
+    for (const k of new Set([...Object.keys(cellsAt), ...Object.keys(next)])) {
+      if (same(cellsAt[k] || [], next[k] || [])) continue;
+      if (next[k]) cellsAt[k] = next[k]; else delete cellsAt[k];
+      const [e, tk] = k.split('/').map(Number);
+      const ev = events.find((x) => x.id === e), task = tasks.find((x) => x.id === tk);
+      if (ev && task && draftTd[k]) putDraftCell(ev, task);
+    }
+    cells.splice(0, cells.length, ...freshCells);
+    if (view && freshView) view.run.stale = freshView.run.stale;
+    paintStale(); paintGroupLocks(); paintDone(); paintSectCounts();
+    if (sel) paintSel();
+    return true;
+  };
   // what the page set up outside itself goes when it is replaced, else every redraw kept the whole old table alive
   root.gone = () => {
     for (const [type, fn] of [['pointermove', onMove], ['pointerup', onUp], ['keydown', onKey]] as const) document.removeEventListener(type, fn as EventListener);
