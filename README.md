@@ -168,6 +168,13 @@ events they are not in, or leaves them out (*Only the dates … has a task*); *D
 browser; someone with a link that may only view starts in View.
 
 ![View: the plan as it stands, with one person's tasks standing out](docs/img/16-view.png)
+
+**Export** (in View) takes what View shows: *Download for Excel/Sheets* gives a file of the table (`.csv`, with the dates across
+if they are across, and only one person's dates if that is chosen), which Excel, Google Sheets and Numbers open; *Copy as text*
+puts the plan on the clipboard as a line per event («Sat 5 Dec 19:00–21:30 — Sound: Kari Test · Video: …»), ready to paste into
+a message or an e-mail. Nothing is sent anywhere: the page makes both from what it shows.
+
+![Export in View: a file for a spreadsheet, or the plan as text](docs/img/22-export.png)
 ![View on a phone: a card per event](docs/img/17-view-phone.png)
 
 **The organisation.** An organisation's page lists its plans, and is where it is renamed or deleted.

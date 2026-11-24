@@ -31,3 +31,19 @@ export function repeatDates(dates, until, every) {
 
 // The time of day of an event: «11:00» or «11:00–12:30», or '' when it has none. A 24-hour clock in both languages.
 export const clock = (ev) => (ev.startTime ? (ev.endTime ? `${ev.startTime}–${ev.endTime}` : ev.startTime) : '');
+
+// A cell of a CSV file: quoted when it has the separator, a quote or a line break; a leading = + - @ gets a ' so a spreadsheet
+// does not take a name for a formula.
+export const csvCell = (x, sep) => {
+  let s = String(x ?? '');
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return s.includes(sep) || /["\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+// download: hands the browser a file made on the page
+export function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

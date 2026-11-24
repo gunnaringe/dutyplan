@@ -4,7 +4,7 @@ import { live, render } from './main';
 import { ask, shareDialog, viewOnly } from './org';
 import { ME, dropdown, go, link, linkBtn, me } from './shell';
 import { addRow, closeBtn, enterMovesOn, field, foot, infoBtn, keyed, modal, reopened } from './ui';
-import { MAX_EVERY, addDays, clock, enc, fmtDate, fmtShortDate, fmtTime, repeatDates } from './util';
+import { MAX_EVERY, addDays, clock, csvCell, download, enc, fmtDate, fmtShortDate, fmtTime, repeatDates } from './util';
 
 // ---- the plan page: one table ----------------------------------------------------------------------------------------
 // Events across. From the top: the event details (rows the plan defines), the tasks with the places each event needs, the
@@ -492,8 +492,9 @@ export async function pagePlan(r, org, people) {
       onclick: () => { across = !across; store.set(acrossKey, across ? '1' : ''); acrossBtn.setAttribute('aria-pressed', String(across)); draw(); } },
     icon('check'), ' ' + t('show.across'));
     // the name found stands out, the events without it fade (or are left out, with «only»)
+    let shown = events;  // the events on show, for Export
     function draw() {
-      const evs = found && only ? events.filter((ev) => hasTask(ev, found)) : events;
+      const evs = shown = found && only ? events.filter((ev) => hasTask(ev, found)) : events;
       body.replaceChildren(h('div', { class: 'show-scroll' }, (across ? acrossTable : down)(evs)), cards(evs));
       body.querySelectorAll<HTMLElement>('.nm[data-person]').forEach((x) => x.classList.toggle('hit', !!found && x.dataset.person === String(found)));
       const hits = new Set(events.filter((ev) => found && hasTask(ev, found)).map((ev) => String(ev.id)));
@@ -547,12 +548,44 @@ export async function pagePlan(r, org, people) {
       else if (e.key === 'Enter') { e.preventDefault(); const o = options()[active]; if (o) pick(sorted.find((p) => p.name === o.textContent)); }
       else if (e.key === 'Escape') { if (!list.hidden) { e.preventDefault(); close(); } }
     });
+    // Export (2026-11-24, the user: "Add export option", then "Please do" on the plan): what View shows (the events on show, across or
+    // not), as a file for a spreadsheet or as text to paste into a message. Made here from what the page has; no request.
+    const cellText = (ev, tk) => {
+      if (!has(ev, tk)) return '';
+      const s = slotsAt(ev, tk);
+      return [...s.items.map(itemText), s.open ? tn('show.open', s.open) : ''].filter(Boolean).join(', ');
+    };
+    const exportMenu = (evs: () => typeof events, isAcross: () => boolean) => dropdown('export',
+      [icon('download'), h('span', { class: 'lbl' }, ' ' + t('export.open'))], t('export.open'),
+      h('button', { type: 'button', class: 'drop-item csv', onclick: (e) => {
+        e.currentTarget.closest('details').open = false;
+        const sep = currentLang === 'nb' ? ';' : ',';  // what Excel expects in each language
+        let rows = [[t('show.date'), t('export.time'), ...showFields.map((f) => f.name), ...showTasks.map((tk) => tk.name)],
+          ...evs().map((ev) => [ev.date, clock(ev), ...showFields.map((f) => value(ev, f)), ...showTasks.map((tk) => cellText(ev, tk))])];
+        if (isAcross()) rows = rows[0].map((_, i) => rows.map((row) => row[i]));
+        download(r.plan + '.csv', '\ufeff' + rows.map((row) => row.map((x) => csvCell(x, sep)).join(sep)).join('\r\n') + '\r\n', 'text/csv;charset=utf-8');
+        say(t('export.downloaded'));
+      } }, h('span', {}, t('export.csv')), icon('file')),
+      h('button', { type: 'button', class: 'drop-item text', onclick: async (e) => {
+        e.currentTarget.closest('details').open = false;
+        const line = (ev) => [fmtShortDate(ev.date) + (clock(ev) ? ' ' + clock(ev) : ''),
+          [...showFields.filter((f) => value(ev, f)).map((f) => f.name + ': ' + value(ev, f)),
+            ...showTasks.filter((tk) => cellText(ev, tk)).map((tk) => tk.name + ': ' + cellText(ev, tk))].join(' · ')].filter(Boolean).join(' — ');
+        const text = [plan.name, '', ...evs().map(line)].join('\n') + '\n';
+        try { await navigator.clipboard.writeText(text); say(t('export.copied')); } catch (err) {
+          // no clipboard (not https, or refused): the text selected in a dialog, to copy by hand
+          const area = h('textarea', { class: 'wide export-text', readonly: true, rows: '12', 'aria-label': t('export.copy_prompt'), onfocus: (ev) => ev.target.select() }, text);
+          modal(t('export.copy_prompt'), area, foot('', closeBtn()));
+          area.focus();
+        }
+      } }, h('span', {}, t('export.text')), icon('copy')));
     const source = done ? t('show.source', { id: view.run.id, time: fmtTime(view.run.finishedAt || view.run.startedAt) }) + (view.run.pinned ? ' · ' + t('run.current') : '')
       : t('show.no_draft');
     const root = h('div', { class: 'plan-page show' },
       h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [t('show.info')]), modeSwitch, shareBtn()),
       events.length ? h('div', { class: 'show-tools' }, h('div', { class: 'findbox' }, input, list), count, onlyField, acrossBtn,
         h('span', { class: 'small muted source' }, source),
+        exportMenu(() => shown, () => across),
         h('button', { type: 'button', class: 'ghost print', onclick: () => window.print() }, t('show.print'))) : h('p', { class: 'muted small' }, t('show.no_events')),
       events.length ? body : '');
     const was = Number(store.get(findKey) || (org.level === 'answer' ? store.get('me:' + key) : ''));  // an answer link: the name chosen

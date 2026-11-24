@@ -206,7 +206,11 @@ plan, main; `gen/` is the Connect client made from the .proto, committed), `solv
     The selection («only these can be picked») stays ("Behold mulighet til å sette utvalg") but is one line in the place dialog, «The planner can pick: … · Change»,
     and a limited place has a small funnel (`mark pool`) in the draft. The `locks:` and `draft:` mutations guard it.
   - Answers: **blank = not answered** (neutral for the planner); a click cycles blank → good → poor → never → blank (thumb up, ?, thumb down).
-- **No spreadsheet support** (neither import nor export). The user does not want it; do not suggest it again.
+- **Export, no import** (2026-11-24, the user: "Add export option", then "Please do" on the plan; until then there was no spreadsheet
+  support at all): View's **Export** menu (`exportMenu` in `showPage`) gives what View shows (the events on show, across or not) as a CSV file
+  (`csvCell`/`download` in `web/src/util.ts`: UTF-8 with a BOM, `;` in Norwegian and `,` in English as Excel expects, CRLF, ISO dates, a
+  leading `= + - @` gets a `'`) or as text on the clipboard (a line per event). Made on the page, no request and no endpoint. No import
+  from a spreadsheet. Covered by ui-check only, like the rest of View.
 - **No calendar feed** (`.ics`, subscription or download; dropped 2026-11-09). Do not suggest it again, although events have times of day now (since 2026-11-09) and a run can be pinned: the user has not asked for it again.
 - **A general tool.** Tasks, people, events and details rows are data the admin creates. No church concepts in code, data model or rules (examples in placeholders and docs are generic).
 - **No groups** (removed 2026-11-20 at the user's request; building them back is issue #9). A place set by hand is a person or a text.

@@ -235,6 +235,10 @@ const CHOICES = {
     await page.keyboard.press('Enter');
     await page.locator('input.find').blur();
     await range(page, '16-view', page.locator('main h1'), page.locator('.show-table tbody tr').last());
+    step = '22-export';
+    await page.click('.show-tools .export > summary');
+    await range(page, '22-export', page.locator('main h1'), page.locator('.show-table tbody tr').nth(3));
+    await page.keyboard.press('Escape');
     await page.click('.title-bar .mode button[data-mode=edit]');
     await page.waitForSelector('.dp-table');
 
