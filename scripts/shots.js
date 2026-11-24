@@ -285,12 +285,21 @@ const CHOICES = {
     await answering.screenshot({ path: path.join(OUT, '18-my-answers.png') });
 
     // «Person»: the same page for a member, someone else's, with whether the planner may pick them
+    // (on the pictures' day, with one date not answered, to show how that looks; answered again after)
     step = '23-person';
+    await page.clock.setFixedTime(new Date('2015-10-21T12:00:00Z'));
     await page.click('.title-bar .mode button[data-mode=me]');
     await page.waitForSelector('.me-page');
     if (await page.locator('button.me-pick').count()) await page.click('button.me-pick:has-text("Kari Test")');
     await page.waitForSelector('.me-takes');
+    const unans = page.locator('.me-list .me-ev').nth(1);
+    const was = await unans.locator('button.me-ans[aria-pressed="true"]').getAttribute('data-level').catch(() => null);
+    if (was) await unans.locator(`button.me-ans.${was}`).click();
+    await page.locator('.me-notice').waitFor();
+    await page.waitForTimeout(300);
     await range(page, '23-person', page.locator('main .title-bar'), page.locator('.me-list .me-ev').nth(2));
+    if (was) await unans.locator(`button.me-ans.${was}`).click();
+    await page.waitForTimeout(300);
     await page.click('.title-bar .mode button[data-mode=edit]');
     await page.waitForSelector('.dp-table');
 

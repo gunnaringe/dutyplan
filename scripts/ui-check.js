@@ -914,10 +914,12 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok(csvRows.some((x) => x[0] === 'Café') && csvRows.filter((x) => x.some((c) => c.includes('Kari Test'))).length > 0, 'and the tasks down with the names');
       ok(!(await page.locator('.show-tools .export').getAttribute('open')), 'the menu closes after a choice');
       await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-      await until(page, () => !document.querySelector('.show-tools .export').open, null, 'the menu is closed');
-      await page.click('.show-tools .export > summary');
-      await page.locator('.drop-item.text').waitFor({ state: 'visible', timeout: 5000 });
-      await page.click('.drop-item.text');
+      // (a redraw from the stream may close the menu between opening it and the click: open it again)
+      for (let i = 0; ; i++) {
+        await until(page, () => !document.querySelector('.show-tools .export').open, null, 'the menu is closed');
+        await page.click('.show-tools .export > summary');
+        try { await page.click('.drop-item.text', { timeout: 3000 }); break; } catch (e) { if (i === 2) throw e; }
+      }
       await until(page, () => document.getElementById('msg') && document.getElementById('msg').textContent.startsWith('Copied'), null, 'Copy as text says so');
       const copied = (await page.evaluate(() => navigator.clipboard.readText())).trimEnd().split('\n');
       ok(copied.length === hits + 2 && copied[1] === '' && copied.slice(2).every((x) => x.includes(' — ') && x.includes('Kari Test')), 'the text is a line per event on show: ' + copied.slice(0, 3).join(' | '));
@@ -1429,14 +1431,39 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await pg.waitForSelector('.view-only');
       ok(!(await pg.locator('button.share').count()), 'a view link shows no Share');
       await pg.unroute('**/dutyplan.v1.OrgService/GetOrg');
-      // an answer link: «My answers» first; who are you, then every date with yes / maybe / no and a note; kept after a reload
+      // an answer link: «My answers» first; a name, then every date with yes / maybe / no and a note; kept after a reload. The
+      // clock is 10 August 2026, so the first date (2 August) is past and the others are to come.
+      await pg.clock.setFixedTime(new Date('2026-08-10T12:00:00Z'));
       await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'answer', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club/p/autumn-2026');
       await pg.waitForSelector('.me-page');
-      ok((await pg.innerText('.me-page h2')) === 'Who are you?' && (await pg.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'My answers View', 'an answer link asks who you are, with My answers and View');
+      ok((await pg.innerText('.me-page h2')) === 'Pick a name' && (await pg.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'My answers View', 'an answer link asks for a name, with My answers and View');
       ok(!(await pg.locator('.dp-table, button.share, .title-bar .settings').count()), 'no table, Share or settings for an answer link');
       await pg.click('button.me-pick:has-text("Pia Demo")');
       await until(pg, () => (document.querySelector('.me-head h2') || {}).textContent === 'Pia Demo', null, 'the name chosen is shown');
+      // neutral texts: neither you nor they
+      const meText = await pg.innerText('.me-page');
+      ok(!/\b(you|your|they|their)\b/i.test(meText.replace(/For example[^\n]*/g, '')) && (await pg.locator('.me-sec > summary h3').allInnerTexts()).join(',') === 'In the plan,Tasks,Dates', 'the page speaks of neither you nor they: ' + (await pg.locator('.me-sec > summary h3').allInnerTexts()).join(','));
+      // dates not answered, from today on: marked, counted above them; answering them takes the notice away; a past date never counts
+      {
+        const unanswered = () => pg.locator('.me-ev.unanswered').count();
+        const past = pg.locator('.me-ev').first();
+        const pastWas = await past.locator('button.me-ans[aria-pressed="true"]').getAttribute('data-level').catch(() => null);
+        if (pastWas) await past.locator(`button.me-ans.${pastWas}`).click();
+        ok(!(await past.evaluate((li) => li.classList.contains('unanswered'))), 'a past date without an answer is not marked');
+        const n = await unanswered();
+        ok(n > 0 && (await pg.innerText('.me-notice > span')) === (n === 1 ? '1 date not answered' : `${n} dates not answered`) && (await pg.innerText('.me-dates .sum')) === (await pg.innerText('.me-notice > span')), 'the dates not answered are counted above them and in the heading: ' + n);
+        await pg.locator('.me-dates').evaluate((d) => { d.open = false; });
+        await pg.click('.me-notice button');
+        ok(await pg.locator('.me-dates').evaluate((d) => d.open) && await pg.evaluate(() => document.activeElement.closest('.me-ev').classList.contains('unanswered')), '«Show the first» opens the dates and goes to it');
+        const clicked = [];
+        while (await unanswered()) { const li = pg.locator('.me-ev.unanswered').first(); clicked.push(await li.getAttribute('data-event')); await li.locator('button.me-ans.good').click(); }
+        ok(await pg.locator('.me-notice').isHidden() && (await pg.innerText('.me-dates .sum')) === 'All answered', 'all answered: no notice');
+        for (const id of clicked) await pg.locator(`.me-ev[data-event="${id}"] button.me-ans.good`).click();  // as they were
+        await until(pg, (k) => document.querySelectorAll('.me-ev.unanswered').length === k, n, 'not answered again');
+        if (pastWas) await past.locator(`button.me-ans.${pastWas}`).click();
+        await pg.waitForTimeout(300);
+      }
       const first = pg.locator('.me-ev').first();
       const n = await pg.locator('.me-ev').count();
       ok(n > 1, 'a line per date: ' + n);
@@ -1460,8 +1487,8 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok((await pg.inputValue('input.find')) === 'Pia Demo', 'View finds the name chosen');
       await pg.click('.title-bar .mode button[data-mode=me]');
       await pg.waitForSelector('.me-list');
-      await pg.getByRole('button', { name: 'Not you? Switch' }).click();
-      await until(pg, () => (document.querySelector('.me-page h2') || {}).textContent === 'Who are you?', null, 'Switch asks again');
+      await pg.getByRole('button', { name: 'Change name' }).click();
+      await until(pg, () => (document.querySelector('.me-page h2') || {}).textContent === 'Pick a name', null, 'Change name asks again');
       // Yes, Maybe, No quickly: the last one is what stays (the writes go one after the other)
       await pg.click('button.me-pick:has-text("Pia Demo")');
       await pg.waitForSelector('.me-list');
@@ -1484,11 +1511,19 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await pg.click('.title-bar .mode button[data-mode=me]');
       await pg.waitForSelector('.me-page');
       if (await pg.locator('button.me-pick').count()) {
-        ok((await pg.innerText('.me-page h2')) === 'Whose page?', 'Person asks whose page');
+        ok((await pg.innerText('.me-page h2')) === 'Pick a name', 'Person asks for a name');
         await pg.click('button.me-pick:has-text("Pia Demo")');
       }
       await pg.waitForSelector('.me-takes');
-      ok((await pg.innerText('.me-takes h3')) === 'Tasks they take' && (await pg.innerText('.me-page h3 >> nth=2')) === 'When can they?', 'the texts are about them, not you');
+      ok((await pg.locator('.me-sec > summary h3').allInnerTexts()).join(',') === 'In the plan,Tasks,Dates', 'the same neutral texts for a member');
+      // the parts fold, and stay folded after a reload
+      await pg.click('.me-takes > summary');
+      await until(pg, () => Object.entries(localStorage).some(([k, v]) => k.includes('mefold:') && v.includes('takes')), null, 'the fold is kept');
+      await pg.reload();
+      await pg.waitForSelector('.me-takes');
+      ok(!(await pg.locator('.me-takes').evaluate((d) => d.open)) && await pg.locator('.me-dates').evaluate((d) => d.open), 'a folded part stays folded, the others open: ' + await pg.evaluate(() => [...document.querySelectorAll('.me-sec')].map((d) => d.dataset.part + '=' + d.open).join(' ') + ' ' + Object.entries(localStorage).filter(([k]) => k.includes('mefold:')).map(([k, v]) => k + '=' + v).join(' ')));
+      ok(/^(None yet|\d+ good|\d+ if needed|\d+ good, \d+ if needed)$/.test(await pg.innerText('.me-takes .sum')), 'and says what is in it: ' + await pg.innerText('.me-takes .sum'));
+      await pg.click('.me-takes > summary');
       const take = pg.locator('.me-take').first();
       const pickBox = pg.locator('.me-pickable input[type=checkbox]');
       ok(await pickBox.isChecked(), 'the planner may pick them');

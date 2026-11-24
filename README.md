@@ -221,15 +221,17 @@ provider), and then they create an organisation, of which they are the admin. No
 shows only that plan, and never lets whoever has it make links. On the **Members** page (the people icon in the header) everyone sees the plans' links; an admin also makes
 invitation links (whoever opens one and signs in becomes a member). Everyone may leave; there is always one admin.
 
-**One link for the volunteers.** An *answer* link is for everyone on the list: it opens *My answers*, asks *Who are you?* (the
-browser remembers the name, with *Not you? Switch*), and shows that person's tasks in the plan, the tasks they take (*Good*,
-*If needed*, *Can’t*) and every date with *Yes*, *Maybe* or *No* and a note. It can also show the whole plan (*View*), and
-nothing else: no table, no editing. There are no accounts behind it, so anyone with the link can answer for anyone.
+**One link for the volunteers.** An *answer* link is for everyone on the list: it opens *My answers*, asks for a name (the
+browser remembers it, with *Change name*), and shows three parts that fold: what is *In the plan* for that person, the *Tasks*
+they take (*Good*, *If needed*, *Can’t*) and the *Dates*, each with *Yes*, *Maybe* or *No* and a note. Dates from today on
+without an answer are marked, and counted in a notice with *Show the first*. The texts are neutral: whoever reads the page may
+be the person or someone answering for them. It can also show the whole plan (*View*), and nothing else: no table, no editing.
+There are no accounts behind it, so anyone with the link can answer for anyone.
 
 ![My answers on a phone: the person's tasks and every date with Yes, Maybe or No](docs/img/18-my-answers.png)
 
-**One person at a time.** Members have the same page as a third mode, *Person* (*Edit | Person | View*): pick a name, then set
-the tasks they take, whether the planner may pick them, and their answers and notes, without the whole table around it.
+**One person at a time.** Members have the same page as a third mode, *Person* (*Edit | Person | View*), with one thing more:
+whether the planner may pick the person. The same as in the table, without the whole table around it.
 *Members* and *Settings* have a way back (‹ and Esc) to the plan you came from.
 
 ![Person: one person's tasks, whether the planner may pick them, and their dates](docs/img/23-person.png)
