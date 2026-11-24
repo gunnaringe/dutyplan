@@ -799,13 +799,15 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     // --- «What matters most»: from the draft's bar, Less / Normal / More per priority; the numbers under Advanced; a line in ⚙ ---
     {
       const seg = (n) => dialog.locator('.prio').nth(n).locator('.seg button[aria-pressed="true"]');
+      // the dialog's contents are swapped after a save: wait for the level instead of reading the old contents
+      const segIs = (n, text, what) => until(page, ([i, x]) => { const b = document.querySelectorAll('dialog[open] .prio')[i]?.querySelector('.seg button[aria-pressed="true"]');
+        return !!b && b.textContent.trim() === x; }, [n, text], what);
       await page.locator('.draft-bar .prio-link').click();
       ok((await seg(0).innerText()) === 'Normal' && (await seg(1).innerText()) === 'Normal' && (await seg(2).innerText()) === 'Normal', 'the defaults are Normal');
       ok((await dialog.locator('ul.rules li').count()) === 5, 'the rules that always hold are listed');
       ok(!(await dialog.locator('input[type=number]').first().isVisible()), 'the numbers are folded away');
       await reopens(() => dialog.locator('.prio').nth(0).getByRole('button', { name: 'More' }).click(), 'the dialog opens again');
-      await dialog.locator('.prio').nth(0).locator('.seg button[aria-pressed="true"]', { hasText: 'More' }).waitFor({ timeout: 5000 }).catch(() => {});  // the dialog's contents are swapped after the save
-      ok((await seg(0).innerText()) === 'More', 'Even distribution: More');
+      await segIs(0, 'More', 'Even distribution: More');
       await dialog.locator('summary').click();
       ok((await dialog.locator('input[aria-label="' + await page.evaluate(() => MESSAGES.en['weight.w_fair.label']) + '"]').inputValue()) === '25', 'the number behind it');
       await closeDialog();
@@ -813,7 +815,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       ok((await dialog.innerText()).includes('Even: More · Wishes: Normal · Combinations: Normal'), 'Plan settings says what matters: ' + await dialog.innerText());
       await dialog.getByRole('button', { name: 'Change' }).click();
       await reopens(() => dialog.locator('.prio').nth(0).getByRole('button', { name: 'Normal' }).click(), 'the dialog opens again');
-      ok((await seg(0).innerText()) === 'Normal', 'and back to Normal');
+      await segIs(0, 'Normal', 'and back to Normal');
       await closeDialog();
     }
 
