@@ -1,7 +1,7 @@
 import { Account, call, changedBy, confirmed, Draft, errorText, forget, get, Plan, Setup, write, writesOut } from './api';
 import { LEVEL_ICON, h, icon, locale, mark, say, store, type Kid, type Page } from './core';
 import { live, render } from './main';
-import { ask, shareDialog, viewOnly } from './org';
+import { ask, rememberPlan, shareDialog, viewOnly } from './org';
 import { ME, dropdown, go, link, linkBtn, me } from './shell';
 import { addRow, closeBtn, enterMovesOn, field, foot, infoBtn, keyed, modal, reopened } from './ui';
 import { MAX_EVERY, addDays, clock, csvCell, download, enc, fmtDate, fmtShortDate, fmtTime, repeatDates } from './util';
@@ -254,6 +254,7 @@ export async function pagePlan(r, org, people) {
   const key = r.org + '/' + r.plan;
   if (planState.key !== key) Object.assign(planState, { key, runId: null, aside: false, sel: null, adds: new Set(), undo: [], viewId: null, olderId: null });
   const [plan, events, tasks, combos, fields, answers, places, cells, pools, weights, health, runs, sections, taskSections] = await planReads(r);
+  rememberPlan(r.org, location.pathname, plan.name);  // the way back from Members and Settings
 
   // The draft on show: the one picked under the earlier drafts, else the current plan (pinned), else the newest; none
   // when «Remove unlocked» set the drafts aside (also when another tab did it).
@@ -263,8 +264,10 @@ export async function pagePlan(r, org, people) {
   const shownId = runs.some((x) => x.id === planState.runId) ? planState.runId : plan.draftAside ? null : pinned ? pinned.id : runs.length ? runs[0].id : null;
   // «Edit | View» (see showPage): View always shows the current plan, else the newest finished draft, not one picked in Edit
   const modeKey = 'mode:' + key;
-  // an answer link has «My answers» and View; the others Edit (Table) and View
-  const modes = org.level === 'answer' ? ['me', 'show'] : ['edit', 'show'];
+  // an answer link has «My answers» and View; a view link Table and View; the others Edit, Person and View (2026-11-23, the user:
+  // "did we make a page focused on a single person? Let that page show the person preferences and set availablity. That can be
+  // done from the planner, but the planner may perhaps be a bit much for some users.")
+  const modes = org.level === 'answer' ? ['me', 'show'] : org.level === 'view' ? ['edit', 'show'] : ['edit', 'me', 'show'];
   const stored = store.get(modeKey);
   const mode = modes.includes(stored) ? stored : org.level === 'answer' ? 'me' : org.level === 'view' ? 'show' : 'edit';
   const viewId = mode === 'edit' ? shownId : plan.draftAside ? null : pinned ? pinned.id : (runs.find((x) => x.status === 'done') || {}).id;
@@ -393,7 +396,7 @@ export async function pagePlan(r, org, people) {
   // nothing to change. Remembered per plan in this browser; one who may only view starts in View.
   const modeSwitch = h('div', { class: 'mode', role: 'group', 'aria-label': t('mode.aria') },
     modes.map((m) => h('button', { type: 'button', 'aria-pressed': String(mode === m), 'data-mode': m,
-      onclick: () => { if (m !== mode) { store.set(modeKey, m); render(); } } }, t(m === 'edit' && org.level === 'view' ? 'mode.table' : 'mode.' + m))));
+      onclick: () => { if (m !== mode) { store.set(modeKey, m); render(); } } }, t(m === 'edit' && org.level === 'view' ? 'mode.table' : m === 'me' && org.level !== 'answer' ? 'mode.person' : 'mode.' + m))));
   const shareBtn = () => (ME && ME.login && org.role ? h('button', { type: 'button', class: 'ghost share', onclick: () => shareDialog(r.org, org, plan) }, icon('share'), h('span', { class: 'lbl' }, ' ' + t('share.open'))) : '');
   // back to the organisation; not for a link, whose organisation page leads straight back here
   const back = () => (org.plan ? '' : link(`/o/${enc(r.org)}`, '‹ ' + org.name, { class: 'back small', 'aria-label': t('common.back', { name: org.name }) }));
@@ -405,10 +408,15 @@ export async function pagePlan(r, org, people) {
   // forholde seg til, så gjerne en visning der de kan fylle ut når de selv kan. Foreløpig uten noen bruker-management, så samme lenke."):
   // what an answer link opens. «Who are you?» picks a name from the list (kept in this browser, «Not you? Switch»); then the person's
   // own tasks and every date down the page with yes / maybe / no and a note. The same link for everyone: anyone may answer for anyone.
+  // The same page is «Person» for members and edit links: someone else's page, chosen from the list (the texts say «they»), with
+  // whether the planner may pick them. Everyone, an answer link too (the user: "Task preferences are editable"), sets the tasks
+  // the person takes in this plan.
   function mePage() {
     const meKey = 'me:' + key;
+    const other = org.level !== 'answer';
+    const tx = (k, v?) => t((other ? 'person.page.' : 'me.') + k, v);
     const me = people.find((p) => String(p.id) === store.get(meKey));
-    const title = h('div', { class: 'title-bar' }, h('h1', {}, plan.name), infoBtn(plan.name, [t('me.info')]), modeSwitch);
+    const title = h('div', { class: 'title-bar' }, back(), h('h1', {}, plan.name), infoBtn(plan.name, [tx('info')]), modeSwitch, other ? shareBtn() : '');
     if (!me) {
       const picks = [...people].sort((a, b) => a.name.localeCompare(b.name, locale())).map((p) => h('button', { type: 'button', class: 'ghost me-pick', 'data-name': p.name.toLowerCase(),
         onclick: () => { store.set(meKey, String(p.id)); render(); } }, p.name));
@@ -416,7 +424,7 @@ export async function pagePlan(r, org, people) {
         const q = e.target.value.trim().toLowerCase();
         picks.forEach((b) => { b.hidden = !!q && !b.dataset.name!.includes(q); });
       } }) : '';
-      return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, t('me.who')), h('p', { class: 'muted small' }, t('me.who_hint')),
+      return h('div', { class: 'plan-page me-page' }, title, h('h2', {}, tx('who')), h('p', { class: 'muted small' }, tx('who_hint')),
         people.length ? [find, h('div', { class: 'me-picks' }, picks)] : h('p', { class: 'muted' }, t('me.nobody')));
     }
     const mine = events.flatMap((ev) => showTasksOf(ev).filter((tk) => slotsAt(ev, tk).items.some((x) => x.kind === 'person' && x.id === me.id)).map((tk) => [ev, tk] as const));
@@ -448,16 +456,44 @@ export async function pagePlan(r, org, people) {
       const details = fields.fields.map((f) => fieldValue[ev.id + '/' + f.id]).filter(Boolean).join(' · ');
       return h('li', { class: 'me-ev' + (tasksHere.length ? ' busy' : ''), 'data-event': String(ev.id) },
         h('div', { class: 'me-when' }, h('span', { class: 'd' }, fmtDate(ev.date)), clock(ev) ? h('span', { class: 'tm' }, clock(ev)) : '',
-          tasksHere.length ? h('span', { class: 'me-task' }, t('me.you_have', { tasks: tasksHere.join(', ') })) : '',
+          tasksHere.length ? h('span', { class: 'me-task' }, tx('you_have', { tasks: tasksHere.join(', ') })) : '',
           details ? h('span', { class: 'small muted' }, details) : ''),
         h('div', { class: 'me-btns', role: 'group', 'aria-label': label(ev) }, btns), note);
     };
+    // the tasks the person takes in this plan: Good / If needed / Can't, one at a time (a click on the one chosen does nothing)
+    const takesLevel = (tk) => ((chosen[me.id] || []).find((x) => x.taskId === tk.id) || { level: '' }).level;
+    const pickText = { good: 'pick.good', poor: 'pick.poor', '': 'pick.not' };
+    const takeRow = (tk) => {
+      const btns = ([['good', 'good'], ['poor', 'poor'], ['never', '']] as const).map(([cls, l]) => h('button', { type: 'button', class: 'me-ans ' + cls, 'data-level': l,
+        'aria-pressed': String(takesLevel(tk) === l), 'aria-label': t('person.task_aria', { name: me.name, task: tk.name }) + ': ' + t(pickText[l]) },
+      icon(LEVEL_ICON[cls]), h('span', {}, t(pickText[l]))));
+      const paint = () => btns.forEach((b) => b.setAttribute('aria-pressed', String(takesLevel(tk) === b.dataset.level)));
+      btns.forEach((b) => b.addEventListener('click', async () => {
+        const was = takesLevel(tk), next = b.dataset.level!;
+        if (next === was) return;
+        const set = (l) => { chosen[me.id] = (chosen[me.id] || []).filter((x) => x.taskId !== tk.id).concat(l ? [{ personId: me.id, taskId: tk.id, level: l }] : []); paint(); };
+        set(next);
+        saving = saving.then(async () => {
+          const q = { org: r.org, plan: r.plan, person: me.id, task: tk.id };
+          if (!(await write(() => (next ? call(Plan.setPersonTask, { ...q, level: next }) : call(Plan.removePersonTask, q))))) set(was);
+        });
+      }));
+      return h('li', { class: 'me-take', 'data-task': String(tk.id) }, h('div', { class: 'me-when' }, h('span', { class: 'd' }, tk.name)),
+        h('div', { class: 'me-btns', role: 'group', 'aria-label': tk.name }, btns));
+    };
+    const planned = tasks.filter((tk) => tk.planned);
+    const pickable = other && org.level !== 'view' ? h('label', { class: 'check me-pickable' }, h('input', { type: 'checkbox', checked: me.proposable, onchange: async (e) => {
+      const on = e.target.checked;
+      if (await write(() => call(Setup.updatePerson, { org: r.org, plan: r.plan, id: me.id, proposable: on }, 'person'))) me.proposable = on; else e.target.checked = !on;
+    } }), ' ' + t('person.proposable_aria', { name: me.name })) : '';
     return h('div', { class: 'plan-page me-page' }, title,
-      h('div', { class: 'me-head' }, h('h2', {}, me.name), linkBtn(t('me.switch'), () => { store.set(meKey, ''); render(); })),
-      h('section', { class: 'me-mine' }, h('h3', {}, t('me.mine')),
+      h('div', { class: 'me-head' }, h('h2', {}, me.name), linkBtn(tx('switch'), () => { store.set(meKey, ''); render(); })),
+      h('section', { class: 'me-mine' }, h('h3', {}, tx('mine')),
         mine.length ? h('ul', { class: 'plain' }, mine.map(([ev, tk]) => h('li', {}, h('b', {}, fmtShortDate(ev.date)), clock(ev) ? ' ' + clock(ev) : '', ' · ', tk.name)))
-          : h('p', { class: 'muted small' }, done ? t('me.no_tasks') : t('me.no_plan'))),
-      h('h3', {}, t('me.when')),
+          : h('p', { class: 'muted small' }, done ? tx('no_tasks') : t('me.no_plan'))),
+      h('section', { class: 'me-takes' }, h('h3', {}, tx('takes')),
+        planned.length ? h('ul', { class: 'plain me-list' }, planned.map(takeRow)) : h('p', { class: 'muted small' }, t('person.no_tasks')), pickable),
+      h('h3', {}, tx('when')),
       events.length ? h('ul', { class: 'plain me-list' }, events.map(answerRow)) : h('p', { class: 'muted small' }, t('show.no_events')));
   }
 

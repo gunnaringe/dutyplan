@@ -82,7 +82,14 @@ plan, main; `gen/` is the Connect client made from the .proto, committed), `solv
   (migration 009 makes `share_link` again for the CHECK) reads like a view link and writes only `SetAvailability` and
   `SetNote` (`answer` in the procs table; several links in one browser: the widest wins, `linkRank`). The page gives it the
   modes «My answers» (`mePage`) and View: «Who are you?» picks a name (localStorage `me:`, «Not you? Switch»), then their tasks and every date with
-  yes / maybe / no (the same again = not answered) and a note. One link for everyone, anyone may answer for anyone: no user management. The `answer:` mutations guard it.
+  yes / maybe / no (the same again = not answered) and a note, and the tasks the person takes in the plan (Good / If needed / Can’t; the user: "Task preferences are editable").
+  One link for everyone, anyone may answer for anyone: no user management. The `answer:` mutations guard it.
+  **Person** (2026-11-23, the user: "did we make a page focused on a single person? … the planner may perhaps be a bit much for some
+  users"): members and edit links get the same page as a third mode, *Edit | Person | View* (`mePage` with `other`: «Whose page?», the
+  texts say «they», `person.page.*`), plus «The planner may pick <name>» (`UpdatePerson proposable`). A view link has Table and View only.
+  **Members and Settings lead back** («The member and settings page does not have a easy way to go back to the plan. Esc doesn't work
+  either."): `backBar` in `web/src/org.ts`, ‹ the plan this tab opened last (`rememberPlan`, sessionStorage `from:<org>`), else the
+  organisation; Esc does the same when no dialog or menu is open and nothing is typed in.
 - **Limits** (2026-11-22, for the public signup): caps in `internal/store/limits.go` (`atMost`, code `too_many_<what>` with `max`; checked
   in the transaction that creates), and a rate limit on changes per person or address in `internal/api/ratelimit.go` (only with a login;
   `--client-ip-header` names the proxy's header; `costly` in the procs table marks the dearer creations). Only `/` with a login may be indexed. The

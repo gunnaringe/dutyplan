@@ -284,6 +284,16 @@ const CHOICES = {
     await answering.waitForSelector('.me-list');
     await answering.screenshot({ path: path.join(OUT, '18-my-answers.png') });
 
+    // «Person»: the same page for a member, someone else's, with whether the planner may pick them
+    step = '23-person';
+    await page.click('.title-bar .mode button[data-mode=me]');
+    await page.waitForSelector('.me-page');
+    if (await page.locator('button.me-pick').count()) await page.click('button.me-pick:has-text("Kari Test")');
+    await page.waitForSelector('.me-takes');
+    await range(page, '23-person', page.locator('main .title-bar'), page.locator('.me-list .me-ev').nth(2));
+    await page.click('.title-bar .mode button[data-mode=edit]');
+    await page.waitForSelector('.dp-table');
+
     const nb = await open(await context({ viewport: { width: 1280, height: 900 } }, 'nb'));
     await go(nb, planPath, '.dp-table');
     await range(nb, '15-norwegian', nb.locator('main h1'), nb.locator('.grid-scroll'));

@@ -222,11 +222,17 @@ shows only that plan, and never lets whoever has it make links. On the **Members
 invitation links (whoever opens one and signs in becomes a member). Everyone may leave; there is always one admin.
 
 **One link for the volunteers.** An *answer* link is for everyone on the list: it opens *My answers*, asks *Who are you?* (the
-browser remembers the name, with *Not you? Switch*), and shows that person's tasks and every date with *Yes*, *Maybe* or *No* and
-a note. It can also show the whole plan (*View*), and nothing else: no table, no editing. There are no accounts behind it, so
-anyone with the link can answer for anyone.
+browser remembers the name, with *Not you? Switch*), and shows that person's tasks in the plan, the tasks they take (*Good*,
+*If needed*, *Can’t*) and every date with *Yes*, *Maybe* or *No* and a note. It can also show the whole plan (*View*), and
+nothing else: no table, no editing. There are no accounts behind it, so anyone with the link can answer for anyone.
 
 ![My answers on a phone: the person's tasks and every date with Yes, Maybe or No](docs/img/18-my-answers.png)
+
+**One person at a time.** Members have the same page as a third mode, *Person* (*Edit | Person | View*): pick a name, then set
+the tasks they take, whether the planner may pick them, and their answers and notes, without the whole table around it.
+*Members* and *Settings* have a way back (‹ and Esc) to the plan you came from.
+
+![Person: one person's tasks, whether the planner may pick them, and their dates](docs/img/23-person.png)
 
 Make a client at your OpenID Connect provider: confidential, with PKCE, the redirect address `<your address>/auth/callback` and,
 for signing out at the provider too, the address `<your address>/` after logout. Then start the server with `--oidc-issuer`,
