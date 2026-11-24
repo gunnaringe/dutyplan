@@ -1272,7 +1272,7 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
     ok((await page.locator('button.ans[aria-label^="Kari Test, søn. 2. aug. 11:00:"]').getAttribute('aria-label')).endsWith(': kanskje'), 'the answers are Norwegian');
     await page.click('.title-bar .mode button[data-mode=show]');
     await page.waitForSelector('.show-tools');
-    ok((await page.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'Rediger Vis' && (await page.getAttribute('input.find', 'placeholder')) === 'Finn et navn'
+    ok((await page.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'Rediger Person Vis' && (await page.getAttribute('input.find', 'placeholder')) === 'Finn et navn'
       && (await page.innerText('.show-table thead')).includes('Dato') && (await page.innerText('.show-tools .source')).startsWith('Fra utkast #2'), 'View is Norwegian');
     await page.click('.title-bar .mode button[data-mode=edit]');
     await page.waitForSelector('.dp-table');
@@ -1401,6 +1401,14 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await pg.click('main form.new-link button[type=submit]:text-is("Invite")');
       await until(pg, () => [...document.querySelectorAll('main .link-row')].some((li) => li.querySelector('.title').textContent === 'Invitation for the new treasurer' && li.querySelector('.lvl').textContent === 'Becomes a member' && li.querySelector('.uses').textContent === 'one person'), null, 'the invitation is listed with whom it is for, for one person by default');
       ok(await pg.evaluate(() => navigator.clipboard.readText()).then((x) => /\/s\/[\w-]{20,}$/.test(x)), 'the new invitation is copied');
+      // the way back: ‹ the plan this tab came from, and Esc
+      ok((await pg.innerText('main .org-page > a.back')) === '‹ Autumn 2026', 'Members leads back to the plan: ' + await pg.innerText('main .org-page > a.back'));
+      await pg.locator('main h1').click();
+      await pg.keyboard.press('Escape');
+      await pg.waitForURL('**/o/sports-club/p/autumn-2026');
+      await pg.waitForSelector('main h1');
+      await pg.goto(base + '/o/sports-club/members');
+      await pg.waitForSelector('main .org-page > a.back');
       // signed in on a phone: the header (members, settings, language, initials) and the pages stay inside the screen
       await pg.setViewportSize({ width: 390, height: 844 });
       for (const url of ['/o/sports-club', '/o/sports-club/members', '/o/sports-club/p/autumn-2026']) {
@@ -1469,6 +1477,34 @@ const readOf = (r) => { const p = new URL(r.url()).pathname; return p.startsWith
       await pg.waitForSelector('.me-page');
       ok(!(await pg.locator('.title-bar .back').count()), 'no link back to the organisation for a link');
       await pg.unroute('**/dutyplan.v1.OrgService/GetOrg');
+      // «Person» for a member: one person's page, with the tasks they take and whether the planner may pick them
+      await pg.goto(base + '/o/sports-club/p/autumn-2026');
+      await pg.waitForSelector('.title-bar .mode');
+      ok((await pg.innerText('.title-bar .mode')).replace(/\s+/g, ' ').trim() === 'Edit Person View', 'a member has Edit, Person and View');
+      await pg.click('.title-bar .mode button[data-mode=me]');
+      await pg.waitForSelector('.me-page');
+      if (await pg.locator('button.me-pick').count()) {
+        ok((await pg.innerText('.me-page h2')) === 'Whose page?', 'Person asks whose page');
+        await pg.click('button.me-pick:has-text("Pia Demo")');
+      }
+      await pg.waitForSelector('.me-takes');
+      ok((await pg.innerText('.me-takes h3')) === 'Tasks they take' && (await pg.innerText('.me-page h3 >> nth=2')) === 'When can they?', 'the texts are about them, not you');
+      const take = pg.locator('.me-take').first();
+      const pickBox = pg.locator('.me-pickable input[type=checkbox]');
+      ok(await pickBox.isChecked(), 'the planner may pick them');
+      await take.locator('button.me-ans.good').click();
+      await until(pg, () => document.querySelector('.me-take button.me-ans.good').getAttribute('aria-pressed') === 'true', null, 'a task taken shows at once');
+      await pickBox.uncheck();
+      await pg.waitForTimeout(400);
+      await pg.reload();
+      await pg.waitForSelector('.me-takes');
+      ok((await take.locator('button.me-ans.good').getAttribute('aria-pressed')) === 'true' && !(await pickBox.isChecked()), 'both are kept after a reload');
+      await take.locator('button.me-ans.never').click();
+      await pickBox.check();
+      await pg.waitForTimeout(400);
+      await pg.click('.title-bar .mode button[data-mode=edit]');
+      await pg.waitForSelector('.dp-table');
+      ok((await pg.getAttribute('tr.person-row[data-name="pia demo"] button.auto', 'aria-pressed')) === 'true', 'the table agrees: the planner may pick them');
       // an edit link to one plan opens that plan, not the organisation, and makes no links
       await pg.route('**/dutyplan.v1.OrgService/GetOrg', asLink({ level: 'edit', plan: 'autumn-2026' }));
       await pg.goto(base + '/o/sports-club');

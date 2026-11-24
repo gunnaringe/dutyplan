@@ -119,6 +119,7 @@ export async function pageSettings(r, org) {
       } }, h('p', { class: 'muted small' }, t('org.delete_hint')), h('div', { class: 'row-inline' }, typed, button));
     }
     return h('div', { class: 'org-page settings-page' },
+      backBar(r, org),
       h('h1', {}, t('settings.title')),
       h('h2', {}, t('org.rename_label')),
       h('form', { class: 'row', onsubmit: async (e) => {
@@ -127,6 +128,26 @@ export async function pageSettings(r, org) {
       } }, name, h('button', { type: 'submit' }, t('common.rename'))),
       h('h2', {}, t('org.delete_title')), del);
   }
+}
+
+// The way back from Members and Settings (2026-11-23, the user: "The member and settings page does not have a easy way to go back
+// to the plan. Esc doesn't work either."): ‹ the plan you came from (remembered in this tab when a plan opens), else the
+// organisation; Esc does the same when no dialog or menu is open and nothing is being typed in.
+export const rememberPlan = (org, path, name) => { try { sessionStorage.setItem('from:' + org, JSON.stringify({ path, name })); } catch (e) { /* private mode */ } };
+function backBar(r, org) {
+  let to = { path: '/o/' + enc(r.org), name: org.name };
+  try { const x = JSON.parse(sessionStorage.getItem('from:' + r.org) || 'null'); if (x && x.path && x.name) to = x; } catch (e) { /* none */ }
+  const a = link(to.path, '‹ ' + to.name, { class: 'back small', 'aria-label': t('common.back', { name: to.name }) });
+  const onKey = (e) => {
+    if (!a.isConnected) return document.removeEventListener('keydown', onKey);
+    if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('dialog[open], details[open]')) return;
+    const el = e.target as HTMLElement;
+    if (el && el.closest && el.closest('input, textarea, select, [contenteditable=true]')) return;
+    e.preventDefault();
+    go(to.path);
+  };
+  document.addEventListener('keydown', onKey);
+  return a;
 }
 
 // ---- sharing: links and members ------------------------------------------------------------------------------------
@@ -265,6 +286,7 @@ export async function pageMembers(r, org) {
   const uses = h('select', { 'aria-label': t('members.invite_uses') },
     h('option', { value: 'once', selected: true }, t('members.invite_once')), h('option', { value: 'many' }, t('members.invite_many')));
   return h('div', { class: 'org-page members-page' },
+    backBar(r, org),
     h('h1', {}, t('nav.members'), infoBtn(t('nav.members'), [t('members.info')])),
     h('ul', { class: 'plain members' }, members.map(row)),
     admin ? [h('h2', {}, t('members.invite')),
